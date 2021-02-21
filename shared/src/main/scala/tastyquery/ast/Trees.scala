@@ -1,8 +1,8 @@
-package tastyreader.ast
+package tastyquery.ast
 
-import tastyreader.ast.Names.{Name, TermName, TypeName}
-import tastyreader.ast.Types.Type
-import tastyreader.ast.Symbols.Symbol
+import tastyquery.ast.Names.{Name, TermName, TypeName}
+import tastyquery.ast.Types.Type
+import tastyquery.ast.Symbols.Symbol
 
 object Trees {
 

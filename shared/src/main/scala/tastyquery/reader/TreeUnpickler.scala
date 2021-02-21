@@ -1,13 +1,14 @@
-package tastyreader.reader
+package tastyquery.reader
 
-import tastyreader.ast.Names._
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
-import tastyreader.ast.Trees._
-import tastyreader.ast.Types.{DummyType, TermRef, Type, TypeRef}
-import tastyreader.ast.Symbols.Symbol
-import tastyreader.reader.TastyUnpickler.NameTable
+
+import tastyquery.ast.Names._
+import tastyquery.ast.Trees._
+import tastyquery.ast.Types.{DummyType, TermRef, Type, TypeRef}
+import tastyquery.ast.Symbols.Symbol
+import tastyquery.reader.TastyUnpickler.NameTable
 
 import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyReader}, TastyBuffer._, TastyFormat._
 

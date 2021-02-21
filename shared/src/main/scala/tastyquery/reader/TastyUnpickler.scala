@@ -2,6 +2,7 @@ package tastyquery.reader
 
 import tastyquery.ast.Names._
 import tastyquery.ast.{ParamSig, Signature, TermSig, TypeLenSig}
+import tastyquery.reader.TreeUnpickler
 
 import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyHeaderUnpickler, TastyReader}
 import TastyBuffer.{Addr, NameRef}
