@@ -3,7 +3,7 @@ import sbt.Keys.libraryDependencies
 ThisBuild / scalaVersion := "2.13.4"
 Test / parallelExecution := false
 
-lazy val root = project.in(file(".")).
+lazy val root = project.in(file(".")).dependsOn(testSources).
                        aggregate(tastyQuery.js, tastyQuery.jvm).
                        settings(
                          publish := {},
