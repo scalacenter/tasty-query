@@ -9,15 +9,18 @@ object Types {
 
   // ----- Type categories ----------------------------------------------
 
-  /** A marker trait for type proxies.
+  /**
+   * A marker trait for type proxies.
    * Each implementation is expected to redefine the `underlying` method.
    */
   abstract class TypeProxy extends Type {
+
     /** The type to which this proxy forwards operations. */
     def underlying: Type
   }
 
-  /** A marker trait for types that apply only to term symbols or that
+  /**
+   * A marker trait for types that apply only to term symbols or that
    * represent higher-kinded types.
    */
   trait TermType extends Type
@@ -28,7 +31,8 @@ object Types {
   /** A marker trait for types that can be types of values or that are higher-kinded */
   trait ValueType extends ValueTypeOrProto
 
-  /** A marker trait for types that are guaranteed to contain only a
+  /**
+   * A marker trait for types that are guaranteed to contain only a
    * single non-null value (they might contain null in addition).
    */
   trait SingletonType extends TypeProxy with ValueType {
@@ -53,7 +57,8 @@ object Types {
 
     def isTerm: Boolean = isInstanceOf[TermRef]
 
-    /** If designator is a name, this name. Otherwise, the original name
+    /**
+     * If designator is a name, this name. Otherwise, the original name
      * of the designator symbol.
      */
     final def name: ThisName = {
@@ -62,12 +67,13 @@ object Types {
     }
 
     private def computeName: Name = designator match {
-      case name: Name => name
+      case name: Name  => name
       case sym: Symbol => sym.name
     }
   }
 
-  /** A reference to an implicit definition. This can be either a TermRef or a
+  /**
+   * A reference to an implicit definition. This can be either a TermRef or a
    *  Implicits.RenamedImplicitRef.
    */
   trait ImplicitRef {
@@ -75,10 +81,13 @@ object Types {
     def underlyingRef: TermRef
   }
 
-  /** The singleton type for path prefix#myDesignator.
+  /**
+   * The singleton type for path prefix#myDesignator.
    */
-  case class TermRef(override val prefix: Type,
-                      var myDesignator: Designator) extends NamedType with SingletonType with ImplicitRef {
+  case class TermRef(override val prefix: Type, var myDesignator: Designator)
+      extends NamedType
+      with SingletonType
+      with ImplicitRef {
 
     type ThisType = TermRef
     type ThisName = TermName
@@ -96,9 +105,7 @@ object Types {
     def underlyingRef: TermRef = this
   }
 
-  case class TypeRef(override val prefix: Type,
-                     private var myDesignator: Designator)
-    extends NamedType {
+  case class TypeRef(override val prefix: Type, private var myDesignator: Designator) extends NamedType {
 
     type ThisType = TypeRef
     type ThisName = TypeName

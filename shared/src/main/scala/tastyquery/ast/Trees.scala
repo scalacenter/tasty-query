@@ -10,7 +10,8 @@ object Trees {
 
   case class PackageDef(pid: Symbol, stats: List[Tree]) extends Tree
 
-  /** mods class name template     or
+  /**
+   * mods class name template     or
    *  mods trait name template     or
    *  mods type name = rhs   or
    *  mods type name >: lo <: hi,          if rhs = TypeBoundsTree(lo, hi)      or
@@ -25,7 +26,8 @@ object Trees {
   case class ValDef(name: TermName, tpt: Tree, rhs: Tree) extends Tree
 
   /** mods def name[tparams](vparams_1)...(vparams_n): tpt = rhs */
-  case class DefDef(name: TermName, tparams: List[TypeDef], vparamss: List[List[ValDef]], tpt: Tree, rhs: Tree) extends Tree
+  case class DefDef(name: TermName, tparams: List[TypeDef], vparamss: List[List[ValDef]], tpt: Tree, rhs: Tree)
+      extends Tree
 
   /** name */
   case class Ident(name: Name) extends Tree

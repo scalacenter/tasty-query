@@ -1,6 +1,5 @@
 package tastyquery.reader
 
-
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 
@@ -12,8 +11,7 @@ import tastyquery.reader.TastyUnpickler.NameTable
 
 import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyReader}, TastyBuffer._, TastyFormat._
 
-class TreeUnpickler(reader: TastyReader,
-                    nameAtRef: NameTable) {
+class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
   def unpickle: List[Tree] = {
     @tailrec def read(acc: ListBuffer[Tree]): List[Tree] = {
       acc += readTopLevelStat
@@ -35,14 +33,13 @@ class TreeUnpickler(reader: TastyReader,
     case _ => readStat
   }
 
-  def readStats(end: Addr): List[Tree] = {
+  def readStats(end: Addr): List[Tree] =
     reader.until(end)(readStat)
-  }
 
   def readStat: Tree = reader.nextByte match {
     case TYPEDEF =>
       reader.readByte()
-      val end = reader.readEnd()
+      val end  = reader.readEnd()
       val name = readName
       // TODO: this is only for classes, read type for other typedefs
       val template = readTemplate
@@ -50,17 +47,17 @@ class TreeUnpickler(reader: TastyReader,
       skipModifiers(end)
       TypeDef(name.toTypeName, template)
     case VALDEF | DEFDEF => readValOrDefDef
-    case _ => readTerm
+    case _               => readTerm
   }
 
   // TODO: classinfo of the owner
   def readTemplate: Template = {
     reader.readByte()
-    val end = reader.readEnd()
+    val end     = reader.readEnd()
     val tparams = readTypeParams
-    val params = readParams
+    val params  = readParams
     val parents = reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF)(readTerm)
-    val self = readSelf
+    val self    = readSelf
     // The first entry is the constructor
     val cstr = readStat.asInstanceOf[DefDef]
     val body = readStats(end)
@@ -110,14 +107,14 @@ class TreeUnpickler(reader: TastyReader,
     }
 
   def readValOrDefDef: Tree = {
-    val tag = reader.readByte()
-    val end = reader.readEnd()
+    val tag  = reader.readByte()
+    val end  = reader.readEnd()
     val name = readName
     // Only for DefDef, but reading works for empty lists
     val tparams = readTypeParams
-    val params = readParamLists
-    val tpt = readTypeTree
-    val rhs = if (reader.currentAddr == end || isModifierTag(reader.nextByte)) EmptyTree else readTerm
+    val params  = readParamLists
+    val tpt     = readTypeTree
+    val rhs     = if (reader.currentAddr == end || isModifierTag(reader.nextByte)) EmptyTree else readTerm
     skipModifiers(end)
     tag match {
       case VALDEF | PARAM => ValDef(name, tpt, rhs)
@@ -126,15 +123,14 @@ class TreeUnpickler(reader: TastyReader,
     }
   }
 
-  def readTerms(end: Addr): List[Tree] = {
+  def readTerms(end: Addr): List[Tree] =
     reader.until(end)(readTerm)
-  }
 
   def readTerm: Tree = reader.nextByte match {
     case APPLY =>
       reader.readByte()
-      val end = reader.readEnd()
-      val fn = readTerm
+      val end  = reader.readEnd()
+      val fn   = readTerm
       val args = readTerms(end)
       Apply(fn, args)
     case SELECT =>
@@ -161,7 +157,7 @@ class TreeUnpickler(reader: TastyReader,
 
   def readTypeTree: Tree = reader.nextByte match {
     case tag if isTypeTreeTag(tag) => readTerm
-    case _ => TypeTree(readType)
+    case _                         => TypeTree(readType)
   }
 
   // TODO: read modifiers and return them instead
