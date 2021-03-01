@@ -26,9 +26,11 @@ lazy val tastyQuery =
       libraryDependencies += "org.scalameta" %% "munit" % "0.7.22" % Test,
       testFrameworks += new TestFramework("munit.Framework")
     )
-    .settings(  
-      javaOptions += { 
-        val testSourcesProducts = (testSources / Compile / products).value; 
+    .settings(
+      javaOptions += {
+        val testSourcesProducts = (testSources / Compile / products).value
+        // Only one output location expected
+        assert(testSourcesProducts.size == 1)
         "-Dtest-resources=" + testSourcesProducts.map(_.getAbsolutePath).head
       },
     )
