@@ -37,6 +37,27 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     reader.until(end)(readStat)
 
   def readStat: Tree = reader.nextByte match {
+    case IMPORT =>
+      def readSelector: ImportSelector = {
+        assert(reader.nextByte == IMPORTED)
+        reader.readByte()
+        val name = Ident(readName)
+        // IMPORTED can be followed by RENAMED or BOUNDED
+        reader.nextByte match {
+          case RENAMED =>
+            reader.readByte()
+            val renamed = Ident(readName)
+            ImportSelector(name, renamed)
+          case BOUNDED =>
+            reader.readByte()
+            ???
+          case _ => ImportSelector(name)
+        }
+      }
+      reader.readByte()
+      val end  = reader.readEnd()
+      val qual = readTerm
+      Import(qual, reader.until(end)(readSelector))
     case TYPEDEF =>
       reader.readByte()
       val end  = reader.readEnd()
@@ -142,6 +163,9 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val cls = readTypeTree
       New(cls)
+    // paths
+    case TERMREFpkg =>
+      DummyTree(readType, "TermRef into tree")
   }
 
   def readType: Type = reader.nextByte match {

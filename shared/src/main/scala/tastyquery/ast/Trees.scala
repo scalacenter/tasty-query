@@ -10,6 +10,26 @@ object Trees {
 
   case class PackageDef(pid: Symbol, stats: List[Tree]) extends Tree
 
+  case class ImportSelector(imported: Ident, renamed: Tree = EmptyTree, bound: Tree = EmptyTree) extends Tree {
+
+    /** It's a `given` selector */
+    val isGiven: Boolean = imported.name.isEmpty
+
+    /** It's a `given` or `_` selector */
+    val isWildcard: Boolean = isGiven || imported.name == Names.Wildcard
+
+    /** The imported name, EmptyTermName if it's a given selector */
+    val name: TermName = imported.name.asInstanceOf[TermName]
+
+    /** The renamed part (which might be `_`), if present, or `name`, if missing */
+    val rename: TermName = renamed match {
+      case Ident(rename: TermName) => rename
+      case _                       => name
+    }
+  }
+
+  case class Import(expr: Tree, selectors: List[ImportSelector]) extends Tree
+
   /**
    * mods class name template     or
    *  mods trait name template     or
