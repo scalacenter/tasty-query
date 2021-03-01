@@ -36,7 +36,7 @@ class ReadTreeSuite extends munit.FunSuite {
   }
 
   test("empty-class") {
-    assert({
+    assert(clue({
       {
         case PackageDef(
               _,
@@ -57,6 +57,6 @@ class ReadTreeSuite extends munit.FunSuite {
               )
             ) if isJavaLangObject.isDefinedAt(parent) =>
       }: PartialFunction[Tree, Unit]
-    }.isDefinedAt(unpickle("empty_class/EmptyClass")))
+    }).isDefinedAt(clue(unpickle("empty_class/EmptyClass"))))
   }
 }
