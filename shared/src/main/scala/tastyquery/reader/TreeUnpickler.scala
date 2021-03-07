@@ -20,6 +20,9 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     read(new ListBuffer[Tree])
   }
 
+  def forkAt(start: Addr): TreeUnpickler =
+    new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef)
+
   def readName: TermName = nameAtRef(reader.readNameRef())
 
   def readTopLevelStat: Tree = reader.nextByte match {
@@ -163,6 +166,13 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val cls = readTypeTree
       New(cls)
+    // type trees
+    case IDENTtpt =>
+      reader.readByte()
+      val typeName = readName.toTypeName
+      val typ      = readType
+      // TODO: assign type
+      Ident(typeName)
     // paths
     case TERMREFpkg =>
       DummyTree(readType, "TermRef into tree")
@@ -173,6 +183,9 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val name = readName.toTypeName
       TypeRef(readType, name)
+    case SHAREDtype =>
+      reader.readByte()
+      forkAt(reader.readAddr()).readType
     case TERMREFpkg =>
       reader.readByte()
       val name = readName
@@ -181,7 +194,10 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
 
   def readTypeTree: Tree = reader.nextByte match {
     case tag if isTypeTreeTag(tag) => readTerm
-    case _                         => TypeTree(readType)
+    case SHAREDterm =>
+      reader.readByte()
+      forkAt(reader.readAddr()).readTerm
+    case _ => TypeTree(readType)
   }
 
   // TODO: read modifiers and return them instead
