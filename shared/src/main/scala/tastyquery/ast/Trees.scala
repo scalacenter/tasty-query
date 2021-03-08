@@ -62,6 +62,9 @@ object Trees {
   /** new tpt, but no constructor call */
   case class New(tpt: Tree) extends Tree
 
+  /** { stats; expr } */
+  case class Block(stats: List[Tree], expr: Tree) extends Tree
+
   /** if cond then thenp else elsep */
   case class If(cond: Tree, thenPart: Tree, elsePart: Tree) extends Tree {
     def isInline = false

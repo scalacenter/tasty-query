@@ -1,6 +1,5 @@
-import tastyquery.ast.Constants.{Constant, UnitTag}
-import tastyquery.ast.Names.{EmptyTermName, QualifiedName, SignedName, SimpleName, TypeName}
-import tastyquery.ast.Symbols.DummySymbol
+import tastyquery.ast.Constants.Constant
+import tastyquery.ast.Names._
 import tastyquery.ast.Trees._
 import tastyquery.ast.Types.{TermRef, TypeRef}
 import tastyquery.reader.TastyUnpickler
@@ -200,5 +199,16 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     val tree = unpickle("simple_trees/If")
     assert(containsSubtree(ifMatch)(clue(tree)))
+  }
+
+  test("block") {
+    val blockMatch: PartialFunction[Tree, Unit] = {
+      case Block(
+            List(ValDef(SimpleName("a"), _, Literal(Constant(1))), ValDef(SimpleName("b"), _, Literal(Constant(2)))),
+            Literal(Constant(()))
+          ) =>
+    }
+    val tree = unpickle("simple_trees/Block")
+    assert(containsSubtree(blockMatch)(clue(tree)))
   }
 }
