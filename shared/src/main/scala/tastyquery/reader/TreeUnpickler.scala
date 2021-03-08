@@ -167,6 +167,15 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val cls = readTypeTree
       New(cls)
+    case IF =>
+      reader.readByte()
+      reader.readEnd()
+      if (reader.nextByte == INLINE) {
+        reader.readByte()
+        new InlineIf(readTerm, readTerm, readTerm)
+      } else {
+        If(readTerm, readTerm, readTerm)
+      }
     // type trees
     case IDENTtpt =>
       reader.readByte()
@@ -181,6 +190,9 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       val sym = readSymRef()
       // TODO: assign type
       Ident(sym.name)
+    case SHAREDtype =>
+      reader.readByte()
+      forkAt(reader.readAddr()).readTerm
     case _ => Literal(readConstant())
   }
 

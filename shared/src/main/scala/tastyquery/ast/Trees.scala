@@ -62,6 +62,15 @@ object Trees {
   /** new tpt, but no constructor call */
   case class New(tpt: Tree) extends Tree
 
+  /** if cond then thenp else elsep */
+  case class If(cond: Tree, thenPart: Tree, elsePart: Tree) extends Tree {
+    def isInline = false
+  }
+  class InlineIf(cond: Tree, thenPart: Tree, elsePart: Tree) extends If(cond, thenPart, elsePart) {
+    override def isInline = true
+    override def toString = s"InlineIf($cond, $thenPart, $elsePart)"
+  }
+
   case class Literal(constant: Constant) extends Tree
 
   case object EmptyTree extends Tree

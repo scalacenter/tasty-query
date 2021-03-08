@@ -1,5 +1,5 @@
 import tastyquery.ast.Constants.{Constant, UnitTag}
-import tastyquery.ast.Names.{EmptyTermName, QualifiedName, SimpleName, TypeName}
+import tastyquery.ast.Names.{EmptyTermName, QualifiedName, SignedName, SimpleName, TypeName}
 import tastyquery.ast.Symbols.DummySymbol
 import tastyquery.ast.Trees._
 import tastyquery.ast.Types.{TermRef, TypeRef}
@@ -30,9 +30,10 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(_, tpt, rhs) => rec(tpt) || rec(rhs)
       case DefDef(_, tparams, vparamss, tpt, rhs) =>
         tparams.exists(rec) || vparamss.flatten.exists(rec) || rec(tpt) || rec(rhs)
-      case Select(qualifier, _) => rec(qualifier)
-      case Apply(fun, args)     => rec(fun) || args.exists(rec)
-      case New(tpt)             => rec(tpt)
+      case Select(qualifier, _)         => rec(qualifier)
+      case Apply(fun, args)             => rec(fun) || args.exists(rec)
+      case New(tpt)                     => rec(tpt)
+      case If(cond, thenPart, elsePart) => rec(cond) || rec(thenPart) || rec(elsePart)
 
       // Nowhere to walk
       case ImportSelector(_, _, _) | Import(_, _) | Ident(_) | TypeTree(_) | Literal(_) | EmptyTree => false
@@ -186,5 +187,18 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(SimpleName("nullVal"), _, Literal(Constant(null))) =>
     }
     assert(containsSubtree(nullConstMatch)(clue(tree)))
+  }
+
+  test("if") {
+    val ifMatch: PartialFunction[Tree, Unit] = {
+      case If(
+            // TODO: when the symbols are correctly created, all Ident(_) should be Ident(x)
+            Apply(Select(Ident(_), SignedName(SimpleName("<"), _)), List(Literal(Constant(0)))),
+            Select(Ident(_), SimpleName("unary_-")),
+            Ident(_)
+          ) =>
+    }
+    val tree = unpickle("simple_trees/If")
+    assert(containsSubtree(ifMatch)(clue(tree)))
   }
 }
