@@ -74,6 +74,9 @@ object Trees {
     override def toString = s"InlineIf($cond, $thenPart, $elsePart)"
   }
 
+  /** while (cond) { body } */
+  case class While(cond: Tree, body: Tree) extends Tree
+
   case class Literal(constant: Constant) extends Tree
 
   case object EmptyTree extends Tree

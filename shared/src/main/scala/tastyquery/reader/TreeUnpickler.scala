@@ -181,6 +181,10 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       } else {
         If(readTerm, readTerm, readTerm)
       }
+    case WHILE =>
+      reader.readByte()
+      reader.readEnd()
+      While(readTerm, readTerm)
     // type trees
     case IDENTtpt =>
       reader.readByte()

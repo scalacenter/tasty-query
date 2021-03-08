@@ -32,7 +32,9 @@ class ReadTreeSuite extends munit.FunSuite {
       case Select(qualifier, _)         => rec(qualifier)
       case Apply(fun, args)             => rec(fun) || args.exists(rec)
       case New(tpt)                     => rec(tpt)
+      case Block(stats, expr)           => stats.exists(rec) || rec(expr)
       case If(cond, thenPart, elsePart) => rec(cond) || rec(thenPart) || rec(elsePart)
+      case While(cond, body)            => rec(cond) || rec(body)
 
       // Nowhere to walk
       case ImportSelector(_, _, _) | Import(_, _) | Ident(_) | TypeTree(_) | Literal(_) | EmptyTree => false
@@ -210,5 +212,13 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     val tree = unpickle("simple_trees/Block")
     assert(containsSubtree(blockMatch)(clue(tree)))
+  }
+
+  test("empty-infinite-while") {
+    val whileMatch: PartialFunction[Tree, Unit] = {
+      case While(Literal(Constant(true)), Block(Nil, Literal(Constant(())))) =>
+    }
+    val tree = unpickle("simple_trees/While")
+    assert(containsSubtree(whileMatch)(clue(tree)))
   }
 }
