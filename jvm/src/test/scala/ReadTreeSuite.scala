@@ -1,3 +1,4 @@
+import tastyquery.ast.Constants.{Constant, UnitTag}
 import tastyquery.ast.Names.{EmptyTermName, QualifiedName, SimpleName, TypeName}
 import tastyquery.ast.Symbols.DummySymbol
 import tastyquery.ast.Trees._
@@ -34,7 +35,7 @@ class ReadTreeSuite extends munit.FunSuite {
       case New(tpt)             => rec(tpt)
 
       // Nowhere to walk
-      case ImportSelector(_, _, _) | Import(_, _) | Ident(_) | TypeTree(_) | EmptyTree => false
+      case ImportSelector(_, _, _) | Import(_, _) | Ident(_) | TypeTree(_) | Literal(_) | EmptyTree => false
     })
   }
 
@@ -127,6 +128,63 @@ class ReadTreeSuite extends munit.FunSuite {
             Ident(_)
           ) =>
     }
-    assert(containsSubtree(identityMatch)(clue(unpickle("methods/IdentityMethod"))))
+    assert(containsSubtree(identityMatch)(clue(unpickle("simple_trees/IdentityMethod"))))
+  }
+
+  test("constants") {
+    val tree = unpickle("simple_trees/Constants")
+    val unitConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("unitVal"), _, Literal(Constant(()))) =>
+    }
+    assert(containsSubtree(unitConstMatch)(clue(tree)))
+
+    val falseConstMatch: PartialFunction[Tree, Unit] = {
+      case ValDef(SimpleName("falseVal"), _, Literal(Constant(false))) =>
+    }
+    assert(containsSubtree(falseConstMatch)(clue(tree)))
+
+    val trueConstMatch: PartialFunction[Tree, Unit] = {
+      case ValDef(SimpleName("trueVal"), _, Literal(Constant(true))) =>
+    }
+    assert(containsSubtree(trueConstMatch)(clue(tree)))
+
+    val byteConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("byteVal"), _, Literal(Constant(1))) =>
+    }
+    assert(containsSubtree(byteConstMatch)(clue(tree)))
+
+    val shortConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("shortVal"), _, Literal(Constant(1))) =>
+    }
+    assert(containsSubtree(shortConstMatch)(clue(tree)))
+
+    val charConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("charVal"), _, Literal(Constant('a'))) =>
+    }
+    assert(containsSubtree(charConstMatch)(clue(tree)))
+
+    val intConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("intVal"), _, Literal(Constant(1))) =>
+    }
+    assert(containsSubtree(intConstMatch)(clue(tree)))
+
+    val longConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("longVal"), _, Literal(Constant(1))) =>
+    }
+    assert(containsSubtree(longConstMatch)(clue(tree)))
+
+    val floatConstMatch: PartialFunction[Tree, Unit] = {
+      case ValDef(SimpleName("floatVal"), _, Literal(Constant(1.1f))) =>
+    }
+    assert(containsSubtree(floatConstMatch)(clue(tree)))
+
+    val doubleConstMatch: PartialFunction[Tree, Unit] = {
+      case ValDef(SimpleName("doubleVal"), _, Literal(Constant(1.1d))) =>
+    }
+    assert(containsSubtree(doubleConstMatch)(clue(tree)))
+
+    val stringConstMatch: PartialFunction[Tree, Unit] = {
+      case ValDef(SimpleName("stringVal"), _, Literal(Constant("string"))) =>
+    }
+    assert(containsSubtree(stringConstMatch)(clue(tree)))
+
+    val nullConstMatch: PartialFunction[Tree, Unit] = {
+      case ValDef(SimpleName("nullVal"), _, Literal(Constant(null))) =>
+    }
+    assert(containsSubtree(nullConstMatch)(clue(tree)))
   }
 }

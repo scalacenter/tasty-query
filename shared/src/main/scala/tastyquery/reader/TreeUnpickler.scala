@@ -1,5 +1,6 @@
 package tastyquery.reader
 
+import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.{DummySymbol, Symbol}
 import tastyquery.ast.Trees._
@@ -180,6 +181,7 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       val sym = readSymRef()
       // TODO: assign type
       Ident(sym.name)
+    case _ => Literal(readConstant())
   }
 
   def readSymRef(): Symbol = {
@@ -208,6 +210,35 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       forkAt(reader.readAddr()).readTerm
     case _ => TypeTree(readType)
+  }
+
+  def readConstant(): Constant = reader.readByte() match {
+    case UNITconst =>
+      Constant(())
+    case TRUEconst =>
+      Constant(true)
+    case FALSEconst =>
+      Constant(false)
+    case BYTEconst =>
+      Constant(reader.readInt().toByte)
+    case SHORTconst =>
+      Constant(reader.readInt().toShort)
+    case CHARconst =>
+      Constant(reader.readNat().toChar)
+    case INTconst =>
+      Constant(reader.readInt())
+    case LONGconst =>
+      Constant(reader.readLongInt())
+    case FLOATconst =>
+      Constant(java.lang.Float.intBitsToFloat(reader.readInt()))
+    case DOUBLEconst =>
+      Constant(java.lang.Double.longBitsToDouble(reader.readLongInt()))
+    case STRINGconst =>
+      Constant(readName.toString)
+    case NULLconst =>
+      Constant(null)
+    case CLASSconst =>
+      Constant(readType)
   }
 
   // TODO: read modifiers and return them instead

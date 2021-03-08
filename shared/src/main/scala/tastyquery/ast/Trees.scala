@@ -1,5 +1,6 @@
 package tastyquery.ast
 
+import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
 import tastyquery.ast.Types.Type
 import tastyquery.ast.Symbols.Symbol
@@ -60,6 +61,8 @@ object Trees {
 
   /** new tpt, but no constructor call */
   case class New(tpt: Tree) extends Tree
+
+  case class Literal(constant: Constant) extends Tree
 
   case object EmptyTree extends Tree
 
