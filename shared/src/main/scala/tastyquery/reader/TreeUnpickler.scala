@@ -1,15 +1,15 @@
 package tastyquery.reader
 
-import scala.annotation.tailrec
-import scala.collection.mutable.ListBuffer
-
 import tastyquery.ast.Names._
+import tastyquery.ast.Symbols.{DummySymbol, Symbol}
 import tastyquery.ast.Trees._
 import tastyquery.ast.Types.{DummyType, TermRef, Type, TypeRef}
-import tastyquery.ast.Symbols.Symbol
 import tastyquery.reader.TastyUnpickler.NameTable
 
 import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyReader}, TastyBuffer._, TastyFormat._
+
+import scala.annotation.tailrec
+import scala.collection.mutable.ListBuffer
 
 class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
   def unpickle: List[Tree] = {
@@ -176,6 +176,16 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     // paths
     case TERMREFpkg =>
       DummyTree(readType, "TermRef into tree")
+    case TERMREFdirect =>
+      val sym = readSymRef()
+      // TODO: assign type
+      Ident(sym.name)
+  }
+
+  def readSymRef(): Symbol = {
+    // TODO: return the symbol of the term at this address
+    reader.readAddr()
+    DummySymbol
   }
 
   def readType: Type = reader.nextByte match {
