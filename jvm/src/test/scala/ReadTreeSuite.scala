@@ -1,4 +1,5 @@
 import tastyquery.ast.Names.{EmptyTermName, QualifiedName, SimpleName, TypeName}
+import tastyquery.ast.Symbols.DummySymbol
 import tastyquery.ast.Trees._
 import tastyquery.ast.Types.{TermRef, TypeRef}
 import tastyquery.reader.TastyUnpickler
@@ -98,7 +99,7 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(importMatch)(clue(unpickle("imports/MultipleImports"))))
   }
-  
+
   test("renamed-import") {
     val importMatch: PartialFunction[Tree, Unit] = {
       case Import(_, List(ImportSelector(Ident(SimpleName("A")), Ident(SimpleName("ClassA")), EmptyTree))) =>
@@ -111,5 +112,21 @@ class ReadTreeSuite extends munit.FunSuite {
       case Import(_, List(ImportSelector(Ident(EmptyTermName), EmptyTree, EmptyTree))) =>
     }
     assert(containsSubtree(importMatch)(clue(unpickle("imports/ImportGiven"))))
+  }
+
+  test("identity-method") {
+    val identityMatch: PartialFunction[Tree, Unit] = {
+      case DefDef(
+            SimpleName("id"),
+            // no type params
+            List(),
+            // one param -- x: Int
+            List(List(ValDef(SimpleName("x"), Ident(TypeName(SimpleName("Int"))), EmptyTree))),
+            Ident(TypeName(SimpleName("Int"))),
+            // TODO: when the symbols are correctly created, this should be x
+            Ident(_)
+          ) =>
+    }
+    assert(containsSubtree(identityMatch)(clue(unpickle("methods/IdentityMethod"))))
   }
 }
