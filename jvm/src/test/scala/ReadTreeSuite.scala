@@ -283,4 +283,12 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(default)(clue(tree)))
   }
+
+  test("assign") {
+    val tree = unpickle("simple_trees/Assign")
+    val assignBlockMatch: PartialFunction[Tree, Unit] = {
+      case Block(List(ValDef(SimpleName("y"), tpt, Literal(Constant(0))), Assign(y: Ident, x: Ident)), res: Ident) =>
+    }
+    assert(containsSubtree(assignBlockMatch)(clue(tree)))
+  }
 }
