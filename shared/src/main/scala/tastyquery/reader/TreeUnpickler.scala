@@ -152,6 +152,12 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     reader.until(end)(readTerm)
 
   def readTerm: Tree = reader.nextByte match {
+    case IDENT =>
+      reader.readByte()
+      val name = readName
+      val typ  = readType
+      // TODO: assign type
+      Ident(name)
     case APPLY =>
       reader.readByte()
       val end  = reader.readEnd()
@@ -181,6 +187,20 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       } else {
         If(readTerm, readTerm, readTerm)
       }
+    case MATCH =>
+      reader.readByte()
+      val end = reader.readEnd()
+      if (reader.nextByte == IMPLICIT) {
+        reader.readByte()
+        new InlineMatch(EmptyTree, reader.until(end)(readCaseDef))
+      } else if (reader.nextByte == INLINE) {
+        reader.readByte()
+        new InlineMatch(readTerm, reader.until(end)(readCaseDef))
+      } else Match(readTerm, reader.until(end)(readCaseDef))
+    case ALTERNATIVE =>
+      reader.readByte()
+      val end = reader.readEnd()
+      Alternative(reader.until(end)(readTerm))
     case WHILE =>
       reader.readByte()
       reader.readEnd()
@@ -203,6 +223,14 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       forkAt(reader.readAddr()).readTerm
     case _ => Literal(readConstant())
+  }
+
+  def readCaseDef: CaseDef = {
+    assert(reader.readByte() == CASEDEF)
+    val end     = reader.readEnd()
+    val pattern = readTerm
+    val body    = readTerm
+    CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body)
   }
 
   def readSymRef(): Symbol = {

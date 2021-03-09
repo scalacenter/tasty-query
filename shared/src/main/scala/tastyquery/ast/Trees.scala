@@ -74,6 +74,21 @@ object Trees {
     override def toString = s"InlineIf($cond, $thenPart, $elsePart)"
   }
 
+  /** selector match { cases } */
+  case class Match(selector: Tree, cases: List[CaseDef]) extends Tree {
+    def isInline = false
+  }
+  class InlineMatch(selector: Tree, cases: List[CaseDef]) extends Match(selector, cases) {
+    override def isInline = true
+    override def toString = s"InlineMatch($selector, $cases)"
+  }
+
+  /** case pattern if guard => body; only appears as child of a Match */
+  case class CaseDef(pattern: Tree, guard: Tree, body: Tree) extends Tree
+
+  /** tree_1 | ... | tree_n */
+  case class Alternative(trees: List[Tree]) extends Tree
+
   /** while (cond) { body } */
   case class While(cond: Tree, body: Tree) extends Tree
 

@@ -29,12 +29,15 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(_, tpt, rhs) => rec(tpt) || rec(rhs)
       case DefDef(_, tparams, vparamss, tpt, rhs) =>
         tparams.exists(rec) || vparamss.flatten.exists(rec) || rec(tpt) || rec(rhs)
-      case Select(qualifier, _)         => rec(qualifier)
-      case Apply(fun, args)             => rec(fun) || args.exists(rec)
-      case New(tpt)                     => rec(tpt)
-      case Block(stats, expr)           => stats.exists(rec) || rec(expr)
-      case If(cond, thenPart, elsePart) => rec(cond) || rec(thenPart) || rec(elsePart)
-      case While(cond, body)            => rec(cond) || rec(body)
+      case Select(qualifier, _)          => rec(qualifier)
+      case Apply(fun, args)              => rec(fun) || args.exists(rec)
+      case New(tpt)                      => rec(tpt)
+      case Block(stats, expr)            => stats.exists(rec) || rec(expr)
+      case If(cond, thenPart, elsePart)  => rec(cond) || rec(thenPart) || rec(elsePart)
+      case Match(selector, cases)        => rec(selector) || cases.exists(rec)
+      case Alternative(trees)            => trees.exists(rec)
+      case CaseDef(pattern, guard, body) => rec(pattern) || rec(guard) || rec(body)
+      case While(cond, body)             => rec(cond) || rec(body)
 
       // Nowhere to walk
       case ImportSelector(_, _, _) | Import(_, _) | Ident(_) | TypeTree(_) | Literal(_) | EmptyTree => false
@@ -220,5 +223,64 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     val tree = unpickle("simple_trees/While")
     assert(containsSubtree(whileMatch)(clue(tree)))
+  }
+
+  test("match") {
+    val tree = unpickle("simple_trees/Match")
+
+    val matchStructure: PartialFunction[Tree, Unit] = {
+      case Match(Ident(_), cases) if cases.length == 6 =>
+    }
+    assert(containsSubtree(matchStructure)(clue(tree)))
+
+    val simpleGuard: PartialFunction[Tree, Unit] = { case CaseDef(Literal(Constant(0)), EmptyTree, body: Block) =>
+    }
+    assert(containsSubtree(simpleGuard)(clue(tree)))
+
+    val guardWithAlternatives: PartialFunction[Tree, Unit] = {
+      case CaseDef(
+            Alternative(List(Literal(Constant(1)), Literal(Constant(-1)), Literal(Constant(2)))),
+            EmptyTree,
+            body: Block
+          ) =>
+    }
+    assert(containsSubtree(guardWithAlternatives)(clue(tree)))
+
+    val guardAndCondition: PartialFunction[Tree, Unit] = {
+      case CaseDef(
+            Literal(Constant(7)),
+            Apply(Select(_, SignedName(SimpleName("=="), _)), Literal(Constant(7)) :: Nil),
+            body: Block
+          ) =>
+    }
+    assert(containsSubtree(guardAndCondition)(clue(tree)))
+
+    val alternativesAndCondition: PartialFunction[Tree, Unit] = {
+      case CaseDef(
+            Alternative(List(Literal(Constant(3)), Literal(Constant(4)), Literal(Constant(5)))),
+            Apply(Select(_, SignedName(SimpleName("<"), _)), Literal(Constant(5)) :: Nil),
+            body: Block
+          ) =>
+    }
+    assert(containsSubtree(alternativesAndCondition)(clue(tree)))
+
+    val defaultWithCondition: PartialFunction[Tree, Unit] = {
+      case CaseDef(
+            Ident(Wildcard),
+            Apply(
+              Select(
+                Apply(Select(_, SignedName(SimpleName("%"), _)), Literal(Constant(2)) :: Nil),
+                SignedName(SimpleName("=="), _)
+              ),
+              Literal(Constant(0)) :: Nil
+            ),
+            body: Block
+          ) =>
+    }
+    assert(containsSubtree(defaultWithCondition)(clue(tree)))
+
+    val default: PartialFunction[Tree, Unit] = { case CaseDef(Ident(Wildcard), EmptyTree, body: Block) =>
+    }
+    assert(containsSubtree(default)(clue(tree)))
   }
 }
