@@ -10,4 +10,6 @@ object Symbols {
   class Symbol(val name: Name) extends Designator {
     override def toString: String = s"symbol[$name]"
   }
+
+  class ClassSymbol(override val name: Name) extends Symbol(name)
 }

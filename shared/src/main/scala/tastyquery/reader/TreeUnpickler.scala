@@ -2,7 +2,6 @@ package tastyquery.reader
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
-
 import tastyquery.ast.Names._
 import tastyquery.ast.Trees._
 import tastyquery.ast.Types.{DummyType, TermRef, Type, TypeRef}
@@ -11,7 +10,22 @@ import tastyquery.reader.TastyUnpickler.NameTable
 
 import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyReader}, TastyBuffer._, TastyFormat._
 
+import scala.collection.mutable
+
 class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
+
+  /** A map from addresses of definition entries to the symbols they define */
+  private val symAtAddr = new mutable.HashMap[Addr, Symbol]
+
+  private def registerSym(addr: Addr, sym: Symbol): Unit =
+    symAtAddr(addr) = sym
+
+  private def createSymbol(addr: Addr, name: Name): Unit =
+    registerSym(addr, new Symbol(name))
+
+  private def createClassSymbol(addr: Addr, name: Name): Unit =
+    registerSym(addr, new Symbol(name))
+
   def unpickle: List[Tree] = {
     @tailrec def read(acc: ListBuffer[Tree]): List[Tree] = {
       acc += readTopLevelStat
@@ -38,14 +52,22 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
 
   def readStat: Tree = reader.nextByte match {
     case TYPEDEF =>
+      val start = reader.currentAddr
       reader.readByte()
       val end  = reader.readEnd()
-      val name = readName
+      val name = readName.toTypeName
+      if (!symAtAddr.contains(start)) {
+        if (reader.nextByte == TEMPLATE) {
+          createClassSymbol(start, name)
+        } else {
+          createSymbol(start, name)
+        }
+      }
       // TODO: this is only for classes, read type for other typedefs
       val template = readTemplate
       // TODO: read modifiers
       skipModifiers(end)
-      TypeDef(name.toTypeName, template)
+      TypeDef(name, template)
     case VALDEF | DEFDEF => readValOrDefDef
     case _               => readTerm
   }
@@ -67,6 +89,7 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
   def readTypeParams: List[TypeDef] = {
     def readTypeParam: TypeDef = {
       reader.readByte()
+      // TODO: create symbols
       ???
     }
     var acc = new ListBuffer[TypeDef]()
@@ -107,9 +130,13 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     }
 
   def readValOrDefDef: Tree = {
-    val tag  = reader.readByte()
-    val end  = reader.readEnd()
-    val name = readName
+    val start = reader.currentAddr
+    val tag   = reader.readByte()
+    val end   = reader.readEnd()
+    val name  = readName
+    if (!symAtAddr.contains(start)) {
+      createSymbol(start, name)
+    }
     // Only for DefDef, but reading works for empty lists
     val tparams = readTypeParams
     val params  = readParamLists
