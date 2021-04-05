@@ -4,6 +4,7 @@ import tastyquery.ast.Names.{Name, TermName, TypeName}
 import tastyquery.ast.Symbols.Symbol
 
 object Types {
+  type Designator = Symbol | Name
 
   abstract class Type
 
