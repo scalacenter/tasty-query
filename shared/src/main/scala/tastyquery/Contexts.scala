@@ -14,7 +14,7 @@ object Contexts {
 
   def empty: Context = new Context()
 
-  class Context(localSymbols: HashMap[Addr, Symbol] = new mutable.HashMap[Addr, Symbol]()) {
+  class Context(val localSymbols: HashMap[Addr, Symbol] = new mutable.HashMap[Addr, Symbol]()) {
     def hasSymbolAt(addr: Addr): Boolean = localSymbols.contains(addr)
 
     def registerSym(addr: Addr, sym: Symbol): Unit =

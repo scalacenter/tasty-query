@@ -14,7 +14,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val resourcePath = getResourcePath(filename)
     val bytes        = Files.readAllBytes(Paths.get(resourcePath))
     val unpickler    = new TastyUnpickler(bytes)
-    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using Contexts.empty).head
+    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle (using Contexts.empty).head
   }
 
   def getResourcePath(name: String): String =
@@ -130,8 +130,7 @@ class ReadTreeSuite extends munit.FunSuite {
             // one param -- x: Int
             List(List(ValDef(SimpleName("x"), Ident(TypeName(SimpleName("Int"))), EmptyTree))),
             Ident(TypeName(SimpleName("Int"))),
-            // TODO: when the symbols are correctly created, this should be x
-            Ident(_)
+            Ident(SimpleName("x"))
           ) =>
     }
     assert(containsSubtree(identityMatch)(clue(unpickle("simple_trees/IdentityMethod"))))
@@ -197,10 +196,9 @@ class ReadTreeSuite extends munit.FunSuite {
   test("if") {
     val ifMatch: PartialFunction[Tree, Unit] = {
       case If(
-            // TODO: when the symbols are correctly created, all Ident(_) should be Ident(x)
-            Apply(Select(Ident(_), SignedName(SimpleName("<"), _)), List(Literal(Constant(0)))),
-            Select(Ident(_), SimpleName("unary_-")),
-            Ident(_)
+            Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("<"), _)), List(Literal(Constant(0)))),
+            Select(Ident(SimpleName("x")), SimpleName("unary_-")),
+            Ident(SimpleName("x"))
           ) =>
     }
     val tree = unpickle("simple_trees/If")
@@ -250,7 +248,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val guardAndCondition: PartialFunction[Tree, Unit] = {
       case CaseDef(
             Literal(Constant(7)),
-            Apply(Select(_, SignedName(SimpleName("=="), _)), Literal(Constant(7)) :: Nil),
+            Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("=="), _)), Literal(Constant(7)) :: Nil),
             body: Block
           ) =>
     }
@@ -259,7 +257,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val alternativesAndCondition: PartialFunction[Tree, Unit] = {
       case CaseDef(
             Alternative(List(Literal(Constant(3)), Literal(Constant(4)), Literal(Constant(5)))),
-            Apply(Select(_, SignedName(SimpleName("<"), _)), Literal(Constant(5)) :: Nil),
+            Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("<"), _)), Literal(Constant(5)) :: Nil),
             body: Block
           ) =>
     }
@@ -270,7 +268,7 @@ class ReadTreeSuite extends munit.FunSuite {
             Ident(Wildcard),
             Apply(
               Select(
-                Apply(Select(_, SignedName(SimpleName("%"), _)), Literal(Constant(2)) :: Nil),
+                Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("%"), _)), Literal(Constant(2)) :: Nil),
                 SignedName(SimpleName("=="), _)
               ),
               Literal(Constant(0)) :: Nil
@@ -288,7 +286,13 @@ class ReadTreeSuite extends munit.FunSuite {
   test("assign") {
     val tree = unpickle("simple_trees/Assign")
     val assignBlockMatch: PartialFunction[Tree, Unit] = {
-      case Block(List(ValDef(SimpleName("y"), tpt, Literal(Constant(0))), Assign(y: Ident, x: Ident)), res: Ident) =>
+      case Block(
+            List(
+              ValDef(SimpleName("y"), tpt, Literal(Constant(0))),
+              Assign(Ident(SimpleName("y")), Ident(SimpleName("x")))
+            ),
+            Ident(SimpleName("x"))
+          ) =>
     }
     assert(containsSubtree(assignBlockMatch)(clue(tree)))
   }

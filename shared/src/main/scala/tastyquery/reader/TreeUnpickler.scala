@@ -81,7 +81,7 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       // TODO: read modifiers
       skipModifiers(end)
       TypeDef(name, template)
-    case VALDEF | DEFDEF => readValOrDefDef
+    case VALDEF | DEFDEF | PARAM => readValOrDefDef
     case _               => readTerm
   }
 
@@ -245,6 +245,7 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     case TERMREFpkg =>
       DummyTree(readType, "TermRef into tree")
     case TERMREFdirect =>
+      reader.readByte()
       val sym = readSymRef
       // TODO: assign type
       Ident(sym.name)
@@ -263,9 +264,13 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
   }
 
   def readSymRef(using Context): Symbol = {
-    // TODO: return the symbol of the term at this address
-    reader.readAddr()
-    DummySymbol
+    val symAddr = reader.readAddr()
+    if (!ctx.localSymbols.contains(symAddr)) {
+      // will create the symbol
+      forkAt(symAddr).readStat
+      assert(ctx.localSymbols.contains(symAddr))
+    }
+    ctx.localSymbols(symAddr)
   }
 
   def readType(using Context): Type = reader.nextByte match {
