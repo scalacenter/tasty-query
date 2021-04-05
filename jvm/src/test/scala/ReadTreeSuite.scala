@@ -1,4 +1,5 @@
-import tastyquery.ast.Names.{SimpleName, QualifiedName, TypeName}
+import tastyquery.Contexts
+import tastyquery.ast.Names.{QualifiedName, SimpleName, TypeName}
 import tastyquery.ast.Trees._
 import tastyquery.ast.Types.{TermRef, TypeRef}
 import tastyquery.reader.TastyUnpickler
@@ -12,7 +13,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val resourcePath = getResourcePath(filename)
     val bytes        = Files.readAllBytes(Paths.get(resourcePath))
     val unpickler    = new TastyUnpickler(bytes)
-    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle.head
+    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using Contexts.empty).head
   }
 
   def getResourcePath(name: String): String =
