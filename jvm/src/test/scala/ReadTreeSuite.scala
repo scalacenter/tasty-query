@@ -45,7 +45,7 @@ class ReadTreeSuite extends munit.FunSuite {
                   TypeName(SimpleName("EmptyClass")),
                   Template(
                     // default constructor: no type params, no arguments, empty body
-                    DefDef(SimpleName("<init>"), List(), List(), TypeTree(_), EmptyTree),
+                    DefDef(SimpleName("<init>"), Nil, List(Nil), TypeTree(_), EmptyTree),
                     // a single parent -- java.lang.Object
                     List(parent),
                     // self not specified => EmptyValDef
