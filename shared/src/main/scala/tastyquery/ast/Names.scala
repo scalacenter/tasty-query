@@ -66,7 +66,7 @@ object Names {
     termName(chars, 0, chars.length)
   }
 
-  abstract class Name extends Designator {
+  abstract class Name {
 
     /** This name converted to a type name */
     def toTypeName: TypeName

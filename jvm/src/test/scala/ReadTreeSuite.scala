@@ -1,5 +1,6 @@
+import tastyquery.Contexts
 import tastyquery.ast.Constants.Constant
-import tastyquery.ast.Names._
+import tastyquery.ast.Names.{QualifiedName, SimpleName, TypeName, _}
 import tastyquery.ast.Trees._
 import tastyquery.ast.Types.{TermRef, TypeRef}
 import tastyquery.reader.TastyUnpickler
@@ -13,7 +14,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val resourcePath = getResourcePath(filename)
     val bytes        = Files.readAllBytes(Paths.get(resourcePath))
     val unpickler    = new TastyUnpickler(bytes)
-    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle.head
+    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using Contexts.empty).head
   }
 
   def getResourcePath(name: String): String =
@@ -71,7 +72,7 @@ class ReadTreeSuite extends munit.FunSuite {
                   TypeName(SimpleName("EmptyClass")),
                   Template(
                     // default constructor: no type params, no arguments, empty body
-                    DefDef(SimpleName("<init>"), List(), List(), TypeTree(_), EmptyTree),
+                    DefDef(SimpleName("<init>"), Nil, List(Nil), TypeTree(_), EmptyTree),
                     // a single parent -- java.lang.Object
                     List(parent),
                     // self not specified => EmptyValDef

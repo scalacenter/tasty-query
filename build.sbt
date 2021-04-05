@@ -1,21 +1,23 @@
 import sbt.Keys.libraryDependencies
 
-ThisBuild / scalaVersion := "2.13.4"
+ThisBuild / scalaVersion := "3.0.0-RC2"
 Test / parallelExecution := false
 
 lazy val root =
   project.in(file(".")).aggregate(tastyQuery.js, tastyQuery.jvm).settings(publish := {}, publishLocal := {})
 
-lazy val testSources = project.in(file("test-sources")).settings(scalaVersion := "3.0.0-M1")
+lazy val testSources = project.in(file("test-sources"))
 
 lazy val tastyQuery =
   crossProject(JSPlatform, JVMPlatform)
     .in(file("."))
-    .settings(name := "tasty-query", version := "0.1-SNAPSHOT")
-    .settings(scalacOptions += "-Ytasty-reader", scalacOptions += "-Yrangepos")
     .settings(
-      libraryDependencies += "org.scala-lang" % "tasty-core_3.0.0-M1" % "3.0.0-M1",
-      libraryDependencies += "org.scalameta" %% "munit"               % "0.7.22" % Test,
+      name := "tasty-query",
+      version := "0.1-SNAPSHOT",
+    )
+    .settings(
+      libraryDependencies += "org.scala-lang" %% "tasty-core" % "3.0.0-RC2",
+      libraryDependencies += "org.scalameta" %% "munit" % "0.7.23" % Test,
       testFrameworks += new TestFramework("munit.Framework")
     )
     .settings(javaOptions += {
