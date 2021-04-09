@@ -14,7 +14,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val resourcePath = getResourcePath(filename)
     val bytes        = Files.readAllBytes(Paths.get(resourcePath))
     val unpickler    = new TastyUnpickler(bytes)
-    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle (using Contexts.empty).head
+    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using Contexts.empty).head
   }
 
   def getResourcePath(name: String): String =
@@ -295,5 +295,18 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(assignBlockMatch)(clue(tree)))
+  }
+
+  test("throw") {
+    val tree = unpickle("simple_trees/ThrowException")
+    val throwMatch: PartialFunction[Tree, Unit] = {
+      case Throw(
+            Apply(
+              Select(New(Ident(TypeName(SimpleName("NullPointerException")))), SignedName(SimpleName("<init>"), _)),
+              Nil
+            )
+          ) =>
+    }
+    assert(containsSubtree(throwMatch)(clue(tree)))
   }
 }

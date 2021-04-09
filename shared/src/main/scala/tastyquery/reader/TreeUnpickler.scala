@@ -82,7 +82,7 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       skipModifiers(end)
       TypeDef(name, template)
     case VALDEF | DEFDEF | PARAM => readValOrDefDef
-    case _               => readTerm
+    case _                       => readTerm
   }
 
   // TODO: classinfo of the owner
@@ -198,6 +198,10 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val cls = readTypeTree
       New(cls)
+    case THROW =>
+      reader.readByte()
+      val thrown = readTerm
+      Throw(thrown)
     case ASSIGN =>
       reader.readByte()
       reader.readEnd()
