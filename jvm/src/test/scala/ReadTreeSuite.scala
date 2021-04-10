@@ -373,4 +373,13 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(classConstMatch)(clue(tree)))
   }
+
+  test("typed") {
+    val tree = unpickle("simple_trees/Typed")
+
+    val typedMatch: PartialFunction[Tree, Unit] = {
+      case Typed(Literal(c), Ident(TypeName(SimpleName("Int")))) if c.tag == IntTag && c.value == 1 =>
+    }
+    assert(containsSubtree(typedMatch)(clue(tree)))
+  }
 }

@@ -62,6 +62,9 @@ object Trees {
   /** new tpt, but no constructor call */
   case class New(tpt: Tree) extends Tree
 
+  /** expr : tpt */
+  case class Typed(expr: Tree, tpt: Tree) extends Tree
+
   /** name = arg, outside a parameter list */
   case class Assign(lhs: Tree, rhs: Tree) extends Tree
 
