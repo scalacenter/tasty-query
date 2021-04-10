@@ -1,6 +1,7 @@
 import tastyquery.Contexts
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{QualifiedName, SimpleName, TypeName, _}
+import tastyquery.ast.Symbols.Symbol
 import tastyquery.ast.Trees._
 import tastyquery.ast.Types.{TermRef, TypeRef}
 import tastyquery.reader.TastyUnpickler
@@ -322,5 +323,16 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(defDefWithSingleton)(clue(tree)))
+  }
+
+  test("selfType") {
+    val tree = unpickle("simple_trees/ClassWithSelf")
+    val selfDefMatch: PartialFunction[Tree, Unit] = {
+      case ValDef(SimpleName("self"), TypeTree(TypeRef(_, sym: Symbol)), EmptyTree) if sym.name match {
+        case TypeName(SimpleName("ClassWithSelf")) => true
+        case _ => false
+      } =>
+    }
+    assert(containsSubtree(selfDefMatch)(clue(tree)))
   }
 }

@@ -141,7 +141,9 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       EmptyValDef
     } else {
       reader.readByte()
-      ???
+      val name = readName
+      val tpt  = readTypeTree
+      ValDef(name, tpt, EmptyTree)
     }
 
   def readValOrDefDef(using Context): Tree = {
@@ -285,6 +287,10 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val name = readName.toTypeName
       TypeRef(readType, name)
+    case TYPEREFsymbol =>
+      reader.readByte()
+      val sym = readSymRef
+      TypeRef(readType, sym)
     case SHAREDtype =>
       reader.readByte()
       forkAt(reader.readAddr()).readType
