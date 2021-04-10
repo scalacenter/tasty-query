@@ -92,8 +92,14 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     val end     = reader.readEnd()
     val tparams = readTypeParams
     val params  = readParams
-    val parents = reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF)(readTerm)
-    val self    = readSelf
+    val parents = reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF) {
+      reader.nextByte match {
+        // class parents of classes are APPLYs, because they specify the constructor
+        case APPLY => readTerm
+        case _     => readTypeTree
+      }
+    }
+    val self = readSelf
     // The first entry is the constructor
     val cstr = readStat.asInstanceOf[DefDef]
     val body = readStats(end)
