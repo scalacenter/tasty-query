@@ -325,13 +325,21 @@ class ReadTreeSuite extends munit.FunSuite {
     assert(containsSubtree(defDefWithSingleton)(clue(tree)))
   }
 
-  test("selfType") {
+  test("defaultSelfType") {
     val tree = unpickle("simple_trees/ClassWithSelf")
     val selfDefMatch: PartialFunction[Tree, Unit] = {
       case ValDef(SimpleName("self"), TypeTree(TypeRef(_, sym: Symbol)), EmptyTree) if sym.name match {
         case TypeName(SimpleName("ClassWithSelf")) => true
         case _ => false
       } =>
+    }
+    assert(containsSubtree(selfDefMatch)(clue(tree)))
+  }
+
+  test("selfType") {
+    val tree = unpickle("simple_trees/TraitWithSelf")
+    val selfDefMatch: PartialFunction[Tree, Unit] = {
+      case ValDef(SimpleName("self"), Ident(TypeName(SimpleName("ClassWithSelf"))), EmptyTree) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
   }

@@ -1,5 +1,9 @@
 package simple_trees
 
-class ClassWithSelf {
+class ClassWithSelf extends TraitWithSelf {
   self =>
+}
+
+trait TraitWithSelf {
+  self: ClassWithSelf =>
 }
