@@ -309,4 +309,18 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(throwMatch)(clue(tree)))
   }
+
+  test("singletonType") {
+    val tree = unpickle("simple_trees/SingletonType")
+    val defDefWithSingleton: PartialFunction[Tree, Unit] = {
+      case DefDef(
+            SimpleName("singletonReturnType"),
+            Nil,
+            List(List(_)),
+            SingletonTypeTree(Ident(SimpleName("x"))),
+            Ident(SimpleName("x"))
+          ) =>
+    }
+    assert(containsSubtree(defDefWithSingleton)(clue(tree)))
+  }
 }

@@ -245,6 +245,9 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       val typ      = readType
       // TODO: assign type
       Ident(typeName)
+    case SINGLETONtpt =>
+      reader.readByte()
+      SingletonTypeTree(readTerm)
     // paths
     case TERMREFpkg =>
       DummyTree(readType, "TermRef into tree")

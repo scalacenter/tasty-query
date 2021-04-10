@@ -106,6 +106,9 @@ object Trees {
 
   case class TypeTree(tp: Type) extends Tree
 
+  /** ref.type */
+  case class SingletonTypeTree(ref: Tree) extends Tree
+
   // A marker for Trees or components which are not yet constructed correctly
   case class DummyTree[T <: Object](components: T, todo: String) extends Tree
 }
