@@ -1,6 +1,6 @@
 import tastyquery.Contexts
-import tastyquery.ast.Constants.Constant
-import tastyquery.ast.Names.{QualifiedName, SimpleName, TypeName, _}
+import tastyquery.ast.Constants.{Constant, IntTag, NullTag}
+import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.Symbol
 import tastyquery.ast.Trees._
 import tastyquery.ast.Types.{TermRef, TypeRef}
@@ -15,7 +15,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val resourcePath = getResourcePath(filename)
     val bytes        = Files.readAllBytes(Paths.get(resourcePath))
     val unpickler    = new TastyUnpickler(bytes)
-    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using Contexts.empty).head
+    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle (using Contexts.empty).head
   }
 
   def getResourcePath(name: String): String =
@@ -342,5 +342,19 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(SimpleName("self"), Ident(TypeName(SimpleName("ClassWithSelf"))), EmptyTree) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
+  }
+
+  test("fields") {
+    val tree = unpickle("simple_trees/Field")
+
+    val classFieldMatch: PartialFunction[Tree, Unit] = {
+      case ValDef(SimpleName("x"), Ident(TypeName(SimpleName("Field"))), Literal(c)) if c.tag == NullTag =>
+    }
+    assert(containsSubtree(classFieldMatch)(clue(tree)))
+
+    val intFieldMatch: PartialFunction[Tree, Unit] = {
+      case ValDef(SimpleName("y"), Ident(TypeName(SimpleName("Int"))), Literal(c)) if c.value == 0 && c.tag == IntTag =>
+    }
+    assert(containsSubtree(intFieldMatch)(clue(tree)))
   }
 }
