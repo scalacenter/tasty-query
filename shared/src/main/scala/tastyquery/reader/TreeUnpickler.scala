@@ -77,6 +77,7 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
         }
       }
       // TODO: this is only for classes, read type for other typedefs
+      assert(reader.nextByte == TEMPLATE)
       val template = readTemplate
       // TODO: read modifiers
       skipModifiers(end)
