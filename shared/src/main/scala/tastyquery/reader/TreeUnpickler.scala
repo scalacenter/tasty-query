@@ -265,6 +265,13 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       val sym = readSymRef
       // TODO: assign type
       Ident(sym.name)
+    // TODO: is it always Ident?
+    case TERMREFsymbol =>
+      reader.readByte()
+      val sym = readSymRef
+      val typ = readType
+      // TODO: assign type
+      Ident(sym.name)
     case SHAREDtype =>
       reader.readByte()
       forkAt(reader.readAddr()).readTerm
@@ -301,6 +308,10 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     case SHAREDtype =>
       reader.readByte()
       forkAt(reader.readAddr()).readType
+    case TERMREFsymbol =>
+      reader.readByte()
+      val sym = readSymRef
+      TermRef(readType, sym)
     case TERMREFpkg =>
       reader.readByte()
       val name = readName

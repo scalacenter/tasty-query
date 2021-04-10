@@ -1,5 +1,5 @@
 import tastyquery.Contexts
-import tastyquery.ast.Constants.{Constant, IntTag, NullTag}
+import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.Symbol
 import tastyquery.ast.Trees._
@@ -40,6 +40,7 @@ class ReadTreeSuite extends munit.FunSuite {
       case Alternative(trees)            => trees.exists(rec)
       case CaseDef(pattern, guard, body) => rec(pattern) || rec(guard) || rec(body)
       case While(cond, body)             => rec(cond) || rec(body)
+      case SingletonTypeTree(ref)        => rec(ref)
 
       // Nowhere to walk
       case ImportSelector(_, _, _) | Import(_, _) | Ident(_) | TypeTree(_) | Literal(_) | EmptyTree => false
@@ -356,5 +357,20 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(SimpleName("y"), Ident(TypeName(SimpleName("Int"))), Literal(c)) if c.value == 0 && c.tag == IntTag =>
     }
     assert(containsSubtree(intFieldMatch)(clue(tree)))
+  }
+
+  test("object") {
+    val tree = unpickle("simple_trees/ScalaObject")
+
+    val selfDefMatch: PartialFunction[Tree, Unit] = {
+      case ValDef(Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject"))), EmptyTree) =>
+    }
+    assert(containsSubtree(selfDefMatch)(clue(tree)))
+
+    // check that the class constant from writeReplace is unpickled
+    val classConstMatch: PartialFunction[Tree, Unit] = {
+      case Literal(c) if c.tag == ClazzTag =>
+    }
+    assert(containsSubtree(classConstMatch)(clue(tree)))
   }
 }
