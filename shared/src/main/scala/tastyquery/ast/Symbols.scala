@@ -11,5 +11,9 @@ object Symbols {
     override def toString: String = s"symbol[$name]"
   }
 
+  object Symbol {
+    def unapply(s: Symbol): Option[Name] = Some(s.name)
+  }
+
   class ClassSymbol(override val name: Name) extends Symbol(name)
 }

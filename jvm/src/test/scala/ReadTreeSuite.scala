@@ -9,6 +9,7 @@ import tastyquery.reader.TastyUnpickler
 import java.nio.file.{Files, Paths}
 
 class ReadTreeSuite extends munit.FunSuite {
+  type StructureCheck = PartialFunction[Tree, Unit]
   val ResourceProperty = "test-resources"
 
   def unpickle(filename: String): Tree = {
@@ -21,7 +22,7 @@ class ReadTreeSuite extends munit.FunSuite {
   def getResourcePath(name: String): String =
     s"${System.getProperty(ResourceProperty)}/$name.tasty"
 
-  def containsSubtree(p: PartialFunction[Tree, Unit])(t: Tree): Boolean = {
+  def containsSubtree(p: StructureCheck)(t: Tree): Boolean = {
     def rec(t: Tree): Boolean = containsSubtree(p)(t)
     p.isDefinedAt(t) || (t match {
       case PackageDef(_, stats) => stats.exists(rec)
@@ -31,23 +32,23 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(_, tpt, rhs) => rec(tpt) || rec(rhs)
       case DefDef(_, tparams, vparamss, tpt, rhs) =>
         tparams.exists(rec) || vparamss.flatten.exists(rec) || rec(tpt) || rec(rhs)
-      case Select(qualifier, _)          => rec(qualifier)
-      case Apply(fun, args)              => rec(fun) || args.exists(rec)
-      case New(tpt)                      => rec(tpt)
-      case Block(stats, expr)            => stats.exists(rec) || rec(expr)
-      case If(cond, thenPart, elsePart)  => rec(cond) || rec(thenPart) || rec(elsePart)
-      case Match(selector, cases)        => rec(selector) || cases.exists(rec)
-      case Alternative(trees)            => trees.exists(rec)
-      case CaseDef(pattern, guard, body) => rec(pattern) || rec(guard) || rec(body)
-      case While(cond, body)             => rec(cond) || rec(body)
-      case SingletonTypeTree(ref)        => rec(ref)
+      case Select(qualifier, _)         => rec(qualifier)
+      case Apply(fun, args)             => rec(fun) || args.exists(rec)
+      case Block(stats, expr)           => stats.exists(rec) || rec(expr)
+      case If(cond, thenPart, elsePart) => rec(cond) || rec(thenPart) || rec(elsePart)
+      case Match(selector, cases)       => rec(selector) || cases.exists(rec)
+
+      // Trees, inside which the existing tests do not descend
+      case _: New | _: Alternative | _: CaseDef | _: SingletonTypeTree | _: While | _: Assign | _: Throw | _: Typed |
+          _: SeqLiteral =>
+        false
 
       // Nowhere to walk
-      case ImportSelector(_, _, _) | Import(_, _) | Ident(_) | TypeTree(_) | Literal(_) | EmptyTree => false
+      case _: ImportSelector | _: Import | Ident(_) | TypeTree(_) | Literal(_) | EmptyTree => false
     })
   }
 
-  val isJavaLangObject: PartialFunction[Tree, Unit] = {
+  val isJavaLangObject: StructureCheck = {
     case Apply(
           Select(
             New(
@@ -85,19 +86,19 @@ class ReadTreeSuite extends munit.FunSuite {
                 )
               )
             ) if isJavaLangObject.isDefinedAt(parent) =>
-      }: PartialFunction[Tree, Unit]
+      }: StructureCheck
     }.isDefinedAt(clue(unpickle("empty_class/EmptyClass"))))
   }
 
   test("basic-import") {
-    val importMatch: PartialFunction[Tree, Unit] = {
+    val importMatch: StructureCheck = {
       case Import(_, List(ImportSelector(Ident(SimpleName("A")), EmptyTree, EmptyTree))) =>
     }
     assert(containsSubtree(clue(importMatch))(clue(unpickle("imports/Import"))))
   }
 
   test("multiple-imports") {
-    val importMatch: PartialFunction[Tree, Unit] = {
+    val importMatch: StructureCheck = {
       case Import(
             _,
             List(
@@ -110,21 +111,21 @@ class ReadTreeSuite extends munit.FunSuite {
   }
 
   test("renamed-import") {
-    val importMatch: PartialFunction[Tree, Unit] = {
+    val importMatch: StructureCheck = {
       case Import(_, List(ImportSelector(Ident(SimpleName("A")), Ident(SimpleName("ClassA")), EmptyTree))) =>
     }
     assert(containsSubtree(importMatch)(clue(unpickle("imports/RenamedImport"))))
   }
 
   test("given-import") {
-    val importMatch: PartialFunction[Tree, Unit] = {
+    val importMatch: StructureCheck = {
       case Import(_, List(ImportSelector(Ident(EmptyTermName), EmptyTree, EmptyTree))) =>
     }
     assert(containsSubtree(importMatch)(clue(unpickle("imports/ImportGiven"))))
   }
 
   test("identity-method") {
-    val identityMatch: PartialFunction[Tree, Unit] = {
+    val identityMatch: StructureCheck = {
       case DefDef(
             SimpleName("id"),
             // no type params
@@ -140,63 +141,57 @@ class ReadTreeSuite extends munit.FunSuite {
 
   test("constants") {
     val tree = unpickle("simple_trees/Constants")
-    val unitConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("unitVal"), _, Literal(Constant(()))) =>
+    val unitConstMatch: StructureCheck = { case ValDef(SimpleName("unitVal"), _, Literal(Constant(()))) =>
     }
     assert(containsSubtree(unitConstMatch)(clue(tree)))
 
-    val falseConstMatch: PartialFunction[Tree, Unit] = {
-      case ValDef(SimpleName("falseVal"), _, Literal(Constant(false))) =>
+    val falseConstMatch: StructureCheck = { case ValDef(SimpleName("falseVal"), _, Literal(Constant(false))) =>
     }
     assert(containsSubtree(falseConstMatch)(clue(tree)))
 
-    val trueConstMatch: PartialFunction[Tree, Unit] = {
-      case ValDef(SimpleName("trueVal"), _, Literal(Constant(true))) =>
+    val trueConstMatch: StructureCheck = { case ValDef(SimpleName("trueVal"), _, Literal(Constant(true))) =>
     }
     assert(containsSubtree(trueConstMatch)(clue(tree)))
 
-    val byteConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("byteVal"), _, Literal(Constant(1))) =>
+    val byteConstMatch: StructureCheck = { case ValDef(SimpleName("byteVal"), _, Literal(Constant(1))) =>
     }
     assert(containsSubtree(byteConstMatch)(clue(tree)))
 
-    val shortConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("shortVal"), _, Literal(Constant(1))) =>
+    val shortConstMatch: StructureCheck = { case ValDef(SimpleName("shortVal"), _, Literal(Constant(1))) =>
     }
     assert(containsSubtree(shortConstMatch)(clue(tree)))
 
-    val charConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("charVal"), _, Literal(Constant('a'))) =>
+    val charConstMatch: StructureCheck = { case ValDef(SimpleName("charVal"), _, Literal(Constant('a'))) =>
     }
     assert(containsSubtree(charConstMatch)(clue(tree)))
 
-    val intConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("intVal"), _, Literal(Constant(1))) =>
+    val intConstMatch: StructureCheck = { case ValDef(SimpleName("intVal"), _, Literal(Constant(1))) =>
     }
     assert(containsSubtree(intConstMatch)(clue(tree)))
 
-    val longConstMatch: PartialFunction[Tree, Unit] = { case ValDef(SimpleName("longVal"), _, Literal(Constant(1))) =>
+    val longConstMatch: StructureCheck = { case ValDef(SimpleName("longVal"), _, Literal(Constant(1))) =>
     }
     assert(containsSubtree(longConstMatch)(clue(tree)))
 
-    val floatConstMatch: PartialFunction[Tree, Unit] = {
-      case ValDef(SimpleName("floatVal"), _, Literal(Constant(1.1f))) =>
+    val floatConstMatch: StructureCheck = { case ValDef(SimpleName("floatVal"), _, Literal(Constant(1.1f))) =>
     }
     assert(containsSubtree(floatConstMatch)(clue(tree)))
 
-    val doubleConstMatch: PartialFunction[Tree, Unit] = {
-      case ValDef(SimpleName("doubleVal"), _, Literal(Constant(1.1d))) =>
+    val doubleConstMatch: StructureCheck = { case ValDef(SimpleName("doubleVal"), _, Literal(Constant(1.1d))) =>
     }
     assert(containsSubtree(doubleConstMatch)(clue(tree)))
 
-    val stringConstMatch: PartialFunction[Tree, Unit] = {
-      case ValDef(SimpleName("stringVal"), _, Literal(Constant("string"))) =>
+    val stringConstMatch: StructureCheck = { case ValDef(SimpleName("stringVal"), _, Literal(Constant("string"))) =>
     }
     assert(containsSubtree(stringConstMatch)(clue(tree)))
 
-    val nullConstMatch: PartialFunction[Tree, Unit] = {
-      case ValDef(SimpleName("nullVal"), _, Literal(Constant(null))) =>
+    val nullConstMatch: StructureCheck = { case ValDef(SimpleName("nullVal"), _, Literal(Constant(null))) =>
     }
     assert(containsSubtree(nullConstMatch)(clue(tree)))
   }
 
   test("if") {
-    val ifMatch: PartialFunction[Tree, Unit] = {
+    val ifMatch: StructureCheck = {
       case If(
             Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("<"), _)), List(Literal(Constant(0)))),
             Select(Ident(SimpleName("x")), SimpleName("unary_-")),
@@ -208,7 +203,7 @@ class ReadTreeSuite extends munit.FunSuite {
   }
 
   test("block") {
-    val blockMatch: PartialFunction[Tree, Unit] = {
+    val blockMatch: StructureCheck = {
       case Block(
             List(ValDef(SimpleName("a"), _, Literal(Constant(1))), ValDef(SimpleName("b"), _, Literal(Constant(2)))),
             Literal(Constant(()))
@@ -219,8 +214,7 @@ class ReadTreeSuite extends munit.FunSuite {
   }
 
   test("empty-infinite-while") {
-    val whileMatch: PartialFunction[Tree, Unit] = {
-      case While(Literal(Constant(true)), Block(Nil, Literal(Constant(())))) =>
+    val whileMatch: StructureCheck = { case While(Literal(Constant(true)), Block(Nil, Literal(Constant(())))) =>
     }
     val tree = unpickle("simple_trees/While")
     assert(containsSubtree(whileMatch)(clue(tree)))
@@ -229,16 +223,16 @@ class ReadTreeSuite extends munit.FunSuite {
   test("match") {
     val tree = unpickle("simple_trees/Match")
 
-    val matchStructure: PartialFunction[Tree, Unit] = {
+    val matchStructure: StructureCheck = {
       case Match(Ident(_), cases) if cases.length == 6 =>
     }
     assert(containsSubtree(matchStructure)(clue(tree)))
 
-    val simpleGuard: PartialFunction[Tree, Unit] = { case CaseDef(Literal(Constant(0)), EmptyTree, body: Block) =>
+    val simpleGuard: StructureCheck = { case CaseDef(Literal(Constant(0)), EmptyTree, body: Block) =>
     }
     assert(containsSubtree(simpleGuard)(clue(tree)))
 
-    val guardWithAlternatives: PartialFunction[Tree, Unit] = {
+    val guardWithAlternatives: StructureCheck = {
       case CaseDef(
             Alternative(List(Literal(Constant(1)), Literal(Constant(-1)), Literal(Constant(2)))),
             EmptyTree,
@@ -247,7 +241,7 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(guardWithAlternatives)(clue(tree)))
 
-    val guardAndCondition: PartialFunction[Tree, Unit] = {
+    val guardAndCondition: StructureCheck = {
       case CaseDef(
             Literal(Constant(7)),
             Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("=="), _)), Literal(Constant(7)) :: Nil),
@@ -256,7 +250,7 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(guardAndCondition)(clue(tree)))
 
-    val alternativesAndCondition: PartialFunction[Tree, Unit] = {
+    val alternativesAndCondition: StructureCheck = {
       case CaseDef(
             Alternative(List(Literal(Constant(3)), Literal(Constant(4)), Literal(Constant(5)))),
             Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("<"), _)), Literal(Constant(5)) :: Nil),
@@ -265,7 +259,7 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(alternativesAndCondition)(clue(tree)))
 
-    val defaultWithCondition: PartialFunction[Tree, Unit] = {
+    val defaultWithCondition: StructureCheck = {
       case CaseDef(
             Ident(Wildcard),
             Apply(
@@ -280,14 +274,14 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(defaultWithCondition)(clue(tree)))
 
-    val default: PartialFunction[Tree, Unit] = { case CaseDef(Ident(Wildcard), EmptyTree, body: Block) =>
+    val default: StructureCheck = { case CaseDef(Ident(Wildcard), EmptyTree, body: Block) =>
     }
     assert(containsSubtree(default)(clue(tree)))
   }
 
   test("assign") {
     val tree = unpickle("simple_trees/Assign")
-    val assignBlockMatch: PartialFunction[Tree, Unit] = {
+    val assignBlockMatch: StructureCheck = {
       case Block(
             List(
               ValDef(SimpleName("y"), tpt, Literal(Constant(0))),
@@ -301,7 +295,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
   test("throw") {
     val tree = unpickle("simple_trees/ThrowException")
-    val throwMatch: PartialFunction[Tree, Unit] = {
+    val throwMatch: StructureCheck = {
       case Throw(
             Apply(
               Select(New(Ident(TypeName(SimpleName("NullPointerException")))), SignedName(SimpleName("<init>"), _)),
@@ -314,7 +308,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
   test("singletonType") {
     val tree = unpickle("simple_trees/SingletonType")
-    val defDefWithSingleton: PartialFunction[Tree, Unit] = {
+    val defDefWithSingleton: StructureCheck = {
       case DefDef(
             SimpleName("singletonReturnType"),
             Nil,
@@ -328,18 +322,15 @@ class ReadTreeSuite extends munit.FunSuite {
 
   test("defaultSelfType") {
     val tree = unpickle("simple_trees/ClassWithSelf")
-    val selfDefMatch: PartialFunction[Tree, Unit] = {
-      case ValDef(SimpleName("self"), TypeTree(TypeRef(_, sym: Symbol)), EmptyTree) if sym.name match {
-        case TypeName(SimpleName("ClassWithSelf")) => true
-        case _ => false
-      } =>
+    val selfDefMatch: StructureCheck = {
+      case ValDef(SimpleName("self"), TypeTree(TypeRef(_, Symbol(TypeName(SimpleName("ClassWithSelf"))))), EmptyTree) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
   }
 
   test("selfType") {
     val tree = unpickle("simple_trees/TraitWithSelf")
-    val selfDefMatch: PartialFunction[Tree, Unit] = {
+    val selfDefMatch: StructureCheck = {
       case ValDef(SimpleName("self"), Ident(TypeName(SimpleName("ClassWithSelf"))), EmptyTree) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
@@ -348,12 +339,12 @@ class ReadTreeSuite extends munit.FunSuite {
   test("fields") {
     val tree = unpickle("simple_trees/Field")
 
-    val classFieldMatch: PartialFunction[Tree, Unit] = {
+    val classFieldMatch: StructureCheck = {
       case ValDef(SimpleName("x"), Ident(TypeName(SimpleName("Field"))), Literal(c)) if c.tag == NullTag =>
     }
     assert(containsSubtree(classFieldMatch)(clue(tree)))
 
-    val intFieldMatch: PartialFunction[Tree, Unit] = {
+    val intFieldMatch: StructureCheck = {
       case ValDef(SimpleName("y"), Ident(TypeName(SimpleName("Int"))), Literal(c)) if c.value == 0 && c.tag == IntTag =>
     }
     assert(containsSubtree(intFieldMatch)(clue(tree)))
@@ -362,13 +353,13 @@ class ReadTreeSuite extends munit.FunSuite {
   test("object") {
     val tree = unpickle("simple_trees/ScalaObject")
 
-    val selfDefMatch: PartialFunction[Tree, Unit] = {
+    val selfDefMatch: StructureCheck = {
       case ValDef(Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject"))), EmptyTree) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
 
     // check that the class constant from writeReplace is unpickled
-    val classConstMatch: PartialFunction[Tree, Unit] = {
+    val classConstMatch: StructureCheck = {
       case Literal(c) if c.tag == ClazzTag =>
     }
     assert(containsSubtree(classConstMatch)(clue(tree)))
@@ -377,7 +368,7 @@ class ReadTreeSuite extends munit.FunSuite {
   test("typed") {
     val tree = unpickle("simple_trees/Typed")
 
-    val typedMatch: PartialFunction[Tree, Unit] = {
+    val typedMatch: StructureCheck = {
       case Typed(Literal(c), Ident(TypeName(SimpleName("Int")))) if c.tag == IntTag && c.value == 1 =>
     }
     assert(containsSubtree(typedMatch)(clue(tree)))
@@ -386,10 +377,18 @@ class ReadTreeSuite extends munit.FunSuite {
   test("repeated") {
     val tree = unpickle("simple_trees/Repeated")
 
-    val typedRepeated: PartialFunction[Tree, Unit] = {
+    val typedRepeated: StructureCheck = {
       case Typed(
-            SeqLiteral(Literal(c1) :: Literal(c2) :: Literal(c3) :: Nil, TypeTree(TypeRef(_, TypeName(SimpleName("Int"))))),
-            TypeTree(AppliedType(TypeRef(_, TypeName(SimpleName("<repeated>"))), TypeRef(_, TypeName(SimpleName("Int"))) :: Nil))
+            SeqLiteral(
+              Literal(c1) :: Literal(c2) :: Literal(c3) :: Nil,
+              TypeTree(TypeRef(_, TypeName(SimpleName("Int"))))
+            ),
+            TypeTree(
+              AppliedType(
+                TypeRef(_, TypeName(SimpleName("<repeated>"))),
+                TypeRef(_, TypeName(SimpleName("Int"))) :: Nil
+              )
+            )
           ) =>
     }
     assert(containsSubtree(typedRepeated)(clue(tree)))
