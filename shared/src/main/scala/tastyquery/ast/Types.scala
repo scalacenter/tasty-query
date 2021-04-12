@@ -118,6 +118,11 @@ object Types {
     override def underlying: Type = ???
   }
 
+  /** A type application `C[T_1, ..., T_n]` */
+  case class AppliedType(tycon: Type, args: List[Type]) extends TypeProxy with ValueType {
+    override def underlying: Type = tycon
+  }
+
   // A marker for Types or components which are not yet constructed correctly
   case object DummyType extends Type
 }

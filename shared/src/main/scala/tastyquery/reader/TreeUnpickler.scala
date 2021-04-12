@@ -5,14 +5,16 @@ import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.{DummySymbol, Symbol}
 import tastyquery.ast.Trees._
-import tastyquery.ast.Types.{DummyType, TermRef, Type, TypeRef}
+import tastyquery.ast.Types.{AppliedType, DummyType, TermRef, Type, TypeRef}
 import tastyquery.reader.TastyUnpickler.NameTable
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-
-import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyReader}, TastyBuffer._, TastyFormat._, TastyReader._
+import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyReader}
+import TastyBuffer._
+import TastyFormat._
+import TastyReader._
 
 class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
   def unpickle(using Context): List[Tree] = {
@@ -247,6 +249,11 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val end = reader.readEnd()
       Alternative(reader.until(end)(readTerm))
+    case REPEATED =>
+      reader.readByte()
+      val end      = reader.readEnd()
+      val elemType = readTypeTree
+      SeqLiteral(reader.until(end)(readTerm), elemType)
     case WHILE =>
       reader.readByte()
       reader.readEnd()
@@ -262,6 +269,13 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       SingletonTypeTree(readTerm)
     // paths
+    case TERMREF =>
+      reader.readByte()
+      val name = readName
+      val typ  = readType
+      // TODO: use type
+      // TODO: this might be more complicated than Ident
+      Ident(name)
     case TERMREFpkg =>
       DummyTree(readType, "TermRef into tree")
     case TERMREFdirect =>
@@ -327,6 +341,12 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     case SHAREDtype =>
       reader.readByte()
       forkAt(reader.readAddr()).readType
+    case APPLIEDtype =>
+      reader.readByte()
+      val end   = reader.readEnd()
+      val tycon = readType
+      // TODO: type operations can be much more complicated
+      AppliedType(tycon, reader.until(end)(readType))
   }
 
   def readTypeTree(using Context): Tree = reader.nextByte match {

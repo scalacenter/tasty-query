@@ -95,6 +95,12 @@ object Trees {
   /** tree_1 | ... | tree_n */
   case class Alternative(trees: List[Tree]) extends Tree
 
+  /**
+   * Seq(elems)
+   *  @param  tpt  The element type of the sequence.
+   */
+  case class SeqLiteral(elems: List[Tree], elemtpt: Tree) extends Tree
+
   /** while (cond) { body } */
   case class While(cond: Tree, body: Tree) extends Tree
 

@@ -3,7 +3,7 @@ import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.Symbol
 import tastyquery.ast.Trees._
-import tastyquery.ast.Types.{TermRef, TypeRef}
+import tastyquery.ast.Types.{AppliedType, TermRef, TypeRef}
 import tastyquery.reader.TastyUnpickler
 
 import java.nio.file.{Files, Paths}
@@ -381,5 +381,17 @@ class ReadTreeSuite extends munit.FunSuite {
       case Typed(Literal(c), Ident(TypeName(SimpleName("Int")))) if c.tag == IntTag && c.value == 1 =>
     }
     assert(containsSubtree(typedMatch)(clue(tree)))
+  }
+
+  test("repeated") {
+    val tree = unpickle("simple_trees/Repeated")
+
+    val typedRepeated: PartialFunction[Tree, Unit] = {
+      case Typed(
+            SeqLiteral(Literal(c1) :: Literal(c2) :: Literal(c3) :: Nil, TypeTree(TypeRef(_, TypeName(SimpleName("Int"))))),
+            TypeTree(AppliedType(TypeRef(_, TypeName(SimpleName("<repeated>"))), TypeRef(_, TypeName(SimpleName("Int"))) :: Nil))
+          ) =>
+    }
+    assert(containsSubtree(typedRepeated)(clue(tree)))
   }
 }
