@@ -1,5 +1,6 @@
 package tastyquery.ast
 
+import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
 import tastyquery.ast.Symbols.Symbol
 
@@ -119,6 +120,11 @@ object Types {
   }
 
   case class ThisType(tref: TypeRef) extends TypeProxy with SingletonType {
+    override def underlying: Type = ???
+  }
+
+  /** A constant type with single `value`. */
+  case class ConstantType(value: Constant) extends TypeProxy with SingletonType {
     override def underlying: Type = ???
   }
 

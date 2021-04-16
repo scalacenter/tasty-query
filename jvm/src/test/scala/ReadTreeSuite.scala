@@ -3,7 +3,7 @@ import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.Symbol
 import tastyquery.ast.Trees._
-import tastyquery.ast.Types.{AppliedType, TermRef, ThisType, TypeRef}
+import tastyquery.ast.Types.{AppliedType, ConstantType, TermRef, ThisType, TypeRef}
 import tastyquery.reader.TastyUnpickler
 
 import java.nio.file.{Files, Paths}
@@ -435,5 +435,14 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(applyMatch)(clue(tree)))
+  }
+
+  test("final") {
+    val tree = unpickle("simple_trees/Final")
+
+    val constTypeMatch: StructureCheck = {
+      case ValDef(SimpleName("Const"), TypeTree(ConstantType(Constant(1))), Literal(Constant(1))) =>
+    }
+    assert(containsSubtree(constTypeMatch)(clue(tree)))
   }
 }
