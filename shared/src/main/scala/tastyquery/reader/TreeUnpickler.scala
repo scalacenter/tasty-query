@@ -5,7 +5,7 @@ import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.{DummySymbol, Symbol}
 import tastyquery.ast.Trees._
-import tastyquery.ast.Types.{AppliedType, DummyType, TermRef, Type, TypeRef}
+import tastyquery.ast.Types.{AppliedType, DummyType, TermRef, ThisType, Type, TypeRef}
 import tastyquery.reader.TastyUnpickler.NameTable
 
 import scala.annotation.tailrec
@@ -352,6 +352,9 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       val tycon = readType
       // TODO: type operations can be much more complicated
       AppliedType(tycon, reader.until(end)(readType))
+    case THIS =>
+      reader.readByte()
+      ThisType(readType.asInstanceOf[TypeRef])
   }
 
   def readTypeTree(using Context): Tree = reader.nextByte match {

@@ -3,7 +3,7 @@ import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.Symbol
 import tastyquery.ast.Trees._
-import tastyquery.ast.Types.{AppliedType, TermRef, TypeRef}
+import tastyquery.ast.Types.{AppliedType, TermRef, ThisType, TypeRef}
 import tastyquery.reader.TastyUnpickler
 
 import java.nio.file.{Files, Paths}
@@ -405,5 +405,19 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(valDefMatch)(clue(tree)))
+  }
+
+  test("construct-inner-class") {
+    val tree = unpickle("simple_trees/InnerClass")
+
+    val innerInstanceMatch: StructureCheck = {
+      case ValDef(
+            SimpleName("innerInstance"),
+            // "Inner" inside THIS
+            TypeTree(TypeRef(ThisType(_), Symbol(TypeName(SimpleName("Inner"))))),
+            Apply(Select(New(Ident(TypeName(SimpleName("Inner")))), _), Nil)
+          ) =>
+    }
+    assert(containsSubtree(innerInstanceMatch)(clue(tree)))
   }
 }

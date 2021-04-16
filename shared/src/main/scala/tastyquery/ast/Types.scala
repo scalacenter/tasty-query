@@ -118,6 +118,10 @@ object Types {
     override def underlying: Type = ???
   }
 
+  case class ThisType(tref: TypeRef) extends TypeProxy with SingletonType {
+    override def underlying: Type = ???
+  }
+
   /** A type application `C[T_1, ..., T_n]` */
   case class AppliedType(tycon: Type, args: List[Type]) extends TypeProxy with ValueType {
     override def underlying: Type = tycon
