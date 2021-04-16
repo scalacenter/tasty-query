@@ -40,7 +40,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
       // Trees, inside which the existing tests do not descend
       case _: New | _: Alternative | _: CaseDef | _: SingletonTypeTree | _: While | _: Assign | _: Throw | _: Typed |
-          _: SeqLiteral =>
+          _: SeqLiteral | _: AppliedTypeTree =>
         false
 
       // Nowhere to walk
@@ -392,5 +392,18 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(typedRepeated)(clue(tree)))
+  }
+
+  test("applied-type-annot") {
+    val tree = unpickle("simple_trees/AppliedTypeAnnotation")
+
+    val valDefMatch: StructureCheck = {
+      case ValDef(
+            SimpleName("x"),
+            AppliedTypeTree(Ident(TypeName(SimpleName("Option"))), Ident(TypeName(SimpleName("Int"))) :: Nil),
+            Ident(SimpleName("None"))
+          ) =>
+    }
+    assert(containsSubtree(valDefMatch)(clue(tree)))
   }
 }

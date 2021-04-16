@@ -268,6 +268,11 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     case SINGLETONtpt =>
       reader.readByte()
       SingletonTypeTree(readTerm)
+    case APPLIEDtpt =>
+      reader.readByte()
+      val end   = reader.readEnd()
+      val tycon = readTypeTree
+      AppliedTypeTree(tycon, reader.until(end)(readTypeTree))
     // paths
     case TERMREF =>
       reader.readByte()
