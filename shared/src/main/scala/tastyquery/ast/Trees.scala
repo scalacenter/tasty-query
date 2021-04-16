@@ -59,6 +59,9 @@ object Trees {
   /** fun(args) */
   case class Apply(fun: Tree, args: List[Tree]) extends Tree
 
+  /** fun[args] */
+  case class TypeApply(fun: Tree, args: List[Tree]) extends Tree
+
   /** new tpt, but no constructor call */
   case class New(tpt: Tree) extends Tree
 

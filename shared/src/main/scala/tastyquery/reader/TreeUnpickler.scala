@@ -192,6 +192,11 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       val fn   = readTerm
       val args = readTerms(end)
       Apply(fn, args)
+    case TYPEAPPLY =>
+      reader.readByte()
+      val end = reader.readEnd()
+      val fn  = readTerm
+      TypeApply(fn, reader.until(end)(readTypeTree))
     case SELECT =>
       reader.readByte()
       val name = readName
