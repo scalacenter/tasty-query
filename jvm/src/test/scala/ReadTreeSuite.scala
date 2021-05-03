@@ -40,7 +40,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
       // Trees, inside which the existing tests do not descend
       case _: New | _: Alternative | _: CaseDef | _: SingletonTypeTree | _: While | _: Assign | _: Throw | _: Typed |
-          _: SeqLiteral | _: AppliedTypeTree | _: TypeApply =>
+          _: SeqLiteral | _: AppliedTypeTree | _: TypeApply | _: This =>
         false
 
       // Nowhere to walk
@@ -444,5 +444,57 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(SimpleName("Const"), TypeTree(ConstantType(Constant(1))), Literal(Constant(1))) =>
     }
     assert(containsSubtree(constTypeMatch)(clue(tree)))
+  }
+
+  test("var") {
+    val tree = unpickle("simple_trees/Var")
+
+    // var = val with a setter
+    val valDefMatch: StructureCheck = {
+      case ValDef(SimpleName("x"), TypeTree(TypeRef(_, TypeName(SimpleName("Int")))), Literal(Constant(1))) =>
+    }
+    val setterMatch: StructureCheck = {
+      case DefDef(
+            SimpleName("x_="),
+            Nil,
+            List(ValDef(SimpleName("x$1"), _, _) :: Nil),
+            TypeTree(TypeRef(_, TypeName(SimpleName("Unit")))),
+            Literal(Constant(()))
+          ) =>
+    }
+    assert(containsSubtree(valDefMatch)(clue(tree)))
+    assert(containsSubtree(setterMatch)(clue(tree)))
+
+    // x = 2
+    val assignmentMatch: StructureCheck = {
+      case Assign(Select(This(Ident(TypeName(SimpleName("Var")))), SimpleName("x")), Literal(Constant(2))) =>
+    }
+    assert(containsSubtree(assignmentMatch)(clue(tree)))
+  }
+
+  test("use-given") {
+    val tree = unpickle("simple_trees/UsingGiven")
+
+    // given Int
+    val givenDefinition: StructureCheck = {
+      case ValDef(SimpleName("given_Int"), Ident(TypeName(SimpleName("Int"))), _) =>
+    }
+    assert(containsSubtree(givenDefinition)(clue(tree)))
+
+    // def useGiven(using Int)
+    // useGiven
+    val withGiven: StructureCheck = {
+      case Apply(
+            Select(_, SignedName(SimpleName("useGiven"), _)),
+            Select(This(Ident(TypeName(SimpleName("UsingGiven")))), SimpleName("given_Int")) :: Nil
+          ) =>
+    }
+    assert(containsSubtree(withGiven)(clue(tree)))
+
+    // useGiven(using 0)
+    val explicitUsing: StructureCheck = {
+      case Apply(Select(_, SignedName(SimpleName("useGiven"), _)), Literal(Constant(0)) :: Nil) =>
+    }
+    assert(containsSubtree(explicitUsing)(clue(tree)))
   }
 }
