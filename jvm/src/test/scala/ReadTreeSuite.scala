@@ -139,6 +139,24 @@ class ReadTreeSuite extends munit.FunSuite {
     assert(containsSubtree(identityMatch)(clue(unpickle("simple_trees/IdentityMethod"))))
   }
 
+  test("multiple-parameter-lists") {
+    val tree = unpickle("simple_trees/MultipleParameterLists")
+    val methodMatch: StructureCheck = {
+      case DefDef(
+            SimpleName("threeParameterLists"),
+            Nil,
+            List(
+              ValDef(SimpleName("x"), _, _) :: Nil,
+              ValDef(SimpleName("y"), _, _) :: ValDef(SimpleName("z"), _, _) :: Nil,
+              ValDef(SimpleName("last"), _, _) :: Nil
+            ),
+            _,
+            _
+          ) =>
+    }
+    assert(containsSubtree(methodMatch)(clue(tree)))
+  }
+
   test("constants") {
     val tree = unpickle("simple_trees/Constants")
     val unitConstMatch: StructureCheck = { case ValDef(SimpleName("unitVal"), _, Literal(Constant(()))) =>
@@ -472,6 +490,39 @@ class ReadTreeSuite extends munit.FunSuite {
     assert(containsSubtree(assignmentMatch)(clue(tree)))
   }
 
+  test("constructor-with-parameters") {
+    val tree = unpickle("simple_trees/ConstructorWithParameters")
+    val classWithParams: StructureCheck = {
+      case Template(
+            DefDef(
+              SimpleName("<init>"),
+              Nil,
+              List(
+                ValDef(SimpleName("local"), _, _),
+                ValDef(SimpleName("theVal"), _, _),
+                ValDef(SimpleName("theVar"), _, _),
+                ValDef(SimpleName("privateVal"), _, _)
+              ) :: Nil,
+              _,
+              _
+            ),
+            _,
+            _,
+            // TODO: check the modifiers (private, local etc) once they are read
+            // constructor parameters are members
+            List(
+              ValDef(SimpleName("local"), _, _),
+              ValDef(SimpleName("theVal"), _, _),
+              ValDef(SimpleName("theVar"), _, _),
+              ValDef(SimpleName("privateVal"), _, _),
+              // setter for theVar
+              DefDef(SimpleName("theVar_="), Nil, _ :: Nil, _, _)
+            )
+          ) =>
+    }
+    assert(containsSubtree(classWithParams)(clue(tree)))
+  }
+
   test("use-given") {
     val tree = unpickle("simple_trees/UsingGiven")
 
@@ -496,5 +547,34 @@ class ReadTreeSuite extends munit.FunSuite {
       case Apply(Select(_, SignedName(SimpleName("useGiven"), _)), Literal(Constant(0)) :: Nil) =>
     }
     assert(containsSubtree(explicitUsing)(clue(tree)))
+  }
+
+  test("trait-with-parameter") {
+    val tree = unpickle("simple_trees/TraitWithParameter")
+
+    val traitMatch: StructureCheck = {
+      case Template(
+            DefDef(SimpleName("<init>"), Nil, List(ValDef(SimpleName("param"), _, _) :: Nil), _, EmptyTree),
+            TypeTree(TypeRef(_, TypeName(SimpleName("Object")))) :: Nil,
+            _,
+            ValDef(SimpleName("param"), _, _) :: Nil
+          ) =>
+    }
+
+  }
+
+  test("extend-trait") {
+    val tree = unpickle("simple_trees/ExtendsTrait")
+
+    val classMatch: StructureCheck = {
+      case Template(
+            _,
+            jlObject :: Ident(TypeName(SimpleName("AbstractTrait"))) :: Nil,
+            _,
+            // TODO: check the OVERRIDE modifer once modifiers are read
+            DefDef(SimpleName("abstractMethod"), _, _, _, _) :: Nil
+          ) if isJavaLangObject.isDefinedAt(jlObject) =>
+    }
+    assert(containsSubtree(classMatch)(clue(tree)))
   }
 }
