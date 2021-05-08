@@ -40,7 +40,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
       // Trees, inside which the existing tests do not descend
       case _: New | _: Alternative | _: CaseDef | _: SingletonTypeTree | _: While | _: Assign | _: Throw | _: Typed |
-          _: SeqLiteral | _: AppliedTypeTree | _: TypeApply | _: This =>
+          _: SeqLiteral | _: AppliedTypeTree | _: TypeApply | _: This | _: Lambda =>
         false
 
       // Nowhere to walk
@@ -588,5 +588,36 @@ class ReadTreeSuite extends munit.FunSuite {
           ) if isJavaLangObject.isDefinedAt(jlObject) =>
     }
     assert(containsSubtree(classMatch)(clue(tree)))
+  }
+
+  test("lambda") {
+    val tree = unpickle("simple_trees/Function")
+
+    val functionLambdaMatch: StructureCheck = {
+      case ValDef(
+            SimpleName("functionLambda"),
+            _,
+            Block(
+              List(DefDef(SimpleName("$anonfun"), Nil, List(ValDef(SimpleName("x"), _, _)) :: Nil, _, _)),
+              // a lambda is simply a wrapper around a DefDef, defined in the same block. Its type is a function type,
+              // therefore not specified (left as EmptyTree)
+              Lambda(Ident(SimpleName("$anonfun")), EmptyTree)
+            )
+          ) =>
+    }
+    assert(containsSubtree(functionLambdaMatch)(clue(tree)))
+
+    val SAMLambdaMatch: StructureCheck = {
+      case ValDef(
+            SimpleName("samLambda"),
+            _,
+            Block(
+              List(DefDef(SimpleName("$anonfun"), Nil, List(Nil), _, _)),
+              // the lambda's type is not just a function type, therefore specified
+              Lambda(Ident(SimpleName("$anonfun")), TypeTree(TypeRef(_, TypeName(SimpleName("Runnable")))))
+            )
+          ) =>
+    }
+    assert(containsSubtree(SAMLambdaMatch)(clue(tree)))
   }
 }

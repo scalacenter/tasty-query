@@ -254,6 +254,12 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       } else {
         If(readTerm, readTerm, readTerm)
       }
+    case LAMBDA =>
+      reader.readByte()
+      val end    = reader.readEnd()
+      val method = readTerm
+      val tpt    = reader.ifBefore(end)(readTypeTree, EmptyTree)
+      Lambda(method, tpt)
     case MATCH =>
       reader.readByte()
       val end = reader.readEnd()

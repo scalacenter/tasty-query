@@ -86,6 +86,12 @@ object Trees {
     override def toString = s"InlineIf($cond, $thenPart, $elsePart)"
   }
 
+  /**
+   *  @param meth   A reference to the method.
+   *  @param tpt    Not an EmptyTree only if the lambda's type is a SAMtype rather than a function type.
+   */
+  case class Lambda(meth: Tree, tpt: Tree) extends Tree
+
   /** selector match { cases } */
   case class Match(selector: Tree, cases: List[CaseDef]) extends Tree {
     def isInline = false
