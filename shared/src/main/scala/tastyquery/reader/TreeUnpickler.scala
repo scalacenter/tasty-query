@@ -195,6 +195,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val fn   = readTerm
       val args = readTerms(end)
       Apply(fn, args)
+    case NAMEDARG => 
+      reader.readByte()
+      NamedArg(readName, readTerm)
     case TYPEAPPLY =>
       reader.readByte()
       val end = reader.readEnd()

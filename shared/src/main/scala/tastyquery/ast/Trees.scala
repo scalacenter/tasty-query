@@ -74,6 +74,9 @@ object Trees {
   /** name = arg, outside a parameter list */
   case class Assign(lhs: Tree, rhs: Tree) extends Tree
 
+  /** name = arg, in a parameter list */
+  case class NamedArg(name: Name, arg: Tree) extends Tree
+
   /** { stats; expr } */
   case class Block(stats: List[Tree], expr: Tree) extends Tree
 

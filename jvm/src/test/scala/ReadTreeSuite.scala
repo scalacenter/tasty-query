@@ -40,7 +40,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
       // Trees, inside which the existing tests do not descend
       case _: New | _: Alternative | _: CaseDef | _: SingletonTypeTree | _: While | _: Assign | _: Throw | _: Typed |
-          _: SeqLiteral | _: AppliedTypeTree | _: TypeApply | _: This | _: Lambda =>
+          _: SeqLiteral | _: AppliedTypeTree | _: TypeApply | _: This | _: Lambda | _: NamedArg =>
         false
 
       // Nowhere to walk
@@ -619,5 +619,18 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(SAMLambdaMatch)(clue(tree)))
+  }
+
+  test("named-argument") {
+    val tree = unpickle("simple_trees/NamedArgument")
+
+    val withNamedArgumentApplication: StructureCheck = {
+      case Apply(
+            Select(This(Ident(TypeName(SimpleName("NamedArgument")))), SignedName(SimpleName("withNamed"), _)),
+            List(Literal(Constant(0)), NamedArg(SimpleName("second"), Literal(Constant(1))))
+          ) =>
+    }
+    assert(containsSubtree(withNamedArgumentApplication)(clue(tree)))
+
   }
 }
