@@ -95,7 +95,7 @@ object Trees {
     override def toString = s"InlineMatch($selector, $cases)"
   }
 
-  /** case pattern if guard => body; only appears as child of a Match */
+  /** case pattern if guard => body; only appears as child of a Match and Try */
   case class CaseDef(pattern: Tree, guard: Tree, body: Tree) extends Tree
 
   /** tree_1 | ... | tree_n */
@@ -112,6 +112,9 @@ object Trees {
 
   /** throw expr */
   case class Throw(expr: Tree) extends Tree
+
+  /** try block catch cases finally finalizer */
+  case class Try(expr: Tree, cases: List[CaseDef], finalizer: Tree) extends Tree
 
   case class Literal(constant: Constant) extends Tree
 

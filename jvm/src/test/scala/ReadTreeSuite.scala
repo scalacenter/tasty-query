@@ -324,6 +324,18 @@ class ReadTreeSuite extends munit.FunSuite {
     assert(containsSubtree(throwMatch)(clue(tree)))
   }
 
+  test("try-catch") {
+    val tree = unpickle("simple_trees/TryCatch")
+    val tryMatch: StructureCheck = {
+      case Try(
+            _,
+            CaseDef(Ident(Wildcard), EmptyTree, Block(Nil, Literal(Constant(0)))) :: Nil,
+            Block(Nil, Literal(Constant(())))
+          ) =>
+    }
+    assert(containsSubtree(tryMatch)(clue(tree)))
+  }
+
   test("singletonType") {
     val tree = unpickle("simple_trees/SingletonType")
     val defDefWithSingleton: StructureCheck = {
