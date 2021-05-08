@@ -16,7 +16,7 @@ import TastyBuffer._
 import TastyFormat._
 import TastyReader._
 
-class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
+class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   def unpickle(using Context): List[Tree] = {
     @tailrec def read(acc: ListBuffer[Tree]): List[Tree] = {
       acc += readTopLevelStat
@@ -27,6 +27,9 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
 
   def forkAt(start: Addr): TreeUnpickler =
     new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef)
+
+  def fork: TreeUnpickler =
+    forkAt(reader.currentAddr)
 
   def readName: TermName = nameAtRef(reader.readNameRef())
 
@@ -249,11 +252,11 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       val end = reader.readEnd()
       if (reader.nextByte == IMPLICIT) {
         reader.readByte()
-        new InlineMatch(EmptyTree, reader.until(end)(readCaseDef))
+        new InlineMatch(EmptyTree, readCases(end))
       } else if (reader.nextByte == INLINE) {
         reader.readByte()
-        new InlineMatch(readTerm, reader.until(end)(readCaseDef))
-      } else Match(readTerm, reader.until(end)(readCaseDef))
+        new InlineMatch(readTerm, readCases(end))
+      } else Match(readTerm, readCases(end))
     case ALTERNATIVE =>
       reader.readByte()
       val end = reader.readEnd()
@@ -309,6 +312,28 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       forkAt(reader.readAddr()).readTerm
     case _ => Literal(readConstant)
   }
+
+  /** The next tag, following through SHARED tags */
+  def nextUnsharedTag: Int = {
+    val tag = reader.nextByte
+    if (tag == SHAREDtype || tag == SHAREDterm) {
+      val lookAhead = fork
+      lookAhead.reader.readByte()
+      forkAt(lookAhead.reader.readAddr()).nextUnsharedTag
+    } else tag
+  }
+
+  def readCases(end: Addr)(using Context): List[CaseDef] =
+    reader.collectWhile((nextUnsharedTag == CASEDEF) && reader.currentAddr != end) {
+      if (reader.nextByte == SHAREDterm) {
+        // skip the SHAREDterm tag
+        reader.readByte()
+        // TODO: changes in the context?
+        forkAt(reader.readAddr()).readCaseDef
+      }
+      // TODO: changes in the context?
+      else readCaseDef
+    }
 
   def readCaseDef(using Context): CaseDef = {
     assert(reader.readByte() == CASEDEF)
