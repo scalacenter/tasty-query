@@ -384,9 +384,6 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val name = readName
       TermRef(readType, name)
-    case SHAREDtype =>
-      reader.readByte()
-      forkAt(reader.readAddr()).readType
     case APPLIEDtype =>
       reader.readByte()
       val end   = reader.readEnd()
