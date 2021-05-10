@@ -631,6 +631,13 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(withNamedArgumentApplication)(clue(tree)))
+  }
 
+  test("return") {
+    val tree = unpickle("simple_trees/Return")
+
+    val returnMatch: StructureCheck = { case Return(Literal(Constant(1)), Ident(SimpleName("withReturn"))) =>
+    }
+    assert(containsSubtree(returnMatch)(clue(tree)))
   }
 }

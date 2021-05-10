@@ -127,6 +127,8 @@ object Trees {
 
   case class Literal(constant: Constant) extends Tree
 
+  case class Return(expr: Tree, from: Tree) extends Tree
+
   case object EmptyTree extends Tree
 
   val EmptyValDef: ValDef = ValDef(Names.Wildcard, EmptyTree, EmptyTree)
