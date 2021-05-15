@@ -212,6 +212,12 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val qualifier = readTerm.asInstanceOf[Ident]
       This(Some(qualifier))
+    case SUPER =>
+      reader.readByte()
+      val end   = reader.readEnd()
+      val qual  = readTerm
+      val mixin = reader.ifBefore(end)(Some(readTerm.asInstanceOf[Ident]), None)
+      Super(qual, mixin)
     case SELECTin =>
       reader.readByte()
       val end  = reader.readEnd()

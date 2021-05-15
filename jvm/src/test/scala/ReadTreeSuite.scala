@@ -40,7 +40,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
       // Trees, inside which the existing tests do not descend
       case _: New | _: Alternative | _: CaseDef | _: SingletonTypeTree | _: While | _: Assign | _: Throw | _: Typed |
-          _: SeqLiteral | _: AppliedTypeTree | _: TypeApply | _: This | _: Lambda | _: NamedArg =>
+          _: SeqLiteral | _: AppliedTypeTree | _: TypeApply | _: This | _: Lambda | _: NamedArg | _: Super =>
         false
 
       // Nowhere to walk
@@ -639,5 +639,17 @@ class ReadTreeSuite extends munit.FunSuite {
     val returnMatch: StructureCheck = { case Return(Literal(Constant(1)), Ident(SimpleName("withReturn"))) =>
     }
     assert(containsSubtree(returnMatch)(clue(tree)))
+  }
+
+  test("super") {
+    val tree = unpickle("simple_trees/Super")
+
+    val superMatch: StructureCheck = { case Super(This(None), None) =>
+    }
+    assert(containsSubtree(superMatch)(clue(tree)))
+
+    val mixinSuper: StructureCheck = { case Super(This(None), Some(Ident(TypeName(SimpleName("Base"))))) =>
+    }
+    assert(containsSubtree(mixinSuper)(clue(tree)))
   }
 }

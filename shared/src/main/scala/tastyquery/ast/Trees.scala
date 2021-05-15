@@ -59,6 +59,9 @@ object Trees {
   /** qual.this */
   case class This(qualifier: Option[Ident]) extends Tree
 
+  /** C.super[mix], where qual = C.this */
+  case class Super(qual: Tree, mix: Option[Ident]) extends Tree
+
   /** fun(args) */
   case class Apply(fun: Tree, args: List[Tree]) extends Tree
 
