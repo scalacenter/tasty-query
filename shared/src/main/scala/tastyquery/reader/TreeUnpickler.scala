@@ -211,7 +211,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case QUALTHIS =>
       reader.readByte()
       val qualifier = readTerm.asInstanceOf[Ident]
-      This(qualifier)
+      This(Some(qualifier))
     case SELECTin =>
       reader.readByte()
       val end  = reader.readEnd()
@@ -309,6 +309,11 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val tycon = readTypeTree
       AppliedTypeTree(tycon, reader.until(end)(readTypeTree))
     // paths
+    case THIS =>
+      reader.readByte()
+      val typ = readType
+      // TODO: assign type
+      This(None)
     case TERMREF =>
       reader.readByte()
       val name = readName

@@ -57,7 +57,7 @@ object Trees {
   case class Select(qualifier: Tree, name: Name) extends Tree
 
   /** qual.this */
-  case class This(qualifier: Ident) extends Tree
+  case class This(qualifier: Option[Ident]) extends Tree
 
   /** fun(args) */
   case class Apply(fun: Tree, args: List[Tree]) extends Tree

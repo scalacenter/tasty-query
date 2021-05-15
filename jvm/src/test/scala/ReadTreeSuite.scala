@@ -497,7 +497,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
     // x = 2
     val assignmentMatch: StructureCheck = {
-      case Assign(Select(This(Ident(TypeName(SimpleName("Var")))), SimpleName("x")), Literal(Constant(2))) =>
+      case Assign(Select(This(Some(Ident(TypeName(SimpleName("Var"))))), SimpleName("x")), Literal(Constant(2))) =>
     }
     assert(containsSubtree(assignmentMatch)(clue(tree)))
   }
@@ -549,7 +549,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val withGiven: StructureCheck = {
       case Apply(
             Select(_, SignedName(SimpleName("useGiven"), _)),
-            Select(This(Ident(TypeName(SimpleName("UsingGiven")))), SimpleName("given_Int")) :: Nil
+            Select(This(Some(Ident(TypeName(SimpleName("UsingGiven"))))), SimpleName("given_Int")) :: Nil
           ) =>
     }
     assert(containsSubtree(withGiven)(clue(tree)))
@@ -626,7 +626,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
     val withNamedArgumentApplication: StructureCheck = {
       case Apply(
-            Select(This(Ident(TypeName(SimpleName("NamedArgument")))), SignedName(SimpleName("withNamed"), _)),
+            Select(This(Some(Ident(TypeName(SimpleName("NamedArgument"))))), SignedName(SimpleName("withNamed"), _)),
             List(Literal(Constant(0)), NamedArg(SimpleName("second"), Literal(Constant(1))))
           ) =>
     }
