@@ -76,9 +76,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val name = readName.toTypeName
       if (!ctx.hasSymbolAt(start)) {
         if (reader.nextByte == TEMPLATE) {
-          ctx.createClassSymbol(start, name)
+          ctx.createClassSymbolIfNew(start, name)
         } else {
-          ctx.createSymbol(start, name)
+          ctx.createSymbolIfNew(start, name)
         }
       }
       // TODO: this is only for classes, read type for other typedefs
@@ -163,9 +163,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     val tag   = reader.readByte()
     val end   = reader.readEnd()
     val name  = readName
-    if (!ctx.hasSymbolAt(start)) {
-      ctx.createSymbol(start, name)
-    }
+    ctx.createSymbolIfNew(start, name)
     // Only for DefDef, but reading works for empty lists
     val tparams = readTypeParams
     val params  = readParamLists

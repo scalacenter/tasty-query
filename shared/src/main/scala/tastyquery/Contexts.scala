@@ -20,10 +20,14 @@ object Contexts {
     def registerSym(addr: Addr, sym: Symbol): Unit =
       localSymbols(addr) = sym
 
-    def createSymbol(addr: Addr, name: Name): Unit =
-      registerSym(addr, new Symbol(name))
+    def createSymbolIfNew(addr: Addr, name: Name): Unit =
+      if (!hasSymbolAt(addr)) {
+        registerSym(addr, new Symbol(name))
+      }
 
-    def createClassSymbol(addr: Addr, name: Name): Unit =
-      registerSym(addr, new Symbol(name))
+    def createClassSymbolIfNew(addr: Addr, name: Name): Unit =
+      if (!hasSymbolAt(addr)) {
+        registerSym(addr, new Symbol(name))
+      }
   }
 }
