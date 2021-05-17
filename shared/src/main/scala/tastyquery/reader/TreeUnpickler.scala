@@ -74,19 +74,16 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val end  = reader.readEnd()
       val name = readName.toTypeName
-      if (!ctx.hasSymbolAt(start)) {
-        if (reader.nextByte == TEMPLATE) {
-          ctx.createClassSymbolIfNew(start, name)
-        } else {
-          ctx.createSymbolIfNew(start, name)
-        }
+      val rhs = if (reader.nextByte == TEMPLATE) {
+        ctx.createClassSymbolIfNew(start, name)
+        readTemplate
+      } else {
+        ctx.createSymbolIfNew(start, name)
+        readTerm
       }
-      // TODO: this is only for classes, read type for other typedefs
-      assert(reader.nextByte == TEMPLATE)
-      val template = readTemplate
       // TODO: read modifiers
       skipModifiers(end)
-      TypeDef(name, template)
+      TypeDef(name, rhs)
     case VALDEF | DEFDEF | PARAM => readValOrDefDef
     case _                       => readTerm
   }

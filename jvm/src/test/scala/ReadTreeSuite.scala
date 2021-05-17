@@ -672,4 +672,13 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(mixinSuper)(clue(tree)))
   }
+
+  test("type-member") {
+    val tree = unpickle("simple_trees/TypeMember")
+
+    val typeMember: StructureCheck = {
+      case TypeDef(TypeName(SimpleName("TypeMember")), Ident(TypeName(SimpleName("Int")))) =>
+    }
+    assert(containsSubtree(typeMember)(clue(tree)))
+  }
 }
