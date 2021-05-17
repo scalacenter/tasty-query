@@ -20,6 +20,9 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     read(new ListBuffer[Tree])
   }
 
+  def forkAt(start: Addr): TreeUnpickler =
+    new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef)
+
   def readName: TermName = nameAtRef(reader.readNameRef())
 
   def readTopLevelStat: Tree = reader.nextByte match {
@@ -78,11 +81,13 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
 
   def readParamLists: List[List[ValDef]] = {
     var acc = new ListBuffer[List[ValDef]]()
-    while (reader.nextByte == PARAM) {
-      acc += readParams
-    }
-    if (reader.nextByte == PARAMEND) {
-      reader.readByte()
+    while (reader.nextByte == PARAM || reader.nextByte == EMPTYCLAUSE) {
+      reader.nextByte match {
+        case PARAM => acc += readParams
+        case EMPTYCLAUSE =>
+          reader.readByte()
+          acc += Nil
+      }
     }
     acc.toList
   }
@@ -92,7 +97,7 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
     while (reader.nextByte == PARAM) {
       acc += readValOrDefDef.asInstanceOf[ValDef]
     }
-    if (reader.nextByte == PARAMEND) {
+    if (reader.nextByte == SPLITCLAUSE) {
       reader.readByte()
     }
     acc.toList
@@ -138,6 +143,14 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       val name = readName
       val qual = readTerm
       Select(qual, name)
+    case SELECTin =>
+      reader.readByte()
+      val end  = reader.readEnd()
+      val name = readName
+      val qual = readTerm
+      // TODO: use owner
+      val owner = readType
+      Select(qual, name)
     case NEW =>
       reader.readByte()
       val cls = readTypeTree
@@ -153,6 +166,9 @@ class TreeUnpickler(reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val name = readName
       TermRef(DummyType, name)
+    case SHAREDtype =>
+      reader.readByte()
+      forkAt(reader.readAddr()).readType
   }
 
   def readTypeTree: Tree = reader.nextByte match {
