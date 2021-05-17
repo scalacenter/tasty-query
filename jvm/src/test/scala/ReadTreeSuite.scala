@@ -641,6 +641,77 @@ class ReadTreeSuite extends munit.FunSuite {
     assert(containsSubtree(SAMLambdaMatch)(clue(tree)))
   }
 
+  test("eta-expansion") {
+    val tree = unpickle("simple_trees/EtaExpansion")
+
+    /*
+    takesFunction(intMethod)
+    the compiler generates a function which simply calls intMethod;
+    this function is passed as the argument to takesFunction
+     */
+    val applicationMatch: StructureCheck = {
+      case Apply(
+            Select(This(Some(Ident(TypeName(SimpleName("EtaExpansion"))))), SignedName(SimpleName("takesFunction"), _)),
+            Block(
+              List(
+                DefDef(
+                  SimpleName("$anonfun"),
+                  Nil,
+                  List(ValDef(SimpleName("x"), _, _)) :: Nil,
+                  _,
+                  Apply(
+                    Select(
+                      This(Some(Ident(TypeName(SimpleName("EtaExpansion"))))),
+                      SignedName(SimpleName("intMethod"), _)
+                    ),
+                    List(Ident(SimpleName("x")))
+                  )
+                )
+              ),
+              Lambda(Ident(SimpleName("$anonfun")), EmptyTree)
+            ) :: Nil
+          ) =>
+    }
+    assert(containsSubtree(applicationMatch)(clue(tree)))
+  }
+
+  test("partial-application") {
+    val tree = unpickle("simple_trees/PartialApplication")
+
+    // Partial application under the hood is defining a function which takes the remaining parameters
+    // and calls the original function with fixed + remaining parameters
+    val applicationMatch: StructureCheck = {
+      case DefDef(
+            SimpleName("partiallyApplied"),
+            Nil,
+            Nil,
+            _,
+            Block(
+              List(
+                DefDef(
+                  SimpleName("$anonfun"),
+                  Nil,
+                  List(ValDef(SimpleName("second"), _, _)) :: Nil,
+                  _,
+                  Apply(
+                    Apply(
+                      Select(
+                        This(Some(Ident(TypeName(SimpleName("PartialApplication"))))),
+                        SignedName(SimpleName("withManyParams"), _)
+                      ),
+                      Literal(Constant(0)) :: Nil
+                    ),
+                    Ident(SimpleName("second")) :: Nil
+                  )
+                )
+              ),
+              Lambda(Ident(SimpleName("$anonfun")), EmptyTree)
+            )
+          ) =>
+    }
+    assert(containsSubtree(applicationMatch)(clue(tree)))
+  }
+
   test("named-argument") {
     val tree = unpickle("simple_trees/NamedArgument")
 
