@@ -297,6 +297,26 @@ class ReadTreeSuite extends munit.FunSuite {
     assert(containsSubtree(default)(clue(tree)))
   }
 
+  test("match-case-class") {
+    val tree = unpickle("simple_trees/PatternMatchingOnCaseClass")
+
+    val guardWithAlternatives: StructureCheck = {
+      case CaseDef(
+            Typed(
+              Unapply(
+                Select(Ident(SimpleName("FirstCase")), SignedName(SimpleName("unapply"), _)),
+                Nil,
+                List(Bind(SimpleName("x"), Ident(Wildcard)))
+              ),
+              _
+            ),
+            EmptyTree,
+            body: Block
+          ) =>
+    }
+    assert(containsSubtree(guardWithAlternatives)(clue(tree)))
+  }
+
   test("assign") {
     val tree = unpickle("simple_trees/Assign")
     val assignBlockMatch: StructureCheck = {

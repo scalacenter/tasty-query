@@ -277,10 +277,33 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         reader.readByte()
         new InlineMatch(readTerm, readCases(end))
       } else Match(readTerm, readCases(end))
+    case BIND =>
+      val start = reader.currentAddr
+      reader.readByte()
+      val end  = reader.readEnd()
+      val name = readName
+      ctx.createSymbolIfNew(start, name)
+      // TODO: use type
+      val typ  = readType
+      val term = readTerm
+      skipModifiers(end)
+      Bind(name, term)
     case ALTERNATIVE =>
       reader.readByte()
       val end = reader.readEnd()
       Alternative(reader.until(end)(readTerm))
+    case UNAPPLY =>
+      reader.readByte()
+      val end = reader.readEnd()
+      val fun = readTerm
+      val args = reader.collectWhile(reader.nextByte == IMPLICITarg)({
+        assert(reader.readByte() == IMPLICITarg)
+        readTerm
+      })
+      // TODO: use pattern type
+      val patType  = readType
+      val patterns = reader.until(end)(readTerm)
+      Unapply(fun, args, patterns)
     case REPEATED =>
       reader.readByte()
       val end      = reader.readEnd()

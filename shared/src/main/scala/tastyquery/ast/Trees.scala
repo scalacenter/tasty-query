@@ -110,8 +110,26 @@ object Trees {
   /** case pattern if guard => body; only appears as child of a Match and Try */
   case class CaseDef(pattern: Tree, guard: Tree, body: Tree) extends Tree
 
+  /** pattern in {@link Unapply} */
+  case class Bind(name: Name, body: Tree) extends Tree
+
   /** tree_1 | ... | tree_n */
   case class Alternative(trees: List[Tree]) extends Tree
+
+  /**
+   * `extractor(patterns)` in a pattern:
+   *  @param fun       is `extractor.unapply` (or, for backwards compatibility, `extractor.unapplySeq`)
+   *                   possibly with type parameters
+   *  @param implicits Any implicit parameters passed to the unapply after the selector
+   *  @param patterns  The argument patterns in the pattern match.
+   *
+   *  It is typed with same type as first `fun` argument
+   *  Given a match selector `sel` a pattern UnApply(fun, implicits, patterns) is roughly translated as follows
+   *
+   *    val result = fun(sel)(implicits)
+   *    if (result.isDefined) "match patterns against result"
+   */
+  case class Unapply(fun: Tree, implicits: List[Tree], patterns: List[Tree]) extends Tree
 
   /**
    * Seq(elems)
