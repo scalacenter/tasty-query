@@ -2,7 +2,8 @@ package tastyquery.ast
 
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
-import tastyquery.ast.Types.Type
+import tastyquery.ast.Types.{Type, TypeBounds}
+import tastyquery.ast.TypeTrees._
 import tastyquery.ast.Symbols.Symbol
 
 object Trees {
@@ -38,41 +39,53 @@ object Trees {
    *  mods type name >: lo <: hi,          if rhs = TypeBoundsTree(lo, hi)      or
    *  mods type name >: lo <: hi = rhs     if rhs = TypeBoundsTree(lo, hi, alias) and opaque in mods
    */
-  case class TypeDef(name: TypeName, rhs: Tree) extends Tree
+  case class TypeDef(name: TypeName, rhs: Template | TypeTree) extends Tree
 
-  /** extends parents { self => body } */
-  case class Template(constr: DefDef, parents: List[Tree], self: ValDef, body: List[Tree]) extends Tree
+  /**
+   * extends parents { self => body }
+   *
+   * @param classParent -- the parent whose constructor is called.
+   *                       If the template defines a class, this is its only class parent.
+   * @param parents        trait parents of the template and the class parent if the template defines a trait.
+   */
+  case class Template(
+    constr: DefDef,
+    classParent: Option[Apply],
+    parents: List[TypeTree],
+    self: ValDef,
+    body: List[Tree]
+  ) extends Tree
 
   /** mods val name: tpt = rhs */
-  case class ValDef(name: TermName, tpt: Tree, rhs: Tree) extends Tree
+  case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree) extends Tree
 
   /** mods def name[tparams](vparams_1)...(vparams_n): tpt = rhs */
-  case class DefDef(name: TermName, tparams: List[TypeDef], vparamss: List[List[ValDef]], tpt: Tree, rhs: Tree)
+  case class DefDef(name: TermName, tparams: List[TypeDef], vparamss: List[List[ValDef]], tpt: TypeTree, rhs: Tree)
       extends Tree
 
   /** name */
-  case class Ident(name: Name) extends Tree
+  case class Ident(name: TermName) extends Tree
 
   /** qualifier.name, or qualifier#name, if qualifier is a type */
   case class Select(qualifier: Tree, name: Name) extends Tree
 
   /** qual.this */
-  case class This(qualifier: Option[Ident]) extends Tree
+  case class This(qualifier: Option[TypeIdent]) extends Tree
 
   /** C.super[mix], where qual = C.this */
-  case class Super(qual: Tree, mix: Option[Ident]) extends Tree
+  case class Super(qual: Tree, mix: Option[TypeIdent]) extends Tree
 
   /** fun(args) */
   case class Apply(fun: Tree, args: List[Tree]) extends Tree
 
   /** fun[args] */
-  case class TypeApply(fun: Tree, args: List[Tree]) extends Tree
+  case class TypeApply(fun: Tree, args: List[TypeTree]) extends Tree
 
   /** new tpt, but no constructor call */
-  case class New(tpt: Tree) extends Tree
+  case class New(tpt: TypeTree) extends Tree
 
   /** expr : tpt */
-  case class Typed(expr: Tree, tpt: Tree) extends Tree
+  case class Typed(expr: Tree, tpt: TypeTree) extends Tree
 
   /** name = arg, outside a parameter list */
   case class Assign(lhs: Tree, rhs: Tree) extends Tree
@@ -96,7 +109,7 @@ object Trees {
    *  @param meth   A reference to the method.
    *  @param tpt    Not an EmptyTree only if the lambda's type is a SAMtype rather than a function type.
    */
-  case class Lambda(meth: Tree, tpt: Tree) extends Tree
+  case class Lambda(meth: Tree, tpt: TypeTree) extends Tree
 
   /** selector match { cases } */
   case class Match(selector: Tree, cases: List[CaseDef]) extends Tree {
@@ -135,7 +148,7 @@ object Trees {
    * Seq(elems)
    *  @param  tpt  The element type of the sequence.
    */
-  case class SeqLiteral(elems: List[Tree], elemtpt: Tree) extends Tree
+  case class SeqLiteral(elems: List[Tree], elemtpt: TypeTree) extends Tree
 
   /** while (cond) { body } */
   case class While(cond: Tree, body: Tree) extends Tree
@@ -152,17 +165,7 @@ object Trees {
 
   case object EmptyTree extends Tree
 
-  val EmptyValDef: ValDef = ValDef(Names.Wildcard, EmptyTree, EmptyTree)
-
-  // TODO: mark type trees?
-
-  case class TypeTree(tp: Type) extends Tree
-
-  /** ref.type */
-  case class SingletonTypeTree(ref: Tree) extends Tree
-
-  /** tpt[args] */
-  case class AppliedTypeTree(tycon: Tree, args: List[Tree]) extends Tree
+  val EmptyValDef: ValDef = ValDef(Names.Wildcard, EmptyTypeTree, EmptyTree)
 
   // A marker for Trees or components which are not yet constructed correctly
   case class DummyTree[T <: Object](components: T, todo: String) extends Tree

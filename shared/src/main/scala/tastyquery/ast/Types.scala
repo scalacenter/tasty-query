@@ -135,4 +135,6 @@ object Types {
 
   // A marker for Types or components which are not yet constructed correctly
   case object DummyType extends Type
+
+  case class TypeBounds(low: Type, high: Type)
 }

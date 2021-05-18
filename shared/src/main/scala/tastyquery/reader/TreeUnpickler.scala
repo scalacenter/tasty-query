@@ -5,7 +5,8 @@ import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.{DummySymbol, Symbol}
 import tastyquery.ast.Trees._
-import tastyquery.ast.Types.{AppliedType, ConstantType, DummyType, TermRef, ThisType, Type, TypeRef}
+import tastyquery.ast.TypeTrees._
+import tastyquery.ast.Types.{AppliedType, ConstantType, DummyType, TermRef, ThisType, Type, TypeBounds, TypeRef}
 import tastyquery.reader.TastyUnpickler.NameTable
 
 import scala.annotation.tailrec
@@ -74,12 +75,12 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val end  = reader.readEnd()
       val name = readName.toTypeName
-      val rhs = if (reader.nextByte == TEMPLATE) {
+      val rhs: Template | TypeTree = if (reader.nextByte == TEMPLATE) {
         ctx.createClassSymbolIfNew(start, name)
         readTemplate
       } else {
         ctx.createSymbolIfNew(start, name)
-        readTerm
+        readTypeTree
       }
       // TODO: read modifiers
       skipModifiers(end)
@@ -94,18 +95,20 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     val end     = reader.readEnd()
     val tparams = readTypeParams
     val params  = readParams
-    val parents = reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF) {
+    val parents: List[Apply | TypeTree] = reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF) {
       reader.nextByte match {
         // class parents of classes are APPLYs, because they specify the constructor
-        case APPLY => readTerm
+        case APPLY => readTerm.asInstanceOf[Apply]
         case _     => readTypeTree
       }
     }
-    val self = readSelf
+    val classParent  = parents.collect { case p: Apply => p }.headOption
+    val traitParents = parents.collect { case p: TypeTree => p }
+    val self         = readSelf
     // The first entry is the constructor
     val cstr = readStat.asInstanceOf[DefDef]
     val body = readStats(end)
-    Template(cstr, parents, self, tparams ++ params ++ body)
+    Template(cstr, classParent, traitParents, self, tparams ++ params ++ body)
   }
 
   def readTypeParams(using Context): List[TypeDef] = {
@@ -205,13 +208,13 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       Select(qual, name)
     case QUALTHIS =>
       reader.readByte()
-      val qualifier = readTerm.asInstanceOf[Ident]
+      val qualifier = readTypeTree.asInstanceOf[TypeIdent]
       This(Some(qualifier))
     case SUPER =>
       reader.readByte()
       val end   = reader.readEnd()
       val qual  = readTerm
-      val mixin = reader.ifBefore(end)(Some(readTerm.asInstanceOf[Ident]), None)
+      val mixin = reader.ifBefore(end)(Some(readTypeTree.asInstanceOf[TypeIdent]), None)
       Super(qual, mixin)
     case SELECTin =>
       reader.readByte()
@@ -262,7 +265,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val end    = reader.readEnd()
       val method = readTerm
-      val tpt    = reader.ifBefore(end)(readTypeTree, EmptyTree)
+      val tpt    = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
       Lambda(method, tpt)
     case MATCH =>
       reader.readByte()
@@ -316,22 +319,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val from = readSymRef
       val expr = reader.ifBefore(end)(readTerm, EmptyTree)
       // TODO: always just taking the name?
-      Return(expr, Ident(from.name))
-    // type trees
-    case IDENTtpt =>
-      reader.readByte()
-      val typeName = readName.toTypeName
-      val typ      = readType
-      // TODO: assign type
-      Ident(typeName)
-    case SINGLETONtpt =>
-      reader.readByte()
-      SingletonTypeTree(readTerm)
-    case APPLIEDtpt =>
-      reader.readByte()
-      val end   = reader.readEnd()
-      val tycon = readTypeTree
-      AppliedTypeTree(tycon, reader.until(end)(readTypeTree))
+      // return always returns from a method, i.e. something with a TermName
+      Return(expr, Ident(from.name.asInstanceOf[TermName]))
     // paths
     case THIS =>
       reader.readByte()
@@ -351,14 +340,16 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val sym = readSymRef
       // TODO: assign type
-      Ident(sym.name)
+      assert(sym.name.isInstanceOf[TermName])
+      Ident(sym.name.asInstanceOf[TermName])
     // TODO: is it always Ident?
     case TERMREFsymbol =>
       reader.readByte()
       val sym = readSymRef
       val typ = readType
+      assert(sym.name.isInstanceOf[TermName])
       // TODO: assign type
-      Ident(sym.name)
+      Ident(sym.name.asInstanceOf[TermName])
     case SHAREDtype =>
       reader.readByte()
       forkAt(reader.readAddr()).readTerm
@@ -441,12 +432,26 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case _ => ConstantType(readConstant)
   }
 
-  def readTypeTree(using Context): Tree = reader.nextByte match {
-    case tag if isTypeTreeTag(tag) => readTerm
+  def readTypeTree(using Context): TypeTree = reader.nextByte match {
+    case IDENTtpt =>
+      reader.readByte()
+      val typeName = readName.toTypeName
+      val typ      = readType
+      // TODO: assign type
+      TypeIdent(typeName)
+    case SINGLETONtpt =>
+      reader.readByte()
+      SingletonTypeTree(readTerm)
+    case APPLIEDtpt =>
+      reader.readByte()
+      val end   = reader.readEnd()
+      val tycon = readTypeTree
+      AppliedTypeTree(tycon, reader.until(end)(readTypeTree))
+//    case tag if isTypeTreeTag(tag) => readTerm
     case SHAREDterm =>
       reader.readByte()
-      forkAt(reader.readAddr()).readTerm
-    case _ => TypeTree(readType)
+      forkAt(reader.readAddr()).readTypeTree
+    case _ => TypeWrapper(readType)
   }
 
   def readConstant(using Context): Constant = reader.readByte() match {
