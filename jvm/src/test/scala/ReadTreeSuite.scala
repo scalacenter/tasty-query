@@ -4,7 +4,7 @@ import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.Symbol
 import tastyquery.ast.Trees._
 import tastyquery.ast.TypeTrees._
-import tastyquery.ast.Types.{AppliedType, ConstantType, TermRef, ThisType, TypeRef}
+import tastyquery.ast.Types.{AppliedType, ConstantType, TermRef, ThisType, RealTypeBounds, TypeRef}
 import tastyquery.reader.TastyUnpickler
 
 import java.nio.file.{Files, Paths}
@@ -26,8 +26,8 @@ class ReadTreeSuite extends munit.FunSuite {
   def containsSubtree(p: StructureCheck)(t: Tree): Boolean = {
     def rec(t: Tree): Boolean = containsSubtree(p)(t)
     p.isDefinedAt(t) || (t match {
-      case PackageDef(_, stats)      => stats.exists(rec)
-      case TypeDef(_, rhs: Template) => rec(rhs)
+      case PackageDef(_, stats) => stats.exists(rec)
+      case Class(_, rhs)        => rec(rhs)
       case Template(constr, classParent, traitParentsparents, self, body) =>
         rec(constr) || rec(self) || classParent.exists(rec) || body.exists(rec)
       case ValDef(_, tpt, rhs) => rec(rhs)
@@ -41,7 +41,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
       // Trees, inside which the existing tests do not descend
       case _: New | _: Alternative | _: CaseDef | _: While | _: Assign | _: Throw | _: Typed | _: SeqLiteral |
-          _: TypeApply | _: This | _: Lambda | _: NamedArg | _: Super | TypeDef(_, _: TypeWrapper) =>
+          _: TypeApply | _: This | _: Lambda | _: NamedArg | _: Super | _: TypeMember | _: TypeParam =>
         false
 
       // Nowhere to walk
@@ -72,7 +72,7 @@ class ReadTreeSuite extends munit.FunSuite {
         case PackageDef(
               _,
               List(
-                TypeDef(
+                Class(
                   TypeName(SimpleName("EmptyClass")),
                   Template(
                     // default constructor: no type params, no arguments, empty body
@@ -763,9 +763,206 @@ class ReadTreeSuite extends munit.FunSuite {
   test("type-member") {
     val tree = unpickle("simple_trees/TypeMember")
 
+    // simple type member
     val typeMember: StructureCheck = {
-      case TypeDef(TypeName(SimpleName("TypeMember")), TypeIdent(TypeName(SimpleName("Int")))) =>
+      case TypeMember(TypeName(SimpleName("TypeMember")), TypeIdent(TypeName(SimpleName("Int")))) =>
     }
     assert(containsSubtree(typeMember)(clue(tree)))
+
+    // abstract without user-specified bounds, therefore default bounds are generated
+    val abstractTypeMember: StructureCheck = {
+      case TypeMember(
+            TypeName(SimpleName("AbstractType")),
+            BoundedTypeTree(
+              TypeBoundsTree(
+                TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+              ),
+              EmptyTypeTree
+            )
+          ) =>
+    }
+    assert(containsSubtree(abstractTypeMember)(clue(tree)))
+
+    // abstract with explicit bounds
+    val abstractWithBounds: StructureCheck = {
+      case TypeMember(
+            TypeName(SimpleName("AbstractWithBounds")),
+            BoundedTypeTree(
+              TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("AnyRef")))),
+              EmptyTypeTree
+            )
+          ) =>
+    }
+    assert(containsSubtree(abstractWithBounds)(clue(tree)))
+
+    // opaque
+    val opaqueTypeMember: StructureCheck = {
+      case TypeMember(TypeName(SimpleName("Opaque")), TypeIdent(TypeName(SimpleName("Int")))) =>
+    }
+    assert(containsSubtree(opaqueTypeMember)(clue(tree)))
+
+    // bounded opaque
+    val opaqueWithBounds: StructureCheck = {
+      case TypeMember(
+            TypeName(SimpleName("OpaqueWithBounds")),
+            BoundedTypeTree(
+              TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("AnyRef")))),
+              TypeIdent(TypeName(SimpleName("Null")))
+            )
+          ) =>
+    }
+    assert(containsSubtree(opaqueWithBounds)(clue(tree)))
+  }
+
+  test("generic-class") {
+    val tree = unpickle("simple_trees/GenericClass")
+
+    /*
+    The class and its constructor have the same type bounds for the type parameter,
+    but the constructor's are attached to the type parameter declaration in the code,
+    and the class's are just typebounds (no associated code location), hence the difference in structures
+     */
+    val genericClass: StructureCheck = {
+      case Class(
+            TypeName(SimpleName("GenericClass")),
+            Template(
+              DefDef(
+                SimpleName("<init>"),
+                TypeParam(
+                  TypeName(SimpleName("T")),
+                  TypeBoundsTree(
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                  )
+                ) :: Nil,
+                _,
+                _,
+                _
+              ),
+              _,
+              _,
+              _,
+              TypeParam(
+                TypeName(SimpleName("T")),
+                RealTypeBounds(TypeRef(_, TypeName(SimpleName("Nothing"))), TypeRef(_, TypeName(SimpleName("Any"))))
+              ) :: _
+            )
+          ) =>
+    }
+    assert(containsSubtree(genericClass)(clue(tree)))
+  }
+
+  test("generic-method") {
+    val tree = unpickle("simple_trees/GenericMethod")
+    val genericMethod: StructureCheck = {
+      case DefDef(
+            SimpleName("usesTypeParam"),
+            TypeParam(
+              TypeName(SimpleName("T")),
+              TypeBoundsTree(
+                TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+              )
+            ) :: Nil,
+            List(Nil),
+            AppliedTypeTree(TypeIdent(TypeName(SimpleName("Option"))), TypeIdent(TypeName(SimpleName("T"))) :: Nil),
+            _
+          ) =>
+    }
+    assert(containsSubtree(genericMethod)(clue(tree)))
+  }
+
+  test("class-type-bounds") {
+    val tree = unpickle("simple_trees/TypeBoundsOnClass")
+    val genericClass: StructureCheck = {
+      case Class(
+            TypeName(SimpleName("TypeBoundsOnClass")),
+            Template(
+              DefDef(
+                SimpleName("<init>"),
+                TypeParam(
+                  TypeName(SimpleName("T")),
+                  TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("AnyRef"))))
+                ) :: Nil,
+                _,
+                _,
+                _
+              ),
+              _,
+              _,
+              _,
+              TypeParam(
+                TypeName(SimpleName("T")),
+                RealTypeBounds(TypeRef(_, TypeName(SimpleName("Null"))), TypeRef(_, TypeName(SimpleName("AnyRef"))))
+              ) :: _
+            )
+          ) =>
+    }
+    assert(containsSubtree(genericClass)(clue(tree)))
+  }
+
+  test("shared-type-bounds") {
+    // The type bounds of the class and its inner class are shared in the TASTy serializations.
+    // This test checks that such shared type bounds are read correctly.
+    val tree = unpickle("simple_trees/GenericClassWithNestedGeneric")
+
+    val genericClass: StructureCheck = {
+      case Class(
+            TypeName(SimpleName("GenericClassWithNestedGeneric")),
+            Template(
+              DefDef(
+                SimpleName("<init>"),
+                TypeParam(
+                  TypeName(SimpleName("T")),
+                  TypeBoundsTree(
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                  )
+                ) :: Nil,
+                _,
+                _,
+                _
+              ),
+              _,
+              _,
+              _,
+              TypeParam(
+                TypeName(SimpleName("T")),
+                RealTypeBounds(TypeRef(_, TypeName(SimpleName("Nothing"))), TypeRef(_, TypeName(SimpleName("Any"))))
+              ) :: Class(TypeName(SimpleName("NestedGeneric")), _) :: _
+            )
+          ) =>
+    }
+    assert(containsSubtree(genericClass)(clue(tree)))
+
+    val nestedClass: StructureCheck = {
+      case Class(
+            TypeName(SimpleName("NestedGeneric")),
+            Template(
+              DefDef(
+                SimpleName("<init>"),
+                TypeParam(
+                  TypeName(SimpleName("U")),
+                  TypeBoundsTree(
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                  )
+                ) :: Nil,
+                _,
+                _,
+                _
+              ),
+              _,
+              _,
+              _,
+              TypeParam(
+                TypeName(SimpleName("U")),
+                RealTypeBounds(TypeRef(_, TypeName(SimpleName("Nothing"))), TypeRef(_, TypeName(SimpleName("Any"))))
+              ) :: _
+            )
+          ) =>
+    }
+    assert(containsSubtree(nestedClass)(clue(tree)))
   }
 }

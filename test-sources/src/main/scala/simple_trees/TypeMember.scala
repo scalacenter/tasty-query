@@ -1,5 +1,9 @@
 package simple_trees
 
-class TypeMember {
+abstract class TypeMember {
   type TypeMember = Int
+  type AbstractType
+  type AbstractWithBounds >: Null <: AnyRef
+  opaque type Opaque = Int
+  opaque type OpaqueWithBounds >: Null <: AnyRef = Null
 }

@@ -18,4 +18,12 @@ object TypeTrees {
   case class AppliedTypeTree(tycon: TypeTree, args: List[TypeTree]) extends TypeTree
 
   case object EmptyTypeTree extends TypeTree
+
+  case class TypeBoundsTree(low: TypeTree, high: TypeTree)
+
+  /**
+   * >: lo <: hi
+   *  >: lo <: hi = alias  for RHS of bounded opaque type
+   */
+  case class BoundedTypeTree(bounds: TypeBoundsTree, alias: TypeTree) extends TypeTree
 }

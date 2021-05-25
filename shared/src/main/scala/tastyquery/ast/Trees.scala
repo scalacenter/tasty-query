@@ -39,7 +39,15 @@ object Trees {
    *  mods type name >: lo <: hi,          if rhs = TypeBoundsTree(lo, hi)      or
    *  mods type name >: lo <: hi = rhs     if rhs = TypeBoundsTree(lo, hi, alias) and opaque in mods
    */
-  case class TypeDef(name: TypeName, rhs: Template | TypeTree) extends Tree
+  abstract class TypeDef extends Tree
+
+  case class Class(name: TypeName, rhs: Template) extends TypeDef
+
+  /** A type member has a type tree rhs if the member is defined by the user, or typebounds if it's synthetic */
+  case class TypeMember(name: TypeName, rhs: TypeTree | TypeBounds) extends TypeDef
+
+  /** The bounds are a type tree if the method is defined by the user and bounds-only if it's synthetic */
+  case class TypeParam(name: TypeName, bounds: TypeBoundsTree | TypeBounds) extends TypeDef
 
   /**
    * extends parents { self => body }

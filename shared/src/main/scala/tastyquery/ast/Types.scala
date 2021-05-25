@@ -119,6 +119,8 @@ object Types {
     override def underlying: Type = ???
   }
 
+  case object NoPrefix extends Type
+
   case class ThisType(tref: TypeRef) extends TypeProxy with SingletonType {
     override def underlying: Type = ???
   }
@@ -136,5 +138,9 @@ object Types {
   // A marker for Types or components which are not yet constructed correctly
   case object DummyType extends Type
 
-  case class TypeBounds(low: Type, high: Type)
+  trait TypeBounds(low: Type, high: Type)
+
+  case class RealTypeBounds(low: Type, high: Type) extends TypeBounds(low, high)
+
+  case class TypeAlias(alias: Type) extends Type with TypeBounds(alias, alias)
 }

@@ -6,7 +6,7 @@ import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.{DummySymbol, Symbol}
 import tastyquery.ast.Trees._
 import tastyquery.ast.TypeTrees._
-import tastyquery.ast.Types.{AppliedType, ConstantType, DummyType, TermRef, ThisType, Type, TypeBounds, TypeRef}
+import tastyquery.ast.Types._
 import tastyquery.reader.TastyUnpickler.NameTable
 
 import scala.annotation.tailrec
@@ -31,6 +31,43 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
   def fork: TreeUnpickler =
     forkAt(reader.currentAddr)
+
+  def isSharedTag(tag: Int): Boolean = tag == SHAREDtype || tag == SHAREDterm
+
+  /** The tag at the end of SHAREDtype/term chain */
+  def tagFollowShared: Int = {
+    val tag = reader.nextByte
+    if (isSharedTag(tag)) {
+      val lookAhead  = fork
+      val addrShared = lookAhead.reader.readAddr()
+      forkAt(addrShared).tagFollowShared
+    } else {
+      tag
+    }
+  }
+
+  /**
+   * Performs the read action as if SHARED tags were transparent:
+   *  - follows the SHARED tags to the term or type that is shared
+   *  - reads the shared term or type with {@code read} action
+   *  - restores the reader to seamlessly continue reading after the SHARED tag we started from
+   */
+  def readPotentiallyShared[T](read: => T): T =
+    if (isSharedTag(reader.nextByte)) {
+      reader.readByte()
+      val addr     = reader.readAddr()
+      val returnTo = reader.currentAddr
+      reader.goto(addr)
+      val result = if (isSharedTag(reader.nextByte)) {
+        readPotentiallyShared(read)
+      } else {
+        read
+      }
+      reader.goto(returnTo)
+      result
+    } else {
+      read
+    }
 
   def readName: TermName = nameAtRef(reader.readNameRef())
 
@@ -75,18 +112,98 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val end  = reader.readEnd()
       val name = readName.toTypeName
-      val rhs: Template | TypeTree = if (reader.nextByte == TEMPLATE) {
+      val typedef: Class | TypeMember = if (reader.nextByte == TEMPLATE) {
         ctx.createClassSymbolIfNew(start, name)
-        readTemplate
+        Class(name, readTemplate)
       } else {
         ctx.createSymbolIfNew(start, name)
-        readTypeTree
+        if (tagFollowShared == TYPEBOUNDS)
+          TypeMember(name, readTypeBounds)
+        else
+          TypeMember(name, readTypeTree)
       }
       // TODO: read modifiers
       skipModifiers(end)
-      TypeDef(name, rhs)
+      typedef
     case VALDEF | DEFDEF | PARAM => readValOrDefDef
     case _                       => readTerm
+  }
+
+  /** Reads type bounds for a synthetic typedef */
+  def readTypeBounds(using Context): TypeBounds = {
+    assert(tagFollowShared == TYPEBOUNDS)
+    readPotentiallyShared({
+      val end = reader.readEnd()
+      val low = readType
+      if (reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
+        val high = readType
+        // TODO: read variance (a modifier)
+        skipModifiers(end)
+        RealTypeBounds(low, high)
+      } else {
+        skipModifiers(end)
+        TypeAlias(low)
+      }
+    })
+  }
+
+  def readTypeParams(using Context): List[TypeParam] = {
+    def readTypeBounds(using Context): TypeBounds | TypeBoundsTree = {
+      def readTypeBoundsType(using Context): TypeBounds = {
+        assert(reader.readByte() == TYPEBOUNDS)
+        val end = reader.readEnd()
+        val low = readType
+        // type bounds for type parameters have to be bounds, not an alias
+        assert(reader.currentAddr != end && !isModifierTag(reader.nextByte))
+        val high = readType
+        // TODO: read variance (a modifier)
+        skipModifiers(end)
+        RealTypeBounds(low, high)
+      }
+
+      def readTypeBoundsTree(using Context): TypeBoundsTree = {
+        assert(reader.readByte() == TYPEBOUNDStpt)
+        val end  = reader.readEnd()
+        val low  = readTypeTree
+        val high = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
+        // assert atEnd: no alias for type parameters
+        assert(reader.currentAddr == end)
+        TypeBoundsTree(low, high)
+      }
+
+      readPotentiallyShared(
+        if (tagFollowShared == TYPEBOUNDS)
+          readTypeBoundsType
+        else
+          readTypeBoundsTree
+      )
+    }
+
+    def readTypeParam: TypeParam = {
+      val start = reader.currentAddr
+      reader.readByte()
+      val end  = reader.readEnd()
+      val name = readName.toTypeName
+      ctx.createSymbolIfNew(start, name)
+      val bounds = readTypeBounds
+      skipModifiers(end)
+      TypeParam(name, bounds)
+    }
+    var acc = new ListBuffer[TypeParam]()
+    while (reader.nextByte == TYPEPARAM) {
+      acc += readTypeParam
+    }
+    acc.toList
+  }
+
+  /** Reads TYPEBOUNDStpt of a typedef */
+  def readBoundedTypeTree(using Context): BoundedTypeTree = {
+    assert(reader.readByte() == TYPEBOUNDStpt)
+    val end   = reader.readEnd()
+    val low   = readTypeTree
+    val high  = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
+    val alias = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
+    BoundedTypeTree(TypeBoundsTree(low, high), alias)
   }
 
   // TODO: classinfo of the owner
@@ -109,19 +226,6 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     val cstr = readStat.asInstanceOf[DefDef]
     val body = readStats(end)
     Template(cstr, classParent, traitParents, self, tparams ++ params ++ body)
-  }
-
-  def readTypeParams(using Context): List[TypeDef] = {
-    def readTypeParam: TypeDef = {
-      reader.readByte()
-      // TODO: create symbols
-      ???
-    }
-    var acc = new ListBuffer[TypeDef]()
-    while (reader.nextByte == TYPEPARAM) {
-      acc += readTypeParam
-    }
-    acc.toList
   }
 
   def readParamLists(using Context): List[List[ValDef]] = {
@@ -401,6 +505,10 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val name = readName.toTypeName
       TypeRef(readType, name)
+    case TYPEREFdirect =>
+      reader.readByte()
+      val sym = readSymRef
+      TypeRef(NoPrefix, sym)
     case TYPEREFsymbol =>
       reader.readByte()
       val sym = readSymRef
@@ -447,7 +555,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val end   = reader.readEnd()
       val tycon = readTypeTree
       AppliedTypeTree(tycon, reader.until(end)(readTypeTree))
-//    case tag if isTypeTreeTag(tag) => readTerm
+    // Type tree for a type member (abstract or bounded opaque)
+    case TYPEBOUNDStpt => readBoundedTypeTree
     case SHAREDterm =>
       reader.readByte()
       forkAt(reader.readAddr()).readTypeTree
