@@ -160,4 +160,8 @@ object Types {
   case class TypeAlias(alias: Type) extends TypeProxy with TypeBounds(alias, alias) {
     override def underlying: Type = alias
   }
+
+  // ----- Ground Types -------------------------------------------------
+
+  case class OrType(first: Type, second: Type) extends GroundType with ValueType
 }

@@ -563,6 +563,10 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val typ   = readType
       val annot = readTerm
       AnnotatedType(typ, annot)
+    case ORtype =>
+      reader.readByte()
+      reader.readEnd()
+      OrType(readType, readType)
     case _ => ConstantType(readConstant)
   }
 

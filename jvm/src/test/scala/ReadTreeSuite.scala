@@ -4,7 +4,7 @@ import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.Symbol
 import tastyquery.ast.Trees._
 import tastyquery.ast.TypeTrees._
-import tastyquery.ast.Types.{AppliedType, ConstantType, TermRef, ThisType, RealTypeBounds, TypeRef}
+import tastyquery.ast.Types.{AppliedType, ConstantType, OrType, RealTypeBounds, TermRef, ThisType, TypeRef}
 import tastyquery.reader.TastyUnpickler
 
 import java.nio.file.{Files, Paths}
@@ -1021,5 +1021,32 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(byName)(clue(tree)))
+  }
+
+  test("union-type") {
+    val tree = unpickle("simple_trees/UnionType")
+
+    val unionTypeMethod: StructureCheck = {
+      case DefDef(
+            SimpleName("argWithOrType"),
+            Nil,
+            // Int | String = | [Int, String]
+            List(
+              List(
+                ValDef(
+                  SimpleName("x"),
+                  AppliedTypeTree(
+                    TypeIdent(TypeName(SimpleName("|"))),
+                    List(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("String"))))
+                  ),
+                  EmptyTree
+                )
+              )
+            ),
+            TypeWrapper(OrType(TypeRef(_, TypeName(SimpleName("Int"))), TypeRef(_, TypeName(SimpleName("String"))))),
+            _
+          ) =>
+    }
+    assert(containsSubtree(unionTypeMethod)(clue(tree)))
   }
 }
