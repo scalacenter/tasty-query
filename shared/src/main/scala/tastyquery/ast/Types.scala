@@ -12,8 +12,10 @@ object Types {
 
   // ----- Type categories ----------------------------------------------
 
+  // Every type is expected to inherit either TypeProxy or GroundType.
+
   /**
-   * A marker trait for type proxies.
+   * Type proxies.
    * Each implementation is expected to redefine the `underlying` method.
    */
   abstract class TypeProxy extends Type {
@@ -21,6 +23,11 @@ object Types {
     /** The type to which this proxy forwards operations. */
     def underlying: Type
   }
+
+  /** Non-proxy types */
+  abstract class GroundType extends Type {}
+
+  // ----- Marker traits ------------------------------------------------
 
   /**
    * A marker trait for types that apply only to term symbols or that
@@ -41,6 +48,8 @@ object Types {
   trait SingletonType extends TypeProxy with ValueType {
     def isOverloaded: Boolean = false
   }
+
+  // ----- Type Proxies -------------------------------------------------
 
   abstract class NamedType extends TypeProxy with ValueType {
     self =>
@@ -148,5 +157,7 @@ object Types {
 
   case class RealTypeBounds(low: Type, high: Type) extends TypeBounds(low, high)
 
-  case class TypeAlias(alias: Type) extends Type with TypeBounds(alias, alias)
+  case class TypeAlias(alias: Type) extends TypeProxy with TypeBounds(alias, alias) {
+    override def underlying: Type = alias
+  }
 }
