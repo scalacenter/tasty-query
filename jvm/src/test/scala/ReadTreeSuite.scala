@@ -4,7 +4,7 @@ import tastyquery.ast.Names._
 import tastyquery.ast.Symbols.Symbol
 import tastyquery.ast.Trees._
 import tastyquery.ast.TypeTrees._
-import tastyquery.ast.Types.{AppliedType, ConstantType, OrType, RealTypeBounds, TermRef, ThisType, TypeRef}
+import tastyquery.ast.Types._
 import tastyquery.reader.TastyUnpickler
 
 import java.nio.file.{Files, Paths}
@@ -723,6 +723,28 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(applicationMatch)(clue(tree)))
+  }
+
+  test("partial-function") {
+    val tree = unpickle("simple_trees/WithPartialFunction")
+
+    val partialFunction: StructureCheck = {
+      case DefDef(
+            SimpleName("$anonfun"),
+            Nil,
+            List(ValDef(SimpleName("x$1"), _, EmptyTree)) :: Nil,
+            _,
+            // match x$1 with type x$1
+            Match(
+              Typed(
+                Ident(SimpleName("x$1")),
+                TypeWrapper(AnnotatedType(TermRef(NoPrefix, Symbol(SimpleName("x$1"))), _))
+              ),
+              cases
+            )
+          ) =>
+    }
+    assert(containsSubtree(partialFunction)(clue(tree)))
   }
 
   test("named-argument") {
