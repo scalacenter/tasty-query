@@ -16,6 +16,9 @@ object TypeTrees {
   /** ref.type */
   case class SingletonTypeTree(ref: Tree) extends TypeTree
 
+  /** => T */
+  case class ByNameTypeTree(result: TypeTree) extends TypeTree
+
   /** tpt[args] */
   case class AppliedTypeTree(tycon: TypeTree, args: List[TypeTree]) extends TypeTree
 

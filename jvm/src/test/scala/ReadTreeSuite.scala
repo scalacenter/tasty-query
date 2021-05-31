@@ -1007,4 +1007,19 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(selectTpt)(clue(tree)))
   }
+
+  test("by-name-parameter") {
+    val tree = unpickle("simple_trees/ByNameParameter")
+
+    val byName: StructureCheck = {
+      case DefDef(
+            SimpleName("withByName"),
+            Nil,
+            List(List(ValDef(SimpleName("x"), ByNameTypeTree(TypeIdent(TypeName(SimpleName("Int")))), EmptyTree))),
+            _,
+            _
+          ) =>
+    }
+    assert(containsSubtree(byName)(clue(tree)))
+  }
 }
