@@ -1071,4 +1071,39 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(unionTypeMethod)(clue(tree)))
   }
+
+  test("intersection-type") {
+    val tree = unpickle("simple_trees/IntersectionType")
+
+    val intersectionTypeMethod: StructureCheck = {
+      case DefDef(
+            SimpleName("argWithAndType"),
+            Nil,
+            List(
+              List(
+                ValDef(
+                  SimpleName("x"),
+                  // IntersectionType & UnionType = & [IntersectionType, UnionType]
+                  AppliedTypeTree(
+                    TypeIdent(TypeName(SimpleName("&"))),
+                    List(
+                      TypeIdent(TypeName(SimpleName("IntersectionType"))),
+                      TypeIdent(TypeName(SimpleName("UnionType")))
+                    )
+                  ),
+                  EmptyTree
+                )
+              )
+            ),
+            TypeWrapper(
+              AndType(
+                TypeRef(_, Symbol(TypeName(SimpleName("IntersectionType")))),
+                TypeRef(_, TypeName(SimpleName("UnionType")))
+              )
+            ),
+            _
+          ) =>
+    }
+    assert(containsSubtree(intersectionTypeMethod)(clue(tree)))
+  }
 }
