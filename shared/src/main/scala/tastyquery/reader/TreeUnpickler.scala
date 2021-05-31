@@ -133,6 +133,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   def readTypeBounds(using Context): TypeBounds = {
     assert(tagFollowShared == TYPEBOUNDS)
     readPotentiallyShared({
+      reader.readByte()
       val end = reader.readEnd()
       val low = readType
       if (reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
