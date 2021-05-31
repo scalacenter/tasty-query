@@ -425,6 +425,22 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       // TODO: always just taking the name?
       // return always returns from a method, i.e. something with a TermName
       Return(expr, Ident(from.name.asInstanceOf[TermName]))
+    case INLINED =>
+      reader.readByte()
+      val end  = reader.readEnd()
+      val expr = readTerm
+      val caller: TypeIdent =
+        reader.ifBefore(end)(
+          tagFollowShared match {
+            // The caller is not specified, this is a binding (or next val or def)
+            case VALDEF | DEFDEF => EmptyTypeIdent
+            case _               => readTypeTree.asInstanceOf[TypeIdent]
+          },
+          EmptyTypeIdent
+        )
+      val bindings = reader.until(end)(readValOrDefDef)
+      Inlined(expr, caller, bindings)
+
     // paths
     case THIS =>
       reader.readByte()

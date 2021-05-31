@@ -171,6 +171,22 @@ object Trees {
 
   case class Return(expr: Tree, from: Tree) extends Tree
 
+  /**
+   * A tree representing inlined code.
+   *
+   * @param expr
+   *   The inlined tree, minus bindings.
+   * @param caller
+   *   The toplevel class from which the call was inlined.
+   * @param bindings
+   *   Bindings for proxies to be used in the inlined code
+   *
+   * The full inlined code is equivalent to
+   *
+   * { bindings; expr }
+   */
+  case class Inlined(expr: Tree, caller: TypeIdent, bindings: List[Tree]) extends Tree
+
   case object EmptyTree extends Tree
 
   val EmptyValDef: ValDef = ValDef(Names.Wildcard, EmptyTypeTree, EmptyTree)

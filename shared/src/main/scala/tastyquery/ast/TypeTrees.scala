@@ -1,6 +1,6 @@
 package tastyquery.ast
 
-import tastyquery.ast.Names.TypeName
+import tastyquery.ast.Names.{EmptyTermName, EmptyTypeName, TypeName}
 import tastyquery.ast.Trees.Tree
 import tastyquery.ast.Types.Type
 
@@ -8,6 +8,8 @@ object TypeTrees {
   abstract class TypeTree
 
   case class TypeIdent(name: TypeName) extends TypeTree
+
+  object EmptyTypeIdent extends TypeIdent(EmptyTypeName)
 
   case class TypeWrapper(tp: Type) extends TypeTree
 

@@ -41,7 +41,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
       // Trees, inside which the existing tests do not descend
       case _: New | _: Alternative | _: CaseDef | _: While | _: Assign | _: Throw | _: Typed | _: SeqLiteral |
-          _: TypeApply | _: This | _: Lambda | _: NamedArg | _: Super | _: TypeMember | _: TypeParam =>
+          _: TypeApply | _: This | _: Lambda | _: NamedArg | _: Super | _: TypeMember | _: TypeParam | _: Inlined =>
         false
 
       // Nowhere to walk
@@ -964,5 +964,30 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(nestedClass)(clue(tree)))
+  }
+
+  test("inline-method") {
+    val tree = unpickle("simple_trees/InlinedCall")
+
+    val inlined: StructureCheck = {
+      case Inlined(
+            // 0 + HasInlinedMethod_this.externalVal
+            Apply(
+              Select(Inlined(Literal(Constant(0)), EmptyTypeIdent, Nil), SignedName(SimpleName("+"), _)),
+              Select(
+                Inlined(Ident(SimpleName("HasInlinedMethod_this")), EmptyTypeIdent, Nil),
+                SimpleName("externalVal")
+              ) :: Nil
+            ),
+            // the _toplevel_ class, method inside which is inlined
+            TypeIdent(TypeName(SimpleName("HasInlinedMethod"))),
+            ValDef(
+              SimpleName("HasInlinedMethod_this"),
+              _,
+              Select(This(Some(TypeIdent(TypeName(SimpleName("InlinedCall"))))), SimpleName("withInlineMethod"))
+            ) :: Nil
+          ) =>
+    }
+    assert(containsSubtree(inlined)(clue(tree)))
   }
 }
