@@ -3,6 +3,7 @@ package tastyquery.ast
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
 import tastyquery.ast.Symbols.Symbol
+import tastyquery.ast.Trees.Tree
 
 object Types {
   type Designator = Symbol | Name
@@ -133,6 +134,11 @@ object Types {
   /** A type application `C[T_1, ..., T_n]` */
   case class AppliedType(tycon: Type, args: List[Type]) extends TypeProxy with ValueType {
     override def underlying: Type = tycon
+  }
+
+  /** typ @ annot */
+  case class AnnotatedType(typ: Type, annotation: Tree) extends TypeProxy with ValueType {
+    override def underlying: Type = typ
   }
 
   // A marker for Types or components which are not yet constructed correctly
