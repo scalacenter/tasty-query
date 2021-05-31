@@ -441,6 +441,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         )
       val bindings = reader.until(end)(readValOrDefDef)
       Inlined(expr, caller, bindings)
+    case SHAREDterm =>
+      reader.readByte()
+      forkAt(reader.readAddr()).readTerm
 
     // paths
     case THIS =>
