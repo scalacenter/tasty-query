@@ -19,6 +19,10 @@ object TypeTrees {
   /** tpt[args] */
   case class AppliedTypeTree(tycon: TypeTree, args: List[TypeTree]) extends TypeTree
 
+  // TODO: shouldn't qualifier be a type tree?
+  /** qualifier#name */
+  case class SelectTypeTree(qualifier: Tree, name: TypeName) extends TypeTree
+
   case object EmptyTypeTree extends TypeTree
 
   case class TypeBoundsTree(low: TypeTree, high: TypeTree)

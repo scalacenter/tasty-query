@@ -74,8 +74,8 @@ object Trees {
   /** name */
   case class Ident(name: TermName) extends Tree
 
-  /** qualifier.name, or qualifier#name, if qualifier is a type */
-  case class Select(qualifier: Tree, name: Name) extends Tree
+  /** qualifier.name */
+  case class Select(qualifier: Tree, name: TermName) extends Tree
 
   /** qual.this */
   case class This(qualifier: Option[TypeIdent]) extends Tree

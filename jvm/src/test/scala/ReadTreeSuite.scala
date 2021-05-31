@@ -990,4 +990,21 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(inlined)(clue(tree)))
   }
+
+  test("select-tpt") {
+    val tree = unpickle("simple_trees/SelectType")
+
+    val selectTpt: StructureCheck = {
+      case ValDef(
+            SimpleName("random"),
+            TypeWrapper(TypeRef(_, TypeName(SimpleName("Random")))),
+            Apply(
+              // select scala.util.Random
+              Select(New(SelectTypeTree(_, TypeName(SimpleName("Random")))), SignedName(SimpleName("<init>"), _)),
+              Nil
+            )
+          ) =>
+    }
+    assert(containsSubtree(selectTpt)(clue(tree)))
+  }
 }
