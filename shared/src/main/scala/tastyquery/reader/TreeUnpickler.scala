@@ -17,6 +17,8 @@ import TastyBuffer._
 import TastyFormat._
 import TastyReader._
 
+class TreeUnpicklerException(msg: String) extends RuntimeException(msg)
+
 class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   def unpickle(using Context): List[Tree] = {
     @tailrec def read(acc: ListBuffer[Tree]): List[Tree] = {
@@ -477,7 +479,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case SHAREDtype =>
       reader.readByte()
       forkAt(reader.readAddr()).readTerm
-    case _ => Literal(readConstant)
+    case tag if isConstantTag(tag) =>
+      Literal(readConstant)
+    case tag => throw TreeUnpicklerException(s"Unexpected term tag: ${astTagToString(tag)}")
   }
 
   /** The next tag, following through SHARED tags */
@@ -575,7 +579,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       reader.readEnd()
       OrType(readType, readType)
-    case _ => ConstantType(readConstant)
+    case tag if (isConstantTag(tag)) =>
+      ConstantType(readConstant)
+    case tag => throw TreeUnpicklerException(s"Unexpected type tag: ${astTagToString(tag)}")
   }
 
   def readTypeTree(using Context): TypeTree = reader.nextByte match {
@@ -605,6 +611,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case SHAREDterm =>
       reader.readByte()
       forkAt(reader.readAddr()).readTypeTree
+    case tag if isTypeTreeTag(tag) =>
+      throw TreeUnpicklerException(s"Unexpected type tree tag: ${astTagToString(tag)}")
     case _ => TypeWrapper(readType)
   }
 
@@ -655,4 +663,12 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       skipModifier()
     }
   }
+
+  private def isConstantTag(tag: Int): Boolean =
+    tag match {
+      case UNITconst | FALSEconst | TRUEconst | BYTEconst | SHORTconst | CHARconst | INTconst | LONGconst | FLOATconst |
+          DOUBLEconst | STRINGconst | NULLconst | CLASSconst =>
+        true
+      case _ => false
+    }
 }
