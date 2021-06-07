@@ -1,7 +1,7 @@
 package tastyquery.ast
 
 import tastyquery.ast.Names.{EmptyTermName, EmptyTypeName, TypeName}
-import tastyquery.ast.Trees.Tree
+import tastyquery.ast.Trees.{Tree, TypeParam}
 import tastyquery.ast.Types.Type
 
 object TypeTrees {
@@ -35,4 +35,6 @@ object TypeTrees {
    *  >: lo <: hi = alias  for RHS of bounded opaque type
    */
   case class BoundedTypeTree(bounds: TypeBoundsTree, alias: TypeTree) extends TypeTree
+
+  case class TypeLambdaTree(tparams: List[TypeParam], body: TypeTree) extends TypeTree
 }

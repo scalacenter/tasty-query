@@ -1106,4 +1106,29 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(intersectionTypeMethod)(clue(tree)))
   }
+
+  test("type-lambda") {
+    val tree = unpickle("simple_trees/TypeLambda")
+
+    val lambdaTpt: StructureCheck = {
+      // TL: [X] =>> List[X]
+      case TypeMember(
+            TypeName(SimpleName("TL")),
+            TypeLambdaTree(
+              // [X]
+              TypeParam(
+                TypeName(SimpleName("X")),
+                TypeBoundsTree(
+                  TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                  TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                )
+              ) :: Nil,
+              // List[X]
+              AppliedTypeTree(TypeIdent(TypeName(SimpleName("List"))), TypeIdent(TypeName(SimpleName("X"))) :: Nil)
+            )
+          ) =>
+    }
+
+    assert(containsSubtree(lambdaTpt)(clue(tree)))
+  }
 }
