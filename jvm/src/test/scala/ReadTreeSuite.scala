@@ -1165,4 +1165,20 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(varargMatch)(clue(tree)))
   }
+
+  test("refined-type") {
+    val tree = unpickle("simple_trees/RefinedType")
+
+    val refinedTpt: StructureCheck = {
+      case TypeMember(
+            TypeName(SimpleName("Refined")),
+            // TypeMember { type AbstractType = Int }
+            RefinedTypeTree(
+              TypeIdent(TypeName(SimpleName("TypeMember"))),
+              TypeMember(TypeName(SimpleName("AbstractType")), TypeIdent(TypeName(SimpleName("Int")))) :: Nil
+            )
+          ) =>
+    }
+    assert(containsSubtree(refinedTpt)(clue(tree)))
+  }
 }

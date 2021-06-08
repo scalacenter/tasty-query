@@ -594,6 +594,10 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case SINGLETONtpt =>
       reader.readByte()
       SingletonTypeTree(readTerm)
+    case REFINEDtpt =>
+      reader.readByte()
+      val end = reader.readEnd()
+      RefinedTypeTree(readTypeTree, readStats(end))
     case APPLIEDtpt =>
       reader.readByte()
       val end   = reader.readEnd()
