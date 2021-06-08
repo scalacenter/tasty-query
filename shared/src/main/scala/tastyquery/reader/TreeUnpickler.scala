@@ -607,6 +607,10 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val name = readName.toTypeName
       SelectTypeTree(readTerm, name)
+    case ANNOTATEDtpt =>
+      reader.readByte()
+      reader.readEnd()
+      AnnotatedTypeTree(readTypeTree, readTerm)
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree
     case BYNAMEtpt =>

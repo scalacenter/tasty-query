@@ -26,6 +26,9 @@ object TypeTrees {
   /** qualifier#name */
   case class SelectTypeTree(qualifier: Tree, name: TypeName) extends TypeTree
 
+  /** arg @annot */
+  case class AnnotatedTypeTree(tpt: TypeTree, annotation: Tree) extends TypeTree
+
   case object EmptyTypeTree extends TypeTree
 
   case class TypeBoundsTree(low: TypeTree, high: TypeTree)

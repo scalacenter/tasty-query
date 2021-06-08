@@ -1131,4 +1131,38 @@ class ReadTreeSuite extends munit.FunSuite {
 
     assert(containsSubtree(lambdaTpt)(clue(tree)))
   }
+
+  test("varags-annotated-type") {
+    val tree = unpickle("simple_trees/VarargFunction")
+
+    val varargMatch: StructureCheck = {
+      case DefDef(
+            SimpleName("takesVarargs"),
+            Nil,
+            List(
+              ValDef(
+                SimpleName("xs"),
+                AnnotatedTypeTree(
+                  // Int* ==> Seq[Int]
+                  AppliedTypeTree(
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Seq")))),
+                    TypeIdent(TypeName(SimpleName("Int"))) :: Nil
+                  ),
+                  Apply(
+                    Select(
+                      New(TypeWrapper(TypeRef(_, TypeName(SimpleName("Repeated"))))),
+                      SignedName(SimpleName("<init>"), _)
+                    ),
+                    Nil
+                  )
+                ),
+                EmptyTree
+              ) :: Nil
+            ),
+            _,
+            _
+          ) =>
+    }
+    assert(containsSubtree(varargMatch)(clue(tree)))
+  }
 }
