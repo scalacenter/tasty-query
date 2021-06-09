@@ -1181,4 +1181,54 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(refinedTpt)(clue(tree)))
   }
+
+  test("match-type") {
+    val tree = unpickle("simple_trees/MatchType")
+
+    val matchTpt: StructureCheck = {
+      case TypeMember(
+            TypeName(SimpleName("MT")),
+            TypeLambdaTree(
+              List(
+                TypeParam(
+                  TypeName(SimpleName("X")),
+                  TypeBoundsTree(
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                  )
+                )
+              ),
+              MatchTypeTree(
+                EmptyTypeTree,
+                TypeIdent(TypeName(SimpleName("X"))),
+                List(TypeCaseDef(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("String")))))
+              )
+            )
+          ) =>
+    }
+    assert(containsSubtree(matchTpt)(clue(tree)))
+
+    val matchWithBound: StructureCheck = {
+      case TypeMember(
+            TypeName(SimpleName("MTWithBound")),
+            TypeLambdaTree(
+              List(
+                TypeParam(
+                  TypeName(SimpleName("X")),
+                  TypeBoundsTree(
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                  )
+                )
+              ),
+              MatchTypeTree(
+                TypeIdent(TypeName(SimpleName("Nothing"))),
+                TypeIdent(TypeName(SimpleName("X"))),
+                List(TypeCaseDef(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("Nothing")))))
+              )
+            )
+          ) =>
+    }
+    assert(containsSubtree(matchWithBound)(clue(tree)))
+  }
 }

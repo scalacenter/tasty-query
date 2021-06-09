@@ -31,6 +31,11 @@ object TypeTrees {
   /** arg @annot */
   case class AnnotatedTypeTree(tpt: TypeTree, annotation: Tree) extends TypeTree
 
+  /** [bound] selector match { cases } */
+  case class MatchTypeTree(bound: TypeTree, selector: TypeTree, cases: List[TypeCaseDef]) extends TypeTree
+
+  case class TypeCaseDef(pattern: TypeTree, body: TypeTree)
+
   case object EmptyTypeTree extends TypeTree
 
   case class TypeBoundsTree(low: TypeTree, high: TypeTree)

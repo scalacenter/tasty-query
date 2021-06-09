@@ -347,7 +347,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val end        = reader.readEnd()
       val expr       = readTerm
-      val catchCases = readCases(end)
+      val catchCases = readCases[CaseDef](TRY, end)
       val finalizer  = reader.ifBefore(end)(readTerm, EmptyTree)
       Try(expr, catchCases, finalizer)
     case ASSIGN =>
@@ -379,11 +379,11 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val end = reader.readEnd()
       if (reader.nextByte == IMPLICIT) {
         reader.readByte()
-        new InlineMatch(EmptyTree, readCases(end))
+        new InlineMatch(EmptyTree, readCases[CaseDef](MATCH, end))
       } else if (reader.nextByte == INLINE) {
         reader.readByte()
-        new InlineMatch(readTerm, readCases(end))
-      } else Match(readTerm, readCases(end))
+        new InlineMatch(readTerm, readCases[CaseDef](MATCH, end))
+      } else Match(readTerm, readCases[CaseDef](MATCH, end))
     case BIND =>
       val start = reader.currentAddr
       reader.readByte()
@@ -495,24 +495,28 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     } else tag
   }
 
-  def readCases(end: Addr)(using Context): List[CaseDef] =
+  def readCases[T <: CaseDef | TypeCaseDef](enclosingTag: Int, end: Addr)(using Context): List[T] =
     reader.collectWhile((nextUnsharedTag == CASEDEF) && reader.currentAddr != end) {
       if (reader.nextByte == SHAREDterm) {
         // skip the SHAREDterm tag
         reader.readByte()
         // TODO: changes in the context?
-        forkAt(reader.readAddr()).readCaseDef
+        forkAt(reader.readAddr()).readCaseDef[T](enclosingTag)
       }
       // TODO: changes in the context?
-      else readCaseDef
+      else readCaseDef[T](enclosingTag)
     }
 
-  def readCaseDef(using Context): CaseDef = {
-    assert(reader.readByte() == CASEDEF)
-    val end     = reader.readEnd()
-    val pattern = readTerm
-    val body    = readTerm
-    CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body)
+  def readCaseDef[T <: CaseDef | TypeCaseDef](enclosingTag: Int)(using Context): T = {
+    assert(reader.readByte() == CASEDEF, reader.currentAddr)
+    val end = reader.readEnd()
+    if (enclosingTag == MATCHtpt)
+      TypeCaseDef(readTypeTree, readTypeTree).asInstanceOf[T]
+    else {
+      val pattern = readTerm
+      val body    = readTerm
+      CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body).asInstanceOf[T]
+    }
   }
 
   def readSymRef(using Context): Symbol = {
@@ -617,6 +621,15 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       reader.readEnd()
       AnnotatedTypeTree(readTypeTree, readTerm)
+    case MATCHtpt =>
+      reader.readByte()
+      val end        = reader.readEnd()
+      val selOrBound = readTypeTree
+      val (bound, selector) =
+        if (tagFollowShared == CASEDEF)
+          (EmptyTypeTree, selOrBound)
+        else (selOrBound, readTypeTree)
+      MatchTypeTree(bound, selector, readCases[TypeCaseDef](MATCHtpt, end))
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree
     case BYNAMEtpt =>
