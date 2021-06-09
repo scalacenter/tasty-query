@@ -7,6 +7,7 @@ import tastyquery.ast.TypeTrees._
 import tastyquery.ast.Types._
 import tastyquery.reader.TastyUnpickler
 
+import dotty.tools.tasty.TastyFormat.NameTags
 import java.nio.file.{Files, Paths}
 
 class ReadTreeSuite extends munit.FunSuite {
@@ -90,6 +91,21 @@ class ReadTreeSuite extends munit.FunSuite {
             ) if isJavaLangObject.isDefinedAt(parent) =>
       }: StructureCheck
     }.isDefinedAt(clue(unpickle("empty_class/EmptyClass"))))
+  }
+
+  test("nested-packages") {
+    val tree = unpickle("simple_trees/nested/InNestedPackage")
+
+    val nestedPackages: StructureCheck = {
+      case PackageDef(
+            Symbol(SimpleName("simple_trees")),
+            List(
+              PackageDef(Symbol(QualifiedName(NameTags.QUALIFIED, SimpleName("simple_trees"), SimpleName("nested"))), _)
+            )
+          ) =>
+    }
+
+    assert(containsSubtree(nestedPackages)(clue(tree)))
   }
 
   test("basic-import") {

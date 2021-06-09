@@ -80,7 +80,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       assert(reader.readByte() == TERMREFpkg, reader.currentAddr)
       // TODO: only create a symbol if it does not exist yet
       val pid = new Symbol(readName)
-      PackageDef(pid, readStats(packageEnd))
+      PackageDef(pid, reader.until(packageEnd)(readTopLevelStat))
     case _ => readStat
   }
 
