@@ -1199,6 +1199,7 @@ class ReadTreeSuite extends munit.FunSuite {
                 )
               ),
               MatchTypeTree(
+                // No bound on the match result
                 EmptyTypeTree,
                 TypeIdent(TypeName(SimpleName("X"))),
                 List(TypeCaseDef(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("String")))))
@@ -1230,5 +1231,43 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(matchWithBound)(clue(tree)))
+
+    val matchWithWildcard: StructureCheck = {
+      case TypeMember(
+            TypeName(SimpleName("MTWithWildcard")),
+            TypeLambdaTree(
+              List(
+                TypeParam(
+                  TypeName(SimpleName("X")),
+                  TypeBoundsTree(
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                  )
+                )
+              ),
+              MatchTypeTree(
+                // No bound on the match result
+                EmptyTypeTree,
+                TypeIdent(TypeName(SimpleName("X"))),
+                List(
+                  TypeCaseDef(
+                    TypeTreeBind(
+                      TypeName(Wildcard),
+                      BoundedTypeTree(
+                        TypeBoundsTree(
+                          TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                          TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                        ),
+                        EmptyTypeTree
+                      )
+                    ),
+                    TypeIdent(TypeName(SimpleName("Int")))
+                  )
+                )
+              )
+            )
+          ) =>
+    }
+    assert(containsSubtree(matchWithWildcard)(clue(tree)))
   }
 }

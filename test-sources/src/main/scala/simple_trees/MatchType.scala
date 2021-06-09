@@ -8,4 +8,8 @@ class MatchType {
   type MTWithBound[X] <: Nothing = X match {
     case Int => Nothing
   }
+  
+  type MTWithWildcard[X] = X match {
+    case _ => Int
+  }
 }

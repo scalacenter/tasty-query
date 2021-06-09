@@ -630,6 +630,19 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
           (EmptyTypeTree, selOrBound)
         else (selOrBound, readTypeTree)
       MatchTypeTree(bound, selector, readCases[TypeCaseDef](MATCHtpt, end))
+    // TODO: why in TYPEAPPLY?
+    // in MATCHtpt, TYPEAPPLY
+    case BIND =>
+      val start = reader.currentAddr
+      reader.readByte()
+      val end  = reader.readEnd()
+      val name = readName.toTypeName
+      ctx.createSymbolIfNew(start, name)
+      // TODO: use type
+      val typ  = readTypeBounds
+      val body = readTypeTree
+      skipModifiers(end)
+      TypeTreeBind(name, body)
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree
     case BYNAMEtpt =>

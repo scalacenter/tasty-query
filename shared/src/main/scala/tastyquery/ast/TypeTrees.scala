@@ -36,6 +36,8 @@ object TypeTrees {
 
   case class TypeCaseDef(pattern: TypeTree, body: TypeTree)
 
+  case class TypeTreeBind(name: TypeName, body: TypeTree) extends TypeTree
+
   case object EmptyTypeTree extends TypeTree
 
   case class TypeBoundsTree(low: TypeTree, high: TypeTree)
