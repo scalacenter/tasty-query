@@ -44,7 +44,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   def tagFollowShared: Int = {
     val tag = reader.nextByte
     if (isSharedTag(tag)) {
-      val lookAhead  = fork
+      val lookAhead = fork
+      // skip SHAREDtype / SHAREDterm tag, read the address
+      lookAhead.reader.readByte()
       val addrShared = lookAhead.reader.readAddr()
       forkAt(addrShared).tagFollowShared
     } else {
