@@ -620,10 +620,16 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       reader.readEnd()
       TypeLambdaTree(readTypeParams, readTypeTree)
+    // select type from a term
+    case SELECT =>
+      reader.readByte()
+      val name = readName.toTypeName
+      val qual = readTerm
+      SelectTypeFromTerm(qual, name)
     case SELECTtpt =>
       reader.readByte()
       val name = readName.toTypeName
-      SelectTypeTree(readTerm, name)
+      SelectTypeTree(readTypeTree, name)
     case ANNOTATEDtpt =>
       reader.readByte()
       reader.readEnd()

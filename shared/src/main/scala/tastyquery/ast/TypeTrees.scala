@@ -24,9 +24,11 @@ object TypeTrees {
   /** tpt[args] */
   case class AppliedTypeTree(tycon: TypeTree, args: List[TypeTree]) extends TypeTree
 
-  // TODO: shouldn't qualifier be a type tree?
   /** qualifier#name */
-  case class SelectTypeTree(qualifier: Tree, name: TypeName) extends TypeTree
+  case class SelectTypeTree(qualifier: TypeTree, name: TypeName) extends TypeTree
+
+  /** qualifier.TypeName */
+  case class SelectTypeFromTerm(qualifier: Tree, name: TypeName) extends TypeTree
 
   /** arg @annot */
   case class AnnotatedTypeTree(tpt: TypeTree, annotation: Tree) extends TypeTree
