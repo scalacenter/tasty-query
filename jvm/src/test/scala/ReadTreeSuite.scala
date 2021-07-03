@@ -1286,4 +1286,19 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(matchWithWildcard)(clue(tree)))
   }
+
+  test("package-type-ref") {
+    val tree = unpickle("toplevelEmptyPackage$package")
+
+    // Empty package (the path to the toplevel$package[ModuleClass]) is a THIS of a TYPEREFpkg as opposed to
+    // non-empty package, which is simply TERMREFpkg. Therefore, reading the type of the package object reads TYPEREFpkg.
+    val packageVal: StructureCheck = {
+      case ValDef(
+            SimpleName("toplevelEmptyPackage$package"),
+            TypeIdent(TypeName(SuffixedName(NameTags.OBJECTCLASS, SimpleName("toplevelEmptyPackage$package")))),
+            _
+          ) =>
+    }
+    assert(containsSubtree(packageVal)(clue(tree)))
+  }
 }

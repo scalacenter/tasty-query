@@ -549,6 +549,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val sym = readSymRef
       TypeRef(readType, sym)
+    case TYPEREFpkg =>
+      reader.readByte()
+      PackageTypeRef(readName)
     case SHAREDtype =>
       reader.readByte()
       forkAt(reader.readAddr()).readType

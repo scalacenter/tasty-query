@@ -131,6 +131,9 @@ object Types {
 
   case object NoPrefix extends Type
 
+  // TODO: store the package type symbol
+  class PackageTypeRef(packageName: Name) extends TypeRef(NoPrefix, packageName)
+
   case class ThisType(tref: TypeRef) extends TypeProxy with SingletonType {
     override def underlying: Type = ???
   }
