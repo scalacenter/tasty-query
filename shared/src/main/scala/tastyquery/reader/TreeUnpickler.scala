@@ -19,6 +19,10 @@ import TastyReader._
 
 class TreeUnpicklerException(msg: String) extends RuntimeException(msg)
 
+sealed trait AbstractCaseDefFactory[CaseDefType]
+case object CaseDefFactory     extends AbstractCaseDefFactory[CaseDef]
+case object TypeCaseDefFactory extends AbstractCaseDefFactory[TypeCaseDef]
+
 class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   def unpickle(using Context): List[Tree] = {
     @tailrec def read(acc: ListBuffer[Tree]): List[Tree] = {
@@ -347,7 +351,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val end        = reader.readEnd()
       val expr       = readTerm
-      val catchCases = readCases[CaseDef](TRY, end)
+      val catchCases = readCases[CaseDef](CaseDefFactory, end)
       val finalizer  = reader.ifBefore(end)(readTerm, EmptyTree)
       Try(expr, catchCases, finalizer)
     case ASSIGN =>
@@ -379,11 +383,11 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val end = reader.readEnd()
       if (reader.nextByte == IMPLICIT) {
         reader.readByte()
-        new InlineMatch(EmptyTree, readCases[CaseDef](MATCH, end))
+        new InlineMatch(EmptyTree, readCases[CaseDef](CaseDefFactory, end))
       } else if (reader.nextByte == INLINE) {
         reader.readByte()
-        new InlineMatch(readTerm, readCases[CaseDef](MATCH, end))
-      } else Match(readTerm, readCases[CaseDef](MATCH, end))
+        new InlineMatch(readTerm, readCases[CaseDef](CaseDefFactory, end))
+      } else Match(readTerm, readCases[CaseDef](CaseDefFactory, end))
     case BIND =>
       val start = reader.currentAddr
       reader.readByte()
@@ -495,27 +499,28 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     } else tag
   }
 
-  def readCases[T <: CaseDef | TypeCaseDef](enclosingTag: Int, end: Addr)(using Context): List[T] =
+  def readCases[T <: CaseDef | TypeCaseDef](factory: AbstractCaseDefFactory[T], end: Addr)(using Context): List[T] =
     reader.collectWhile((nextUnsharedTag == CASEDEF) && reader.currentAddr != end) {
       if (reader.nextByte == SHAREDterm) {
         // skip the SHAREDterm tag
         reader.readByte()
         // TODO: changes in the context?
-        forkAt(reader.readAddr()).readCaseDef[T](enclosingTag)
+        forkAt(reader.readAddr()).readCaseDef[T](factory)
       }
       // TODO: changes in the context?
-      else readCaseDef[T](enclosingTag)
+      else readCaseDef[T](factory)
     }
 
-  def readCaseDef[T <: CaseDef | TypeCaseDef](enclosingTag: Int)(using Context): T = {
+  def readCaseDef[T <: CaseDef | TypeCaseDef](factory: AbstractCaseDefFactory[T])(using Context): T = {
     assert(reader.readByte() == CASEDEF, reader.currentAddr)
     val end = reader.readEnd()
-    if (enclosingTag == MATCHtpt)
-      TypeCaseDef(readTypeTree, readTypeTree).asInstanceOf[T]
-    else {
-      val pattern = readTerm
-      val body    = readTerm
-      CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body).asInstanceOf[T]
+    factory match {
+      case CaseDefFactory =>
+        val pattern = readTerm
+        val body    = readTerm
+        CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body)
+      case TypeCaseDefFactory =>
+        TypeCaseDef(readTypeTree, readTypeTree)
     }
   }
 
@@ -629,7 +634,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         if (tagFollowShared == CASEDEF)
           (EmptyTypeTree, selOrBound)
         else (selOrBound, readTypeTree)
-      MatchTypeTree(bound, selector, readCases[TypeCaseDef](MATCHtpt, end))
+      MatchTypeTree(bound, selector, readCases[TypeCaseDef](TypeCaseDefFactory, end))
     // TODO: why in TYPEAPPLY?
     // in MATCHtpt, TYPEAPPLY
     case BIND =>
