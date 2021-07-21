@@ -157,7 +157,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   }
 
   def readTypeParams(using Context): List[TypeParam] = {
-    def readTypeBounds(using Context): TypeBounds | TypeBoundsTree = {
+    def readTypeParamType(using Context): TypeBounds | TypeBoundsTree | TypeLambdaTree = {
       def readTypeBoundsType(using Context): TypeBounds = {
         assert(reader.readByte() == TYPEBOUNDS, reader.currentAddr)
         val end = reader.readEnd()
@@ -180,11 +180,18 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         TypeBoundsTree(low, high)
       }
 
+      def readLambdaTpt(using Context): TypeLambdaTree = {
+        assert(reader.nextByte == LAMBDAtpt, reader.currentAddr)
+        readTypeTree.asInstanceOf[TypeLambdaTree]
+      }
+
       readPotentiallyShared(
         if (tagFollowShared == TYPEBOUNDS)
           readTypeBoundsType
-        else
+        else if (tagFollowShared == TYPEBOUNDStpt)
           readTypeBoundsTree
+        else
+          readLambdaTpt
       )
     }
 
@@ -194,7 +201,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val end  = reader.readEnd()
       val name = readName.toTypeName
       ctx.createSymbolIfNew(start, name)
-      val bounds = readTypeBounds
+      val bounds = readTypeParamType
       skipModifiers(end)
       TypeParam(name, bounds)
     }

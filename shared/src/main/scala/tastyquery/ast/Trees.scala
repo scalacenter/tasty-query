@@ -47,7 +47,7 @@ object Trees {
   case class TypeMember(name: TypeName, rhs: TypeTree | TypeBounds) extends TypeDef
 
   /** The bounds are a type tree if the method is defined by the user and bounds-only if it's synthetic */
-  case class TypeParam(name: TypeName, bounds: TypeBoundsTree | TypeBounds) extends TypeDef
+  case class TypeParam(name: TypeName, bounds: TypeBoundsTree | TypeBounds | TypeLambdaTree) extends TypeDef
 
   /**
    * extends parents { self => body }
