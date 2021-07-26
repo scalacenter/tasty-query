@@ -8,10 +8,12 @@ import tastyquery.ast.Types._
 import tastyquery.reader.TastyUnpickler
 
 import dotty.tools.tasty.TastyFormat.NameTags
+
 import java.nio.file.{Files, Paths}
 
 class ReadTreeSuite extends munit.FunSuite {
-  type StructureCheck = PartialFunction[Tree, Unit]
+  type StructureCheck     = PartialFunction[Tree, Unit]
+  type TypeStructureCheck = PartialFunction[Type, Unit]
   val ResourceProperty = "test-resources"
 
   def unpickle(filename: String): Tree = {
@@ -1146,6 +1148,50 @@ class ReadTreeSuite extends munit.FunSuite {
     }
 
     assert(containsSubtree(lambdaTpt)(clue(tree)))
+  }
+
+  test("type-lambda-type") {
+    val tree = unpickle("simple_trees/HigherKinded")
+
+    val typeLambdaResultIsAny: TypeStructureCheck = { case TypeRef(_, TypeName(SimpleName("Any"))) =>
+    }
+
+    // A[_], i.e. A >: Nothing <: [X] =>> Any
+    val typeLambda: StructureCheck = {
+      case TypeParam(
+            TypeName(SimpleName("A")),
+            RealTypeBounds(
+              nothing,
+              tl @ TypeLambda(
+                TypeParam(TypeName(UniqueName("_$", EmptyTermName, 1)), RealTypeBounds(nothing2, any)) :: Nil,
+                _
+              )
+            )
+          ) if typeLambdaResultIsAny.isDefinedAt(tl.resultType) =>
+    }
+    assert(containsSubtree(typeLambda)(clue(tree)))
+  }
+
+  test("type-lambda-type-result-depends-on-param") {
+    val tree = unpickle("simple_trees/HigherKindedWithParam")
+
+    // Type lambda result is List[X]
+    val typeLambdaResultIsListOf: TypeStructureCheck = {
+      case AppliedType(TypeRef(_, TypeName(SimpleName("List"))), TypeParamRef(lambda, paramNum) :: Nil)
+          if lambda.params(paramNum).name == TypeName(SimpleName("X")) =>
+    }
+
+    // A[X] <: List[X], i.e. A >: Nothing <: [X] =>> List[X]
+    val typeLambda: StructureCheck = {
+      case TypeParam(
+            TypeName(SimpleName("A")),
+            RealTypeBounds(
+              nothing,
+              tl @ TypeLambda(TypeParam(TypeName(SimpleName("X")), RealTypeBounds(nothing2, any)) :: Nil, _)
+            )
+          ) if typeLambdaResultIsListOf.isDefinedAt(tl.resultType) =>
+    }
+    assert(containsSubtree(typeLambda)(clue(tree)))
   }
 
   test("varags-annotated-type") {

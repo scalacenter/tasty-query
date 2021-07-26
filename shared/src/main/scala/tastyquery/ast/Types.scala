@@ -3,7 +3,7 @@ package tastyquery.ast
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
 import tastyquery.ast.Symbols.Symbol
-import tastyquery.ast.Trees.Tree
+import tastyquery.ast.Trees.{Tree, TypeParam}
 
 object Types {
   type Designator = Symbol | Name
@@ -146,6 +146,20 @@ object Types {
   /** A type application `C[T_1, ..., T_n]` */
   case class AppliedType(tycon: Type, args: List[Type]) extends TypeProxy with ValueType {
     override def underlying: Type = tycon
+  }
+
+  case class TypeLambda(params: List[TypeParam], resultTypeCtor: TypeLambda => Type) extends TypeProxy with TermType {
+    val resultType = resultTypeCtor(this)
+
+    override def underlying: Type = ???
+
+    override def toString: String = s"TypeLambda($params, $resultType)"
+  }
+
+  case class TypeParamRef(binder: TypeLambda, num: Int) extends TypeProxy with ValueType {
+    override def underlying: Type = ???
+
+    override def toString: String = binder.params(num).name.toString
   }
 
   /** typ @ annot */

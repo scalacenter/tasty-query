@@ -38,6 +38,14 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   def fork: TreeUnpickler =
     forkAt(reader.currentAddr)
 
+  def skipTree(tag: Int): Unit =
+    if (tag >= firstLengthTreeTag) reader.goto(reader.readEnd())
+    else if (tag >= firstNatASTTreeTag) { reader.readNat(); skipTree() }
+    else if (tag >= firstASTTreeTag) skipTree()
+    else if (tag >= firstNatTreeTag) reader.readNat()
+
+  def skipTree(): Unit = skipTree(reader.readByte())
+
   def isSharedTag(tag: Int): Boolean = tag == SHAREDtype || tag == SHAREDterm
 
   /** The tag at the end of SHAREDtype/term chain */
@@ -601,6 +609,25 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       reader.readEnd()
       OrType(readType, readType)
+    case TYPELAMBDAtype =>
+      val lambdaAddr = reader.currentAddr
+      reader.readByte()
+      val end             = reader.readEnd()
+      val resultUnpickler = fork
+      // skip the result type: it might refer to the parameters, which we haven't read yet
+      skipTree()
+      val params = reader.until(end)({
+        val bounds = readTypeBounds
+        val name   = readName.toTypeName
+        TypeParam(name, bounds)
+      })
+      TypeLambda(params, (tl: TypeLambda) => resultUnpickler.readType (using ctx.withEnclosingLambda(lambdaAddr, tl)))
+    case PARAMtype =>
+      reader.readByte()
+      reader.readEnd()
+      val lambdaAddr = reader.readAddr()
+      val num        = reader.readNat()
+      TypeParamRef(ctx.enclosingLambdas(lambdaAddr), num)
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
     case tag =>
