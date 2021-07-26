@@ -141,8 +141,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       // TODO: read modifiers
       skipModifiers(end)
       typedef
-    case VALDEF | DEFDEF | PARAM => readValOrDefDef
-    case _                       => readTerm
+    case VALDEF | DEFDEF => readValOrDefDef
+    case _               => readTerm
   }
 
   /** Reads type bounds for a synthetic typedef */
