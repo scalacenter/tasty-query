@@ -115,10 +115,11 @@ object Names {
     override def isEmpty: Boolean = false
   }
 
-  final case class SignedName(override val underlying: TermName, sig: Signature) extends DerivedName(underlying) {
+  final case class SignedName(override val underlying: TermName, sig: Signature, target: TermName)
+      extends DerivedName(underlying) {
     override def tag: Int = NameTags.SIGNED
 
-    override def toString: String = s"$underlying[with sig ${sig}]"
+    override def toString: String = s"$underlying[with sig ${sig} @$target]"
   }
 
   final case class QualifiedName(override val tag: Int, prefix: TermName, name: SimpleName)
