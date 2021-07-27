@@ -167,6 +167,16 @@ object Types {
     override def underlying: Type = typ
   }
 
+  /**
+   * A refined type parent { refinement }
+   *  @param parent      The type being refined
+   *  @param refinedName The name of the refinement declaration
+   *  @param refinedInfo The info of the refinement declaration
+   */
+  case class RefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds) extends TypeProxy with ValueType {
+    override def underlying: Type = parent
+  }
+
   // A marker for Types or components which are not yet constructed correctly
   case object DummyType extends Type
 

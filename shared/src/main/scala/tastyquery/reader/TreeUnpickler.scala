@@ -628,6 +628,18 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val lambdaAddr = reader.readAddr()
       val num        = reader.readNat()
       TypeParamRef(ctx.enclosingLambdas(lambdaAddr), num)
+    case REFINEDtype =>
+      reader.readByte()
+      reader.readEnd()
+      // TODO: support term refinements, then the name won't always be a type name.
+      val refinementName = readName.toTypeName
+      val underlying     = readType
+      if (tagFollowShared != TYPEBOUNDS) {
+        throw TreeUnpicklerException(
+          s"Only type refinements are supported. Term refinement at address ${reader.currentAddr}"
+        )
+      }
+      RefinedType(underlying, refinementName, readTypeBounds)
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
     case tag =>
