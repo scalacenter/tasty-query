@@ -35,6 +35,8 @@ object Types {
    */
   trait TermType extends Type
 
+  trait MethodicType extends TermType
+
   /** A marker trait for types that can be types of values or prototypes of value types */
   trait ValueTypeOrProto extends TermType
 
@@ -146,6 +148,11 @@ object Types {
   /** A type application `C[T_1, ..., T_n]` */
   case class AppliedType(tycon: Type, args: List[Type]) extends TypeProxy with ValueType {
     override def underlying: Type = tycon
+  }
+
+  /** A by-name parameter type of the form `=> T`, or the type of a method with no parameter list. */
+  case class ExprType(resType: Type) extends TypeProxy with MethodicType {
+    override def underlying: Type = resType
   }
 
   case class TypeLambda(params: List[TypeParam], resultTypeCtor: TypeLambda => Type) extends TypeProxy with TermType {

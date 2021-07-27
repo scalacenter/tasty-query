@@ -609,6 +609,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       reader.readEnd()
       OrType(readType, readType)
+    case BYNAMEtype =>
+      reader.readByte()
+      ExprType(readType)
     case TYPELAMBDAtype =>
       val lambdaAddr = reader.currentAddr
       reader.readByte()
