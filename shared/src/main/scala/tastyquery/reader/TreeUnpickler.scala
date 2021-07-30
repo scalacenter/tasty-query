@@ -230,6 +230,17 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     BoundedTypeTree(TypeBoundsTree(low, high), alias)
   }
 
+  def readTypeBoundsTree(using Context): TypeBoundsTree = {
+    assert(tagFollowShared == TYPEBOUNDStpt, reader.currentAddr)
+    readPotentiallyShared({
+      reader.readByte()
+      val end  = reader.readEnd()
+      val low  = readTypeTree
+      val high = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
+      TypeBoundsTree(low, high)
+    })
+  }
+
   // TODO: classinfo of the owner
   def readTemplate(using Context): Template = {
     reader.readByte()
@@ -591,7 +602,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val end   = reader.readEnd()
       val tycon = readType
       // TODO: type operations can be much more complicated
-      AppliedType(tycon, reader.until(end)(readType))
+      AppliedType(tycon, reader.until(end)(if (tagFollowShared == TYPEBOUNDS) readTypeBounds else readType))
     case THIS =>
       reader.readByte()
       ThisType(readType.asInstanceOf[TypeRef])
@@ -667,7 +678,14 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val end   = reader.readEnd()
       val tycon = readTypeTree
-      AppliedTypeTree(tycon, reader.until(end)(readTypeTree))
+      AppliedTypeTree(
+        tycon,
+        reader.until(end)(
+          if (tagFollowShared == TYPEBOUNDS) readTypeBounds
+          else if (tagFollowShared == TYPEBOUNDStpt) readTypeBoundsTree
+          else readTypeTree
+        )
+      )
     case LAMBDAtpt =>
       reader.readByte()
       reader.readEnd()

@@ -2,7 +2,7 @@ package tastyquery.ast
 
 import tastyquery.ast.Names.{EmptyTermName, EmptyTypeName, TypeName}
 import tastyquery.ast.Trees.{Tree, TypeParam}
-import tastyquery.ast.Types.Type
+import tastyquery.ast.Types.{Type, TypeBounds}
 
 object TypeTrees {
   abstract class TypeTree
@@ -21,8 +21,11 @@ object TypeTrees {
   /** => T */
   case class ByNameTypeTree(result: TypeTree) extends TypeTree
 
-  /** tpt[args] */
-  case class AppliedTypeTree(tycon: TypeTree, args: List[TypeTree]) extends TypeTree
+  /**
+   * tpt[args]
+   * TypeBounds[Tree] for wildcard application: tpt[_], tpt[?]
+   */
+  case class AppliedTypeTree(tycon: TypeTree, args: List[TypeTree | TypeBoundsTree | TypeBounds]) extends TypeTree
 
   /** qualifier#name */
   case class SelectTypeTree(qualifier: TypeTree, name: TypeName) extends TypeTree

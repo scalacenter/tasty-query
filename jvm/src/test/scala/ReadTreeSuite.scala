@@ -41,10 +41,11 @@ class ReadTreeSuite extends munit.FunSuite {
       case Block(stats, expr)           => stats.exists(rec) || rec(expr)
       case If(cond, thenPart, elsePart) => rec(cond) || rec(thenPart) || rec(elsePart)
       case Match(selector, cases)       => rec(selector) || cases.exists(rec)
+      case TypeApply(fun, _)            => rec(fun)
 
       // Trees, inside which the existing tests do not descend
-      case _: New | _: Alternative | _: CaseDef | _: While | _: Assign | _: Throw | _: Typed | _: SeqLiteral |
-          _: TypeApply | _: This | _: Lambda | _: NamedArg | _: Super | _: TypeMember | _: TypeParam | _: Inlined =>
+      case _: New | _: Alternative | _: CaseDef | _: While | _: Assign | _: Throw | _: Typed | _: SeqLiteral | _: This |
+          _: Lambda | _: NamedArg | _: Super | _: TypeMember | _: TypeParam | _: Inlined =>
         false
 
       // Nowhere to walk
@@ -1381,5 +1382,57 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(packageVal)(clue(tree)))
+  }
+
+  test("wildcard-type-application") {
+    val tree = unpickle("simple_trees/WildcardTypeApplication")
+
+    // class parameter as a val
+    val appliedTypeToTypeBounds: StructureCheck = {
+      case ValDef(
+            SimpleName("anyList"),
+            TypeWrapper(
+              AppliedType(
+                TypeRef(_, TypeName(SimpleName("List"))),
+                RealTypeBounds(
+                  TypeRef(_, TypeName(SimpleName("Nothing"))),
+                  TypeRef(_, TypeName(SimpleName("Any")))
+                ) :: Nil
+              )
+            ),
+            EmptyTree
+          ) =>
+    }
+    assert(containsSubtree(appliedTypeToTypeBounds)(clue(tree)))
+
+    // class parameter as a constructor parameter
+    val appliedTypeToTypeBoundsTpt: StructureCheck = {
+      case ValDef(
+            SimpleName("anyList"),
+            AppliedTypeTree(
+              TypeIdent(TypeName(SimpleName("List"))),
+              TypeBoundsTree(
+                TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+              ) :: Nil
+            ),
+            EmptyTree
+          ) =>
+    }
+    assert(containsSubtree(appliedTypeToTypeBoundsTpt)(clue(tree)))
+
+    // extends GenericWithTypeBound[_]
+    val wildcardParent: StructureCheck = {
+      case New(
+            AppliedTypeTree(
+              TypeIdent(TypeName(SimpleName("GenericWithTypeBound"))),
+              RealTypeBounds(
+                TypeRef(_, TypeName(SimpleName("Nothing"))),
+                TypeRef(_, TypeName(SimpleName("AnyKind")))
+              ) :: Nil
+            )
+          ) =>
+    }
+    assert(containsSubtree(wildcardParent)(clue(tree)))
   }
 }
