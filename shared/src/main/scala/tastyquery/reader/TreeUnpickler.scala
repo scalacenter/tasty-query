@@ -606,6 +606,18 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case THIS =>
       reader.readByte()
       ThisType(readType.asInstanceOf[TypeRef])
+    case QUALTHIS =>
+      reader.readByte()
+      if (tagFollowShared != IDENTtpt) {
+        throw TreeUnpicklerException(
+          s"Unexpected tag after QUALTHIS: ${astTagToString(tagFollowShared)} at address ${reader.currentAddr}"
+        )
+      }
+      // Skip IDENTtpt tag and name
+      reader.readByte()
+      readName
+      // Type of QUALTHIS is ThisType for the type reference, which is the type of the IDENTtpt
+      ThisType(readType.asInstanceOf[TypeRef])
     case ANNOTATEDtype =>
       reader.readByte()
       reader.readEnd()

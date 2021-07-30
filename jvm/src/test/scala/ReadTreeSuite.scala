@@ -1435,4 +1435,18 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(wildcardParent)(clue(tree)))
   }
+
+  test("qual-this-type") {
+    val tree = unpickle("simple_trees/QualThisType")
+
+    val newInner: StructureCheck = {
+      case New(
+            SelectTypeTree(
+              TypeWrapper(ThisType(TypeRef(_, Symbol(TypeName(SimpleName("QualThisType")))))),
+              TypeName(SimpleName("Inner"))
+            )
+          ) =>
+    }
+    assert(containsSubtree(newInner)(clue(tree)))
+  }
 }
