@@ -145,9 +145,10 @@ object Types {
     override def underlying: Type = ???
   }
 
-  /** A type application `C[T_1, ..., T_n]` 
+  /**
+   * A type application `C[T_1, ..., T_n]`
    * Typebounds for wildcard application: C[_], C[?]
-   * */
+   */
   case class AppliedType(tycon: Type, args: List[Type | TypeBounds]) extends TypeProxy with ValueType {
     override def underlying: Type = tycon
   }
