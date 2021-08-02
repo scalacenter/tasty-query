@@ -115,7 +115,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
             ImportSelector(name, renamed)
           case BOUNDED =>
             reader.readByte()
-            ???
+            val bound = readTypeTree
+            ImportSelector(name, EmptyTree, bound)
           case _ => ImportSelector(name)
         }
       }

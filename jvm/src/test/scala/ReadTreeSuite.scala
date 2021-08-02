@@ -113,7 +113,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
   test("basic-import") {
     val importMatch: StructureCheck = {
-      case Import(_, List(ImportSelector(Ident(SimpleName("A")), EmptyTree, EmptyTree))) =>
+      case Import(_, List(ImportSelector(Ident(SimpleName("A")), EmptyTree, EmptyTypeTree))) =>
     }
     assert(containsSubtree(clue(importMatch))(clue(unpickle("imports/Import"))))
   }
@@ -123,8 +123,8 @@ class ReadTreeSuite extends munit.FunSuite {
       case Import(
             _,
             List(
-              ImportSelector(Ident(SimpleName("A")), EmptyTree, EmptyTree),
-              ImportSelector(Ident(SimpleName("B")), EmptyTree, EmptyTree)
+              ImportSelector(Ident(SimpleName("A")), EmptyTree, EmptyTypeTree),
+              ImportSelector(Ident(SimpleName("B")), EmptyTree, EmptyTypeTree)
             )
           ) =>
     }
@@ -133,22 +133,32 @@ class ReadTreeSuite extends munit.FunSuite {
 
   test("renamed-import") {
     val importMatch: StructureCheck = {
-      case Import(_, List(ImportSelector(Ident(SimpleName("A")), Ident(SimpleName("ClassA")), EmptyTree))) =>
+      case Import(_, List(ImportSelector(Ident(SimpleName("A")), Ident(SimpleName("ClassA")), EmptyTypeTree))) =>
     }
     assert(containsSubtree(importMatch)(clue(unpickle("imports/RenamedImport"))))
   }
 
   test("given-import") {
     val importMatch: StructureCheck = {
-      case Import(_, List(ImportSelector(Ident(EmptyTermName), EmptyTree, EmptyTree))) =>
+      // A given import selector has an empty name
+      case Import(_, List(ImportSelector(Ident(EmptyTermName), EmptyTree, EmptyTypeTree))) =>
     }
     assert(containsSubtree(importMatch)(clue(unpickle("imports/ImportGiven"))))
+  }
+
+  test("given-bounded-import") {
+    val tree = unpickle("imports/ImportGivenWithBound")
+    val importMatch: StructureCheck = {
+      // A given import selector has an empty name
+      case Import(_, ImportSelector(Ident(EmptyTermName), EmptyTree, TypeIdent(TypeName(SimpleName("A")))) :: Nil) =>
+    }
+    assert(containsSubtree(importMatch)(clue(tree)))
   }
 
   test("export") {
     val tree = unpickle("simple_trees/Export")
     val simpleExport: StructureCheck = {
-      case Export(_, ImportSelector(Ident(SimpleName("status")), EmptyTree, EmptyTree) :: Nil) =>
+      case Export(_, ImportSelector(Ident(SimpleName("status")), EmptyTree, EmptyTypeTree) :: Nil) =>
     }
     assert(containsSubtree(simpleExport)(clue(tree)))
 
@@ -156,11 +166,20 @@ class ReadTreeSuite extends munit.FunSuite {
       case Export(
             _,
             // An omitting selector is simply a rename to _
-            ImportSelector(Ident(SimpleName("status")), Ident(Wildcard), EmptyTree) ::
-            ImportSelector(Ident(Wildcard), EmptyTree, EmptyTree) :: Nil
+            ImportSelector(Ident(SimpleName("status")), Ident(Wildcard), EmptyTypeTree) ::
+            ImportSelector(Ident(Wildcard), EmptyTree, EmptyTypeTree) :: Nil
           ) =>
     }
     assert(containsSubtree(omittedAndWildcardExport)(clue(tree)))
+
+    val givenExport: StructureCheck = {
+      case Export(
+            _,
+            // A given selector has an empty name
+            ImportSelector(Ident(EmptyTermName), EmptyTree, TypeIdent(TypeName(SimpleName("AnyRef")))) :: Nil
+          ) =>
+    }
+    assert(containsSubtree(givenExport)(clue(tree)))
   }
 
   test("identity-method") {

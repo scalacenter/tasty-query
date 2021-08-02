@@ -12,7 +12,7 @@ object Trees {
 
   case class PackageDef(pid: Symbol, stats: List[Tree]) extends Tree
 
-  case class ImportSelector(imported: Ident, renamed: Tree = EmptyTree, bound: Tree = EmptyTree) extends Tree {
+  case class ImportSelector(imported: Ident, renamed: Tree = EmptyTree, bound: TypeTree = EmptyTypeTree) extends Tree {
 
     /** It's a `given` selector */
     val isGiven: Boolean = imported.name.isEmpty
