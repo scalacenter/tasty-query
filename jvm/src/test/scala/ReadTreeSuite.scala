@@ -1367,6 +1367,38 @@ class ReadTreeSuite extends munit.FunSuite {
           ) =>
     }
     assert(containsSubtree(matchWithWildcard)(clue(tree)))
+
+    val matchWithBind: StructureCheck = {
+      case TypeMember(
+            TypeName(SimpleName("MTWithBind")),
+            TypeLambdaTree(
+              List(
+                TypeParam(
+                  TypeName(SimpleName("X")),
+                  TypeBoundsTree(
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                  )
+                )
+              ),
+              MatchTypeTree(
+                // No bound on the match result
+                EmptyTypeTree,
+                TypeIdent(TypeName(SimpleName("X"))),
+                List(
+                  TypeCaseDef(
+                    AppliedTypeTree(
+                      TypeIdent(TypeName(SimpleName("List"))),
+                      TypeTreeBind(TypeName(SimpleName("t")), TypeIdent(TypeName(Wildcard))) :: Nil
+                    ),
+                    TypeIdent(TypeName(SimpleName("t")))
+                  )
+                )
+              )
+            )
+          ) =>
+    }
+    assert(containsSubtree(matchWithBind)(clue(tree)))
   }
 
   test("package-type-ref") {

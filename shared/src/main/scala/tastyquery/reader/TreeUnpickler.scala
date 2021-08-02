@@ -733,9 +733,19 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val end  = reader.readEnd()
       val name = readName.toTypeName
       ctx.createSymbolIfNew(start, name)
-      // TODO: use type
-      val typ  = readTypeBounds
-      val body = readTypeTree
+      // TODO: use type bounds
+      val typ = readTypeBounds
+      /* This is a workaround: consider a BIND inside a MATCHtpt
+       * example: case List[t] => t
+       * Such a bind has IDENT(_) as its body, which is not a type tree and therefore not expected.
+       * Treat it as if it were an IDENTtpt. */
+      val body: TypeTree = if (reader.nextByte == IDENT) {
+        reader.readByte()
+        val typeName = readName.toTypeName
+        val typ      = readTypeBounds
+        // TODO: assign type
+        TypeIdent(typeName)
+      } else readTypeTree
       skipModifiers(end)
       TypeTreeBind(name, body)
     // Type tree for a type member (abstract or bounded opaque)

@@ -12,4 +12,8 @@ class MatchType {
   type MTWithWildcard[X] = X match {
     case _ => Int
   }
+
+  type MTWithBind[X] = X match {
+    case List[t] => t
+  }
 }
