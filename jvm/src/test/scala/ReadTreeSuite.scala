@@ -49,7 +49,7 @@ class ReadTreeSuite extends munit.FunSuite {
         false
 
       // Nowhere to walk
-      case _: ImportSelector | _: Import | Ident(_) | Literal(_) | EmptyTree => false
+      case _: ImportSelector | _: Import | _: Export | Ident(_) | Literal(_) | EmptyTree => false
     })
   }
 
@@ -143,6 +143,24 @@ class ReadTreeSuite extends munit.FunSuite {
       case Import(_, List(ImportSelector(Ident(EmptyTermName), EmptyTree, EmptyTree))) =>
     }
     assert(containsSubtree(importMatch)(clue(unpickle("imports/ImportGiven"))))
+  }
+
+  test("export") {
+    val tree = unpickle("simple_trees/Export")
+    val simpleExport: StructureCheck = {
+      case Export(_, ImportSelector(Ident(SimpleName("status")), EmptyTree, EmptyTree) :: Nil) =>
+    }
+    assert(containsSubtree(simpleExport)(clue(tree)))
+
+    val omittedAndWildcardExport: StructureCheck = {
+      case Export(
+            _,
+            // An omitting selector is simply a rename to _
+            ImportSelector(Ident(SimpleName("status")), Ident(Wildcard), EmptyTree) ::
+            ImportSelector(Ident(Wildcard), EmptyTree, EmptyTree) :: Nil
+          ) =>
+    }
+    assert(containsSubtree(omittedAndWildcardExport)(clue(tree)))
   }
 
   test("identity-method") {

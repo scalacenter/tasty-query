@@ -32,6 +32,9 @@ object Trees {
 
   case class Import(expr: Tree, selectors: List[ImportSelector]) extends Tree
 
+  /** import expr.selectors */
+  case class Export(expr: Tree, selectors: List[ImportSelector]) extends Tree
+
   /**
    * mods class name template     or
    *  mods trait name template     or

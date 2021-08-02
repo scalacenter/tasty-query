@@ -102,7 +102,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     reader.until(end)(readStat)
 
   def readStat(using Context): Tree = reader.nextByte match {
-    case IMPORT =>
+    case IMPORT | EXPORT =>
       def readSelector: ImportSelector = {
         assert(reader.nextByte == IMPORTED, reader.currentAddr)
         reader.readByte()
@@ -119,10 +119,11 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
           case _ => ImportSelector(name)
         }
       }
-      reader.readByte()
-      val end  = reader.readEnd()
-      val qual = readTerm
-      Import(qual, reader.until(end)(readSelector))
+      val tag       = reader.readByte()
+      val end       = reader.readEnd()
+      val qual      = readTerm
+      val selectors = reader.until(end)(readSelector)
+      if (tag == IMPORT) Import(qual, selectors) else Export(qual, selectors)
     case TYPEDEF =>
       val start = reader.currentAddr
       reader.readByte()
