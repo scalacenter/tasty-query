@@ -249,20 +249,19 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     val end     = reader.readEnd()
     val tparams = readTypeParams
     val params  = readParams
-    val parents: List[Apply | TypeTree] = reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF) {
-      reader.nextByte match {
-        // class parents of classes are APPLYs, because they specify the constructor
-        case APPLY => readTerm.asInstanceOf[Apply]
-        case _     => readTypeTree
+    val parents: List[Apply | TypeTree] =
+      reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF) {
+        reader.nextByte match {
+          // class parents of classes and trait parents with arguments are APPLYs, because they specify the constructor
+          case APPLY => readTerm.asInstanceOf[Apply]
+          case _     => readTypeTree
+        }
       }
-    }
-    val classParent  = parents.collect { case p: Apply => p }.headOption
-    val traitParents = parents.collect { case p: TypeTree => p }
-    val self         = readSelf
+    val self = readSelf
     // The first entry is the constructor
     val cstr = readStat.asInstanceOf[DefDef]
     val body = readStats(end)
-    Template(cstr, classParent, traitParents, self, tparams ++ params ++ body)
+    Template(cstr, parents, self, tparams ++ params ++ body)
   }
 
   def readAllParams(using Context): List[ParamsClause] =

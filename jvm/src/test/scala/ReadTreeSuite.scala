@@ -31,8 +31,8 @@ class ReadTreeSuite extends munit.FunSuite {
     p.isDefinedAt(t) || (t match {
       case PackageDef(_, stats) => stats.exists(rec)
       case Class(_, rhs)        => rec(rhs)
-      case Template(constr, classParent, traitParentsparents, self, body) =>
-        rec(constr) || rec(self) || classParent.exists(rec) || body.exists(rec)
+      case Template(constr, parents, self, body) =>
+        rec(constr) || rec(self) || parents.collect { case p: Tree => p }.exists(rec) || body.exists(rec)
       case ValDef(_, tpt, rhs) => rec(rhs)
       case DefDef(_, params, tpt, rhs) =>
         params.flatten.exists(rec) || rec(rhs)
@@ -82,8 +82,7 @@ class ReadTreeSuite extends munit.FunSuite {
                     // default constructor: no type params, no arguments, empty body
                     DefDef(SimpleName("<init>"), Nil :: Nil, TypeWrapper(_), EmptyTree),
                     // a single parent -- java.lang.Object
-                    Some(parent),
-                    Nil,
+                    List(parent: Apply),
                     // self not specified => EmptyValDef
                     EmptyValDef,
                     // empty body
@@ -597,8 +596,7 @@ class ReadTreeSuite extends munit.FunSuite {
               _,
               _
             ),
-            _,
-            Nil,
+            jlObject :: Nil,
             _,
             // TODO: check the modifiers (private, local etc) once they are read
             // constructor parameters are members
@@ -647,7 +645,6 @@ class ReadTreeSuite extends munit.FunSuite {
     val traitMatch: StructureCheck = {
       case Template(
             DefDef(SimpleName("<init>"), List(ValDef(SimpleName("param"), _, _) :: Nil), _, EmptyTree),
-            None,
             TypeWrapper(TypeRef(_, TypeName(SimpleName("Object")))) :: Nil,
             _,
             ValDef(SimpleName("param"), _, _) :: Nil
@@ -662,8 +659,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val classMatch: StructureCheck = {
       case Template(
             _,
-            Some(jlObject),
-            TypeIdent(TypeName(SimpleName("AbstractTrait"))) :: Nil,
+            List(jlObject: Apply, TypeIdent(TypeName(SimpleName("AbstractTrait")))),
             _,
             // TODO: check the OVERRIDE modifer once modifiers are read
             DefDef(SimpleName("abstractMethod"), _, _, _) :: Nil
@@ -916,7 +912,6 @@ class ReadTreeSuite extends munit.FunSuite {
               ),
               _,
               _,
-              _,
               TypeParam(
                 TypeName(SimpleName("T")),
                 RealTypeBounds(TypeRef(_, TypeName(SimpleName("Nothing"))), TypeRef(_, TypeName(SimpleName("Any"))))
@@ -999,7 +994,6 @@ class ReadTreeSuite extends munit.FunSuite {
               ),
               _,
               _,
-              _,
               TypeParam(
                 TypeName(SimpleName("T")),
                 RealTypeBounds(TypeRef(_, TypeName(SimpleName("Null"))), TypeRef(_, TypeName(SimpleName("AnyRef"))))
@@ -1038,7 +1032,6 @@ class ReadTreeSuite extends munit.FunSuite {
               ),
               _,
               _,
-              _,
               TypeParam(
                 TypeName(SimpleName("T")),
                 RealTypeBounds(TypeRef(_, TypeName(SimpleName("Nothing"))), TypeRef(_, TypeName(SimpleName("Any"))))
@@ -1069,7 +1062,6 @@ class ReadTreeSuite extends munit.FunSuite {
                 _,
                 _
               ),
-              _,
               _,
               _,
               TypeParam(
