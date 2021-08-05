@@ -59,7 +59,8 @@ object Trees {
    *                       If the template defines a class, this is its only class parent.
    * @param parents        trait parents of the template and the class parent if the template defines a trait.
    */
-  case class Template(constr: DefDef, parents: List[Apply | TypeTree], self: ValDef, body: List[Tree]) extends Tree
+  case class Template(constr: DefDef, parents: List[Apply | Block | TypeTree], self: ValDef, body: List[Tree])
+      extends Tree
 
   /** mods val name: tpt = rhs */
   case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree) extends Tree

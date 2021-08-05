@@ -249,11 +249,13 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     val end     = reader.readEnd()
     val tparams = readTypeParams
     val params  = readParams
-    val parents: List[Apply | TypeTree] =
+    val parents: List[Apply | Block | TypeTree] =
       reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF) {
         reader.nextByte match {
           // class parents of classes and trait parents with arguments are APPLYs, because they specify the constructor
+          // BLOCK when the parent constructor has default parameters and the call specifies only some of them
           case APPLY => readTerm.asInstanceOf[Apply]
+          case BLOCK => readTerm.asInstanceOf[Block]
           case _     => readTypeTree
         }
       }

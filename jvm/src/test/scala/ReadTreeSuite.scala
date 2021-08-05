@@ -613,6 +613,15 @@ class ReadTreeSuite extends munit.FunSuite {
     assert(containsSubtree(classWithParams)(clue(tree)))
   }
 
+  test("call-parent-constructor-with-defaults") {
+    val tree = unpickle("simple_trees/ChildCallsParentWithDefaultParameter")
+
+    val blockParent: StructureCheck = {
+      case Class(TypeName(SimpleName("ChildCallsParentWithDefaultParameter")), Template(_, List(Block(_, _)), _, _)) =>
+    }
+    assert(containsSubtree(blockParent)(clue(tree)))
+  }
+
   test("use-given") {
     val tree = unpickle("simple_trees/UsingGiven")
 
