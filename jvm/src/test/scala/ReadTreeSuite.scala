@@ -34,8 +34,8 @@ class ReadTreeSuite extends munit.FunSuite {
       case Template(constr, classParent, traitParentsparents, self, body) =>
         rec(constr) || rec(self) || classParent.exists(rec) || body.exists(rec)
       case ValDef(_, tpt, rhs) => rec(rhs)
-      case DefDef(_, tparams, vparamss, tpt, rhs) =>
-        tparams.exists(rec) || vparamss.flatten.exists(rec) || rec(rhs)
+      case DefDef(_, params, tpt, rhs) =>
+        params.flatten.exists(rec) || rec(rhs)
       case Select(qualifier, _)         => rec(qualifier)
       case Apply(fun, args)             => rec(fun) || args.exists(rec)
       case Block(stats, expr)           => stats.exists(rec) || rec(expr)
@@ -80,7 +80,7 @@ class ReadTreeSuite extends munit.FunSuite {
                   TypeName(SimpleName("EmptyClass")),
                   Template(
                     // default constructor: no type params, no arguments, empty body
-                    DefDef(SimpleName("<init>"), Nil, List(Nil), TypeWrapper(_), EmptyTree),
+                    DefDef(SimpleName("<init>"), Nil :: Nil, TypeWrapper(_), EmptyTree),
                     // a single parent -- java.lang.Object
                     Some(parent),
                     Nil,
@@ -186,9 +186,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val identityMatch: StructureCheck = {
       case DefDef(
             SimpleName("id"),
-            // no type params
-            List(),
-            // one param -- x: Int
+            // no type params, one param -- x: Int
             List(List(ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("Int"))), EmptyTree))),
             TypeIdent(TypeName(SimpleName("Int"))),
             Ident(SimpleName("x"))
@@ -202,11 +200,10 @@ class ReadTreeSuite extends munit.FunSuite {
     val methodMatch: StructureCheck = {
       case DefDef(
             SimpleName("threeParameterLists"),
-            Nil,
             List(
-              ValDef(SimpleName("x"), _, _) :: Nil,
-              ValDef(SimpleName("y"), _, _) :: ValDef(SimpleName("z"), _, _) :: Nil,
-              ValDef(SimpleName("last"), _, _) :: Nil
+              List(ValDef(SimpleName("x"), _, _)),
+              List(ValDef(SimpleName("y"), _, _), ValDef(SimpleName("z"), _, _)),
+              List(ValDef(SimpleName("last"), _, _))
             ),
             _,
             _
@@ -419,7 +416,6 @@ class ReadTreeSuite extends munit.FunSuite {
     val defDefWithSingleton: StructureCheck = {
       case DefDef(
             SimpleName("singletonReturnType"),
-            Nil,
             List(List(_)),
             SingletonTypeTree(Ident(SimpleName("x"))),
             Ident(SimpleName("x"))
@@ -569,7 +565,6 @@ class ReadTreeSuite extends munit.FunSuite {
     val setterMatch: StructureCheck = {
       case DefDef(
             SimpleName("x_="),
-            Nil,
             List(ValDef(SimpleName("x$1"), _, _) :: Nil),
             TypeWrapper(TypeRef(_, TypeName(SimpleName("Unit")))),
             Literal(Constant(()))
@@ -591,13 +586,14 @@ class ReadTreeSuite extends munit.FunSuite {
       case Template(
             DefDef(
               SimpleName("<init>"),
-              Nil,
               List(
-                ValDef(SimpleName("local"), _, _),
-                ValDef(SimpleName("theVal"), _, _),
-                ValDef(SimpleName("theVar"), _, _),
-                ValDef(SimpleName("privateVal"), _, _)
-              ) :: Nil,
+                List(
+                  ValDef(SimpleName("local"), _, _),
+                  ValDef(SimpleName("theVal"), _, _),
+                  ValDef(SimpleName("theVar"), _, _),
+                  ValDef(SimpleName("privateVal"), _, _)
+                )
+              ),
               _,
               _
             ),
@@ -612,7 +608,7 @@ class ReadTreeSuite extends munit.FunSuite {
               ValDef(SimpleName("theVar"), _, _),
               ValDef(SimpleName("privateVal"), _, _),
               // setter for theVar
-              DefDef(SimpleName("theVar_="), Nil, _ :: Nil, _, _)
+              DefDef(SimpleName("theVar_="), List(List(_)), _, _)
             )
           ) =>
     }
@@ -650,7 +646,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
     val traitMatch: StructureCheck = {
       case Template(
-            DefDef(SimpleName("<init>"), Nil, List(ValDef(SimpleName("param"), _, _) :: Nil), _, EmptyTree),
+            DefDef(SimpleName("<init>"), List(ValDef(SimpleName("param"), _, _) :: Nil), _, EmptyTree),
             None,
             TypeWrapper(TypeRef(_, TypeName(SimpleName("Object")))) :: Nil,
             _,
@@ -670,7 +666,7 @@ class ReadTreeSuite extends munit.FunSuite {
             TypeIdent(TypeName(SimpleName("AbstractTrait"))) :: Nil,
             _,
             // TODO: check the OVERRIDE modifer once modifiers are read
-            DefDef(SimpleName("abstractMethod"), _, _, _, _) :: Nil
+            DefDef(SimpleName("abstractMethod"), _, _, _) :: Nil
           ) if isJavaLangObject.isDefinedAt(jlObject) =>
     }
     assert(containsSubtree(classMatch)(clue(tree)))
@@ -684,7 +680,7 @@ class ReadTreeSuite extends munit.FunSuite {
             SimpleName("functionLambda"),
             _,
             Block(
-              List(DefDef(SimpleName("$anonfun"), Nil, List(ValDef(SimpleName("x"), _, _)) :: Nil, _, _)),
+              List(DefDef(SimpleName("$anonfun"), List(List(ValDef(SimpleName("x"), _, _))), _, _)),
               // a lambda is simply a wrapper around a DefDef, defined in the same block. Its type is a function type,
               // therefore not specified (left as EmptyTree)
               Lambda(Ident(SimpleName("$anonfun")), EmptyTypeTree)
@@ -698,7 +694,7 @@ class ReadTreeSuite extends munit.FunSuite {
             SimpleName("samLambda"),
             _,
             Block(
-              List(DefDef(SimpleName("$anonfun"), Nil, List(Nil), _, _)),
+              List(DefDef(SimpleName("$anonfun"), List(List()), _, _)),
               // the lambda's type is not just a function type, therefore specified
               Lambda(Ident(SimpleName("$anonfun")), TypeWrapper(TypeRef(_, TypeName(SimpleName("Runnable")))))
             )
@@ -725,7 +721,6 @@ class ReadTreeSuite extends munit.FunSuite {
               List(
                 DefDef(
                   SimpleName("$anonfun"),
-                  Nil,
                   List(ValDef(SimpleName("x"), _, _)) :: Nil,
                   _,
                   Apply(
@@ -753,14 +748,12 @@ class ReadTreeSuite extends munit.FunSuite {
       case DefDef(
             SimpleName("partiallyApplied"),
             Nil,
-            Nil,
             _,
             Block(
               List(
                 DefDef(
                   SimpleName("$anonfun"),
-                  Nil,
-                  List(ValDef(SimpleName("second"), _, _)) :: Nil,
+                  List(ValDef(SimpleName("second"), _, _) :: Nil),
                   _,
                   Apply(
                     Apply(
@@ -787,7 +780,6 @@ class ReadTreeSuite extends munit.FunSuite {
     val partialFunction: StructureCheck = {
       case DefDef(
             SimpleName("$anonfun"),
-            Nil,
             List(ValDef(SimpleName("x$1"), _, EmptyTree)) :: Nil,
             _,
             // match x$1 with type x$1
@@ -907,14 +899,18 @@ class ReadTreeSuite extends munit.FunSuite {
             Template(
               DefDef(
                 SimpleName("<init>"),
-                TypeParam(
-                  TypeName(SimpleName("T")),
-                  TypeBoundsTree(
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
-                  )
-                ) :: Nil,
-                _,
+                List(
+                  List(
+                    TypeParam(
+                      TypeName(SimpleName("T")),
+                      TypeBoundsTree(
+                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                      )
+                    )
+                  ),
+                  List()
+                ),
                 _,
                 _
               ),
@@ -936,19 +932,49 @@ class ReadTreeSuite extends munit.FunSuite {
     val genericMethod: StructureCheck = {
       case DefDef(
             SimpleName("usesTypeParam"),
-            TypeParam(
-              TypeName(SimpleName("T")),
-              TypeBoundsTree(
-                TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
-              )
-            ) :: Nil,
-            List(Nil),
+            List(
+              List(
+                TypeParam(
+                  TypeName(SimpleName("T")),
+                  TypeBoundsTree(
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                  )
+                )
+              ),
+              List()
+            ),
             AppliedTypeTree(TypeIdent(TypeName(SimpleName("Option"))), TypeIdent(TypeName(SimpleName("T"))) :: Nil),
             _
           ) =>
     }
     assert(containsSubtree(genericMethod)(clue(tree)))
+  }
+
+  test("generic-extension") {
+    val tree = unpickle("simple_trees/GenericExtension$package")
+
+    val extensionCheck: StructureCheck = {
+      case DefDef(
+            SimpleName("genericExtension"),
+            List(
+              List(ValDef(SimpleName("i"), TypeIdent(TypeName(SimpleName("Int"))), EmptyTree)),
+              List(
+                TypeParam(
+                  TypeName(SimpleName("T")),
+                  TypeBoundsTree(
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                  )
+                )
+              ),
+              List(ValDef(SimpleName("genericArg"), TypeIdent(TypeName(SimpleName("T"))), EmptyTree))
+            ),
+            _,
+            _
+          ) =>
+    }
+    assert(containsSubtree(extensionCheck)(clue(tree)))
   }
 
   test("class-type-bounds") {
@@ -959,11 +985,15 @@ class ReadTreeSuite extends munit.FunSuite {
             Template(
               DefDef(
                 SimpleName("<init>"),
-                TypeParam(
-                  TypeName(SimpleName("T")),
-                  TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("AnyRef"))))
-                ) :: Nil,
-                _,
+                List(
+                  List(
+                    TypeParam(
+                      TypeName(SimpleName("T")),
+                      TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("AnyRef"))))
+                    )
+                  ),
+                  List()
+                ),
                 _,
                 _
               ),
@@ -991,14 +1021,18 @@ class ReadTreeSuite extends munit.FunSuite {
             Template(
               DefDef(
                 SimpleName("<init>"),
-                TypeParam(
-                  TypeName(SimpleName("T")),
-                  TypeBoundsTree(
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
-                  )
-                ) :: Nil,
-                _,
+                List(
+                  List(
+                    TypeParam(
+                      TypeName(SimpleName("T")),
+                      TypeBoundsTree(
+                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                      )
+                    )
+                  ),
+                  List()
+                ),
                 _,
                 _
               ),
@@ -1020,14 +1054,18 @@ class ReadTreeSuite extends munit.FunSuite {
             Template(
               DefDef(
                 SimpleName("<init>"),
-                TypeParam(
-                  TypeName(SimpleName("U")),
-                  TypeBoundsTree(
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
-                  )
-                ) :: Nil,
-                _,
+                List(
+                  List(
+                    TypeParam(
+                      TypeName(SimpleName("U")),
+                      TypeBoundsTree(
+                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
+                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                      )
+                    )
+                  ),
+                  List()
+                ),
                 _,
                 _
               ),
@@ -1092,7 +1130,6 @@ class ReadTreeSuite extends munit.FunSuite {
     val byName: StructureCheck = {
       case DefDef(
             SimpleName("withByName"),
-            Nil,
             List(List(ValDef(SimpleName("x"), ByNameTypeTree(TypeIdent(TypeName(SimpleName("Int")))), EmptyTree))),
             _,
             _
@@ -1120,7 +1157,6 @@ class ReadTreeSuite extends munit.FunSuite {
     val unionTypeMethod: StructureCheck = {
       case DefDef(
             SimpleName("argWithOrType"),
-            Nil,
             // Int | String = | [Int, String]
             List(
               List(
@@ -1147,7 +1183,6 @@ class ReadTreeSuite extends munit.FunSuite {
     val intersectionTypeMethod: StructureCheck = {
       case DefDef(
             SimpleName("argWithAndType"),
-            Nil,
             List(
               List(
                 ValDef(
@@ -1251,7 +1286,6 @@ class ReadTreeSuite extends munit.FunSuite {
     val varargMatch: StructureCheck = {
       case DefDef(
             SimpleName("takesVarargs"),
-            Nil,
             List(
               ValDef(
                 SimpleName("xs"),

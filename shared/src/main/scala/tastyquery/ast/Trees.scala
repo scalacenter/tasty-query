@@ -70,9 +70,10 @@ object Trees {
   /** mods val name: tpt = rhs */
   case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree) extends Tree
 
+  type ParamsClause = List[ValDef] | List[TypeParam]
+
   /** mods def name[tparams](vparams_1)...(vparams_n): tpt = rhs */
-  case class DefDef(name: TermName, tparams: List[TypeDef], vparamss: List[List[ValDef]], tpt: TypeTree, rhs: Tree)
-      extends Tree
+  case class DefDef(name: TermName, params: List[ParamsClause], tpt: TypeTree, rhs: Tree) extends Tree
 
   /** name */
   case class Ident(name: TermName) extends Tree

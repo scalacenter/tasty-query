@@ -265,6 +265,16 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     Template(cstr, classParent, traitParents, self, tparams ++ params ++ body)
   }
 
+  def readAllParams(using Context): List[ParamsClause] =
+    reader.nextByte match {
+      case PARAM => readParams :: readAllParams
+      case EMPTYCLAUSE =>
+        reader.readByte()
+        Nil :: readAllParams
+      case TYPEPARAM => readTypeParams :: readAllParams
+      case _         => Nil
+    }
+
   def readParamLists(using Context): List[List[ValDef]] = {
     var acc = new ListBuffer[List[ValDef]]()
     while (reader.nextByte == PARAM || reader.nextByte == EMPTYCLAUSE) {
@@ -306,15 +316,14 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     val name  = readName
     ctx.createSymbolIfNew(start, name)
     // Only for DefDef, but reading works for empty lists
-    val tparams = readTypeParams
-    val params  = readParamLists
-    val tpt     = readTypeTree
-    val rhs     = if (reader.currentAddr == end || isModifierTag(reader.nextByte)) EmptyTree else readTerm
+    val params = readAllParams
+    val tpt    = readTypeTree
+    val rhs    = if (reader.currentAddr == end || isModifierTag(reader.nextByte)) EmptyTree else readTerm
     skipModifiers(end)
     tag match {
       case VALDEF | PARAM => ValDef(name, tpt, rhs)
       case DEFDEF =>
-        DefDef(name, tparams, params, tpt, rhs)
+        DefDef(name, params, tpt, rhs)
     }
   }
 
