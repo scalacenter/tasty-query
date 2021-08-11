@@ -91,9 +91,11 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case PACKAGE =>
       reader.readByte()
       val packageEnd = reader.readEnd()
-      assert(reader.readByte() == TERMREFpkg, reader.currentAddr)
-      // TODO: only create a symbol if it does not exist yet
-      val pid = new Symbol(readName)
+      val pid = readPotentiallyShared({
+        assert(reader.readByte() == TERMREFpkg, reader.currentAddr)
+        // TODO: only create a symbol if it does not exist yet
+        new Symbol(readName)
+      })
       PackageDef(pid, reader.until(packageEnd)(readTopLevelStat))
     case _ => readStat
   }

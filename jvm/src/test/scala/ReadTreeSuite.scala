@@ -1553,4 +1553,10 @@ class ReadTreeSuite extends munit.FunSuite {
     }
     assert(containsSubtree(newInner)(clue(tree)))
   }
+
+  test("shared-package-reference") {
+    val tree = unpickle("simple_trees/SharedPackageReference$package")
+
+    // TODO: once references are created, check correctness
+  }
 }
