@@ -265,7 +265,7 @@ class ReadTreeSuite extends munit.FunSuite {
   test("if") {
     val ifMatch: StructureCheck = {
       case If(
-            Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("<"), _)), List(Literal(Constant(0)))),
+            Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("<"), _, _)), List(Literal(Constant(0)))),
             Select(Ident(SimpleName("x")), SimpleName("unary_-")),
             Ident(SimpleName("x"))
           ) =>
@@ -316,7 +316,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val guardAndCondition: StructureCheck = {
       case CaseDef(
             Literal(Constant(7)),
-            Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("=="), _)), Literal(Constant(7)) :: Nil),
+            Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("=="), _, _)), Literal(Constant(7)) :: Nil),
             body: Block
           ) =>
     }
@@ -325,7 +325,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val alternativesAndCondition: StructureCheck = {
       case CaseDef(
             Alternative(List(Literal(Constant(3)), Literal(Constant(4)), Literal(Constant(5)))),
-            Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("<"), _)), Literal(Constant(5)) :: Nil),
+            Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("<"), _, _)), Literal(Constant(5)) :: Nil),
             body: Block
           ) =>
     }
@@ -336,8 +336,8 @@ class ReadTreeSuite extends munit.FunSuite {
             Ident(Wildcard),
             Apply(
               Select(
-                Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("%"), _)), Literal(Constant(2)) :: Nil),
-                SignedName(SimpleName("=="), _)
+                Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("%"), _, _)), Literal(Constant(2)) :: Nil),
+                SignedName(SimpleName("=="), _, _)
               ),
               Literal(Constant(0)) :: Nil
             ),
@@ -358,7 +358,7 @@ class ReadTreeSuite extends munit.FunSuite {
       case CaseDef(
             Typed(
               Unapply(
-                Select(Ident(SimpleName("FirstCase")), SignedName(SimpleName("unapply"), _)),
+                Select(Ident(SimpleName("FirstCase")), SignedName(SimpleName("unapply"), _, _)),
                 Nil,
                 List(Bind(SimpleName("x"), Ident(Wildcard)))
               ),
@@ -390,7 +390,10 @@ class ReadTreeSuite extends munit.FunSuite {
     val throwMatch: StructureCheck = {
       case Throw(
             Apply(
-              Select(New(TypeIdent(TypeName(SimpleName("NullPointerException")))), SignedName(SimpleName("<init>"), _)),
+              Select(
+                New(TypeIdent(TypeName(SimpleName("NullPointerException")))),
+                SignedName(SimpleName("<init>"), _, _)
+              ),
               Nil
             )
           ) =>
@@ -536,7 +539,7 @@ class ReadTreeSuite extends munit.FunSuite {
       case Apply(
             // apply[Int]
             TypeApply(
-              Select(Ident(SimpleName("Seq")), SignedName(SimpleName("apply"), _)),
+              Select(Ident(SimpleName("Seq")), SignedName(SimpleName("apply"), _, _)),
               TypeWrapper(TypeRef(_, TypeName(SimpleName("Int")))) :: Nil
             ),
             Typed(SeqLiteral(Literal(Constant(1)) :: Nil, _), _) :: Nil
@@ -635,7 +638,7 @@ class ReadTreeSuite extends munit.FunSuite {
     // useGiven
     val withGiven: StructureCheck = {
       case Apply(
-            Select(_, SignedName(SimpleName("useGiven"), _)),
+            Select(_, SignedName(SimpleName("useGiven"), _, _)),
             Select(This(Some(TypeIdent(TypeName(SimpleName("UsingGiven"))))), SimpleName("given_Int")) :: Nil
           ) =>
     }
@@ -643,7 +646,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
     // useGiven(using 0)
     val explicitUsing: StructureCheck = {
-      case Apply(Select(_, SignedName(SimpleName("useGiven"), _)), Literal(Constant(0)) :: Nil) =>
+      case Apply(Select(_, SignedName(SimpleName("useGiven"), _, _)), Literal(Constant(0)) :: Nil) =>
     }
     assert(containsSubtree(explicitUsing)(clue(tree)))
   }
@@ -720,7 +723,7 @@ class ReadTreeSuite extends munit.FunSuite {
       case Apply(
             Select(
               This(Some(TypeIdent(TypeName(SimpleName("EtaExpansion"))))),
-              SignedName(SimpleName("takesFunction"), _)
+              SignedName(SimpleName("takesFunction"), _, _)
             ),
             Block(
               List(
@@ -731,7 +734,7 @@ class ReadTreeSuite extends munit.FunSuite {
                   Apply(
                     Select(
                       This(Some(TypeIdent(TypeName(SimpleName("EtaExpansion"))))),
-                      SignedName(SimpleName("intMethod"), _)
+                      SignedName(SimpleName("intMethod"), _, _)
                     ),
                     List(Ident(SimpleName("x")))
                   )
@@ -764,7 +767,7 @@ class ReadTreeSuite extends munit.FunSuite {
                     Apply(
                       Select(
                         This(Some(TypeIdent(TypeName(SimpleName("PartialApplication"))))),
-                        SignedName(SimpleName("withManyParams"), _)
+                        SignedName(SimpleName("withManyParams"), _, _)
                       ),
                       Literal(Constant(0)) :: Nil
                     ),
@@ -807,7 +810,7 @@ class ReadTreeSuite extends munit.FunSuite {
       case Apply(
             Select(
               This(Some(TypeIdent(TypeName(SimpleName("NamedArgument"))))),
-              SignedName(SimpleName("withNamed"), _)
+              SignedName(SimpleName("withNamed"), _, _)
             ),
             List(Literal(Constant(0)), NamedArg(SimpleName("second"), Literal(Constant(1))))
           ) =>
@@ -1090,7 +1093,7 @@ class ReadTreeSuite extends munit.FunSuite {
       case Inlined(
             // 0 + HasInlinedMethod_this.externalVal
             Apply(
-              Select(Inlined(Literal(Constant(0)), EmptyTypeIdent, Nil), SignedName(SimpleName("+"), _)),
+              Select(Inlined(Literal(Constant(0)), EmptyTypeIdent, Nil), SignedName(SimpleName("+"), _, _)),
               Select(
                 Inlined(Ident(SimpleName("HasInlinedMethod_this")), EmptyTypeIdent, Nil),
                 SimpleName("externalVal")
@@ -1117,7 +1120,7 @@ class ReadTreeSuite extends munit.FunSuite {
             TypeWrapper(TypeRef(_, TypeName(SimpleName("Random")))),
             Apply(
               // select scala.util.Random
-              Select(New(SelectTypeTree(_, TypeName(SimpleName("Random")))), SignedName(SimpleName("<init>"), _)),
+              Select(New(SelectTypeTree(_, TypeName(SimpleName("Random")))), SignedName(SimpleName("<init>"), _, _)),
               Nil
             )
           ) =>
@@ -1299,7 +1302,7 @@ class ReadTreeSuite extends munit.FunSuite {
                   Apply(
                     Select(
                       New(TypeWrapper(TypeRef(_, TypeName(SimpleName("Repeated"))))),
-                      SignedName(SimpleName("<init>"), _)
+                      SignedName(SimpleName("<init>"), _, _)
                     ),
                     Nil
                   )
