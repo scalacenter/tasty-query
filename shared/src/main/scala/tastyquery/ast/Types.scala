@@ -1,7 +1,9 @@
 package tastyquery.ast
 
+import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
 import tastyquery.ast.Symbols.Symbol
+import tastyquery.ast.Trees.{Tree, TypeParam}
 
 object Types {
   type Designator = Symbol | Name
@@ -10,8 +12,10 @@ object Types {
 
   // ----- Type categories ----------------------------------------------
 
+  // Every type is expected to inherit either TypeProxy or GroundType.
+
   /**
-   * A marker trait for type proxies.
+   * Type proxies.
    * Each implementation is expected to redefine the `underlying` method.
    */
   abstract class TypeProxy extends Type {
@@ -20,11 +24,18 @@ object Types {
     def underlying: Type
   }
 
+  /** Non-proxy types */
+  abstract class GroundType extends Type {}
+
+  // ----- Marker traits ------------------------------------------------
+
   /**
    * A marker trait for types that apply only to term symbols or that
    * represent higher-kinded types.
    */
   trait TermType extends Type
+
+  trait MethodicType extends TermType
 
   /** A marker trait for types that can be types of values or prototypes of value types */
   trait ValueTypeOrProto extends TermType
@@ -39,6 +50,8 @@ object Types {
   trait SingletonType extends TypeProxy with ValueType {
     def isOverloaded: Boolean = false
   }
+
+  // ----- Type Proxies -------------------------------------------------
 
   abstract class NamedType extends TypeProxy with ValueType {
     self =>
@@ -118,6 +131,76 @@ object Types {
     override def underlying: Type = ???
   }
 
+  case object NoPrefix extends Type
+
+  // TODO: store the package type symbol
+  class PackageTypeRef(packageName: Name) extends TypeRef(NoPrefix, packageName)
+
+  case class ThisType(tref: TypeRef) extends TypeProxy with SingletonType {
+    override def underlying: Type = ???
+  }
+
+  /** A constant type with single `value`. */
+  case class ConstantType(value: Constant) extends TypeProxy with SingletonType {
+    override def underlying: Type = ???
+  }
+
+  /**
+   * A type application `C[T_1, ..., T_n]`
+   * Typebounds for wildcard application: C[_], C[?]
+   */
+  case class AppliedType(tycon: Type, args: List[Type | TypeBounds]) extends TypeProxy with ValueType {
+    override def underlying: Type = tycon
+  }
+
+  /** A by-name parameter type of the form `=> T`, or the type of a method with no parameter list. */
+  case class ExprType(resType: Type) extends TypeProxy with MethodicType {
+    override def underlying: Type = resType
+  }
+
+  case class TypeLambda(params: List[TypeParam], resultTypeCtor: TypeLambda => Type) extends TypeProxy with TermType {
+    val resultType = resultTypeCtor(this)
+
+    override def underlying: Type = ???
+
+    override def toString: String = s"TypeLambda($params, $resultType)"
+  }
+
+  case class TypeParamRef(binder: TypeLambda, num: Int) extends TypeProxy with ValueType {
+    override def underlying: Type = ???
+
+    override def toString: String = binder.params(num).name.toString
+  }
+
+  /** typ @ annot */
+  case class AnnotatedType(typ: Type, annotation: Tree) extends TypeProxy with ValueType {
+    override def underlying: Type = typ
+  }
+
+  /**
+   * A refined type parent { refinement }
+   *  @param parent      The type being refined
+   *  @param refinedName The name of the refinement declaration
+   *  @param refinedInfo The info of the refinement declaration
+   */
+  case class RefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds) extends TypeProxy with ValueType {
+    override def underlying: Type = parent
+  }
+
   // A marker for Types or components which are not yet constructed correctly
   case object DummyType extends Type
+
+  trait TypeBounds(low: Type, high: Type)
+
+  case class RealTypeBounds(low: Type, high: Type) extends TypeBounds(low, high)
+
+  case class TypeAlias(alias: Type) extends TypeProxy with TypeBounds(alias, alias) {
+    override def underlying: Type = alias
+  }
+
+  // ----- Ground Types -------------------------------------------------
+
+  case class OrType(first: Type, second: Type) extends GroundType with ValueType
+
+  case class AndType(first: Type, second: Type) extends GroundType with ValueType
 }
