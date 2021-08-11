@@ -10,6 +10,7 @@ object Names {
 
   /** The term name represented by the empty string */
   val EmptyTermName: SimpleName = SimpleName("")
+  val EmptyTypeName: TypeName   = TypeName(EmptyTermName)
   val RootName: SimpleName      = SimpleName("<root>")
   val Wildcard: SimpleName      = SimpleName("_")
 
