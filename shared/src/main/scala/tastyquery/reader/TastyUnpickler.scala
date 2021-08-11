@@ -75,12 +75,13 @@ class TastyUnpickler(reader: TastyReader) {
         new UniqueName(separator, original, num)
       case NameTags.DEFAULTGETTER =>
         new DefaultGetterName(readName(), readNat())
-      case NameTags.SIGNED =>
+      case NameTags.SIGNED | NameTags.TARGETSIGNED =>
         val original  = readName()
+        val target    = if (tag == NameTags.TARGETSIGNED) readName() else original
         val result    = readName().toTypeName
         val paramsSig = reader.until(end)(readParamSig())
         val sig       = Signature(paramsSig, result)
-        new SignedName(original, sig)
+        new SignedName(original, sig, target)
       case NameTags.SUPERACCESSOR | NameTags.INLINEACCESSOR =>
         new PrefixedName(tag, readName())
       case NameTags.BODYRETAINER | NameTags.OBJECTCLASS =>
