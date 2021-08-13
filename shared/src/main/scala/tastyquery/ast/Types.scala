@@ -117,7 +117,11 @@ object Types {
     def implicitName: TermName = name
 
     def underlyingRef: TermRef = this
+
+    def resolveToSymbol: Symbol = ???
   }
+
+  class PackageRef(packageName: Name) extends TermRef(NoPrefix, packageName)
 
   case class TypeRef(override val prefix: Type, private var myDesignator: Designator) extends NamedType {
 
@@ -186,9 +190,6 @@ object Types {
   case class RefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds) extends TypeProxy with ValueType {
     override def underlying: Type = parent
   }
-
-  // A marker for Types or components which are not yet constructed correctly
-  case object DummyType extends Type
 
   trait TypeBounds(low: Type, high: Type)
 

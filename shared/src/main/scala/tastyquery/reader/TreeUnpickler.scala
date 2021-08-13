@@ -3,7 +3,7 @@ package tastyquery.reader
 import tastyquery.Contexts._
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names._
-import tastyquery.ast.Symbols.{DummySymbol, Symbol}
+import tastyquery.ast.Symbols.Symbol
 import tastyquery.ast.Trees._
 import tastyquery.ast.TypeTrees._
 import tastyquery.ast.Types._
@@ -507,7 +507,10 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       // TODO: this might be more complicated than Ident
       Ident(name)
     case TERMREFpkg =>
-      DummyTree(readType, "TermRef into tree")
+      reader.readByte()
+      val name = readName
+      // TODO: create a termref and store as a tpe
+      ReferencedPackage(name)
     case TERMREFdirect =>
       reader.readByte()
       val sym = readSymRef
@@ -606,7 +609,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case TERMREFpkg =>
       reader.readByte()
       val name = readName
-      TermRef(DummyType, name)
+      PackageRef(name)
     case TERMREF =>
       reader.readByte()
       val name = readName
