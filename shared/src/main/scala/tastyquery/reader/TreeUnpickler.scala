@@ -29,7 +29,74 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       acc += readTopLevelStat
       if (!reader.isAtEnd) read(acc) else acc.toList
     }
+    val symbolFork = fork
+    while (!symbolFork.reader.isAtEnd) symbolFork.createSymbols
     read(new ListBuffer[Tree])
+  }
+
+  /* This method walks a TASTy file and creates all symbols in it.
+   *
+   * This is useful for forward references. Example: type parameters in the following case:
+   * class ExampleClass[T1 <: T2, T2]
+   * The example is equally applicable to methods, which can be arbitrarily nested.
+   * The alternative is to create a symbol when we encounter a forward reference, but it is hard to
+   * keep track of the owner in this case.
+   * */
+  def createSymbols(using Context): Unit = {
+    val start = reader.currentAddr
+    val tag   = reader.readByte()
+    tag match {
+      // ---------- tags that trigger symbol creation -----------------------------------
+      case PACKAGE =>
+        val end = reader.readEnd()
+        val pid = readPotentiallyShared({
+          assert(reader.readByte() == TERMREFpkg, reader.currentAddr)
+          ctx.createPackageSymbolIfNew(readName)
+        })
+        reader.until(end)(createSymbols)
+      case TYPEDEF =>
+        val end  = reader.readEnd()
+        val name = readName.toTypeName
+        if (reader.nextByte == TEMPLATE) {
+          ctx.createClassSymbolIfNew(start, name)
+        } else {
+          ctx.createSymbolIfNew(start, name)
+        }
+        reader.until(end)(createSymbols)
+      case VALDEF | PARAM | TYPEPARAM | DEFDEF =>
+        val end  = reader.readEnd()
+        val name = if (tag == TYPEPARAM) readName.toTypeName else readName
+        ctx.createSymbolIfNew(start, name)
+        reader.until(end)(createSymbols)
+      case BIND =>
+        val end        = reader.readEnd()
+        var name: Name = readName
+        if (tagFollowShared == TYPEBOUNDS) name = name.toTypeName
+        ctx.createSymbolIfNew(start, name)
+        reader.until(end)(createSymbols)
+
+      // ---------- tags with potentially nested symbols --------------------------------
+      case tag if firstASTTreeTag <= tag && tag < firstNatASTTreeTag => createSymbols
+      case tag if firstNatASTTreeTag <= tag && tag < firstLengthTreeTag =>
+        reader.readNat()
+        createSymbols
+      case TEMPLATE | APPLY | TYPEAPPLY | SUPER | TYPED | ASSIGN | BLOCK | INLINED | LAMBDA | IF | MATCH | TRY | WHILE |
+          REPEATED | ALTERNATIVE | UNAPPLY | REFINEDtpt | APPLIEDtpt | LAMBDAtpt | TYPEBOUNDStpt | ANNOTATEDtpt |
+          MATCHtpt | CASEDEF =>
+        val end = reader.readEnd()
+        reader.until(end)(createSymbols)
+      case SELECTin =>
+        val end = reader.readEnd()
+        readName
+        reader.until(end)(createSymbols)
+      case RETURN | SELECTouter =>
+        val end = reader.readEnd()
+        reader.readNat()
+        reader.until(end)(createSymbols)
+
+      // ---------- no nested symbols ---------------------------------------------------
+      case _ => skipTree(tag)
+    }
   }
 
   def forkAt(start: Addr): TreeUnpickler =
@@ -571,11 +638,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
   def readSymRef(using Context): Symbol = {
     val symAddr = reader.readAddr()
-    if (!ctx.localSymbols.contains(symAddr)) {
-      // will create the symbol
-      forkAt(symAddr).readStat
-      assert(ctx.localSymbols.contains(symAddr), reader.currentAddr)
-    }
+    assert(ctx.localSymbols.contains(symAddr), reader.currentAddr)
     ctx.localSymbols(symAddr)
   }
 
