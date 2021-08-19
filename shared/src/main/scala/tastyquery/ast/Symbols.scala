@@ -16,4 +16,6 @@ object Symbols {
   }
 
   class ClassSymbol(override val name: Name) extends Symbol(name)
+
+  class PackageClassSymbol(override val name: Name) extends ClassSymbol(name)
 }

@@ -2,7 +2,7 @@ package tastyquery
 
 import dotty.tools.tasty.TastyBuffer.Addr
 import tastyquery.ast.Names.Name
-import tastyquery.ast.Symbols.{NoSymbol, Symbol}
+import tastyquery.ast.Symbols.{ClassSymbol, NoSymbol, PackageClassSymbol, Symbol}
 import tastyquery.ast.Types.TypeLambda
 
 import scala.collection.mutable
@@ -36,7 +36,11 @@ object Contexts {
 
     def createClassSymbolIfNew(addr: Addr, name: Name): Unit =
       if (!hasSymbolAt(addr)) {
-        registerSym(addr, new Symbol(name))
+        registerSym(addr, new ClassSymbol(name))
       }
+
+    // TODO: store decls and walk the decls tree, finding a symbol for a package
+    def createPackageSymbolIfNew(name: Name): Unit =
+      new PackageClassSymbol(name)
   }
 }
