@@ -8,7 +8,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 object Symbols {
   val NoSymbol = new Symbol(Names.EmptyTermName, null)
 
-  class Symbol(val name: Name, val owner: Symbol) {
+  class Symbol(val name: Name, val owner: DeclaringSymbol) {
     override def toString: String = s"symbol[$name]"
   }
 
@@ -16,7 +16,8 @@ object Symbols {
     def unapply(s: Symbol): Option[Name] = Some(s.name)
   }
 
-  abstract class DeclaringSymbol(override val name: Name, override val owner: Symbol) extends Symbol(name, owner) {
+  abstract class DeclaringSymbol(override val name: Name, override val owner: DeclaringSymbol)
+      extends Symbol(name, owner) {
     /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
     protected val declarations: mutable.HashMap[Name, Symbol] = mutable.HashMap[Name, Symbol]()
@@ -25,12 +26,14 @@ object Symbols {
     def getDecl(name: Name): Option[Symbol] = declarations.get(name)
   }
 
-  class MethodSymbol(override val name: TermName, override val owner: Symbol) extends DeclaringSymbol(name, owner)
+  class MethodSymbol(override val name: TermName, override val owner: DeclaringSymbol)
+      extends DeclaringSymbol(name, owner)
 
-  class ClassSymbol(override val name: Name, override val owner: Symbol) extends DeclaringSymbol(name, owner)
+  class ClassSymbol(override val name: Name, override val owner: DeclaringSymbol) extends DeclaringSymbol(name, owner)
 
   // TODO: typename or term name?
-  class PackageClassSymbol(override val name: Name, override val owner: Symbol) extends ClassSymbol(name, owner) {
+  class PackageClassSymbol(override val name: Name, override val owner: DeclaringSymbol)
+      extends ClassSymbol(name, owner) {
     def findPackageSymbol(packageName: TermName): Option[PackageClassSymbol] = packageName match {
       case _: SimpleName => getPackageDecl(packageName)
       case QualifiedName(NameTags.QUALIFIED, prefix, suffix) =>
