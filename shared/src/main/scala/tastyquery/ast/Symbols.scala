@@ -18,6 +18,13 @@ object Symbols {
 
   abstract class DeclaringSymbol(override val name: Name, override val owner: DeclaringSymbol)
       extends Symbol(name, owner) {
+    if (owner != null) {
+      // Declaring symbol is always a declaration in its owner
+      owner.addDecl(this)
+    } else {
+      // Root package is the only symbol that is allowed to not have an owner
+      assert(name == RootName)
+    }
     /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
     protected val declarations: mutable.HashMap[Name, Symbol] = mutable.HashMap[Name, Symbol]()
