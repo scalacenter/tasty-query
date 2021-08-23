@@ -166,7 +166,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val pid = readPotentiallyShared({
         assert(reader.readByte() == TERMREFpkg, reader.currentAddr)
         // Symbol is already created during symbol creation phase
-        ctx.createPackageSymbolIfNew(readName)
+        ctx.getPackageSymbol(readName).get
       })
       PackageDef(pid, reader.until(packageEnd)(readTopLevelStat (using ctx.withOwner(pid))))
     case _ => readStat
