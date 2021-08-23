@@ -10,28 +10,31 @@ import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 object Contexts {
-  val rootPackage = PackageClassSymbol(RootName, NoSymbol)
 
   /** The current context */
   inline def ctx(using ctx: Context): Context = ctx
 
-  def empty: Context = new Context(rootPackage)
+  def empty: Context = {
+    val defn = new Definitions()
+    new Context(defn.RootPackage, defn)
+  }
 
   class Context private[Contexts] (
     val owner: DeclaringSymbol,
+    val defn: Definitions,
     val localSymbols: HashMap[Addr, Symbol] = new mutable.HashMap[Addr, Symbol]()
   ) {
     var enclosingLambdas: Map[Addr, TypeLambda] = Map.empty
 
     def withEnclosingLambda(addr: Addr, tl: TypeLambda): Context = {
-      val copy = new Context(owner, localSymbols)
+      val copy = new Context(owner, defn, localSymbols)
       copy.enclosingLambdas = enclosingLambdas.updated(addr, tl)
       copy
     }
 
     def withOwner(newOwner: DeclaringSymbol): Context =
       if (newOwner == owner) this
-      else new Context(newOwner, localSymbols)
+      else new Context(newOwner, defn, localSymbols)
 
     def hasSymbolAt(addr: Addr): Boolean = localSymbols.contains(addr)
 
@@ -87,7 +90,7 @@ object Contexts {
       }
     }
 
-    def getPackageSymbol(name: TermName): Option[PackageClassSymbol] = rootPackage.findPackageSymbol(name)
+    def getPackageSymbol(name: TermName): Option[PackageClassSymbol] = defn.RootPackage.findPackageSymbol(name)
 
     def getSymbol(addr: Addr): Symbol = localSymbols(addr)
   }
