@@ -2,7 +2,7 @@ package tastyquery
 
 import dotty.tools.tasty.TastyBuffer.Addr
 import dotty.tools.tasty.TastyFormat.NameTags
-import tastyquery.ast.Names.{Name, QualifiedName, RootName, SimpleName, TermName}
+import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Types.TypeLambda
 
@@ -66,8 +66,8 @@ object Contexts {
 
     def createPackageSymbolIfNew(name: TermName): PackageClassSymbol = {
       def create(): PackageClassSymbol = {
-        val sym = new PackageClassSymbol(name, owner)
-        owner.addDecl(sym)
+        val trueOwner = if (owner == defn.EmptyPackage) defn.RootPackage else owner
+        val sym       = new PackageClassSymbol(name, trueOwner)
         sym
       }
 
