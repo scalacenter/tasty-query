@@ -40,7 +40,7 @@ object Contexts {
       }
 
     // TODO: store decls and walk the decls tree, finding a symbol for a package
-    def createPackageSymbolIfNew(name: Name): Unit =
+    def createPackageSymbolIfNew(name: Name): PackageClassSymbol =
       new PackageClassSymbol(name)
   }
 }
