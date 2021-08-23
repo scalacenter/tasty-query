@@ -121,7 +121,13 @@ object Types {
     def resolveToSymbol: Symbol = ???
   }
 
-  class PackageRef(packageName: Name) extends TermRef(NoPrefix, packageName)
+  class PackageRef(val packageName: Name) extends TermRef(NoPrefix, packageName) {
+    override def toString: String = s"PackageRef($packageName)"
+  }
+
+  object PackageRef {
+    def unapply(r: PackageRef): Option[Name] = Some(r.packageName)
+  }
 
   case class TypeRef(override val prefix: Type, private var myDesignator: Designator) extends NamedType {
 

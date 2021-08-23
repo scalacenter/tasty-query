@@ -74,7 +74,13 @@ object Trees {
   case class Ident(name: TermName) extends Tree
 
   /** reference to a package, seen as a term */
-  class ReferencedPackage(override val name: TermName) extends Ident(name)
+  class ReferencedPackage(override val name: TermName) extends Ident(name) {
+    override def toString: String = s"ReferencedPackage($name)"
+  }
+
+  object ReferencedPackage {
+    def unapply(r: ReferencedPackage): Option[TermName] = Some(r.name)
+  }
 
   /** qualifier.termName */
   case class Select(qualifier: Tree, name: TermName) extends Tree

@@ -59,12 +59,12 @@ class ReadTreeSuite extends munit.FunSuite {
             New(
               TypeWrapper(
                 TypeRef(
-                  TermRef(_, QualifiedName(_, SimpleName("java"), SimpleName("lang"))),
+                  PackageRef(QualifiedName(NameTags.QUALIFIED, SimpleName("java"), SimpleName("lang"))),
                   TypeName(SimpleName("Object"))
                 )
               )
             ),
-            _
+            SignedName(SimpleName("<init>"), _, _)
           ),
           List()
         ) =>
@@ -74,13 +74,18 @@ class ReadTreeSuite extends munit.FunSuite {
     assert({
       {
         case PackageDef(
-              _,
+              Symbol(SimpleName("empty_class")),
               List(
                 Class(
                   TypeName(SimpleName("EmptyClass")),
                   Template(
                     // default constructor: no type params, no arguments, empty body
-                    DefDef(SimpleName("<init>"), Nil :: Nil, TypeWrapper(_), EmptyTree),
+                    DefDef(
+                      SimpleName("<init>"),
+                      Nil :: Nil,
+                      TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Unit")))),
+                      EmptyTree
+                    ),
                     // a single parent -- java.lang.Object
                     List(parent: Apply),
                     // self not specified => EmptyValDef
@@ -110,6 +115,16 @@ class ReadTreeSuite extends munit.FunSuite {
     assert(containsSubtree(nestedPackages)(clue(tree)))
   }
 
+  test("qualified-nested-package") {
+    val tree = unpickle("simple_trees/nested/InQualifiedNestedPackage")
+
+    val packageCheck: StructureCheck = {
+      case PackageDef(Symbol(QualifiedName(NameTags.QUALIFIED, SimpleName("simple_trees"), SimpleName("nested"))), _) =>
+    }
+
+    assert(containsSubtree(packageCheck)(clue(tree)))
+  }
+
   test("basic-import") {
     val importMatch: StructureCheck = {
       case Import(_, List(ImportSelector(Ident(SimpleName("A")), EmptyTree, EmptyTypeTree))) =>
@@ -120,7 +135,7 @@ class ReadTreeSuite extends munit.FunSuite {
   test("multiple-imports") {
     val importMatch: StructureCheck = {
       case Import(
-            _,
+            ReferencedPackage(SimpleName("imported_files")),
             List(
               ImportSelector(Ident(SimpleName("A")), EmptyTree, EmptyTypeTree),
               ImportSelector(Ident(SimpleName("B")), EmptyTree, EmptyTypeTree)
@@ -132,7 +147,10 @@ class ReadTreeSuite extends munit.FunSuite {
 
   test("renamed-import") {
     val importMatch: StructureCheck = {
-      case Import(_, List(ImportSelector(Ident(SimpleName("A")), Ident(SimpleName("ClassA")), EmptyTypeTree))) =>
+      case Import(
+            ReferencedPackage(SimpleName("imported_files")),
+            List(ImportSelector(Ident(SimpleName("A")), Ident(SimpleName("ClassA")), EmptyTypeTree))
+          ) =>
     }
     assert(containsSubtree(importMatch)(clue(unpickle("imports/RenamedImport"))))
   }
@@ -140,7 +158,11 @@ class ReadTreeSuite extends munit.FunSuite {
   test("given-import") {
     val importMatch: StructureCheck = {
       // A given import selector has an empty name
-      case Import(_, List(ImportSelector(Ident(EmptyTermName), EmptyTree, EmptyTypeTree))) =>
+      case Import(
+            // TODO: SELECTtpt?
+            Select(ReferencedPackage(SimpleName("imported_files")), SimpleName("Givens")),
+            List(ImportSelector(Ident(EmptyTermName), EmptyTree, EmptyTypeTree))
+          ) =>
     }
     assert(containsSubtree(importMatch)(clue(unpickle("imports/ImportGiven"))))
   }
@@ -149,7 +171,11 @@ class ReadTreeSuite extends munit.FunSuite {
     val tree = unpickle("imports/ImportGivenWithBound")
     val importMatch: StructureCheck = {
       // A given import selector has an empty name
-      case Import(_, ImportSelector(Ident(EmptyTermName), EmptyTree, TypeIdent(TypeName(SimpleName("A")))) :: Nil) =>
+      case Import(
+            // TODO: SELECTtpt?
+            Select(ReferencedPackage(SimpleName("imported_files")), SimpleName("Givens")),
+            ImportSelector(Ident(EmptyTermName), EmptyTree, TypeIdent(TypeName(SimpleName("A")))) :: Nil
+          ) =>
     }
     assert(containsSubtree(importMatch)(clue(tree)))
   }
@@ -157,13 +183,16 @@ class ReadTreeSuite extends munit.FunSuite {
   test("export") {
     val tree = unpickle("simple_trees/Export")
     val simpleExport: StructureCheck = {
-      case Export(_, ImportSelector(Ident(SimpleName("status")), EmptyTree, EmptyTypeTree) :: Nil) =>
+      case Export(
+            Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("first")),
+            ImportSelector(Ident(SimpleName("status")), EmptyTree, EmptyTypeTree) :: Nil
+          ) =>
     }
     assert(containsSubtree(simpleExport)(clue(tree)))
 
     val omittedAndWildcardExport: StructureCheck = {
       case Export(
-            _,
+            Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("second")),
             // An omitting selector is simply a rename to _
             ImportSelector(Ident(SimpleName("status")), Ident(Wildcard), EmptyTypeTree) ::
             ImportSelector(Ident(Wildcard), EmptyTree, EmptyTypeTree) :: Nil
@@ -173,7 +202,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
     val givenExport: StructureCheck = {
       case Export(
-            _,
+            Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("givens")),
             // A given selector has an empty name
             ImportSelector(Ident(EmptyTermName), EmptyTree, TypeIdent(TypeName(SimpleName("AnyRef")))) :: Nil
           ) =>
@@ -431,7 +460,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val selfDefMatch: StructureCheck = {
       case ValDef(
             SimpleName("self"),
-            TypeWrapper(TypeRef(_, Symbol(TypeName(SimpleName("ClassWithSelf"))))),
+            TypeWrapper(TypeRef(PackageRef(SimpleName("simple_trees")), Symbol(TypeName(SimpleName("ClassWithSelf"))))),
             EmptyTree
           ) =>
     }
@@ -492,12 +521,12 @@ class ReadTreeSuite extends munit.FunSuite {
       case Typed(
             SeqLiteral(
               Literal(c1) :: Literal(c2) :: Literal(c3) :: Nil,
-              TypeWrapper(TypeRef(_, TypeName(SimpleName("Int"))))
+              TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int"))))
             ),
             TypeWrapper(
               AppliedType(
-                TypeRef(_, TypeName(SimpleName("<repeated>"))),
-                TypeRef(_, TypeName(SimpleName("Int"))) :: Nil
+                TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("<repeated>"))),
+                TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int"))) :: Nil
               )
             )
           ) =>
@@ -525,7 +554,12 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(
             SimpleName("innerInstance"),
             // "Inner" inside THIS
-            TypeWrapper(TypeRef(ThisType(_), Symbol(TypeName(SimpleName("Inner"))))),
+            TypeWrapper(
+              TypeRef(
+                ThisType(TypeRef(PackageRef(SimpleName("simple_trees")), Symbol(TypeName(SimpleName("InnerClass"))))),
+                Symbol(TypeName(SimpleName("Inner")))
+              )
+            ),
             Apply(Select(New(TypeIdent(TypeName(SimpleName("Inner")))), _), Nil)
           ) =>
     }
@@ -540,7 +574,7 @@ class ReadTreeSuite extends munit.FunSuite {
             // apply[Int]
             TypeApply(
               Select(Ident(SimpleName("Seq")), SignedName(SimpleName("apply"), _, _)),
-              TypeWrapper(TypeRef(_, TypeName(SimpleName("Int")))) :: Nil
+              TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int")))) :: Nil
             ),
             Typed(SeqLiteral(Literal(Constant(1)) :: Nil, _), _) :: Nil
           ) =>
@@ -562,13 +596,17 @@ class ReadTreeSuite extends munit.FunSuite {
 
     // var = val with a setter
     val valDefMatch: StructureCheck = {
-      case ValDef(SimpleName("x"), TypeWrapper(TypeRef(_, TypeName(SimpleName("Int")))), Literal(Constant(1))) =>
+      case ValDef(
+            SimpleName("x"),
+            TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int")))),
+            Literal(Constant(1))
+          ) =>
     }
     val setterMatch: StructureCheck = {
       case DefDef(
             SimpleName("x_="),
             List(ValDef(SimpleName("x$1"), _, _) :: Nil),
-            TypeWrapper(TypeRef(_, TypeName(SimpleName("Unit")))),
+            TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Unit")))),
             Literal(Constant(()))
           ) =>
     }
@@ -638,7 +676,7 @@ class ReadTreeSuite extends munit.FunSuite {
     // useGiven
     val withGiven: StructureCheck = {
       case Apply(
-            Select(_, SignedName(SimpleName("useGiven"), _, _)),
+            Select(This(Some(TypeIdent(TypeName(SimpleName("UsingGiven"))))), SignedName(SimpleName("useGiven"), _, _)),
             Select(This(Some(TypeIdent(TypeName(SimpleName("UsingGiven"))))), SimpleName("given_Int")) :: Nil
           ) =>
     }
@@ -646,7 +684,10 @@ class ReadTreeSuite extends munit.FunSuite {
 
     // useGiven(using 0)
     val explicitUsing: StructureCheck = {
-      case Apply(Select(_, SignedName(SimpleName("useGiven"), _, _)), Literal(Constant(0)) :: Nil) =>
+      case Apply(
+            Select(This(Some(TypeIdent(TypeName(SimpleName("UsingGiven"))))), SignedName(SimpleName("useGiven"), _, _)),
+            Literal(Constant(0)) :: Nil
+          ) =>
     }
     assert(containsSubtree(explicitUsing)(clue(tree)))
   }
@@ -657,7 +698,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val traitMatch: StructureCheck = {
       case Template(
             DefDef(SimpleName("<init>"), List(ValDef(SimpleName("param"), _, _) :: Nil), _, EmptyTree),
-            TypeWrapper(TypeRef(_, TypeName(SimpleName("Object")))) :: Nil,
+            TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Object")))) :: Nil,
             _,
             ValDef(SimpleName("param"), _, _) :: Nil
           ) =>
@@ -704,7 +745,15 @@ class ReadTreeSuite extends munit.FunSuite {
             Block(
               List(DefDef(SimpleName("$anonfun"), List(List()), _, _)),
               // the lambda's type is not just a function type, therefore specified
-              Lambda(Ident(SimpleName("$anonfun")), TypeWrapper(TypeRef(_, TypeName(SimpleName("Runnable")))))
+              Lambda(
+                Ident(SimpleName("$anonfun")),
+                TypeWrapper(
+                  TypeRef(
+                    PackageRef(QualifiedName(NameTags.QUALIFIED, SimpleName("java"), SimpleName("lang"))),
+                    TypeName(SimpleName("Runnable"))
+                  )
+                )
+              )
             )
           ) =>
     }
@@ -794,7 +843,12 @@ class ReadTreeSuite extends munit.FunSuite {
             Match(
               Typed(
                 Ident(SimpleName("x$1")),
-                TypeWrapper(AnnotatedType(TermRef(NoPrefix, Symbol(SimpleName("x$1"))), _))
+                TypeWrapper(
+                  AnnotatedType(
+                    TermRef(NoPrefix, Symbol(SimpleName("x$1"))),
+                    New(TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("unchecked")))))
+                  )
+                )
               ),
               cases
             )
@@ -853,8 +907,8 @@ class ReadTreeSuite extends munit.FunSuite {
             TypeName(SimpleName("AbstractType")),
             BoundedTypeTree(
               TypeBoundsTree(
-                TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
               ),
               EmptyTypeTree
             )
@@ -912,8 +966,8 @@ class ReadTreeSuite extends munit.FunSuite {
                     TypeParam(
                       TypeName(SimpleName("T")),
                       TypeBoundsTree(
-                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                        TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                        TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                       )
                     )
                   ),
@@ -926,7 +980,10 @@ class ReadTreeSuite extends munit.FunSuite {
               _,
               TypeParam(
                 TypeName(SimpleName("T")),
-                RealTypeBounds(TypeRef(_, TypeName(SimpleName("Nothing"))), TypeRef(_, TypeName(SimpleName("Any"))))
+                RealTypeBounds(
+                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
+                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
+                )
               ) :: _
             )
           ) =>
@@ -944,8 +1001,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeParam(
                   TypeName(SimpleName("T")),
                   TypeBoundsTree(
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                   )
                 )
               ),
@@ -970,8 +1027,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeParam(
                   TypeName(SimpleName("T")),
                   TypeBoundsTree(
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                   )
                 )
               ),
@@ -1008,7 +1065,10 @@ class ReadTreeSuite extends munit.FunSuite {
               _,
               TypeParam(
                 TypeName(SimpleName("T")),
-                RealTypeBounds(TypeRef(_, TypeName(SimpleName("Null"))), TypeRef(_, TypeName(SimpleName("AnyRef"))))
+                RealTypeBounds(
+                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Null"))),
+                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("AnyRef")))
+                )
               ) :: _
             )
           ) =>
@@ -1032,8 +1092,8 @@ class ReadTreeSuite extends munit.FunSuite {
                     TypeParam(
                       TypeName(SimpleName("T")),
                       TypeBoundsTree(
-                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                        TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                        TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                       )
                     )
                   ),
@@ -1046,7 +1106,10 @@ class ReadTreeSuite extends munit.FunSuite {
               _,
               TypeParam(
                 TypeName(SimpleName("T")),
-                RealTypeBounds(TypeRef(_, TypeName(SimpleName("Nothing"))), TypeRef(_, TypeName(SimpleName("Any"))))
+                RealTypeBounds(
+                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
+                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
+                )
               ) :: Class(TypeName(SimpleName("NestedGeneric")), _) :: _
             )
           ) =>
@@ -1064,8 +1127,8 @@ class ReadTreeSuite extends munit.FunSuite {
                     TypeParam(
                       TypeName(SimpleName("U")),
                       TypeBoundsTree(
-                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                        TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                        TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                        TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                       )
                     )
                   ),
@@ -1078,7 +1141,10 @@ class ReadTreeSuite extends munit.FunSuite {
               _,
               TypeParam(
                 TypeName(SimpleName("U")),
-                RealTypeBounds(TypeRef(_, TypeName(SimpleName("Nothing"))), TypeRef(_, TypeName(SimpleName("Any"))))
+                RealTypeBounds(
+                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
+                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
+                )
               ) :: _
             )
           ) =>
@@ -1117,10 +1183,23 @@ class ReadTreeSuite extends munit.FunSuite {
     val selectTpt: StructureCheck = {
       case ValDef(
             SimpleName("random"),
-            TypeWrapper(TypeRef(_, TypeName(SimpleName("Random")))),
+            TypeWrapper(
+              TypeRef(
+                PackageRef(QualifiedName(NameTags.QUALIFIED, SimpleName("scala"), SimpleName("util"))),
+                TypeName(SimpleName("Random"))
+              )
+            ),
             Apply(
               // select scala.util.Random
-              Select(New(SelectTypeTree(_, TypeName(SimpleName("Random")))), SignedName(SimpleName("<init>"), _, _)),
+              Select(
+                New(
+                  SelectTypeTree(
+                    TypeWrapper(PackageRef(QualifiedName(NameTags.QUALIFIED, SimpleName("scala"), SimpleName("util")))),
+                    TypeName(SimpleName("Random"))
+                  )
+                ),
+                SignedName(SimpleName("<init>"), _, _)
+              ),
               Nil
             )
           ) =>
@@ -1148,7 +1227,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val byName: StructureCheck = {
       case ValDef(
             SimpleName("byNameParam"),
-            TypeWrapper(ExprType(TypeRef(_, TypeName(SimpleName("Int"))))),
+            TypeWrapper(ExprType(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int"))))),
             EmptyTree
           ) =>
     }
@@ -1174,7 +1253,12 @@ class ReadTreeSuite extends munit.FunSuite {
                 )
               )
             ),
-            TypeWrapper(OrType(TypeRef(_, TypeName(SimpleName("Int"))), TypeRef(_, TypeName(SimpleName("String"))))),
+            TypeWrapper(
+              OrType(
+                TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int"))),
+                TypeRef(TermRef(PackageRef(SimpleName("scala")), SimpleName("Predef")), TypeName(SimpleName("String")))
+              )
+            ),
             _
           ) =>
     }
@@ -1205,8 +1289,8 @@ class ReadTreeSuite extends munit.FunSuite {
             ),
             TypeWrapper(
               AndType(
-                TypeRef(_, Symbol(TypeName(SimpleName("IntersectionType")))),
-                TypeRef(_, TypeName(SimpleName("UnionType")))
+                TypeRef(PackageRef(SimpleName("simple_trees")), Symbol(TypeName(SimpleName("IntersectionType")))),
+                TypeRef(PackageRef(SimpleName("simple_trees")), TypeName(SimpleName("UnionType")))
               )
             ),
             _
@@ -1227,8 +1311,8 @@ class ReadTreeSuite extends munit.FunSuite {
               TypeParam(
                 TypeName(SimpleName("X")),
                 TypeBoundsTree(
-                  TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                  TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                  TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                  TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                 )
               ) :: Nil,
               // List[X]
@@ -1243,7 +1327,8 @@ class ReadTreeSuite extends munit.FunSuite {
   test("type-lambda-type") {
     val tree = unpickle("simple_trees/HigherKinded")
 
-    val typeLambdaResultIsAny: TypeStructureCheck = { case TypeRef(_, TypeName(SimpleName("Any"))) =>
+    val typeLambdaResultIsAny: TypeStructureCheck = {
+      case TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))) =>
     }
 
     // A[_], i.e. A >: Nothing <: [X] =>> Any
@@ -1267,7 +1352,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
     // Type lambda result is List[X]
     val typeLambdaResultIsListOf: TypeStructureCheck = {
-      case AppliedType(TypeRef(_, TypeName(SimpleName("List"))), TypeParamRef(lambda, paramNum) :: Nil)
+      case AppliedType(TypeRef(PackageRef(_), TypeName(SimpleName("List"))), TypeParamRef(lambda, paramNum) :: Nil)
           if lambda.params(paramNum).name == TypeName(SimpleName("X")) =>
     }
 
@@ -1296,12 +1381,12 @@ class ReadTreeSuite extends munit.FunSuite {
                 AnnotatedTypeTree(
                   // Int* ==> Seq[Int]
                   AppliedTypeTree(
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Seq")))),
+                    TypeWrapper(TypeRef(PackageRef(_), TypeName(SimpleName("Seq")))),
                     TypeIdent(TypeName(SimpleName("Int"))) :: Nil
                   ),
                   Apply(
                     Select(
-                      New(TypeWrapper(TypeRef(_, TypeName(SimpleName("Repeated"))))),
+                      New(TypeWrapper(TypeRef(PackageRef(_), TypeName(SimpleName("Repeated"))))),
                       SignedName(SimpleName("<init>"), _, _)
                     ),
                     Nil
@@ -1342,12 +1427,12 @@ class ReadTreeSuite extends munit.FunSuite {
             TypeWrapper(
               RefinedType(
                 RefinedType(
-                  TypeRef(_, TypeName(SimpleName("TypeMember"))),
+                  TypeRef(PackageRef(SimpleName("simple_trees")), TypeName(SimpleName("TypeMember"))),
                   TypeName(SimpleName("AbstractType")),
                   TypeAlias(alias)
                 ),
                 TypeName(SimpleName("AbstractWithBounds")),
-                TypeAlias(TypeRef(_, TypeName(SimpleName("Null"))))
+                TypeAlias(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Null"))))
               )
             )
           ) =>
@@ -1366,8 +1451,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeParam(
                   TypeName(SimpleName("X")),
                   TypeBoundsTree(
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                   )
                 )
               ),
@@ -1390,8 +1475,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeParam(
                   TypeName(SimpleName("X")),
                   TypeBoundsTree(
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                   )
                 )
               ),
@@ -1413,8 +1498,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeParam(
                   TypeName(SimpleName("X")),
                   TypeBoundsTree(
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                   )
                 )
               ),
@@ -1428,8 +1513,8 @@ class ReadTreeSuite extends munit.FunSuite {
                       TypeName(Wildcard),
                       BoundedTypeTree(
                         TypeBoundsTree(
-                          TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                          TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                          TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                          TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                         ),
                         EmptyTypeTree
                       )
@@ -1451,8 +1536,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeParam(
                   TypeName(SimpleName("X")),
                   TypeBoundsTree(
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                   )
                 )
               ),
@@ -1500,10 +1585,10 @@ class ReadTreeSuite extends munit.FunSuite {
             SimpleName("anyList"),
             TypeWrapper(
               AppliedType(
-                TypeRef(_, TypeName(SimpleName("List"))),
+                TypeRef(PackageRef(_), TypeName(SimpleName("List"))),
                 RealTypeBounds(
-                  TypeRef(_, TypeName(SimpleName("Nothing"))),
-                  TypeRef(_, TypeName(SimpleName("Any")))
+                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
+                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
                 ) :: Nil
               )
             ),
@@ -1519,8 +1604,8 @@ class ReadTreeSuite extends munit.FunSuite {
             AppliedTypeTree(
               TypeIdent(TypeName(SimpleName("List"))),
               TypeBoundsTree(
-                TypeWrapper(TypeRef(_, TypeName(SimpleName("Nothing")))),
-                TypeWrapper(TypeRef(_, TypeName(SimpleName("Any"))))
+                TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
               ) :: Nil
             ),
             EmptyTree
@@ -1534,8 +1619,8 @@ class ReadTreeSuite extends munit.FunSuite {
             AppliedTypeTree(
               TypeIdent(TypeName(SimpleName("GenericWithTypeBound"))),
               RealTypeBounds(
-                TypeRef(_, TypeName(SimpleName("Nothing"))),
-                TypeRef(_, TypeName(SimpleName("AnyKind")))
+                TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
+                TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("AnyKind")))
               ) :: Nil
             )
           ) =>
@@ -1549,7 +1634,9 @@ class ReadTreeSuite extends munit.FunSuite {
     val newInner: StructureCheck = {
       case New(
             SelectTypeTree(
-              TypeWrapper(ThisType(TypeRef(_, Symbol(TypeName(SimpleName("QualThisType")))))),
+              TypeWrapper(
+                ThisType(TypeRef(PackageRef(SimpleName("simple_trees")), Symbol(TypeName(SimpleName("QualThisType")))))
+              ),
               TypeName(SimpleName("Inner"))
             )
           ) =>
