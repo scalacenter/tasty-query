@@ -17,7 +17,7 @@ object Contexts {
 
   def empty: Context = new Context(rootPackage)
 
-  class Context(
+  class Context private[Contexts] (
     val owner: DeclaringSymbol,
     val localSymbols: HashMap[Addr, Symbol] = new mutable.HashMap[Addr, Symbol]()
   ) {
