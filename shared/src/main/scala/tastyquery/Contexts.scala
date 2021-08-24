@@ -43,35 +43,21 @@ object Contexts {
       owner.addDecl(sym)
     }
 
-    def createSymbolIfNew(addr: Addr, name: Name): Symbol = {
+    def createSymbolIfNew[T <: Symbol](addr: Addr, name: Name, factory: SymbolFactory[T]): T = {
       if (!hasSymbolAt(addr)) {
-        registerSym(addr, new Symbol(name, owner))
+        registerSym(addr, factory.createSymbol(name, owner))
       }
-      localSymbols(addr)
-    }
-
-    def createClassSymbolIfNew(addr: Addr, name: Name): ClassSymbol = {
-      if (!hasSymbolAt(addr)) {
-        registerSym(addr, new ClassSymbol(name, owner))
-      }
-      localSymbols(addr).asInstanceOf[ClassSymbol]
-    }
-
-    def createMethodSymbolIfNew(addr: Addr, name: TermName): MethodSymbol = {
-      if (!hasSymbolAt(addr)) {
-        registerSym(addr, new MethodSymbol(name, owner))
-      }
-      localSymbols(addr).asInstanceOf[MethodSymbol]
+      localSymbols(addr).asInstanceOf[T]
     }
 
     def createPackageSymbolIfNew(name: TermName): PackageClassSymbol = {
       def create(): PackageClassSymbol = {
         val trueOwner = if (owner == defn.EmptyPackage) defn.RootPackage else owner
-        val sym       = new PackageClassSymbol(name, trueOwner)
+        val sym       = PackageClassSymbolFactory.createSymbol(name, trueOwner)
         sym
       }
 
-      getPackageSymbol(name) match {
+      defn.RootPackage.findPackageSymbol(name) match {
         case Some(pkg) => pkg
         case None =>
           name match {
@@ -90,7 +76,7 @@ object Contexts {
       }
     }
 
-    def getPackageSymbol(name: TermName): Option[PackageClassSymbol] = defn.RootPackage.findPackageSymbol(name)
+    def getPackageSymbol(name: TermName): PackageClassSymbol = defn.RootPackage.findPackageSymbol(name).get
 
     def getSymbol(addr: Addr): Symbol = localSymbols(addr)
   }

@@ -3,7 +3,14 @@ package tastyquery.reader
 import tastyquery.Contexts.*
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.{ClassSymbol, MethodSymbol, Symbol}
+import tastyquery.ast.Symbols.{
+  ClassSymbol,
+  MethodSymbol,
+  Symbol,
+  RegularSymbolFactory,
+  MethodSymbolFactory,
+  ClassSymbolFactory
+}
 import tastyquery.ast.Trees.*
 import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Types.*
@@ -57,27 +64,27 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         val end  = reader.readEnd()
         val name = readName.toTypeName
         val newOwner = if (reader.nextByte == TEMPLATE) {
-          ctx.createClassSymbolIfNew(start, name)
+          ctx.createSymbolIfNew(start, name, ClassSymbolFactory)
         } else {
-          ctx.createSymbolIfNew(start, name)
+          ctx.createSymbolIfNew(start, name, RegularSymbolFactory)
           ctx.owner
         }
         reader.until(end)(createSymbols (using ctx.withOwner(newOwner)))
       case VALDEF | PARAM | TYPEPARAM =>
         val end       = reader.readEnd()
         val name      = if (tag == TYPEPARAM) readName.toTypeName else readName
-        val newSymbol = ctx.createSymbolIfNew(start, name)
+        val newSymbol = ctx.createSymbolIfNew(start, name, RegularSymbolFactory)
         reader.until(end)(createSymbols)
       case DEFDEF =>
         val end       = reader.readEnd()
         val name      = readName
-        val newSymbol = ctx.createMethodSymbolIfNew(start, name)
+        val newSymbol = ctx.createSymbolIfNew(start, name, MethodSymbolFactory)
         reader.until(end)(createSymbols (using ctx.withOwner(newSymbol)))
       case BIND =>
         val end        = reader.readEnd()
         var name: Name = readName
         if (tagFollowShared == TYPEBOUNDS) name = name.toTypeName
-        ctx.createSymbolIfNew(start, name)
+        ctx.createSymbolIfNew(start, name, RegularSymbolFactory)
         reader.until(end)(createSymbols)
 
       // ---------- tags with potentially nested symbols --------------------------------
@@ -166,7 +173,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val pid = readPotentiallyShared({
         assert(reader.readByte() == TERMREFpkg, reader.currentAddr)
         // Symbol is already created during symbol creation phase
-        ctx.getPackageSymbol(readName).get
+        ctx.getPackageSymbol(readName)
       })
       PackageDef(pid, reader.until(packageEnd)(readTopLevelStat (using ctx.withOwner(pid))))
     case _ => readStat

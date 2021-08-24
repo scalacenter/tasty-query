@@ -8,7 +8,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 object Symbols {
   val NoSymbol = new Symbol(Names.EmptyTermName, null)
 
-  class Symbol(val name: Name, val owner: DeclaringSymbol) {
+  class Symbol private[Symbols] (val name: Name, val owner: DeclaringSymbol) {
     override def toString: String = s"symbol[$name]"
   }
 
@@ -33,8 +33,7 @@ object Symbols {
     def getDecl(name: Name): Option[Symbol] = declarations.get(name)
   }
 
-  class MethodSymbol(override val name: TermName, override val owner: DeclaringSymbol)
-      extends DeclaringSymbol(name, owner)
+  class MethodSymbol(override val name: Name, override val owner: DeclaringSymbol) extends DeclaringSymbol(name, owner)
 
   class ClassSymbol(override val name: Name, override val owner: DeclaringSymbol) extends DeclaringSymbol(name, owner)
 
@@ -54,5 +53,26 @@ object Symbols {
 
     private def getPackageDecl(packageName: TermName): Option[PackageClassSymbol] =
       getDecl(packageName).map(_.asInstanceOf[PackageClassSymbol])
+  }
+
+  abstract class SymbolFactory[T <: Symbol] {
+    def createSymbol(name: Name, owner: DeclaringSymbol): T
+  }
+
+  object RegularSymbolFactory extends SymbolFactory[Symbol] {
+    override def createSymbol(name: Name, owner: DeclaringSymbol): Symbol = new Symbol(name, owner)
+  }
+
+  object ClassSymbolFactory extends SymbolFactory[ClassSymbol] {
+    override def createSymbol(name: Name, owner: DeclaringSymbol): ClassSymbol = new ClassSymbol(name, owner)
+  }
+
+  object PackageClassSymbolFactory extends SymbolFactory[PackageClassSymbol] {
+    override def createSymbol(name: Name, owner: DeclaringSymbol): PackageClassSymbol =
+      new PackageClassSymbol(name, owner)
+  }
+
+  object MethodSymbolFactory extends SymbolFactory[MethodSymbol] {
+    override def createSymbol(name: Name, owner: DeclaringSymbol): MethodSymbol = new MethodSymbol(name, owner)
   }
 }
