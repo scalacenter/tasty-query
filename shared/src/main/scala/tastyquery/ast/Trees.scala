@@ -73,6 +73,15 @@ object Trees {
   /** name */
   case class Ident(name: TermName) extends Tree
 
+  /** reference to a package, seen as a term */
+  class ReferencedPackage(override val name: TermName) extends Ident(name) {
+    override def toString: String = s"ReferencedPackage($name)"
+  }
+
+  object ReferencedPackage {
+    def unapply(r: ReferencedPackage): Option[TermName] = Some(r.name)
+  }
+
   /** qualifier.termName */
   case class Select(qualifier: Tree, name: TermName) extends Tree
 
@@ -189,7 +198,4 @@ object Trees {
   case object EmptyTree extends Tree
 
   val EmptyValDef: ValDef = ValDef(Names.Wildcard, EmptyTypeTree, EmptyTree)
-
-  // A marker for Trees or components which are not yet constructed correctly
-  case class DummyTree[T <: Object](components: T, todo: String) extends Tree
 }
