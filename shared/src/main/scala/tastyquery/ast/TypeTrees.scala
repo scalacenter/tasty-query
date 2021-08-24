@@ -1,7 +1,8 @@
 package tastyquery.ast
 
 import tastyquery.ast.Names.{EmptyTermName, EmptyTypeName, TypeName}
-import tastyquery.ast.Trees.{Tree, TypeParam}
+import tastyquery.ast.Symbols.Symbol
+import tastyquery.ast.Trees.{DefTree, Tree, TypeParam}
 import tastyquery.ast.Types.{Type, TypeBounds}
 
 object TypeTrees {
@@ -41,7 +42,9 @@ object TypeTrees {
 
   case class TypeCaseDef(pattern: TypeTree, body: TypeTree)
 
-  case class TypeTreeBind(name: TypeName, body: TypeTree) extends TypeTree
+  case class TypeTreeBind(name: TypeName, body: TypeTree, override val symbol: Symbol)
+      extends TypeTree
+      with DefTree(symbol)
 
   case object EmptyTypeTree extends TypeTree
 

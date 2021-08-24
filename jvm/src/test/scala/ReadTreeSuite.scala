@@ -1,12 +1,11 @@
 import tastyquery.Contexts
 import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
-import tastyquery.ast.Names._
-import tastyquery.ast.Symbols.Symbol
-import tastyquery.ast.Trees._
-import tastyquery.ast.TypeTrees._
-import tastyquery.ast.Types._
+import tastyquery.ast.Names.*
+import tastyquery.ast.Symbols.{NoSymbol, Symbol}
+import tastyquery.ast.Trees.*
+import tastyquery.ast.TypeTrees.*
+import tastyquery.ast.Types.*
 import tastyquery.reader.TastyUnpickler
-
 import dotty.tools.tasty.TastyFormat.NameTags
 
 import java.nio.file.{Files, Paths}
@@ -30,11 +29,11 @@ class ReadTreeSuite extends munit.FunSuite {
     def rec(t: Tree): Boolean = containsSubtree(p)(t)
     p.isDefinedAt(t) || (t match {
       case PackageDef(_, stats) => stats.exists(rec)
-      case Class(_, rhs)        => rec(rhs)
+      case Class(_, rhs, _)     => rec(rhs)
       case Template(constr, parents, self, body) =>
         rec(constr) || rec(self) || parents.collect { case p: Tree => p }.exists(rec) || body.exists(rec)
-      case ValDef(_, tpt, rhs) => rec(rhs)
-      case DefDef(_, params, tpt, rhs) =>
+      case ValDef(_, tpt, rhs, _) => rec(rhs)
+      case DefDef(_, params, tpt, rhs, _) =>
         params.flatten.exists(rec) || rec(rhs)
       case Select(qualifier, _)         => rec(qualifier)
       case Apply(fun, args)             => rec(fun) || args.exists(rec)
@@ -84,7 +83,8 @@ class ReadTreeSuite extends munit.FunSuite {
                       SimpleName("<init>"),
                       Nil :: Nil,
                       TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Unit")))),
-                      EmptyTree
+                      EmptyTree,
+                      _
                     ),
                     // a single parent -- java.lang.Object
                     List(parent: Apply),
@@ -92,7 +92,8 @@ class ReadTreeSuite extends munit.FunSuite {
                     EmptyValDef,
                     // empty body
                     List()
-                  )
+                  ),
+                  _
                 )
               )
             ) if isJavaLangObject.isDefinedAt(parent) =>
@@ -215,9 +216,10 @@ class ReadTreeSuite extends munit.FunSuite {
       case DefDef(
             SimpleName("id"),
             // no type params, one param -- x: Int
-            List(List(ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("Int"))), EmptyTree))),
+            List(List(ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("Int"))), EmptyTree, _))),
             TypeIdent(TypeName(SimpleName("Int"))),
-            Ident(SimpleName("x"))
+            Ident(SimpleName("x")),
+            _
           ) =>
     }
     assert(containsSubtree(identityMatch)(clue(unpickle("simple_trees/IdentityMethod"))))
@@ -229,10 +231,11 @@ class ReadTreeSuite extends munit.FunSuite {
       case DefDef(
             SimpleName("threeParameterLists"),
             List(
-              List(ValDef(SimpleName("x"), _, _)),
-              List(ValDef(SimpleName("y"), _, _), ValDef(SimpleName("z"), _, _)),
-              List(ValDef(SimpleName("last"), _, _))
+              List(ValDef(SimpleName("x"), _, _, _)),
+              List(ValDef(SimpleName("y"), _, _, _), ValDef(SimpleName("z"), _, _, _)),
+              List(ValDef(SimpleName("last"), _, _, _))
             ),
+            _,
             _,
             _
           ) =>
@@ -242,51 +245,51 @@ class ReadTreeSuite extends munit.FunSuite {
 
   test("constants") {
     val tree = unpickle("simple_trees/Constants")
-    val unitConstMatch: StructureCheck = { case ValDef(SimpleName("unitVal"), _, Literal(Constant(()))) =>
+    val unitConstMatch: StructureCheck = { case ValDef(SimpleName("unitVal"), _, Literal(Constant(())), _) =>
     }
     assert(containsSubtree(unitConstMatch)(clue(tree)))
 
-    val falseConstMatch: StructureCheck = { case ValDef(SimpleName("falseVal"), _, Literal(Constant(false))) =>
+    val falseConstMatch: StructureCheck = { case ValDef(SimpleName("falseVal"), _, Literal(Constant(false)), _) =>
     }
     assert(containsSubtree(falseConstMatch)(clue(tree)))
 
-    val trueConstMatch: StructureCheck = { case ValDef(SimpleName("trueVal"), _, Literal(Constant(true))) =>
+    val trueConstMatch: StructureCheck = { case ValDef(SimpleName("trueVal"), _, Literal(Constant(true)), _) =>
     }
     assert(containsSubtree(trueConstMatch)(clue(tree)))
 
-    val byteConstMatch: StructureCheck = { case ValDef(SimpleName("byteVal"), _, Literal(Constant(1))) =>
+    val byteConstMatch: StructureCheck = { case ValDef(SimpleName("byteVal"), _, Literal(Constant(1)), _) =>
     }
     assert(containsSubtree(byteConstMatch)(clue(tree)))
 
-    val shortConstMatch: StructureCheck = { case ValDef(SimpleName("shortVal"), _, Literal(Constant(1))) =>
+    val shortConstMatch: StructureCheck = { case ValDef(SimpleName("shortVal"), _, Literal(Constant(1)), _) =>
     }
     assert(containsSubtree(shortConstMatch)(clue(tree)))
 
-    val charConstMatch: StructureCheck = { case ValDef(SimpleName("charVal"), _, Literal(Constant('a'))) =>
+    val charConstMatch: StructureCheck = { case ValDef(SimpleName("charVal"), _, Literal(Constant('a')), _) =>
     }
     assert(containsSubtree(charConstMatch)(clue(tree)))
 
-    val intConstMatch: StructureCheck = { case ValDef(SimpleName("intVal"), _, Literal(Constant(1))) =>
+    val intConstMatch: StructureCheck = { case ValDef(SimpleName("intVal"), _, Literal(Constant(1)), _) =>
     }
     assert(containsSubtree(intConstMatch)(clue(tree)))
 
-    val longConstMatch: StructureCheck = { case ValDef(SimpleName("longVal"), _, Literal(Constant(1))) =>
+    val longConstMatch: StructureCheck = { case ValDef(SimpleName("longVal"), _, Literal(Constant(1)), _) =>
     }
     assert(containsSubtree(longConstMatch)(clue(tree)))
 
-    val floatConstMatch: StructureCheck = { case ValDef(SimpleName("floatVal"), _, Literal(Constant(1.1f))) =>
+    val floatConstMatch: StructureCheck = { case ValDef(SimpleName("floatVal"), _, Literal(Constant(1.1f)), _) =>
     }
     assert(containsSubtree(floatConstMatch)(clue(tree)))
 
-    val doubleConstMatch: StructureCheck = { case ValDef(SimpleName("doubleVal"), _, Literal(Constant(1.1d))) =>
+    val doubleConstMatch: StructureCheck = { case ValDef(SimpleName("doubleVal"), _, Literal(Constant(1.1d)), _) =>
     }
     assert(containsSubtree(doubleConstMatch)(clue(tree)))
 
-    val stringConstMatch: StructureCheck = { case ValDef(SimpleName("stringVal"), _, Literal(Constant("string"))) =>
+    val stringConstMatch: StructureCheck = { case ValDef(SimpleName("stringVal"), _, Literal(Constant("string")), _) =>
     }
     assert(containsSubtree(stringConstMatch)(clue(tree)))
 
-    val nullConstMatch: StructureCheck = { case ValDef(SimpleName("nullVal"), _, Literal(Constant(null))) =>
+    val nullConstMatch: StructureCheck = { case ValDef(SimpleName("nullVal"), _, Literal(Constant(null)), _) =>
     }
     assert(containsSubtree(nullConstMatch)(clue(tree)))
   }
@@ -306,7 +309,10 @@ class ReadTreeSuite extends munit.FunSuite {
   test("block") {
     val blockMatch: StructureCheck = {
       case Block(
-            List(ValDef(SimpleName("a"), _, Literal(Constant(1))), ValDef(SimpleName("b"), _, Literal(Constant(2)))),
+            List(
+              ValDef(SimpleName("a"), _, Literal(Constant(1)), _),
+              ValDef(SimpleName("b"), _, Literal(Constant(2)), _)
+            ),
             Literal(Constant(()))
           ) =>
     }
@@ -389,7 +395,7 @@ class ReadTreeSuite extends munit.FunSuite {
               Unapply(
                 Select(Ident(SimpleName("FirstCase")), SignedName(SimpleName("unapply"), _, _)),
                 Nil,
-                List(Bind(SimpleName("x"), Ident(Wildcard)))
+                List(Bind(SimpleName("x"), Ident(Wildcard), _))
               ),
               _
             ),
@@ -405,7 +411,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val assignBlockMatch: StructureCheck = {
       case Block(
             List(
-              ValDef(SimpleName("y"), tpt, Literal(Constant(0))),
+              ValDef(SimpleName("y"), tpt, Literal(Constant(0)), _),
               Assign(Ident(SimpleName("y")), Ident(SimpleName("x")))
             ),
             Ident(SimpleName("x"))
@@ -449,7 +455,8 @@ class ReadTreeSuite extends munit.FunSuite {
             SimpleName("singletonReturnType"),
             List(List(_)),
             SingletonTypeTree(Ident(SimpleName("x"))),
-            Ident(SimpleName("x"))
+            Ident(SimpleName("x")),
+            _
           ) =>
     }
     assert(containsSubtree(defDefWithSingleton)(clue(tree)))
@@ -461,7 +468,8 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(
             SimpleName("self"),
             TypeWrapper(TypeRef(PackageRef(SimpleName("simple_trees")), Symbol(TypeName(SimpleName("ClassWithSelf"))))),
-            EmptyTree
+            EmptyTree,
+            NoSymbol
           ) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
@@ -470,7 +478,7 @@ class ReadTreeSuite extends munit.FunSuite {
   test("selfType") {
     val tree = unpickle("simple_trees/TraitWithSelf")
     val selfDefMatch: StructureCheck = {
-      case ValDef(SimpleName("self"), TypeIdent(TypeName(SimpleName("ClassWithSelf"))), EmptyTree) =>
+      case ValDef(SimpleName("self"), TypeIdent(TypeName(SimpleName("ClassWithSelf"))), EmptyTree, NoSymbol) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
   }
@@ -479,12 +487,12 @@ class ReadTreeSuite extends munit.FunSuite {
     val tree = unpickle("simple_trees/Field")
 
     val classFieldMatch: StructureCheck = {
-      case ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("Field"))), Literal(c)) if c.tag == NullTag =>
+      case ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("Field"))), Literal(c), _) if c.tag == NullTag =>
     }
     assert(containsSubtree(classFieldMatch)(clue(tree)))
 
     val intFieldMatch: StructureCheck = {
-      case ValDef(SimpleName("y"), TypeIdent(TypeName(SimpleName("Int"))), Literal(c))
+      case ValDef(SimpleName("y"), TypeIdent(TypeName(SimpleName("Int"))), Literal(c), _)
           if c.value == 0 && c.tag == IntTag =>
     }
     assert(containsSubtree(intFieldMatch)(clue(tree)))
@@ -494,7 +502,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val tree = unpickle("simple_trees/ScalaObject")
 
     val selfDefMatch: StructureCheck = {
-      case ValDef(Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject"))), EmptyTree) =>
+      case ValDef(Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject"))), EmptyTree, NoSymbol) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
 
@@ -541,7 +549,8 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(
             SimpleName("x"),
             AppliedTypeTree(TypeIdent(TypeName(SimpleName("Option"))), TypeIdent(TypeName(SimpleName("Int"))) :: Nil),
-            Ident(SimpleName("None"))
+            Ident(SimpleName("None")),
+            _
           ) =>
     }
     assert(containsSubtree(valDefMatch)(clue(tree)))
@@ -560,7 +569,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 Symbol(TypeName(SimpleName("Inner")))
               )
             ),
-            Apply(Select(New(TypeIdent(TypeName(SimpleName("Inner")))), _), Nil)
+            Apply(Select(New(TypeIdent(TypeName(SimpleName("Inner")))), _), Nil),
+            _
           ) =>
     }
     assert(containsSubtree(innerInstanceMatch)(clue(tree)))
@@ -586,7 +596,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val tree = unpickle("simple_trees/Final")
 
     val constTypeMatch: StructureCheck = {
-      case ValDef(SimpleName("Const"), TypeWrapper(ConstantType(Constant(1))), Literal(Constant(1))) =>
+      case ValDef(SimpleName("Const"), TypeWrapper(ConstantType(Constant(1))), Literal(Constant(1)), _) =>
     }
     assert(containsSubtree(constTypeMatch)(clue(tree)))
   }
@@ -599,15 +609,17 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(
             SimpleName("x"),
             TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int")))),
-            Literal(Constant(1))
+            Literal(Constant(1)),
+            _
           ) =>
     }
     val setterMatch: StructureCheck = {
       case DefDef(
             SimpleName("x_="),
-            List(ValDef(SimpleName("x$1"), _, _) :: Nil),
+            List(ValDef(SimpleName("x$1"), _, _, _) :: Nil),
             TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Unit")))),
-            Literal(Constant(()))
+            Literal(Constant(())),
+            _
           ) =>
     }
     assert(containsSubtree(valDefMatch)(clue(tree)))
@@ -628,12 +640,13 @@ class ReadTreeSuite extends munit.FunSuite {
               SimpleName("<init>"),
               List(
                 List(
-                  ValDef(SimpleName("local"), _, _),
-                  ValDef(SimpleName("theVal"), _, _),
-                  ValDef(SimpleName("theVar"), _, _),
-                  ValDef(SimpleName("privateVal"), _, _)
+                  ValDef(SimpleName("local"), _, _, _),
+                  ValDef(SimpleName("theVal"), _, _, _),
+                  ValDef(SimpleName("theVar"), _, _, _),
+                  ValDef(SimpleName("privateVal"), _, _, _)
                 )
               ),
+              _,
               _,
               _
             ),
@@ -642,12 +655,12 @@ class ReadTreeSuite extends munit.FunSuite {
             // TODO: check the modifiers (private, local etc) once they are read
             // constructor parameters are members
             List(
-              ValDef(SimpleName("local"), _, _),
-              ValDef(SimpleName("theVal"), _, _),
-              ValDef(SimpleName("theVar"), _, _),
-              ValDef(SimpleName("privateVal"), _, _),
+              ValDef(SimpleName("local"), _, _, _),
+              ValDef(SimpleName("theVal"), _, _, _),
+              ValDef(SimpleName("theVar"), _, _, _),
+              ValDef(SimpleName("privateVal"), _, _, _),
               // setter for theVar
-              DefDef(SimpleName("theVar_="), List(List(_)), _, _)
+              DefDef(SimpleName("theVar_="), List(List(_)), _, _, _)
             )
           ) =>
     }
@@ -658,7 +671,11 @@ class ReadTreeSuite extends munit.FunSuite {
     val tree = unpickle("simple_trees/ChildCallsParentWithDefaultParameter")
 
     val blockParent: StructureCheck = {
-      case Class(TypeName(SimpleName("ChildCallsParentWithDefaultParameter")), Template(_, List(Block(_, _)), _, _)) =>
+      case Class(
+            TypeName(SimpleName("ChildCallsParentWithDefaultParameter")),
+            Template(_, List(Block(_, _)), _, _),
+            _
+          ) =>
     }
     assert(containsSubtree(blockParent)(clue(tree)))
   }
@@ -668,7 +685,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
     // given Int
     val givenDefinition: StructureCheck = {
-      case ValDef(SimpleName("given_Int"), TypeIdent(TypeName(SimpleName("Int"))), _) =>
+      case ValDef(SimpleName("given_Int"), TypeIdent(TypeName(SimpleName("Int"))), _, _) =>
     }
     assert(containsSubtree(givenDefinition)(clue(tree)))
 
@@ -697,10 +714,10 @@ class ReadTreeSuite extends munit.FunSuite {
 
     val traitMatch: StructureCheck = {
       case Template(
-            DefDef(SimpleName("<init>"), List(ValDef(SimpleName("param"), _, _) :: Nil), _, EmptyTree),
+            DefDef(SimpleName("<init>"), List(ValDef(SimpleName("param"), _, _, _) :: Nil), _, EmptyTree, _),
             TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Object")))) :: Nil,
             _,
-            ValDef(SimpleName("param"), _, _) :: Nil
+            ValDef(SimpleName("param"), _, _, _) :: Nil
           ) =>
     }
 
@@ -715,7 +732,7 @@ class ReadTreeSuite extends munit.FunSuite {
             List(jlObject: Apply, TypeIdent(TypeName(SimpleName("AbstractTrait")))),
             _,
             // TODO: check the OVERRIDE modifer once modifiers are read
-            DefDef(SimpleName("abstractMethod"), _, _, _) :: Nil
+            DefDef(SimpleName("abstractMethod"), _, _, _, _) :: Nil
           ) if isJavaLangObject.isDefinedAt(jlObject) =>
     }
     assert(containsSubtree(classMatch)(clue(tree)))
@@ -729,11 +746,12 @@ class ReadTreeSuite extends munit.FunSuite {
             SimpleName("functionLambda"),
             _,
             Block(
-              List(DefDef(SimpleName("$anonfun"), List(List(ValDef(SimpleName("x"), _, _))), _, _)),
+              List(DefDef(SimpleName("$anonfun"), List(List(ValDef(SimpleName("x"), _, _, _))), _, _, _)),
               // a lambda is simply a wrapper around a DefDef, defined in the same block. Its type is a function type,
               // therefore not specified (left as EmptyTree)
               Lambda(Ident(SimpleName("$anonfun")), EmptyTypeTree)
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(functionLambdaMatch)(clue(tree)))
@@ -743,7 +761,7 @@ class ReadTreeSuite extends munit.FunSuite {
             SimpleName("samLambda"),
             _,
             Block(
-              List(DefDef(SimpleName("$anonfun"), List(List()), _, _)),
+              List(DefDef(SimpleName("$anonfun"), List(List()), _, _, _)),
               // the lambda's type is not just a function type, therefore specified
               Lambda(
                 Ident(SimpleName("$anonfun")),
@@ -754,7 +772,8 @@ class ReadTreeSuite extends munit.FunSuite {
                   )
                 )
               )
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(SAMLambdaMatch)(clue(tree)))
@@ -778,7 +797,7 @@ class ReadTreeSuite extends munit.FunSuite {
               List(
                 DefDef(
                   SimpleName("$anonfun"),
-                  List(ValDef(SimpleName("x"), _, _)) :: Nil,
+                  List(ValDef(SimpleName("x"), _, _, _)) :: Nil,
                   _,
                   Apply(
                     Select(
@@ -786,7 +805,8 @@ class ReadTreeSuite extends munit.FunSuite {
                       SignedName(SimpleName("intMethod"), _, _)
                     ),
                     List(Ident(SimpleName("x")))
-                  )
+                  ),
+                  _
                 )
               ),
               Lambda(Ident(SimpleName("$anonfun")), EmptyTypeTree)
@@ -810,7 +830,7 @@ class ReadTreeSuite extends munit.FunSuite {
               List(
                 DefDef(
                   SimpleName("$anonfun"),
-                  List(ValDef(SimpleName("second"), _, _) :: Nil),
+                  List(ValDef(SimpleName("second"), _, _, _) :: Nil),
                   _,
                   Apply(
                     Apply(
@@ -821,11 +841,13 @@ class ReadTreeSuite extends munit.FunSuite {
                       Literal(Constant(0)) :: Nil
                     ),
                     Ident(SimpleName("second")) :: Nil
-                  )
+                  ),
+                  _
                 )
               ),
               Lambda(Ident(SimpleName("$anonfun")), EmptyTypeTree)
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(applicationMatch)(clue(tree)))
@@ -837,7 +859,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val partialFunction: StructureCheck = {
       case DefDef(
             SimpleName("$anonfun"),
-            List(ValDef(SimpleName("x$1"), _, EmptyTree)) :: Nil,
+            List(ValDef(SimpleName("x$1"), _, EmptyTree, _)) :: Nil,
             _,
             // match x$1 with type x$1
             Match(
@@ -851,7 +873,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 )
               ),
               cases
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(partialFunction)(clue(tree)))
@@ -897,7 +920,7 @@ class ReadTreeSuite extends munit.FunSuite {
 
     // simple type member
     val typeMember: StructureCheck = {
-      case TypeMember(TypeName(SimpleName("TypeMember")), TypeIdent(TypeName(SimpleName("Int")))) =>
+      case TypeMember(TypeName(SimpleName("TypeMember")), TypeIdent(TypeName(SimpleName("Int"))), _) =>
     }
     assert(containsSubtree(typeMember)(clue(tree)))
 
@@ -911,7 +934,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
               ),
               EmptyTypeTree
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(abstractTypeMember)(clue(tree)))
@@ -923,14 +947,15 @@ class ReadTreeSuite extends munit.FunSuite {
             BoundedTypeTree(
               TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("AnyRef")))),
               EmptyTypeTree
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(abstractWithBounds)(clue(tree)))
 
     // opaque
     val opaqueTypeMember: StructureCheck = {
-      case TypeMember(TypeName(SimpleName("Opaque")), TypeIdent(TypeName(SimpleName("Int")))) =>
+      case TypeMember(TypeName(SimpleName("Opaque")), TypeIdent(TypeName(SimpleName("Int"))), _) =>
     }
     assert(containsSubtree(opaqueTypeMember)(clue(tree)))
 
@@ -941,7 +966,8 @@ class ReadTreeSuite extends munit.FunSuite {
             BoundedTypeTree(
               TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("AnyRef")))),
               TypeIdent(TypeName(SimpleName("Null")))
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(opaqueWithBounds)(clue(tree)))
@@ -968,11 +994,13 @@ class ReadTreeSuite extends munit.FunSuite {
                       TypeBoundsTree(
                         TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
                         TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
-                      )
+                      ),
+                      _
                     )
                   ),
                   List()
                 ),
+                _,
                 _,
                 _
               ),
@@ -983,9 +1011,11 @@ class ReadTreeSuite extends munit.FunSuite {
                 RealTypeBounds(
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
-                )
+                ),
+                _
               ) :: _
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
@@ -1003,12 +1033,14 @@ class ReadTreeSuite extends munit.FunSuite {
                   TypeBoundsTree(
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
-                  )
+                  ),
+                  _
                 )
               ),
               List()
             ),
             AppliedTypeTree(TypeIdent(TypeName(SimpleName("Option"))), TypeIdent(TypeName(SimpleName("T"))) :: Nil),
+            _,
             _
           ) =>
     }
@@ -1022,18 +1054,20 @@ class ReadTreeSuite extends munit.FunSuite {
       case DefDef(
             SimpleName("genericExtension"),
             List(
-              List(ValDef(SimpleName("i"), TypeIdent(TypeName(SimpleName("Int"))), EmptyTree)),
+              List(ValDef(SimpleName("i"), TypeIdent(TypeName(SimpleName("Int"))), EmptyTree, _)),
               List(
                 TypeParam(
                   TypeName(SimpleName("T")),
                   TypeBoundsTree(
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
-                  )
+                  ),
+                  _
                 )
               ),
-              List(ValDef(SimpleName("genericArg"), TypeIdent(TypeName(SimpleName("T"))), EmptyTree))
+              List(ValDef(SimpleName("genericArg"), TypeIdent(TypeName(SimpleName("T"))), EmptyTree, _))
             ),
+            _,
             _,
             _
           ) =>
@@ -1053,11 +1087,16 @@ class ReadTreeSuite extends munit.FunSuite {
                   List(
                     TypeParam(
                       TypeName(SimpleName("T")),
-                      TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("AnyRef"))))
+                      TypeBoundsTree(
+                        TypeIdent(TypeName(SimpleName("Null"))),
+                        TypeIdent(TypeName(SimpleName("AnyRef")))
+                      ),
+                      _
                     )
                   ),
                   List()
                 ),
+                _,
                 _,
                 _
               ),
@@ -1068,9 +1107,11 @@ class ReadTreeSuite extends munit.FunSuite {
                 RealTypeBounds(
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Null"))),
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("AnyRef")))
-                )
+                ),
+                _
               ) :: _
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
@@ -1094,11 +1135,13 @@ class ReadTreeSuite extends munit.FunSuite {
                       TypeBoundsTree(
                         TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
                         TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
-                      )
+                      ),
+                      _
                     )
                   ),
                   List()
                 ),
+                _,
                 _,
                 _
               ),
@@ -1109,9 +1152,11 @@ class ReadTreeSuite extends munit.FunSuite {
                 RealTypeBounds(
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
-                )
-              ) :: Class(TypeName(SimpleName("NestedGeneric")), _) :: _
-            )
+                ),
+                _
+              ) :: Class(TypeName(SimpleName("NestedGeneric")), _, _) :: _
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
@@ -1129,11 +1174,13 @@ class ReadTreeSuite extends munit.FunSuite {
                       TypeBoundsTree(
                         TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
                         TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
-                      )
+                      ),
+                      _
                     )
                   ),
                   List()
                 ),
+                _,
                 _,
                 _
               ),
@@ -1144,9 +1191,11 @@ class ReadTreeSuite extends munit.FunSuite {
                 RealTypeBounds(
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
-                )
+                ),
+                _
               ) :: _
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(nestedClass)(clue(tree)))
@@ -1170,7 +1219,8 @@ class ReadTreeSuite extends munit.FunSuite {
             ValDef(
               SimpleName("HasInlinedMethod_this"),
               _,
-              Select(This(Some(TypeIdent(TypeName(SimpleName("InlinedCall"))))), SimpleName("withInlineMethod"))
+              Select(This(Some(TypeIdent(TypeName(SimpleName("InlinedCall"))))), SimpleName("withInlineMethod")),
+              _
             ) :: Nil
           ) =>
     }
@@ -1201,7 +1251,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 SignedName(SimpleName("<init>"), _, _)
               ),
               Nil
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(selectTpt)(clue(tree)))
@@ -1213,7 +1264,8 @@ class ReadTreeSuite extends munit.FunSuite {
     val byName: StructureCheck = {
       case DefDef(
             SimpleName("withByName"),
-            List(List(ValDef(SimpleName("x"), ByNameTypeTree(TypeIdent(TypeName(SimpleName("Int")))), EmptyTree))),
+            List(List(ValDef(SimpleName("x"), ByNameTypeTree(TypeIdent(TypeName(SimpleName("Int")))), EmptyTree, _))),
+            _,
             _,
             _
           ) =>
@@ -1228,7 +1280,8 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(
             SimpleName("byNameParam"),
             TypeWrapper(ExprType(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int"))))),
-            EmptyTree
+            EmptyTree,
+            _
           ) =>
     }
     assert(containsSubtree(byName)(clue(tree)))
@@ -1249,7 +1302,8 @@ class ReadTreeSuite extends munit.FunSuite {
                     TypeIdent(TypeName(SimpleName("|"))),
                     List(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("String"))))
                   ),
-                  EmptyTree
+                  EmptyTree,
+                  _
                 )
               )
             ),
@@ -1259,6 +1313,7 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeRef(TermRef(PackageRef(SimpleName("scala")), SimpleName("Predef")), TypeName(SimpleName("String")))
               )
             ),
+            _,
             _
           ) =>
     }
@@ -1283,7 +1338,8 @@ class ReadTreeSuite extends munit.FunSuite {
                       TypeIdent(TypeName(SimpleName("UnionType")))
                     )
                   ),
-                  EmptyTree
+                  EmptyTree,
+                  _
                 )
               )
             ),
@@ -1293,6 +1349,7 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeRef(PackageRef(SimpleName("simple_trees")), TypeName(SimpleName("UnionType")))
               )
             ),
+            _,
             _
           ) =>
     }
@@ -1313,11 +1370,13 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeBoundsTree(
                   TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
                   TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
-                )
+                ),
+                _
               ) :: Nil,
               // List[X]
               AppliedTypeTree(TypeIdent(TypeName(SimpleName("List"))), TypeIdent(TypeName(SimpleName("X"))) :: Nil)
-            )
+            ),
+            _
           ) =>
     }
 
@@ -1338,10 +1397,11 @@ class ReadTreeSuite extends munit.FunSuite {
             RealTypeBounds(
               nothing,
               tl @ TypeLambda(
-                TypeParam(TypeName(UniqueName("_$", EmptyTermName, 1)), RealTypeBounds(nothing2, any)) :: Nil,
+                TypeParam(TypeName(UniqueName("_$", EmptyTermName, 1)), RealTypeBounds(nothing2, any), _) :: Nil,
                 _
               )
-            )
+            ),
+            _
           ) if typeLambdaResultIsAny.isDefinedAt(tl.resultType) =>
     }
     assert(containsSubtree(typeLambda)(clue(tree)))
@@ -1362,8 +1422,9 @@ class ReadTreeSuite extends munit.FunSuite {
             TypeName(SimpleName("A")),
             RealTypeBounds(
               nothing,
-              tl @ TypeLambda(TypeParam(TypeName(SimpleName("X")), RealTypeBounds(nothing2, any)) :: Nil, _)
-            )
+              tl @ TypeLambda(TypeParam(TypeName(SimpleName("X")), RealTypeBounds(nothing2, any), _) :: Nil, _)
+            ),
+            _
           ) if typeLambdaResultIsListOf.isDefinedAt(tl.resultType) =>
     }
     assert(containsSubtree(typeLambda)(clue(tree)))
@@ -1392,9 +1453,11 @@ class ReadTreeSuite extends munit.FunSuite {
                     Nil
                   )
                 ),
-                EmptyTree
+                EmptyTree,
+                _
               ) :: Nil
             ),
+            _,
             _,
             _
           ) =>
@@ -1411,8 +1474,9 @@ class ReadTreeSuite extends munit.FunSuite {
             // TypeMember { type AbstractType = Int }
             RefinedTypeTree(
               TypeIdent(TypeName(SimpleName("TypeMember"))),
-              TypeMember(TypeName(SimpleName("AbstractType")), TypeIdent(TypeName(SimpleName("Int")))) :: Nil
-            )
+              TypeMember(TypeName(SimpleName("AbstractType")), TypeIdent(TypeName(SimpleName("Int"))), _) :: Nil
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(refinedTpt)(clue(tree)))
@@ -1453,7 +1517,8 @@ class ReadTreeSuite extends munit.FunSuite {
                   TypeBoundsTree(
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
-                  )
+                  ),
+                  _
                 )
               ),
               MatchTypeTree(
@@ -1462,7 +1527,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeIdent(TypeName(SimpleName("X"))),
                 List(TypeCaseDef(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("String")))))
               )
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(matchTpt)(clue(tree)))
@@ -1477,7 +1543,8 @@ class ReadTreeSuite extends munit.FunSuite {
                   TypeBoundsTree(
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
-                  )
+                  ),
+                  _
                 )
               ),
               MatchTypeTree(
@@ -1485,7 +1552,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeIdent(TypeName(SimpleName("X"))),
                 List(TypeCaseDef(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("Nothing")))))
               )
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(matchWithBound)(clue(tree)))
@@ -1500,7 +1568,8 @@ class ReadTreeSuite extends munit.FunSuite {
                   TypeBoundsTree(
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
-                  )
+                  ),
+                  _
                 )
               ),
               MatchTypeTree(
@@ -1517,13 +1586,15 @@ class ReadTreeSuite extends munit.FunSuite {
                           TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                         ),
                         EmptyTypeTree
-                      )
+                      ),
+                      _
                     ),
                     TypeIdent(TypeName(SimpleName("Int")))
                   )
                 )
               )
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(matchWithWildcard)(clue(tree)))
@@ -1538,7 +1609,8 @@ class ReadTreeSuite extends munit.FunSuite {
                   TypeBoundsTree(
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
                     TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
-                  )
+                  ),
+                  _
                 )
               ),
               MatchTypeTree(
@@ -1549,13 +1621,14 @@ class ReadTreeSuite extends munit.FunSuite {
                   TypeCaseDef(
                     AppliedTypeTree(
                       TypeIdent(TypeName(SimpleName("List"))),
-                      TypeTreeBind(TypeName(SimpleName("t")), TypeIdent(TypeName(Wildcard))) :: Nil
+                      TypeTreeBind(TypeName(SimpleName("t")), TypeIdent(TypeName(Wildcard)), _) :: Nil
                     ),
                     TypeIdent(TypeName(SimpleName("t")))
                   )
                 )
               )
-            )
+            ),
+            _
           ) =>
     }
     assert(containsSubtree(matchWithBind)(clue(tree)))
@@ -1570,6 +1643,7 @@ class ReadTreeSuite extends munit.FunSuite {
       case ValDef(
             SimpleName("toplevelEmptyPackage$package"),
             TypeIdent(TypeName(SuffixedName(NameTags.OBJECTCLASS, SimpleName("toplevelEmptyPackage$package")))),
+            _,
             _
           ) =>
     }
@@ -1592,7 +1666,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 ) :: Nil
               )
             ),
-            EmptyTree
+            EmptyTree,
+            _
           ) =>
     }
     assert(containsSubtree(appliedTypeToTypeBounds)(clue(tree)))
@@ -1608,7 +1683,8 @@ class ReadTreeSuite extends munit.FunSuite {
                 TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
               ) :: Nil
             ),
-            EmptyTree
+            EmptyTree,
+            _
           ) =>
     }
     assert(containsSubtree(appliedTypeToTypeBoundsTpt)(clue(tree)))
