@@ -59,22 +59,31 @@ object Symbols {
 
   abstract class SymbolFactory[T <: Symbol] {
     def createSymbol(name: Name, owner: DeclaringSymbol): T
+    def castSymbol(symbol: Symbol): T
   }
 
   object RegularSymbolFactory extends SymbolFactory[RegularSymbol] {
     override def createSymbol(name: Name, owner: DeclaringSymbol): RegularSymbol = new RegularSymbol(name, owner)
+
+    override def castSymbol(symbol: Symbol): RegularSymbol = symbol.asInstanceOf[RegularSymbol]
   }
 
   object ClassSymbolFactory extends SymbolFactory[ClassSymbol] {
     override def createSymbol(name: Name, owner: DeclaringSymbol): ClassSymbol = new ClassSymbol(name, owner)
+
+    override def castSymbol(symbol: Symbol): ClassSymbol = symbol.asInstanceOf[ClassSymbol]
   }
 
   object PackageClassSymbolFactory extends SymbolFactory[PackageClassSymbol] {
     override def createSymbol(name: Name, owner: DeclaringSymbol): PackageClassSymbol =
       new PackageClassSymbol(name, owner)
+
+    override def castSymbol(symbol: Symbol): PackageClassSymbol = symbol.asInstanceOf[PackageClassSymbol]
   }
 
   object MethodSymbolFactory extends SymbolFactory[MethodSymbol] {
     override def createSymbol(name: Name, owner: DeclaringSymbol): MethodSymbol = new MethodSymbol(name, owner)
+
+    override def castSymbol(symbol: Symbol): MethodSymbol = symbol.asInstanceOf[MethodSymbol]
   }
 }

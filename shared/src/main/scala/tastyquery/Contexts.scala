@@ -78,6 +78,9 @@ object Contexts {
 
     def getPackageSymbol(name: TermName): PackageClassSymbol = defn.RootPackage.findPackageSymbol(name).get
 
-    def getSymbol(addr: Addr): Symbol = localSymbols(addr)
+    def getSymbol(addr: Addr): Symbol =
+      localSymbols(addr)
+    def getSymbol[T <: Symbol](addr: Addr, symbolFactory: SymbolFactory[T]): T =
+      symbolFactory.castSymbol(localSymbols(addr))
   }
 }
