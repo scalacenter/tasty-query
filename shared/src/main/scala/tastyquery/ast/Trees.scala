@@ -4,7 +4,7 @@ import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
 import tastyquery.ast.Types.{Type, TypeBounds}
 import tastyquery.ast.TypeTrees.*
-import tastyquery.ast.Symbols.{ClassSymbol, MethodSymbol, NoSymbol, PackageClassSymbol, RegularSymbol, Symbol}
+import tastyquery.ast.Symbols.{ClassSymbol, NoSymbol, PackageClassSymbol, RegularSymbol, Symbol}
 
 object Trees {
 
@@ -82,7 +82,7 @@ object Trees {
     params: List[ParamsClause],
     tpt: TypeTree,
     rhs: Tree,
-    override val symbol: MethodSymbol
+    override val symbol: RegularSymbol
   ) extends Tree
       with DefTree(symbol)
 
