@@ -10,20 +10,9 @@ import dotty.tools.tasty.TastyFormat.NameTags
 
 import java.nio.file.{Files, Paths}
 
-class ReadTreeSuite extends munit.FunSuite {
+class ReadTreeSuite extends BaseUnpicklingSuite {
   type StructureCheck     = PartialFunction[Tree, Unit]
   type TypeStructureCheck = PartialFunction[Type, Unit]
-  val ResourceProperty = "test-resources"
-
-  def unpickle(filename: String): Tree = {
-    val resourcePath = getResourcePath(filename)
-    val bytes        = Files.readAllBytes(Paths.get(resourcePath))
-    val unpickler    = new TastyUnpickler(bytes)
-    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle (using Contexts.empty).head
-  }
-
-  def getResourcePath(name: String): String =
-    s"${System.getProperty(ResourceProperty)}/$name.tasty"
 
   def containsSubtree(p: StructureCheck)(t: Tree): Boolean = {
     def rec(t: Tree): Boolean = containsSubtree(p)(t)
