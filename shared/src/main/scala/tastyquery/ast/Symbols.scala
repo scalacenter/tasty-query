@@ -6,15 +6,17 @@ import tastyquery.ast.Names._
 import dotty.tools.tasty.TastyFormat.NameTags
 
 object Symbols {
-  val NoSymbol = new Symbol(Names.EmptyTermName, null)
+  val NoSymbol = new RegularSymbol(Names.EmptyTermName, null)
 
-  class Symbol private[Symbols] (val name: Name, val owner: DeclaringSymbol) {
+  abstract class Symbol private[Symbols] (val name: Name, val owner: Symbol) {
     override def toString: String = s"symbol[$name]"
   }
 
   object Symbol {
     def unapply(s: Symbol): Option[Name] = Some(s.name)
   }
+
+  final class RegularSymbol(override val name: Name, override val owner: Symbol) extends Symbol(name, owner)
 
   abstract class DeclaringSymbol(override val name: Name, override val owner: DeclaringSymbol)
       extends Symbol(name, owner) {
@@ -59,8 +61,8 @@ object Symbols {
     def createSymbol(name: Name, owner: DeclaringSymbol): T
   }
 
-  object RegularSymbolFactory extends SymbolFactory[Symbol] {
-    override def createSymbol(name: Name, owner: DeclaringSymbol): Symbol = new Symbol(name, owner)
+  object RegularSymbolFactory extends SymbolFactory[RegularSymbol] {
+    override def createSymbol(name: Name, owner: DeclaringSymbol): RegularSymbol = new RegularSymbol(name, owner)
   }
 
   object ClassSymbolFactory extends SymbolFactory[ClassSymbol] {

@@ -9,6 +9,7 @@ import tastyquery.ast.Symbols.{
   MethodSymbol,
   MethodSymbolFactory,
   NoSymbol,
+  RegularSymbol,
   RegularSymbolFactory,
   Symbol
 }
@@ -218,9 +219,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         Class(name, readTemplate (using ctx.withOwner(classSymbol)), classSymbol)
       } else {
         if (tagFollowShared == TYPEBOUNDS)
-          TypeMember(name, readTypeBounds, symbol)
+          TypeMember(name, readTypeBounds, symbol.asInstanceOf[RegularSymbol])
         else
-          TypeMember(name, readTypeTree, symbol)
+          TypeMember(name, readTypeTree, symbol.asInstanceOf[RegularSymbol])
       }
       // TODO: read modifiers
       skipModifiers(end)
@@ -294,7 +295,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val name   = readName.toTypeName
       val bounds = readTypeParamType
       skipModifiers(end)
-      TypeParam(name, bounds, ctx.getSymbol(start))
+      TypeParam(name, bounds, ctx.getSymbol(start).asInstanceOf[RegularSymbol])
     }
     var acc = new ListBuffer[TypeParam]()
     while (reader.nextByte == TYPEPARAM) {
@@ -407,7 +408,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       else readTerm (using insideCtx)
     skipModifiers(end)
     tag match {
-      case VALDEF | PARAM => ValDef(name, tpt, rhs, ctx.getSymbol(start))
+      case VALDEF | PARAM => ValDef(name, tpt, rhs, ctx.getSymbol(start).asInstanceOf[RegularSymbol])
       case DEFDEF =>
         DefDef(name, params, tpt, rhs, ctx.getSymbol(start).asInstanceOf[MethodSymbol])
     }
@@ -522,7 +523,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val typ  = readType
       val term = readTerm
       skipModifiers(end)
-      Bind(name, term, ctx.getSymbol(start))
+      Bind(name, term, ctx.getSymbol(start).asInstanceOf[RegularSymbol])
     case ALTERNATIVE =>
       reader.readByte()
       val end = reader.readEnd()
@@ -842,7 +843,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         TypeIdent(typeName)
       } else readTypeTree
       skipModifiers(end)
-      TypeTreeBind(name, body, ctx.getSymbol(start))
+      TypeTreeBind(name, body, ctx.getSymbol(start).asInstanceOf[RegularSymbol])
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree
     case BYNAMEtpt =>

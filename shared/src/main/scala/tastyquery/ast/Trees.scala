@@ -4,7 +4,7 @@ import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
 import tastyquery.ast.Types.{Type, TypeBounds}
 import tastyquery.ast.TypeTrees.*
-import tastyquery.ast.Symbols.{NoSymbol, PackageClassSymbol, Symbol, MethodSymbol, ClassSymbol}
+import tastyquery.ast.Symbols.{ClassSymbol, MethodSymbol, NoSymbol, PackageClassSymbol, RegularSymbol, Symbol}
 
 object Trees {
 
@@ -49,14 +49,14 @@ object Trees {
   case class Class(name: TypeName, rhs: Template, override val symbol: ClassSymbol) extends TypeDef(name, symbol)
 
   /** A type member has a type tree rhs if the member is defined by the user, or typebounds if it's synthetic */
-  case class TypeMember(name: TypeName, rhs: TypeTree | TypeBounds, override val symbol: Symbol)
+  case class TypeMember(name: TypeName, rhs: TypeTree | TypeBounds, override val symbol: RegularSymbol)
       extends TypeDef(name, symbol)
 
   /** The bounds are a type tree if the method is defined by the user and bounds-only if it's synthetic */
   case class TypeParam(
     name: TypeName,
     bounds: TypeBoundsTree | TypeBounds | TypeLambdaTree,
-    override val symbol: Symbol
+    override val symbol: RegularSymbol
   ) extends TypeDef(name, symbol)
 
   /**
@@ -70,7 +70,7 @@ object Trees {
       extends Tree
 
   /** mods val name: tpt = rhs */
-  case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: Symbol)
+  case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: RegularSymbol)
       extends Tree
       with DefTree(symbol)
 
@@ -156,7 +156,7 @@ object Trees {
   case class CaseDef(pattern: Tree, guard: Tree, body: Tree) extends Tree
 
   /** pattern in {@link Unapply} */
-  case class Bind(name: Name, body: Tree, override val symbol: Symbol) extends Tree with DefTree(symbol)
+  case class Bind(name: Name, body: Tree, override val symbol: RegularSymbol) extends Tree with DefTree(symbol)
 
   /** tree_1 | ... | tree_n */
   case class Alternative(trees: List[Tree]) extends Tree
