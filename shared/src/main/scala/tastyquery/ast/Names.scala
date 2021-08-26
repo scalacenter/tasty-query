@@ -78,6 +78,7 @@ object Names {
 
     def isEmpty: Boolean
 
+    def toDebugString: String = toString
   }
 
   abstract class TermName extends Name {
@@ -174,5 +175,7 @@ object Names {
     override def isEmpty: Boolean = toTermName.isEmpty
 
     override def toString: String = toTermName.toString
+
+    override def toDebugString: String = s"${toString}/T"
   }
 }

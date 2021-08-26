@@ -10,6 +10,7 @@ object Symbols {
 
   abstract class Symbol private[Symbols] (val name: Name, val owner: Symbol) {
     override def toString: String = s"symbol[$name]"
+    def toDebugString             = toString
   }
 
   object Symbol {
@@ -21,10 +22,14 @@ object Symbols {
   abstract class DeclaringSymbol(override val name: Name, override val owner: Symbol) extends Symbol(name, owner) {
     /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
-    protected val declarations: mutable.HashMap[Name, Symbol] = mutable.HashMap[Name, Symbol]()
+    protected val myDeclarations: mutable.HashMap[Name, Symbol] = mutable.HashMap[Name, Symbol]()
 
-    def addDecl(decl: Symbol): Unit         = declarations(decl.name) = decl
-    def getDecl(name: Name): Option[Symbol] = declarations.get(name)
+    def addDecl(decl: Symbol): Unit         = myDeclarations(decl.name) = decl
+    def getDecl(name: Name): Option[Symbol] = myDeclarations.get(name)
+    def declarations: List[Symbol] = myDeclarations.values.toList
+
+    override def toDebugString: String =
+      s"${super.toString} with declarations [${myDeclarations.keys.map(_.toDebugString).mkString(", ")}]"
   }
 
   class ClassSymbol(override val name: Name, override val owner: Symbol) extends DeclaringSymbol(name, owner)
