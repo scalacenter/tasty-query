@@ -9,6 +9,9 @@ class SymbolSuite extends BaseUnpicklingSuite {
   extension (path: DeclarationPath)
     def toDebugString: String = path.map(_.toDebugString).mkString(".")
 
+  extension (symbols: Iterable[Name])
+    def toDebugString: String = s"[${symbols.map(_.toDebugString).mkString(", ")}]"
+
   def getUnpicklingContext(filename: String): Context = {
     val ctx = Contexts.empty
     unpickle(filename) (using ctx)
@@ -42,7 +45,10 @@ class SymbolSuite extends BaseUnpicklingSuite {
   }
 
   def assertForallWithPrefix(ctx: Context, prefix: DeclarationPath, condition: Symbol => Boolean): Unit =
-    getDeclsByPrefix(ctx, prefix).forall(condition)
+    assert(
+      getDeclsByPrefix(ctx, prefix).forall(condition),
+      s"Condition does not hold for ${getDeclsByPrefix(ctx, prefix).filter(!condition(_))}"
+    )
 
   def assertContainsOnly(ctx: Context, prefix: DeclarationPath, symbolNames: Set[Name]): Unit =
     assertForallWithPrefix(ctx, prefix, s => symbolNames.contains(s.name))
@@ -71,6 +77,6 @@ class SymbolSuite extends BaseUnpicklingSuite {
   test("empty-package-contains-no-packages") {
     val ctx = getUnpicklingContext("simple_trees/SharedPackageReference$package")
     // simple_trees is not a subpackage of empty package
-    assertForallWithPrefix(ctx, EmptyPackageName :: Nil, s => !s.isInstanceOf[PackageClassSymbol])
+    assertForallWithPrefix(ctx, EmptyPackageName :: Nil, s => s.name == EmptyPackageName || !s.isInstanceOf[PackageClassSymbol])
   }
 }
