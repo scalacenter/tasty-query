@@ -34,12 +34,12 @@ class SymbolSuite extends BaseUnpicklingSuite {
   def assertContainsDeclaration(ctx: Context, path: DeclarationPath): Unit =
     followPath(ctx.defn.RootPackage, path)
 
-  def getDeclsByPrefix(ctx: Context, prefix: DeclarationPath): List[Symbol] = {
-    def symbolsInSubtree(root: Symbol): List[Symbol] =
+  def getDeclsByPrefix(ctx: Context, prefix: DeclarationPath): Seq[Symbol] = {
+    def symbolsInSubtree(root: Symbol): Seq[Symbol] =
       if (root.isInstanceOf[DeclaringSymbol]) {
-        root :: root.asInstanceOf[DeclaringSymbol].declarations.flatMap(symbolsInSubtree(_))
+        root +: root.asInstanceOf[DeclaringSymbol].declarations.toSeq.flatMap(symbolsInSubtree(_))
       } else {
-        root :: Nil
+        Seq(root)
       }
     symbolsInSubtree(followPath(ctx.defn.RootPackage, prefix))
   }
