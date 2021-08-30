@@ -66,7 +66,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         val end  = reader.readEnd()
         val name = if (tag == TYPEPARAM) readName.toTypeName else readName
         val newSymbol =
-          ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls = (tag == VALDEF || tag == DEFDEF))
+          ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls = (tag != TYPEPARAM))
         reader.until(end)(createSymbols (using ctx.withOwner(newSymbol)))
       case BIND =>
         val end        = reader.readEnd()

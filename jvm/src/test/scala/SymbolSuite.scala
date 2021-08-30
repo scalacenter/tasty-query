@@ -93,5 +93,50 @@ class SymbolSuite extends BaseUnpicklingSuite {
       s => s.name == EmptyPackageName || !s.isInstanceOf[PackageClassSymbol]
     )
   }
+
+  test("class-parameter-is-a-decl") {
+    val ctx = getUnpicklingContext("simple_trees/ConstructorWithParameters")
+    assertContainsExactly(
+      ctx,
+      SimpleName("simple_trees") :: TypeName(SimpleName("ConstructorWithParameters")) :: Nil,
+      Set(
+        TypeName(SimpleName("ConstructorWithParameters")),
+        SimpleName("<init>"),
+        SimpleName("local"),
+        SimpleName("theVal"),
+        SimpleName("privateVal"),
+        // var and the setter for it
+        SimpleName("theVar"),
+        SimpleName("theVar_=")
+      )
+    )
+  }
+
+  test("class-type-parameter-is-not-a-decl") {
+    val ctx = getUnpicklingContext("simple_trees/GenericClass")
+    assertContainsExactly(
+      ctx,
+      SimpleName("simple_trees") :: Nil,
+      Set(SimpleName("simple_trees"), TypeName(SimpleName("GenericClass")), SimpleName("<init>"))
+    )
+  }
+
+  test("method-parameter-is-not-a-decl") {
+    val ctx = getUnpicklingContext("simple_trees/GenericMethod")
+    assertContainsExactly(
+      ctx,
+      SimpleName("simple_trees") :: TypeName(SimpleName("GenericMethod")) :: SimpleName("usesTypeParam") :: Nil,
+      Set(SimpleName("usesTypeParam"))
+    )
+  }
+
+  test("nested-method-is-not-a-decl") {
+    val ctx = getUnpicklingContext("simple_trees/NestedMethod")
+    assertContainsExactly(
+      ctx,
+      SimpleName("simple_trees") :: TypeName(SimpleName("NestedMethod")) :: SimpleName("outerMethod") :: Nil,
+      // innerMethod is not a declaration of outerMethod
+      Set(SimpleName("outerMethod"))
+    )
   }
 }
