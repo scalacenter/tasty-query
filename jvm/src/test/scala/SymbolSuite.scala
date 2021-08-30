@@ -50,19 +50,29 @@ class SymbolSuite extends BaseUnpicklingSuite {
       s"Condition does not hold for ${getDeclsByPrefix(ctx, prefix).filter(!condition(_))}"
     )
 
-  def assertContainsOnly(ctx: Context, prefix: DeclarationPath, symbolNames: Set[Name]): Unit =
-    assertForallWithPrefix(ctx, prefix, s => symbolNames.contains(s.name))
+  def assertContainsExactly(ctx: Context, prefix: DeclarationPath, symbolNames: Set[Name]): Unit = {
+    val decls = getDeclsByPrefix(ctx, prefix).map(_.name)
+    // each declaration is in the passed set
+    assert(
+      decls.forall(symbolNames.contains(_)),
+      s"Unexpected declarations: ${decls.filter(!symbolNames.contains(_)).toDebugString}"
+    )
+    // every name in the passed set is a declaration
+    assert(
+      symbolNames.forall(decls.contains(_)),
+      s"Declaration not found: ${symbolNames.filter(!decls.contains(_)).toDebugString}"
+    )
+  }
 
   test("basic-symbol-structure") {
     val ctx = getUnpicklingContext("empty_class/EmptyClass")
     assertContainsDeclaration(ctx, SimpleName("empty_class") :: TypeName(SimpleName("EmptyClass")) :: Nil)
     // EmptyClass and its constructor are the only declarations in empty_class package
-    assertContainsOnly(
+    assertContainsExactly(
       ctx,
       SimpleName("empty_class") :: Nil,
       Set(SimpleName("empty_class"), TypeName(SimpleName("EmptyClass")), SimpleName("<init>"))
     )
-
   }
 
   test("inner-class") {
@@ -77,6 +87,11 @@ class SymbolSuite extends BaseUnpicklingSuite {
   test("empty-package-contains-no-packages") {
     val ctx = getUnpicklingContext("simple_trees/SharedPackageReference$package")
     // simple_trees is not a subpackage of empty package
-    assertForallWithPrefix(ctx, EmptyPackageName :: Nil, s => s.name == EmptyPackageName || !s.isInstanceOf[PackageClassSymbol])
+    assertForallWithPrefix(
+      ctx,
+      EmptyPackageName :: Nil,
+      s => s.name == EmptyPackageName || !s.isInstanceOf[PackageClassSymbol]
+    )
+  }
   }
 }
