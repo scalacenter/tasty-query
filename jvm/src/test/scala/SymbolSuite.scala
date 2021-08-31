@@ -6,15 +6,13 @@ import tastyquery.ast.Symbols.{DeclaringSymbol, PackageClassSymbol, Symbol}
 class SymbolSuite extends BaseUnpicklingSuite {
   type DeclarationPath = List[Name]
 
-  extension (path: DeclarationPath)
-    def toDebugString: String = path.map(_.toDebugString).mkString(".")
+  extension (path: DeclarationPath) def toDebugString: String = path.map(_.toDebugString).mkString(".")
 
-  extension (symbols: Iterable[Name])
-    def toDebugString: String = s"[${symbols.map(_.toDebugString).mkString(", ")}]"
+  extension (symbols: Iterable[Name]) def toDebugString: String = s"[${symbols.map(_.toDebugString).mkString(", ")}]"
 
   def getUnpicklingContext(filename: String): Context = {
     val ctx = Contexts.empty
-    unpickle(filename) (using ctx)
+    unpickle(filename)(using ctx)
     ctx
   }
 

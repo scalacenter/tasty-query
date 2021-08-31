@@ -10,7 +10,7 @@ object Symbols {
 
   abstract class Symbol private[Symbols] (val name: Name, val owner: Symbol) {
     override def toString: String = s"symbol[$name]"
-    def toDebugString             = toString
+    def toDebugString = toString
   }
 
   object Symbol {
@@ -24,7 +24,7 @@ object Symbols {
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
     protected val myDeclarations: mutable.HashMap[Name, Symbol] = mutable.HashMap[Name, Symbol]()
 
-    def addDecl(decl: Symbol): Unit         = myDeclarations(decl.name) = decl
+    def addDecl(decl: Symbol): Unit = myDeclarations(decl.name) = decl
     def getDecl(name: Name): Option[Symbol] = myDeclarations.get(name)
     def declarations: List[Symbol] = myDeclarations.values.toList
 

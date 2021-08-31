@@ -44,14 +44,13 @@ object Contexts {
         owner.asInstanceOf[DeclaringSymbol].addDecl(sym)
     }
 
-    /**
-     * Creates a new symbol at @addr with @name. The symbol is added to the owner's declarations if both
-     * 1) @addToDecls is true.
-     *    Example: true for valdef and defdef, false for parameters and type parameters
-     * 2) the owner is a declaring symbol.
-     *    Example: a method is added to the declarations of its class, but a nested method is not added
-     *    to declarations of its owner method.
-     */
+    /** Creates a new symbol at @addr with @name. The symbol is added to the owner's declarations if both
+      * 1) @addToDecls is true.
+      *    Example: true for valdef and defdef, false for parameters and type parameters
+      * 2) the owner is a declaring symbol.
+      *    Example: a method is added to the declarations of its class, but a nested method is not added
+      *    to declarations of its owner method.
+      */
     def createSymbolIfNew[T <: Symbol](
       addr: Addr,
       name: Name,
@@ -67,7 +66,7 @@ object Contexts {
     def createPackageSymbolIfNew(name: TermName): PackageClassSymbol = {
       def create(): PackageClassSymbol = {
         val trueOwner = if (owner == defn.EmptyPackage) defn.RootPackage else owner
-        val sym       = PackageClassSymbolFactory.createSymbol(name, trueOwner)
+        val sym = PackageClassSymbolFactory.createSymbol(name, trueOwner)
         sym
       }
 

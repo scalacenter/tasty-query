@@ -11,7 +11,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import java.nio.file.{Files, Paths}
 
 class ReadTreeSuite extends BaseUnpicklingSuite {
-  type StructureCheck     = PartialFunction[Tree, Unit]
+  type StructureCheck = PartialFunction[Tree, Unit]
   type TypeStructureCheck = PartialFunction[Type, Unit]
 
   def containsSubtree(p: StructureCheck)(t: Tree): Boolean = {

@@ -11,9 +11,9 @@ abstract class BaseUnpicklingSuite extends munit.FunSuite {
 
   def unpickle(filename: String)(using ctx: Context = Contexts.empty): Tree = {
     val resourcePath = getResourcePath(filename)
-    val bytes        = Files.readAllBytes(Paths.get(resourcePath))
-    val unpickler    = new TastyUnpickler(bytes)
-    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle (using ctx).head
+    val bytes = Files.readAllBytes(Paths.get(resourcePath))
+    val unpickler = new TastyUnpickler(bytes)
+    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using ctx).head
   }
 
   def getResourcePath(name: String): String =

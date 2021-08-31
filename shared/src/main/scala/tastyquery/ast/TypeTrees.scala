@@ -22,10 +22,9 @@ object TypeTrees {
   /** => T */
   case class ByNameTypeTree(result: TypeTree) extends TypeTree
 
-  /**
-   * tpt[args]
-   * TypeBounds[Tree] for wildcard application: tpt[_], tpt[?]
-   */
+  /** tpt[args]
+    * TypeBounds[Tree] for wildcard application: tpt[_], tpt[?]
+    */
   case class AppliedTypeTree(tycon: TypeTree, args: List[TypeTree | TypeBoundsTree | TypeBounds]) extends TypeTree
 
   /** qualifier#name */
@@ -50,10 +49,9 @@ object TypeTrees {
 
   case class TypeBoundsTree(low: TypeTree, high: TypeTree)
 
-  /**
-   * >: lo <: hi
-   *  >: lo <: hi = alias  for RHS of bounded opaque type
-   */
+  /** >: lo <: hi
+    *  >: lo <: hi = alias  for RHS of bounded opaque type
+    */
   case class BoundedTypeTree(bounds: TypeBoundsTree, alias: TypeTree) extends TypeTree
 
   case class TypeLambdaTree(tparams: List[TypeParam], body: TypeTree) extends TypeTree

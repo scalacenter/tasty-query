@@ -3,37 +3,35 @@ package tastyquery.ast
 import tastyquery.ast.Types.Type
 
 object Constants {
-  final val NoTag      = 0
-  final val UnitTag    = 1
+  final val NoTag = 0
+  final val UnitTag = 1
   final val BooleanTag = 2
-  final val ByteTag    = 3
-  final val ShortTag   = 4
-  final val CharTag    = 5
-  final val IntTag     = 6
-  final val LongTag    = 7
-  final val FloatTag   = 8
-  final val DoubleTag  = 9
-  final val StringTag  = 10
-  final val NullTag    = 11
-  final val ClazzTag   = 12
+  final val ByteTag = 3
+  final val ShortTag = 4
+  final val CharTag = 5
+  final val IntTag = 6
+  final val LongTag = 7
+  final val FloatTag = 8
+  final val DoubleTag = 9
+  final val StringTag = 10
+  final val NullTag = 11
+  final val ClazzTag = 12
 
   class Constant(val value: Any, val tag: Int) {
     import java.lang.Double.doubleToRawLongBits
     import java.lang.Float.floatToRawIntBits
 
-    def isByteRange: Boolean     = isIntRange && Byte.MinValue <= intValue && intValue <= Byte.MaxValue
-    def isShortRange: Boolean    = isIntRange && Short.MinValue <= intValue && intValue <= Short.MaxValue
-    def isCharRange: Boolean     = isIntRange && Char.MinValue <= intValue && intValue <= Char.MaxValue
-    def isIntRange: Boolean      = ByteTag <= tag && tag <= IntTag
-    def isLongRange: Boolean     = ByteTag <= tag && tag <= LongTag
-    def isFloatRange: Boolean    = ByteTag <= tag && tag <= FloatTag
-    def isNumeric: Boolean       = ByteTag <= tag && tag <= DoubleTag
+    def isByteRange: Boolean = isIntRange && Byte.MinValue <= intValue && intValue <= Byte.MaxValue
+    def isShortRange: Boolean = isIntRange && Short.MinValue <= intValue && intValue <= Short.MaxValue
+    def isCharRange: Boolean = isIntRange && Char.MinValue <= intValue && intValue <= Char.MaxValue
+    def isIntRange: Boolean = ByteTag <= tag && tag <= IntTag
+    def isLongRange: Boolean = ByteTag <= tag && tag <= LongTag
+    def isFloatRange: Boolean = ByteTag <= tag && tag <= FloatTag
+    def isNumeric: Boolean = ByteTag <= tag && tag <= DoubleTag
     def isNonUnitAnyVal: Boolean = BooleanTag <= tag && tag <= DoubleTag
-    def isAnyVal: Boolean        = UnitTag <= tag && tag <= DoubleTag
+    def isAnyVal: Boolean = UnitTag <= tag && tag <= DoubleTag
 
-    /**
-     * We need the equals method to take account of tags as well as values.
-     */
+    /** We need the equals method to take account of tags as well as values. */
     override def equals(other: Any): Boolean = other match {
       case that: Constant =>
         this.tag == that.tag && equalHashValue == that.equalHashValue
@@ -131,16 +129,15 @@ object Constants {
 
     def typeValue: Type = value.asInstanceOf[Type]
 
-    /**
-     * Consider two `NaN`s to be identical, despite non-equality
-     * Consider -0d to be distinct from 0d, despite equality
-     *
-     * We use the raw versions (i.e. `floatToRawIntBits` rather than `floatToIntBits`)
-     * to avoid treating different encodings of `NaN` as the same constant.
-     * You probably can't express different `NaN` varieties as compile time
-     * constants in regular Scala code, but it is conceivable that you could
-     * conjure them with a macro.
-     */
+    /** Consider two `NaN`s to be identical, despite non-equality
+      * Consider -0d to be distinct from 0d, despite equality
+      *
+      * We use the raw versions (i.e. `floatToRawIntBits` rather than `floatToIntBits`)
+      * to avoid treating different encodings of `NaN` as the same constant.
+      * You probably can't express different `NaN` varieties as compile time
+      * constants in regular Scala code, but it is conceivable that you could
+      * conjure them with a macro.
+      */
     private def equalHashValue: Any = value match {
       case f: Float  => floatToRawIntBits(f)
       case d: Double => doubleToRawLongBits(d)
@@ -150,7 +147,7 @@ object Constants {
     override def hashCode: Int = {
       import scala.util.hashing.MurmurHash3._
       val seed = 17
-      var h    = seed
+      var h = seed
       h = mix(h, tag.##) // include tag in the hash, otherwise 0, 0d, 0L, 0f collide.
       h = mix(h, equalHashValue.##)
       finalizeHash(h, length = 2)
@@ -158,24 +155,24 @@ object Constants {
 
     override def toString: String = s"Constant($value)"
     def canEqual(x: Any): Boolean = true
-    def get: Any                  = value
-    def isEmpty: Boolean          = false
-    def _1: Any                   = value
+    def get: Any = value
+    def isEmpty: Boolean = false
+    def _1: Any = value
   }
 
   object Constant {
-    def apply(x: Null): Constant    = new Constant(x, NullTag)
-    def apply(x: Unit): Constant    = new Constant(x, UnitTag)
+    def apply(x: Null): Constant = new Constant(x, NullTag)
+    def apply(x: Unit): Constant = new Constant(x, UnitTag)
     def apply(x: Boolean): Constant = new Constant(x, BooleanTag)
-    def apply(x: Byte): Constant    = new Constant(x, ByteTag)
-    def apply(x: Short): Constant   = new Constant(x, ShortTag)
-    def apply(x: Int): Constant     = new Constant(x, IntTag)
-    def apply(x: Long): Constant    = new Constant(x, LongTag)
-    def apply(x: Float): Constant   = new Constant(x, FloatTag)
-    def apply(x: Double): Constant  = new Constant(x, DoubleTag)
-    def apply(x: String): Constant  = new Constant(x, StringTag)
-    def apply(x: Char): Constant    = new Constant(x, CharTag)
-    def apply(x: Type): Constant    = new Constant(x, ClazzTag)
+    def apply(x: Byte): Constant = new Constant(x, ByteTag)
+    def apply(x: Short): Constant = new Constant(x, ShortTag)
+    def apply(x: Int): Constant = new Constant(x, IntTag)
+    def apply(x: Long): Constant = new Constant(x, LongTag)
+    def apply(x: Float): Constant = new Constant(x, FloatTag)
+    def apply(x: Double): Constant = new Constant(x, DoubleTag)
+    def apply(x: String): Constant = new Constant(x, StringTag)
+    def apply(x: Char): Constant = new Constant(x, CharTag)
+    def apply(x: Type): Constant = new Constant(x, ClazzTag)
 
     def unapply(c: Constant): Constant = c
   }

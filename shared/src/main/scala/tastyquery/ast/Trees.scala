@@ -37,13 +37,12 @@ object Trees {
   /** import expr.selectors */
   case class Export(expr: Tree, selectors: List[ImportSelector]) extends Tree
 
-  /**
-   * mods class name template     or
-   *  mods trait name template     or
-   *  mods type name = rhs   or
-   *  mods type name >: lo <: hi,          if rhs = TypeBoundsTree(lo, hi)      or
-   *  mods type name >: lo <: hi = rhs     if rhs = TypeBoundsTree(lo, hi, alias) and opaque in mods
-   */
+  /** mods class name template     or
+    *  mods trait name template     or
+    *  mods type name = rhs   or
+    *  mods type name >: lo <: hi,          if rhs = TypeBoundsTree(lo, hi)      or
+    *  mods type name >: lo <: hi = rhs     if rhs = TypeBoundsTree(lo, hi, alias) and opaque in mods
+    */
   abstract class TypeDef(name: TypeName, override val symbol: Symbol) extends Tree with DefTree(symbol)
 
   case class Class(name: TypeName, rhs: Template, override val symbol: ClassSymbol) extends TypeDef(name, symbol)
@@ -59,13 +58,12 @@ object Trees {
     override val symbol: RegularSymbol
   ) extends TypeDef(name, symbol)
 
-  /**
-   * extends parents { self => body }
-   *
-   * @param classParent -- the parent whose constructor is called.
-   *                       If the template defines a class, this is its only class parent.
-   * @param parents        trait parents of the template and the class parent if the template defines a trait.
-   */
+  /** extends parents { self => body }
+    *
+    * @param classParent -- the parent whose constructor is called.
+    *                       If the template defines a class, this is its only class parent.
+    * @param parents        trait parents of the template and the class parent if the template defines a trait.
+    */
   case class Template(constr: DefDef, parents: List[Apply | Block | TypeTree], self: ValDef, body: List[Tree])
       extends Tree
 
@@ -137,10 +135,9 @@ object Trees {
     override def toString = s"InlineIf($cond, $thenPart, $elsePart)"
   }
 
-  /**
-   *  @param meth   A reference to the method.
-   *  @param tpt    Not an EmptyTree only if the lambda's type is a SAMtype rather than a function type.
-   */
+  /**  @param meth   A reference to the method.
+    *  @param tpt    Not an EmptyTree only if the lambda's type is a SAMtype rather than a function type.
+    */
   case class Lambda(meth: Tree, tpt: TypeTree) extends Tree
 
   /** selector match { cases } */
@@ -161,25 +158,23 @@ object Trees {
   /** tree_1 | ... | tree_n */
   case class Alternative(trees: List[Tree]) extends Tree
 
-  /**
-   * `extractor(patterns)` in a pattern:
-   *  @param fun       is `extractor.unapply` (or, for backwards compatibility, `extractor.unapplySeq`)
-   *                   possibly with type parameters
-   *  @param implicits Any implicit parameters passed to the unapply after the selector
-   *  @param patterns  The argument patterns in the pattern match.
-   *
-   *  It is typed with same type as first `fun` argument
-   *  Given a match selector `sel` a pattern UnApply(fun, implicits, patterns) is roughly translated as follows
-   *
-   *    val result = fun(sel)(implicits)
-   *    if (result.isDefined) "match patterns against result"
-   */
+  /** `extractor(patterns)` in a pattern:
+    *  @param fun       is `extractor.unapply` (or, for backwards compatibility, `extractor.unapplySeq`)
+    *                   possibly with type parameters
+    *  @param implicits Any implicit parameters passed to the unapply after the selector
+    *  @param patterns  The argument patterns in the pattern match.
+    *
+    *  It is typed with same type as first `fun` argument
+    *  Given a match selector `sel` a pattern UnApply(fun, implicits, patterns) is roughly translated as follows
+    *
+    *    val result = fun(sel)(implicits)
+    *    if (result.isDefined) "match patterns against result"
+    */
   case class Unapply(fun: Tree, implicits: List[Tree], patterns: List[Tree]) extends Tree
 
-  /**
-   * Seq(elems)
-   *  @param  tpt  The element type of the sequence.
-   */
+  /** Seq(elems)
+    *  @param  tpt  The element type of the sequence.
+    */
   case class SeqLiteral(elems: List[Tree], elemtpt: TypeTree) extends Tree
 
   /** while (cond) { body } */
@@ -195,20 +190,19 @@ object Trees {
 
   case class Return(expr: Tree, from: Tree) extends Tree
 
-  /**
-   * A tree representing inlined code.
-   *
-   * @param expr
-   *   The inlined tree, minus bindings.
-   * @param caller
-   *   The toplevel class from which the call was inlined.
-   * @param bindings
-   *   Bindings for proxies to be used in the inlined code
-   *
-   * The full inlined code is equivalent to
-   *
-   * { bindings; expr }
-   */
+  /** A tree representing inlined code.
+    *
+    * @param expr
+    *   The inlined tree, minus bindings.
+    * @param caller
+    *   The toplevel class from which the call was inlined.
+    * @param bindings
+    *   Bindings for proxies to be used in the inlined code
+    *
+    * The full inlined code is equivalent to
+    *
+    * { bindings; expr }
+    */
   case class Inlined(expr: Tree, caller: TypeIdent, bindings: List[Tree]) extends Tree
 
   case object EmptyTree extends Tree

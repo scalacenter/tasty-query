@@ -42,7 +42,7 @@ class TastyUnpickler(reader: TastyReader) {
   def this(bytes: Array[Byte]) = this(new TastyReader(bytes))
 
   private val sectionReader = new mutable.HashMap[String, TastyReader]
-  val nameAtRef: NameTable  = new NameTable
+  val nameAtRef: NameTable = new NameTable
 
   private def readName(): TermName = nameAtRef(readNameRef())
 
@@ -57,10 +57,10 @@ class TastyUnpickler(reader: TastyReader) {
   }
 
   private def readNameContents(): TermName = {
-    val tag         = readByte()
-    val length      = readNat()
+    val tag = readByte()
+    val length = readNat()
     val start: Addr = reader.currentAddr
-    val end: Addr   = start + length
+    val end: Addr = start + length
     val result = tag match {
       case NameTags.UTF8 =>
         reader.goto(end)
@@ -69,18 +69,18 @@ class TastyUnpickler(reader: TastyReader) {
         new QualifiedName(tag, readName(), readName().asSimpleName)
       case NameTags.UNIQUE =>
         val separator = readName().toString
-        val num       = readNat()
+        val num = readNat()
         val originals = reader.until(end)(readName())
-        val original  = if (originals.isEmpty) EmptyTermName else originals.head
+        val original = if (originals.isEmpty) EmptyTermName else originals.head
         new UniqueName(separator, original, num)
       case NameTags.DEFAULTGETTER =>
         new DefaultGetterName(readName(), readNat())
       case NameTags.SIGNED | NameTags.TARGETSIGNED =>
-        val original  = readName()
-        val target    = if (tag == NameTags.TARGETSIGNED) readName() else original
-        val result    = readName().toTypeName
+        val original = readName()
+        val target = if (tag == NameTags.TARGETSIGNED) readName() else original
+        val result = readName().toTypeName
         val paramsSig = reader.until(end)(readParamSig())
-        val sig       = Signature(paramsSig, result)
+        val sig = Signature(paramsSig, result)
         new SignedName(original, sig, target)
       case NameTags.SUPERACCESSOR | NameTags.INLINEACCESSOR =>
         new PrefixedName(tag, readName())
@@ -97,7 +97,7 @@ class TastyUnpickler(reader: TastyReader) {
   locally {
     reader.until(readEnd())(nameAtRef.add(readNameContents()))
     while (!isAtEnd) {
-      val secName      = readString()
+      val secName = readString()
       val secEnd: Addr = readEnd()
       sectionReader(secName) = new TastyReader(bytes, currentAddr.index, secEnd.index, currentAddr.index)
       reader.goto(secEnd)
