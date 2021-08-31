@@ -12,14 +12,14 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import java.nio.file.{Files, Paths}
 
 class ReadTreeSuite extends munit.FunSuite {
-  type StructureCheck     = PartialFunction[Tree, Unit]
+  type StructureCheck = PartialFunction[Tree, Unit]
   type TypeStructureCheck = PartialFunction[Type, Unit]
   val ResourceProperty = "test-resources"
 
   def unpickle(filename: String): Tree = {
     val resourcePath = getResourcePath(filename)
-    val bytes        = Files.readAllBytes(Paths.get(resourcePath))
-    val unpickler    = new TastyUnpickler(bytes)
+    val bytes = Files.readAllBytes(Paths.get(resourcePath))
+    val unpickler = new TastyUnpickler(bytes)
     unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using Contexts.empty).head
   }
 

@@ -9,15 +9,15 @@ import scala.io.Codec
 object Names {
 
   /** The term name represented by the empty string */
-  val EmptyTermName: SimpleName    = SimpleName("")
-  val EmptyTypeName: TypeName      = TypeName(EmptyTermName)
-  val RootName: SimpleName         = SimpleName("<root>")
+  val EmptyTermName: SimpleName = SimpleName("")
+  val EmptyTypeName: TypeName = TypeName(EmptyTermName)
+  val RootName: SimpleName = SimpleName("<root>")
   val EmptyPackageName: SimpleName = SimpleName("<empty>")
-  val Wildcard: SimpleName         = SimpleName("_")
+  val Wildcard: SimpleName = SimpleName("_")
 
-  val SuperAccessorPrefix: String  = "super$"
+  val SuperAccessorPrefix: String = "super$"
   val InlineAccessorPrefix: String = "inline$"
-  val BodyRetainerSuffix: String   = "$retainedBody"
+  val BodyRetainerSuffix: String = "$retainedBody"
 
   import scala.jdk.CollectionConverters._
 
