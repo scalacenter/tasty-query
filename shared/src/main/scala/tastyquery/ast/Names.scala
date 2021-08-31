@@ -73,7 +73,7 @@ object Names {
 
     def isEmpty: Boolean
 
-    override def hashCode: Int = System.identityHashCode(this)
+    def toDebugString: String = toString
   }
 
   abstract class TermName extends Name {
@@ -97,8 +97,6 @@ object Names {
     override def asSimpleName: SimpleName = this
 
     override def isEmpty: Boolean = name.length == 0
-
-    override def hashCode: Int = name.hashCode
 
     override def toString: String = name
   }
@@ -172,5 +170,7 @@ object Names {
     override def isEmpty: Boolean = toTermName.isEmpty
 
     override def toString: String = toTermName.toString
+
+    override def toDebugString: String = s"$toString/T"
   }
 }

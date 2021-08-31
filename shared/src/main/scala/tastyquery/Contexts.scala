@@ -20,9 +20,9 @@ object Contexts {
   }
 
   class Context private[Contexts] (
-    val owner: DeclaringSymbol,
+    val owner: Symbol,
     val defn: Definitions,
-    val localSymbols: HashMap[Addr, Symbol] = new mutable.HashMap[Addr, Symbol]()
+    val localSymbols: mutable.HashMap[Addr, Symbol] = new mutable.HashMap[Addr, Symbol]()
   ) {
     var enclosingLambdas: Map[Addr, TypeLambda] = Map.empty
 
@@ -32,46 +32,45 @@ object Contexts {
       copy
     }
 
-    def withOwner(newOwner: DeclaringSymbol): Context =
+    def withOwner(newOwner: Symbol): Context =
       if (newOwner == owner) this
       else new Context(newOwner, defn, localSymbols)
 
     def hasSymbolAt(addr: Addr): Boolean = localSymbols.contains(addr)
 
-    def registerSym(addr: Addr, sym: Symbol): Unit = {
+    private def registerSym(addr: Addr, sym: Symbol, addToDecls: Boolean): Unit = {
       localSymbols(addr) = sym
-      owner.addDecl(sym)
+      if (addToDecls && owner.isInstanceOf[DeclaringSymbol])
+        owner.asInstanceOf[DeclaringSymbol].addDecl(sym)
     }
 
-    def createSymbolIfNew(addr: Addr, name: Name): Symbol = {
+    /** Creates a new symbol at @addr with @name. The symbol is added to the owner's declarations if both
+      * 1) @addToDecls is true.
+      *    Example: true for valdef and defdef, false for parameters and type parameters
+      * 2) the owner is a declaring symbol.
+      *    Example: a method is added to the declarations of its class, but a nested method is not added
+      *    to declarations of its owner method.
+      */
+    def createSymbolIfNew[T <: Symbol](
+      addr: Addr,
+      name: Name,
+      factory: SymbolFactory[T],
+      addToDecls: Boolean = false
+    ): T = {
       if (!hasSymbolAt(addr)) {
-        registerSym(addr, new Symbol(name, owner))
+        registerSym(addr, factory.createSymbol(name, owner), addToDecls)
       }
-      localSymbols(addr)
-    }
-
-    def createClassSymbolIfNew(addr: Addr, name: Name): ClassSymbol = {
-      if (!hasSymbolAt(addr)) {
-        registerSym(addr, new ClassSymbol(name, owner))
-      }
-      localSymbols(addr).asInstanceOf[ClassSymbol]
-    }
-
-    def createMethodSymbolIfNew(addr: Addr, name: TermName): MethodSymbol = {
-      if (!hasSymbolAt(addr)) {
-        registerSym(addr, new MethodSymbol(name, owner))
-      }
-      localSymbols(addr).asInstanceOf[MethodSymbol]
+      localSymbols(addr).asInstanceOf[T]
     }
 
     def createPackageSymbolIfNew(name: TermName): PackageClassSymbol = {
       def create(): PackageClassSymbol = {
         val trueOwner = if (owner == defn.EmptyPackage) defn.RootPackage else owner
-        val sym = new PackageClassSymbol(name, trueOwner)
+        val sym = PackageClassSymbolFactory.createSymbol(name, trueOwner)
         sym
       }
 
-      getPackageSymbol(name) match {
+      defn.RootPackage.findPackageSymbol(name) match {
         case Some(pkg) => pkg
         case None =>
           name match {
@@ -90,8 +89,11 @@ object Contexts {
       }
     }
 
-    def getPackageSymbol(name: TermName): Option[PackageClassSymbol] = defn.RootPackage.findPackageSymbol(name)
+    def getPackageSymbol(name: TermName): PackageClassSymbol = defn.RootPackage.findPackageSymbol(name).get
 
-    def getSymbol(addr: Addr): Symbol = localSymbols(addr)
+    def getSymbol(addr: Addr): Symbol =
+      localSymbols(addr)
+    def getSymbol[T <: Symbol](addr: Addr, symbolFactory: SymbolFactory[T]): T =
+      symbolFactory.castSymbol(localSymbols(addr))
   }
 }

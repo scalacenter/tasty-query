@@ -3,7 +3,7 @@ package tastyquery.reader
 import tastyquery.Contexts.*
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.{ClassSymbol, MethodSymbol, Symbol}
+import tastyquery.ast.Symbols.{ClassSymbol, ClassSymbolFactory, NoSymbol, RegularSymbol, RegularSymbolFactory, Symbol}
 import tastyquery.ast.Trees.*
 import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Types.*
@@ -57,27 +57,23 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         val end = reader.readEnd()
         val name = readName.toTypeName
         val newOwner = if (reader.nextByte == TEMPLATE) {
-          ctx.createClassSymbolIfNew(start, name)
+          ctx.createSymbolIfNew(start, name, ClassSymbolFactory, addToDecls = true)
         } else {
-          ctx.createSymbolIfNew(start, name)
-          ctx.owner
+          ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls = true)
         }
         reader.until(end)(createSymbols(using ctx.withOwner(newOwner)))
-      case VALDEF | PARAM | TYPEPARAM =>
+      case DEFDEF | VALDEF | PARAM | TYPEPARAM =>
         val end = reader.readEnd()
         val name = if (tag == TYPEPARAM) readName.toTypeName else readName
-        val newSymbol = ctx.createSymbolIfNew(start, name)
-        reader.until(end)(createSymbols)
-      case DEFDEF =>
-        val end = reader.readEnd()
-        val name = readName
-        val newSymbol = ctx.createMethodSymbolIfNew(start, name)
+        val newSymbol =
+          ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls = (tag != TYPEPARAM))
         reader.until(end)(createSymbols(using ctx.withOwner(newSymbol)))
       case BIND =>
         val end = reader.readEnd()
         var name: Name = readName
         if (tagFollowShared == TYPEBOUNDS) name = name.toTypeName
-        ctx.createSymbolIfNew(start, name)
+        ctx.createSymbolIfNew(start, name, RegularSymbolFactory)
+        // bind is never an owner
         reader.until(end)(createSymbols)
 
       // ---------- tags with potentially nested symbols --------------------------------
@@ -165,7 +161,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val pid = readPotentiallyShared({
         assert(reader.readByte() == TERMREFpkg, reader.currentAddr)
         // Symbol is already created during symbol creation phase
-        ctx.getPackageSymbol(readName).get
+        ctx.getPackageSymbol(readName)
       })
       PackageDef(pid, reader.until(packageEnd)(readTopLevelStat(using ctx.withOwner(pid))))
     case _ => readStat
@@ -204,12 +200,14 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val end = reader.readEnd()
       val name = readName.toTypeName
       val typedef: Class | TypeMember = if (reader.nextByte == TEMPLATE) {
-        Class(name, readTemplate(using ctx.withOwner(ctx.getSymbol(start).asInstanceOf[ClassSymbol])))
+        val classSymbol = ctx.getSymbol(start, ClassSymbolFactory)
+        Class(name, readTemplate(using ctx.withOwner(classSymbol)), classSymbol)
       } else {
+        val symbol = ctx.getSymbol(start, RegularSymbolFactory)
         if (tagFollowShared == TYPEBOUNDS)
-          TypeMember(name, readTypeBounds)
+          TypeMember(name, readTypeBounds(using ctx.withOwner(symbol)), symbol)
         else
-          TypeMember(name, readTypeTree)
+          TypeMember(name, readTypeTree(using ctx.withOwner(symbol)), symbol)
       }
       // TODO: read modifiers
       skipModifiers(end)
@@ -278,12 +276,13 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
     def readTypeParam: TypeParam = {
       val start = reader.currentAddr
+      val paramSymbol = ctx.getSymbol(start, RegularSymbolFactory)
       reader.readByte()
       val end = reader.readEnd()
       val name = readName.toTypeName
-      val bounds = readTypeParamType
+      val bounds = readTypeParamType(using ctx.withOwner(paramSymbol))
       skipModifiers(end)
-      TypeParam(name, bounds)
+      TypeParam(name, bounds, paramSymbol)
     }
     var acc = new ListBuffer[TypeParam]()
     while (reader.nextByte == TYPEPARAM) {
@@ -377,7 +376,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val name = readName
       val tpt = readTypeTree
-      ValDef(name, tpt, EmptyTree)
+      // no symbol for self, because it's never referred to by symbol
+      ValDef(name, tpt, EmptyTree, NoSymbol)
     }
 
   def readValOrDefDef(using Context): Tree = {
@@ -386,8 +386,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     val end = reader.readEnd()
     val name = readName
     // Only for DefDef, but reading works for empty lists
-    val insideOwner = if (tag == DEFDEF) ctx.getSymbol(start).asInstanceOf[MethodSymbol] else ctx.owner
-    val insideCtx = ctx.withOwner(insideOwner)
+    val symbol = ctx.getSymbol(start, RegularSymbolFactory)
+    val insideCtx = ctx.withOwner(symbol)
     val params = readAllParams(using insideCtx)
     val tpt = readTypeTree(using insideCtx)
     val rhs =
@@ -395,9 +395,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       else readTerm(using insideCtx)
     skipModifiers(end)
     tag match {
-      case VALDEF | PARAM => ValDef(name, tpt, rhs)
+      case VALDEF | PARAM => ValDef(name, tpt, rhs, symbol)
       case DEFDEF =>
-        DefDef(name, params, tpt, rhs)
+        DefDef(name, params, tpt, rhs, symbol)
     }
   }
 
@@ -510,7 +510,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val typ = readType
       val term = readTerm
       skipModifiers(end)
-      Bind(name, term)
+      Bind(name, term, ctx.getSymbol(start, RegularSymbolFactory))
     case ALTERNATIVE =>
       reader.readByte()
       val end = reader.readEnd()
@@ -728,7 +728,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val params = reader.until(end)({
         val bounds = readTypeBounds
         val name = readName.toTypeName
-        TypeParam(name, bounds)
+        // cannot have symbols inside types
+        TypeParam(name, bounds, NoSymbol)
       })
       TypeLambda(params, (tl: TypeLambda) => resultUnpickler.readType(using ctx.withEnclosingLambda(lambdaAddr, tl)))
     case PARAMtype =>
@@ -829,7 +830,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         TypeIdent(typeName)
       } else readTypeTree
       skipModifiers(end)
-      TypeTreeBind(name, body)
+      TypeTreeBind(name, body, ctx.getSymbol(start, RegularSymbolFactory))
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree
     case BYNAMEtpt =>

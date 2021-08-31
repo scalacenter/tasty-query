@@ -3,14 +3,16 @@ package tastyquery.ast
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
 import tastyquery.ast.Types.{Type, TypeBounds}
-import tastyquery.ast.TypeTrees._
-import tastyquery.ast.Symbols.Symbol
+import tastyquery.ast.TypeTrees.*
+import tastyquery.ast.Symbols.{ClassSymbol, NoSymbol, PackageClassSymbol, RegularSymbol, Symbol}
 
 object Trees {
 
   abstract class Tree
 
-  case class PackageDef(pid: Symbol, stats: List[Tree]) extends Tree
+  trait DefTree(val symbol: Symbol)
+
+  case class PackageDef(pid: PackageClassSymbol, stats: List[Tree]) extends Tree with DefTree(pid)
 
   case class ImportSelector(imported: Ident, renamed: Tree = EmptyTree, bound: TypeTree = EmptyTypeTree) extends Tree {
 
@@ -41,15 +43,20 @@ object Trees {
     *  mods type name >: lo <: hi,          if rhs = TypeBoundsTree(lo, hi)      or
     *  mods type name >: lo <: hi = rhs     if rhs = TypeBoundsTree(lo, hi, alias) and opaque in mods
     */
-  abstract class TypeDef extends Tree
+  abstract class TypeDef(name: TypeName, override val symbol: Symbol) extends Tree with DefTree(symbol)
 
-  case class Class(name: TypeName, rhs: Template) extends TypeDef
+  case class Class(name: TypeName, rhs: Template, override val symbol: ClassSymbol) extends TypeDef(name, symbol)
 
   /** A type member has a type tree rhs if the member is defined by the user, or typebounds if it's synthetic */
-  case class TypeMember(name: TypeName, rhs: TypeTree | TypeBounds) extends TypeDef
+  case class TypeMember(name: TypeName, rhs: TypeTree | TypeBounds, override val symbol: RegularSymbol)
+      extends TypeDef(name, symbol)
 
   /** The bounds are a type tree if the method is defined by the user and bounds-only if it's synthetic */
-  case class TypeParam(name: TypeName, bounds: TypeBoundsTree | TypeBounds | TypeLambdaTree) extends TypeDef
+  case class TypeParam(
+    name: TypeName,
+    bounds: TypeBoundsTree | TypeBounds | TypeLambdaTree,
+    override val symbol: RegularSymbol
+  ) extends TypeDef(name, symbol)
 
   /** extends parents { self => body }
     *
@@ -61,12 +68,21 @@ object Trees {
       extends Tree
 
   /** mods val name: tpt = rhs */
-  case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree) extends Tree
+  case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: RegularSymbol)
+      extends Tree
+      with DefTree(symbol)
 
   type ParamsClause = List[ValDef] | List[TypeParam]
 
   /** mods def name[tparams](vparams_1)...(vparams_n): tpt = rhs */
-  case class DefDef(name: TermName, params: List[ParamsClause], tpt: TypeTree, rhs: Tree) extends Tree
+  case class DefDef(
+    name: TermName,
+    params: List[ParamsClause],
+    tpt: TypeTree,
+    rhs: Tree,
+    override val symbol: RegularSymbol
+  ) extends Tree
+      with DefTree(symbol)
 
   /** name */
   case class Ident(name: TermName) extends Tree
@@ -137,7 +153,7 @@ object Trees {
   case class CaseDef(pattern: Tree, guard: Tree, body: Tree) extends Tree
 
   /** pattern in {@link Unapply} */
-  case class Bind(name: Name, body: Tree) extends Tree
+  case class Bind(name: Name, body: Tree, override val symbol: RegularSymbol) extends Tree with DefTree(symbol)
 
   /** tree_1 | ... | tree_n */
   case class Alternative(trees: List[Tree]) extends Tree
@@ -191,5 +207,5 @@ object Trees {
 
   case object EmptyTree extends Tree
 
-  val EmptyValDef: ValDef = ValDef(Names.Wildcard, EmptyTypeTree, EmptyTree)
+  val EmptyValDef: ValDef = ValDef(Names.Wildcard, EmptyTypeTree, EmptyTree, NoSymbol)
 }
