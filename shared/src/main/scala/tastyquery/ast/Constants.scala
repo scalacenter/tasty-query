@@ -129,16 +129,15 @@ object Constants {
 
     def typeValue: Type = value.asInstanceOf[Type]
 
-    /**
-     * Consider two `NaN`s to be identical, despite non-equality
-     * Consider -0d to be distinct from 0d, despite equality
-     *
-     * We use the raw versions (i.e. `floatToRawIntBits` rather than `floatToIntBits`)
-     * to avoid treating different encodings of `NaN` as the same constant.
-     * You probably can't express different `NaN` varieties as compile time
-     * constants in regular Scala code, but it is conceivable that you could
-     * conjure them with a macro.
-     */
+    /** Consider two `NaN`s to be identical, despite non-equality
+      * Consider -0d to be distinct from 0d, despite equality
+      *
+      * We use the raw versions (i.e. `floatToRawIntBits` rather than `floatToIntBits`)
+      * to avoid treating different encodings of `NaN` as the same constant.
+      * You probably can't express different `NaN` varieties as compile time
+      * constants in regular Scala code, but it is conceivable that you could
+      * conjure them with a macro.
+      */
     private def equalHashValue: Any = value match {
       case f: Float  => floatToRawIntBits(f)
       case d: Double => doubleToRawLongBits(d)

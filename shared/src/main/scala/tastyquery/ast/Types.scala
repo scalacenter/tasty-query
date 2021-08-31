@@ -14,10 +14,9 @@ object Types {
 
   // Every type is expected to inherit either TypeProxy or GroundType.
 
-  /**
-   * Type proxies.
-   * Each implementation is expected to redefine the `underlying` method.
-   */
+  /** Type proxies.
+    * Each implementation is expected to redefine the `underlying` method.
+    */
   abstract class TypeProxy extends Type {
 
     /** The type to which this proxy forwards operations. */
@@ -29,10 +28,9 @@ object Types {
 
   // ----- Marker traits ------------------------------------------------
 
-  /**
-   * A marker trait for types that apply only to term symbols or that
-   * represent higher-kinded types.
-   */
+  /** A marker trait for types that apply only to term symbols or that
+    * represent higher-kinded types.
+    */
   trait TermType extends Type
 
   trait MethodicType extends TermType
@@ -43,10 +41,9 @@ object Types {
   /** A marker trait for types that can be types of values or that are higher-kinded */
   trait ValueType extends ValueTypeOrProto
 
-  /**
-   * A marker trait for types that are guaranteed to contain only a
-   * single non-null value (they might contain null in addition).
-   */
+  /** A marker trait for types that are guaranteed to contain only a
+    * single non-null value (they might contain null in addition).
+    */
   trait SingletonType extends TypeProxy with ValueType {
     def isOverloaded: Boolean = false
   }
@@ -71,10 +68,9 @@ object Types {
 
     def isTerm: Boolean = isInstanceOf[TermRef]
 
-    /**
-     * If designator is a name, this name. Otherwise, the original name
-     * of the designator symbol.
-     */
+    /** If designator is a name, this name. Otherwise, the original name
+      * of the designator symbol.
+      */
     final def name: ThisName = {
       if (myName == null) myName = computeName
       myName.asInstanceOf[ThisName]
@@ -86,10 +82,9 @@ object Types {
     }
   }
 
-  /**
-   * A reference to an implicit definition. This can be either a TermRef or a
-   *  Implicits.RenamedImplicitRef.
-   */
+  /** A reference to an implicit definition. This can be either a TermRef or a
+    *  Implicits.RenamedImplicitRef.
+    */
   trait ImplicitRef {
     def implicitName: TermName
     def underlyingRef: TermRef
@@ -153,10 +148,9 @@ object Types {
     override def underlying: Type = ???
   }
 
-  /**
-   * A type application `C[T_1, ..., T_n]`
-   * Typebounds for wildcard application: C[_], C[?]
-   */
+  /** A type application `C[T_1, ..., T_n]`
+    * Typebounds for wildcard application: C[_], C[?]
+    */
   case class AppliedType(tycon: Type, args: List[Type | TypeBounds]) extends TypeProxy with ValueType {
     override def underlying: Type = tycon
   }
@@ -185,12 +179,11 @@ object Types {
     override def underlying: Type = typ
   }
 
-  /**
-   * A refined type parent { refinement }
-   *  @param parent      The type being refined
-   *  @param refinedName The name of the refinement declaration
-   *  @param refinedInfo The info of the refinement declaration
-   */
+  /** A refined type parent { refinement }
+    *  @param parent      The type being refined
+    *  @param refinedName The name of the refinement declaration
+    *  @param refinedInfo The info of the refinement declaration
+    */
   case class RefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds) extends TypeProxy with ValueType {
     override def underlying: Type = parent
   }

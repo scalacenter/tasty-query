@@ -134,12 +134,11 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     }
   }
 
-  /**
-   * Performs the read action as if SHARED tags were transparent:
-   *  - follows the SHARED tags to the term or type that is shared
-   *  - reads the shared term or type with {@code read} action
-   *  - restores the reader to seamlessly continue reading after the SHARED tag we started from
-   */
+  /** Performs the read action as if SHARED tags were transparent:
+    *  - follows the SHARED tags to the term or type that is shared
+    *  - reads the shared term or type with {@code read} action
+    *  - restores the reader to seamlessly continue reading after the SHARED tag we started from
+    */
   def readPotentiallyShared[T](read: => T): T =
     if (isSharedTag(reader.nextByte)) {
       reader.readByte()
