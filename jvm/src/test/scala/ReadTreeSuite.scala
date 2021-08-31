@@ -20,7 +20,7 @@ class ReadTreeSuite extends munit.FunSuite {
     val resourcePath = getResourcePath(filename)
     val bytes        = Files.readAllBytes(Paths.get(resourcePath))
     val unpickler    = new TastyUnpickler(bytes)
-    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle (using Contexts.empty).head
+    unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using Contexts.empty).head
   }
 
   def getResourcePath(name: String): String =

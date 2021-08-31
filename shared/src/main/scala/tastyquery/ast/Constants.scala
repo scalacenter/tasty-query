@@ -31,9 +31,7 @@ object Constants {
     def isNonUnitAnyVal: Boolean = BooleanTag <= tag && tag <= DoubleTag
     def isAnyVal: Boolean        = UnitTag <= tag && tag <= DoubleTag
 
-    /**
-     * We need the equals method to take account of tags as well as values.
-     */
+    /** We need the equals method to take account of tags as well as values. */
     override def equals(other: Any): Boolean = other match {
       case that: Constant =>
         this.tag == that.tag && equalHashValue == that.equalHashValue

@@ -121,7 +121,7 @@ object Names {
       extends DerivedName(underlying) {
     override def tag: Int = NameTags.SIGNED
 
-    override def toString: String = s"$underlying[with sig ${sig} @$target]"
+    override def toString: String = s"$underlying[with sig $sig @$target]"
   }
 
   final case class QualifiedName(override val tag: Int, prefix: TermName, name: SimpleName)

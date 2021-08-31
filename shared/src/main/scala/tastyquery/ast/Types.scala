@@ -95,9 +95,7 @@ object Types {
     def underlyingRef: TermRef
   }
 
-  /**
-   * The singleton type for path prefix#myDesignator.
-   */
+  /** The singleton type for path prefix#myDesignator. */
   case class TermRef(override val prefix: Type, var myDesignator: Designator)
       extends NamedType
       with SingletonType
