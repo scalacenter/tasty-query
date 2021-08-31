@@ -29,7 +29,7 @@ object Symbols {
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
     protected val declarations: mutable.HashMap[Name, Symbol] = mutable.HashMap[Name, Symbol]()
 
-    def addDecl(decl: Symbol): Unit         = declarations(decl.name) = decl
+    def addDecl(decl: Symbol): Unit = declarations(decl.name) = decl
     def getDecl(name: Name): Option[Symbol] = declarations.get(name)
   }
 

@@ -9,15 +9,15 @@ import scala.io.Codec
 object Names {
 
   /** The term name represented by the empty string */
-  val EmptyTermName: SimpleName    = SimpleName("")
-  val EmptyTypeName: TypeName      = TypeName(EmptyTermName)
-  val RootName: SimpleName         = SimpleName("<root>")
+  val EmptyTermName: SimpleName = SimpleName("")
+  val EmptyTypeName: TypeName = TypeName(EmptyTermName)
+  val RootName: SimpleName = SimpleName("<root>")
   val EmptyPackageName: SimpleName = SimpleName("<empty>")
-  val Wildcard: SimpleName         = SimpleName("_")
+  val Wildcard: SimpleName = SimpleName("_")
 
-  val SuperAccessorPrefix: String  = "super$"
+  val SuperAccessorPrefix: String = "super$"
   val InlineAccessorPrefix: String = "inline$"
-  val BodyRetainerSuffix: String   = "$retainedBody"
+  val BodyRetainerSuffix: String = "$retainedBody"
 
   import scala.jdk.CollectionConverters._
 
@@ -25,44 +25,39 @@ object Names {
   private val nameTable: scala.collection.concurrent.Map[SimpleName, SimpleName] =
     new ConcurrentHashMap[SimpleName, SimpleName]().asScala
 
-  /**
-   * Create a type name from the characters in cs[offset..offset+len-1].
-   * Assume they are already encoded.
-   */
+  /** Create a type name from the characters in cs[offset..offset+len-1].
+    * Assume they are already encoded.
+    */
   def typeName(cs: Array[Char], offset: Int, len: Int): TypeName =
     termName(cs, offset, len).toTypeName
 
-  /**
-   * Create a type name from the UTF8 encoded bytes in bs[offset..offset+len-1].
-   * Assume they are already encoded.
-   */
+  /** Create a type name from the UTF8 encoded bytes in bs[offset..offset+len-1].
+    * Assume they are already encoded.
+    */
   def typeName(bs: Array[Byte], offset: Int, len: Int): TypeName =
     termName(bs, offset, len).toTypeName
 
   /** Create a type name from a string */
   def typeName(s: String): TypeName = typeName(s.toCharArray, 0, s.length)
 
-  /**
-   * Create a term name from a string.
-   * See `sliceToTermName` in `Decorators` for a more efficient version
-   * which however requires a Context for its operation.
-   */
+  /** Create a term name from a string.
+    * See `sliceToTermName` in `Decorators` for a more efficient version
+    * which however requires a Context for its operation.
+    */
   def termName(s: String): SimpleName = termName(s.toCharArray, 0, s.length)
 
-  /**
-   * Create a term name from the characters in cs[offset..offset+len-1].
-   * Assume they are already encoded.
-   */
+  /** Create a term name from the characters in cs[offset..offset+len-1].
+    * Assume they are already encoded.
+    */
   def termName(cs: Array[Char], offset: Int, len: Int): SimpleName = {
     val newName = SimpleName(cs.slice(offset, offset + len).mkString)
     val oldName = nameTable.putIfAbsent(newName, newName)
     oldName.getOrElse(newName)
   }
 
-  /**
-   * Create a term name from the UTF8 encoded bytes in bs[offset..offset+len-1].
-   * Assume they are already encoded.
-   */
+  /** Create a term name from the UTF8 encoded bytes in bs[offset..offset+len-1].
+    * Assume they are already encoded.
+    */
   def termName(bs: Array[Byte], offset: Int, len: Int): SimpleName = {
     val chars = Codec.fromUTF8(bs, offset, len)
     termName(chars, 0, chars.length)
@@ -121,7 +116,7 @@ object Names {
       extends DerivedName(underlying) {
     override def tag: Int = NameTags.SIGNED
 
-    override def toString: String = s"$underlying[with sig ${sig} @$target]"
+    override def toString: String = s"$underlying[with sig $sig @$target]"
   }
 
   final case class QualifiedName(override val tag: Int, prefix: TermName, name: SimpleName)

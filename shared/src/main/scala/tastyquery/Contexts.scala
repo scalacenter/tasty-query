@@ -67,7 +67,7 @@ object Contexts {
     def createPackageSymbolIfNew(name: TermName): PackageClassSymbol = {
       def create(): PackageClassSymbol = {
         val trueOwner = if (owner == defn.EmptyPackage) defn.RootPackage else owner
-        val sym       = new PackageClassSymbol(name, trueOwner)
+        val sym = new PackageClassSymbol(name, trueOwner)
         sym
       }
 
