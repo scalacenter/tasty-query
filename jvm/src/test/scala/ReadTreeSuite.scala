@@ -1714,4 +1714,17 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
 
     // TODO: once references are created, check correctness
   }
+
+  test("typerefin") {
+    val tree = unpickle("simple_trees/TypeRefIn")
+
+    val typerefCheck: StructureCheck = {
+      case TypeApply(
+            Select(qualifier, SignedName(SimpleName("withArray"), _, _)),
+            // TODO: check the namespace ("in") once its taken into account
+            TypeWrapper(TypeRef(TermRef(NoPrefix, Symbol(SimpleName("arr"))), TypeName(SimpleName("T")))) :: Nil
+          ) =>
+    }
+    assert(containsSubtree(typerefCheck)(clue(tree)))
+  }
 }
