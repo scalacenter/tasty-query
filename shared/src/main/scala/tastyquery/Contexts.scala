@@ -12,34 +12,66 @@ import scala.collection.mutable.HashMap
 object Contexts {
 
   /** The current context */
-  inline def ctx(using ctx: Context): Context = ctx
+  inline def ctx(using ctx: FileContext): FileContext = ctx
 
-  def empty: Context = {
+  def empty: ContextBase =
+    new ContextBase(new Definitions())
+
+  def empty(filename: String): FileContext = {
     val defn = new Definitions()
-    new Context(defn.RootPackage, defn)
+    new FileContext(defn, defn.RootPackage, filename)
   }
 
-  class Context private[Contexts] (
-    val owner: Symbol,
-    val defn: Definitions,
-    val localSymbols: mutable.HashMap[Addr, Symbol] = new mutable.HashMap[Addr, Symbol]()
+  /** ContextBase is used throughout unpickling an entire project. */
+  class ContextBase private[Contexts] (val defn: Definitions) {
+    def withFile(filename: String): FileContext =
+      new FileContext(defn, defn.RootPackage, filename)
+  }
+
+  /** FileLocalInfo maintains file-local information, used during unpickling:
+    * @param filename -- the .tasty file being unpickled, used for error reporting
+    * @param localSymbols -- map of the symbols, created when unpickling the current file.
+    *                     A symbol can be referred to from anywhere in the file, therefore once the symbol is added
+    *                     to the file info, it is kept in the context and its subcontexts.
+    *  @param enclosingLambdas -- map of the type lambdas which have the current address in scope.
+    *                          A type lambda can only be referred to if it encloses the referring address.
+    *                          A new FileLocalInfo (hence a new FileContext) is created when an enclosing is added
+    *                          to mimic the scoping.
+    */
+  class FileLocalInfo(
+    val filename: String,
+    val localSymbols: mutable.HashMap[Addr, Symbol] = mutable.HashMap.empty,
+    val enclosingLambdas: Map[Addr, TypeLambda] = Map.empty
   ) {
-    var enclosingLambdas: Map[Addr, TypeLambda] = Map.empty
+    def addEnclosingLambda(addr: Addr, tl: TypeLambda): FileLocalInfo =
+      new FileLocalInfo(filename, localSymbols, enclosingLambdas.updated(addr, tl))
+  }
 
-    def withEnclosingLambda(addr: Addr, tl: TypeLambda): Context = {
-      val copy = new Context(owner, defn, localSymbols)
-      copy.enclosingLambdas = enclosingLambdas.updated(addr, tl)
-      copy
-    }
+  /** FileContext is used when unpickling a given .tasty file.
+    * It extends the ContextBase with the information,local to the file, and keeps track of the current owner.
+    */
+  class FileContext private[Contexts] (
+    override val defn: Definitions,
+    val owner: Symbol,
+    private val fileLocalInfo: FileLocalInfo
+  ) extends ContextBase(defn) {
+    def this(defn: Definitions, owner: Symbol, filename: String) = this(defn, owner, new FileLocalInfo(filename))
 
-    def withOwner(newOwner: Symbol): Context =
+    def withEnclosingLambda(addr: Addr, tl: TypeLambda): FileContext =
+      new FileContext(defn, owner, fileLocalInfo.addEnclosingLambda(addr, tl))
+
+    def withOwner(newOwner: Symbol): FileContext =
       if (newOwner == owner) this
-      else new Context(newOwner, defn, localSymbols)
+      else new FileContext(defn, newOwner, fileLocalInfo)
 
-    def hasSymbolAt(addr: Addr): Boolean = localSymbols.contains(addr)
+    def getFile: String = fileLocalInfo.filename
+
+    def getEnclosingLambda(addr: Addr): TypeLambda = fileLocalInfo.enclosingLambdas(addr)
+
+    def hasSymbolAt(addr: Addr): Boolean = fileLocalInfo.localSymbols.contains(addr)
 
     private def registerSym(addr: Addr, sym: Symbol, addToDecls: Boolean): Unit = {
-      localSymbols(addr) = sym
+      fileLocalInfo.localSymbols(addr) = sym
       if (addToDecls && owner.isInstanceOf[DeclaringSymbol])
         owner.asInstanceOf[DeclaringSymbol].addDecl(sym)
     }
@@ -60,7 +92,7 @@ object Contexts {
       if (!hasSymbolAt(addr)) {
         registerSym(addr, factory.createSymbol(name, owner), addToDecls)
       }
-      localSymbols(addr).asInstanceOf[T]
+      fileLocalInfo.localSymbols(addr).asInstanceOf[T]
     }
 
     def createPackageSymbolIfNew(name: TermName): PackageClassSymbol = {
@@ -92,8 +124,8 @@ object Contexts {
     def getPackageSymbol(name: TermName): PackageClassSymbol = defn.RootPackage.findPackageSymbol(name).get
 
     def getSymbol(addr: Addr): Symbol =
-      localSymbols(addr)
+      fileLocalInfo.localSymbols(addr)
     def getSymbol[T <: Symbol](addr: Addr, symbolFactory: SymbolFactory[T]): T =
-      symbolFactory.castSymbol(localSymbols(addr))
+      symbolFactory.castSymbol(fileLocalInfo.localSymbols(addr))
   }
 }

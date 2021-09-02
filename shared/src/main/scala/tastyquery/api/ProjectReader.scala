@@ -13,7 +13,7 @@ class ProjectReader {
   def read(classpath: List[String]): TastyQuery = {
     val unpicklingCtx = Contexts.empty
     classpathToEntries(classpath).map(
-      _.walkTastyFiles(stream => getTreeUnpickler(stream).unpickle(using unpicklingCtx))
+      _.walkTastyFiles((filename, stream) => getTreeUnpickler(stream).unpickle(using unpicklingCtx.withFile(filename)))
     )
     new TastyQuery(unpicklingCtx)
   }
@@ -29,11 +29,13 @@ class ProjectReader {
 }
 
 sealed abstract class ClasspathEntry(val path: String) {
-  def walkTastyFiles(op: InputStream => Unit): Unit
+  def walkTastyFiles(op: (String, InputStream) => Unit): Unit
 }
 
 final case class Jar(override val path: String) extends ClasspathEntry(path) {
-  override def walkTastyFiles(op: InputStream => Unit): Unit = {
+  def getFullPath(filename: String): String = s"$path:$filename"
+
+  override def walkTastyFiles(op: (String, InputStream) => Unit): Unit = {
     val jar = JarFile(path)
     // TODO: a nicer way to force?
     jar
@@ -43,14 +45,14 @@ final case class Jar(override val path: String) extends ClasspathEntry(path) {
       .asScala
       .toList
       .filter(je => je.getName().endsWith(".tasty"))
-      .map(je => op(jar.getInputStream(je)))
+      .map(je => op(getFullPath(je.getName()), jar.getInputStream(je)))
   }
 }
 
 final case class Directory(override val path: String) extends ClasspathEntry(path) {
-  override def walkTastyFiles(op: InputStream => Unit): Unit =
+  override def walkTastyFiles(op: (String, InputStream) => Unit): Unit =
     FileUtils
       .listFiles(new File(path), Array("tasty"), true)
       .asScala
-      .map(f => op(FileUtils.openInputStream(f)))
+      .map(f => op(f.getAbsolutePath(), FileUtils.openInputStream(f)))
 }

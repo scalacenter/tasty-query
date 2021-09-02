@@ -1,5 +1,5 @@
 package tastyquery.api
 
-import tastyquery.Contexts.Context
+import tastyquery.Contexts.ContextBase
 
-class TastyQuery private[api] (ctx: Context) {}
+class TastyQuery private[api] (ctx: ContextBase) {}
