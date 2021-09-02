@@ -50,7 +50,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       case PACKAGE =>
         val end = reader.readEnd()
         val pid = readPotentiallyShared({
-          assert(reader.readByte() == TERMREFpkg, reader.currentAddr)
+          assert(reader.readByte() == TERMREFpkg, posErrorMsg)
           ctx.createPackageSymbolIfNew(readName)
         })
         reader.until(end)(createSymbols(using ctx.withOwner(pid)))
@@ -100,6 +100,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       case _ => skipTree(tag)
     }
   }
+
+  private def posErrorMsg(using FileContext): String = s"at address ${reader.currentAddr} in file ${ctx.getFile}"
+  private def posErrorMsg(atAddr: Addr)(using FileContext): String = s"at address $atAddr in file ${ctx.getFile}"
 
   def forkAt(start: Addr): TreeUnpickler =
     new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef)
@@ -160,7 +163,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val packageEnd = reader.readEnd()
       val pid = readPotentiallyShared({
-        assert(reader.readByte() == TERMREFpkg, reader.currentAddr)
+        assert(reader.readByte() == TERMREFpkg, posErrorMsg)
         // Symbol is already created during symbol creation phase
         ctx.getPackageSymbol(readName)
       })
@@ -174,7 +177,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   def readStat(using FileContext): Tree = reader.nextByte match {
     case IMPORT | EXPORT =>
       def readSelector: ImportSelector = {
-        assert(reader.nextByte == IMPORTED, reader.currentAddr)
+        assert(reader.nextByte == IMPORTED, posErrorMsg)
         reader.readByte()
         val name = Ident(readName)
         // IMPORTED can be followed by RENAMED or BOUNDED
@@ -219,7 +222,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
   /** Reads type bounds for a synthetic typedef */
   def readTypeBounds(using FileContext): TypeBounds = {
-    assert(tagFollowShared == TYPEBOUNDS, reader.currentAddr)
+    assert(tagFollowShared == TYPEBOUNDS, posErrorMsg)
     readPotentiallyShared({
       reader.readByte()
       val end = reader.readEnd()
@@ -239,11 +242,11 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   def readTypeParams(using FileContext): List[TypeParam] = {
     def readTypeParamType(using FileContext): TypeBounds | TypeBoundsTree | TypeLambdaTree = {
       def readTypeBoundsType(using FileContext): TypeBounds = {
-        assert(reader.readByte() == TYPEBOUNDS, reader.currentAddr)
+        assert(reader.readByte() == TYPEBOUNDS, posErrorMsg)
         val end = reader.readEnd()
         val low = readType
         // type bounds for type parameters have to be bounds, not an alias
-        assert(reader.currentAddr != end && !isModifierTag(reader.nextByte), reader.currentAddr)
+        assert(reader.currentAddr != end && !isModifierTag(reader.nextByte), posErrorMsg)
         val high = readType
         // TODO: read variance (a modifier)
         skipModifiers(end)
@@ -251,17 +254,17 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       }
 
       def readTypeBoundsTree(using FileContext): TypeBoundsTree = {
-        assert(reader.readByte() == TYPEBOUNDStpt, reader.currentAddr)
+        assert(reader.readByte() == TYPEBOUNDStpt, posErrorMsg)
         val end = reader.readEnd()
         val low = readTypeTree
         val high = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
         // assert atEnd: no alias for type parameters
-        assert(reader.currentAddr == end, reader.currentAddr)
+        assert(reader.currentAddr == end, posErrorMsg)
         TypeBoundsTree(low, high)
       }
 
       def readLambdaTpt(using FileContext): TypeLambdaTree = {
-        assert(reader.nextByte == LAMBDAtpt, reader.currentAddr)
+        assert(reader.nextByte == LAMBDAtpt, posErrorMsg)
         readTypeTree.asInstanceOf[TypeLambdaTree]
       }
 
@@ -294,7 +297,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
   /** Reads TYPEBOUNDStpt of a typedef */
   def readBoundedTypeTree(using FileContext): BoundedTypeTree = {
-    assert(reader.readByte() == TYPEBOUNDStpt, reader.currentAddr)
+    assert(reader.readByte() == TYPEBOUNDStpt, posErrorMsg)
     val end = reader.readEnd()
     val low = readTypeTree
     val high = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
@@ -303,7 +306,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   }
 
   def readTypeBoundsTree(using FileContext): TypeBoundsTree = {
-    assert(tagFollowShared == TYPEBOUNDStpt, reader.currentAddr)
+    assert(tagFollowShared == TYPEBOUNDStpt, posErrorMsg)
     readPotentiallyShared({
       reader.readByte()
       val end = reader.readEnd()
@@ -521,7 +524,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val end = reader.readEnd()
       val fun = readTerm
       val args = reader.collectWhile(reader.nextByte == IMPLICITarg)({
-        assert(reader.readByte() == IMPLICITarg, reader.currentAddr)
+        assert(reader.readByte() == IMPLICITarg, posErrorMsg)
         readTerm
       })
       // TODO: use pattern type
@@ -586,14 +589,14 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val sym = readSymRef
       // TODO: assign type
-      assert(sym.name.isInstanceOf[TermName], reader.currentAddr)
+      assert(sym.name.isInstanceOf[TermName], posErrorMsg)
       Ident(sym.name.asInstanceOf[TermName])
     // TODO: is it always Ident?
     case TERMREFsymbol =>
       reader.readByte()
       val sym = readSymRef
       val typ = readType
-      assert(sym.name.isInstanceOf[TermName], reader.currentAddr)
+      assert(sym.name.isInstanceOf[TermName], posErrorMsg)
       // TODO: assign type
       Ident(sym.name.asInstanceOf[TermName])
     case SHAREDtype =>
@@ -602,7 +605,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case tag if isConstantTag(tag) =>
       Literal(readConstant)
     case tag =>
-      throw TreeUnpicklerException(s"Unexpected term tag ${astTagToString(tag)} at address ${reader.currentAddr}")
+      throw TreeUnpicklerException(s"Unexpected term tag ${astTagToString(tag)} $posErrorMsg")
   }
 
   /** The next tag, following through SHARED tags */
@@ -628,7 +631,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     }
 
   def readCaseDef[T <: CaseDef | TypeCaseDef](factory: AbstractCaseDefFactory[T])(using FileContext): T = {
-    assert(reader.readByte() == CASEDEF, reader.currentAddr)
+    assert(reader.readByte() == CASEDEF, posErrorMsg)
     val end = reader.readEnd()
     factory match {
       case CaseDefFactory =>
@@ -642,7 +645,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
   def readSymRef(using FileContext): Symbol = {
     val symAddr = reader.readAddr()
-    assert(ctx.hasSymbolAt(symAddr), reader.currentAddr)
+    assert(ctx.hasSymbolAt(symAddr), posErrorMsg)
     ctx.getSymbol(symAddr)
   }
 
@@ -693,9 +696,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case QUALTHIS =>
       reader.readByte()
       if (tagFollowShared != IDENTtpt) {
-        throw TreeUnpicklerException(
-          s"Unexpected tag after QUALTHIS: ${astTagToString(tagFollowShared)} at address ${reader.currentAddr}"
-        )
+        throw TreeUnpicklerException(s"Unexpected tag after QUALTHIS: ${astTagToString(tagFollowShared)} $posErrorMsg")
       }
       // Skip IDENTtpt tag and name
       reader.readByte()
@@ -746,15 +747,13 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val refinementName = readName.toTypeName
       val underlying = readType
       if (tagFollowShared != TYPEBOUNDS) {
-        throw TreeUnpicklerException(
-          s"Only type refinements are supported. Term refinement at address ${reader.currentAddr}"
-        )
+        throw TreeUnpicklerException(s"Only type refinements are supported. Term refinement $posErrorMsg")
       }
       RefinedType(underlying, refinementName, readTypeBounds)
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
     case tag =>
-      throw TreeUnpicklerException(s"Unexpected type tag ${astTagToString(tag)} at address ${reader.currentAddr}")
+      throw TreeUnpicklerException(s"Unexpected type tag ${astTagToString(tag)} $posErrorMsg")
   }
 
   def readTypeTree(using FileContext): TypeTree = reader.nextByte match {
@@ -841,7 +840,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       forkAt(reader.readAddr()).readTypeTree
     case tag if isTypeTreeTag(tag) =>
-      throw TreeUnpicklerException(s"Unexpected type tree tag ${astTagToString(tag)} at address ${reader.currentAddr}")
+      throw TreeUnpicklerException(s"Unexpected type tree tag ${astTagToString(tag)} $posErrorMsg")
     case _ => TypeWrapper(readType)
   }
 
