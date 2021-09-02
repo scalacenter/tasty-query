@@ -654,6 +654,14 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val name = readName.toTypeName
       TypeRef(readType, name)
+    case TYPEREFin =>
+      reader.readByte()
+      reader.readEnd()
+      val name = readName.toTypeName
+      val prefix = readType
+      // TODO: use the namespace
+      val namespace = readType
+      TypeRef(prefix, name)
     case TYPEREFdirect =>
       reader.readByte()
       val sym = readSymRef
