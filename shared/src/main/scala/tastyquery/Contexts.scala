@@ -26,6 +26,34 @@ object Contexts {
   class ContextBase private[Contexts] (val defn: Definitions) {
     def withFile(filename: String): FileContext =
       new FileContext(defn, defn.RootPackage, filename)
+
+    def createPackageSymbolIfNew(name: TermName, owner: Symbol): PackageClassSymbol = {
+      def create(): PackageClassSymbol = {
+        val trueOwner = if (owner == defn.EmptyPackage) defn.RootPackage else owner
+        val sym = PackageClassSymbolFactory.createSymbol(name, trueOwner)
+        sym
+      }
+
+      defn.RootPackage.findPackageSymbol(name) match {
+        case Some(pkg) => pkg
+        case None =>
+          name match {
+            case _: SimpleName => create()
+            case QualifiedName(NameTags.QUALIFIED, prefix, _) =>
+              if (prefix == owner.name) {
+                create()
+              } else {
+                // create intermediate packages
+                val newOwner = createPackageSymbolIfNew(prefix, owner)
+                createPackageSymbolIfNew(name, newOwner)
+              }
+            case _ =>
+              throw IllegalArgumentException(s"Unexpected package name: $name")
+          }
+      }
+    }
+
+    def getPackageSymbol(name: TermName): PackageClassSymbol = defn.RootPackage.findPackageSymbol(name).get
   }
 
   /** FileLocalInfo maintains file-local information, used during unpickling:
@@ -95,33 +123,7 @@ object Contexts {
       fileLocalInfo.localSymbols(addr).asInstanceOf[T]
     }
 
-    def createPackageSymbolIfNew(name: TermName): PackageClassSymbol = {
-      def create(): PackageClassSymbol = {
-        val trueOwner = if (owner == defn.EmptyPackage) defn.RootPackage else owner
-        val sym = PackageClassSymbolFactory.createSymbol(name, trueOwner)
-        sym
-      }
-
-      defn.RootPackage.findPackageSymbol(name) match {
-        case Some(pkg) => pkg
-        case None =>
-          name match {
-            case _: SimpleName => create()
-            case QualifiedName(NameTags.QUALIFIED, prefix, _) =>
-              if (prefix == owner.name) {
-                create()
-              } else {
-                // create intermediate packages
-                val newOwner = createPackageSymbolIfNew(prefix)
-                withOwner(newOwner).createPackageSymbolIfNew(name)
-              }
-            case _ =>
-              throw IllegalArgumentException(s"Unexpected package name: $name")
-          }
-      }
-    }
-
-    def getPackageSymbol(name: TermName): PackageClassSymbol = defn.RootPackage.findPackageSymbol(name).get
+    def createPackageSymbolIfNew(name: TermName): PackageClassSymbol = super.createPackageSymbolIfNew(name, owner)
 
     def getSymbol(addr: Addr): Symbol =
       fileLocalInfo.localSymbols(addr)
