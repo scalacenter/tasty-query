@@ -1,5 +1,5 @@
 import tastyquery.Contexts
-import tastyquery.Contexts.Context
+import tastyquery.Contexts.FileContext
 import tastyquery.ast.Names.{EmptyPackageName, Name, SimpleName, TypeName}
 import tastyquery.ast.Symbols.{DeclaringSymbol, PackageClassSymbol, Symbol}
 
@@ -10,8 +10,8 @@ class SymbolSuite extends BaseUnpicklingSuite {
 
   extension (symbols: Iterable[Name]) def toDebugString: String = s"[${symbols.map(_.toDebugString).mkString(", ")}]"
 
-  def getUnpicklingContext(filename: String): Context = {
-    val ctx = Contexts.empty
+  def getUnpicklingContext(filename: String): FileContext = {
+    val ctx = Contexts.empty(filename)
     unpickle(filename)(using ctx)
     ctx
   }
@@ -29,10 +29,10 @@ class SymbolSuite extends BaseUnpicklingSuite {
       res
   }
 
-  def assertContainsDeclaration(ctx: Context, path: DeclarationPath): Unit =
+  def assertContainsDeclaration(ctx: FileContext, path: DeclarationPath): Unit =
     followPath(ctx.defn.RootPackage, path)
 
-  def getDeclsByPrefix(ctx: Context, prefix: DeclarationPath): Seq[Symbol] = {
+  def getDeclsByPrefix(ctx: FileContext, prefix: DeclarationPath): Seq[Symbol] = {
     def symbolsInSubtree(root: Symbol): Seq[Symbol] =
       if (root.isInstanceOf[DeclaringSymbol]) {
         root +: root.asInstanceOf[DeclaringSymbol].declarations.toSeq.flatMap(symbolsInSubtree(_))
@@ -42,13 +42,13 @@ class SymbolSuite extends BaseUnpicklingSuite {
     symbolsInSubtree(followPath(ctx.defn.RootPackage, prefix))
   }
 
-  def assertForallWithPrefix(ctx: Context, prefix: DeclarationPath, condition: Symbol => Boolean): Unit =
+  def assertForallWithPrefix(ctx: FileContext, prefix: DeclarationPath, condition: Symbol => Boolean): Unit =
     assert(
       getDeclsByPrefix(ctx, prefix).forall(condition),
       s"Condition does not hold for ${getDeclsByPrefix(ctx, prefix).filter(!condition(_))}"
     )
 
-  def assertContainsExactly(ctx: Context, prefix: DeclarationPath, symbolNames: Set[Name]): Unit = {
+  def assertContainsExactly(ctx: FileContext, prefix: DeclarationPath, symbolNames: Set[Name]): Unit = {
     val decls = getDeclsByPrefix(ctx, prefix).map(_.name)
     // each declaration is in the passed set
     assert(
