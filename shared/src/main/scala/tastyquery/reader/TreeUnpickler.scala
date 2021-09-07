@@ -205,13 +205,13 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val name = readName.toTypeName
       val typedef: Class | TypeMember = if (reader.nextByte == TEMPLATE) {
         val classSymbol = ctx.getSymbol(start, ClassSymbolFactory)
-        Class(name, readTemplate(using ctx.withOwner(classSymbol)), classSymbol)
+        createSymbolTree(s => Class(name, readTemplate(using ctx.withOwner(s)), s), classSymbol)
       } else {
         val symbol = ctx.getSymbol(start, RegularSymbolFactory)
         if (tagFollowShared == TYPEBOUNDS)
-          TypeMember(name, readTypeBounds(using ctx.withOwner(symbol)), symbol)
+          createSymbolTree(s => TypeMember(name, readTypeBounds(using ctx.withOwner(s)), s), symbol)
         else
-          TypeMember(name, readTypeTree(using ctx.withOwner(symbol)), symbol)
+          createSymbolTree(s => TypeMember(name, readTypeTree(using ctx.withOwner(s)), s), symbol)
       }
       // TODO: read modifiers
       skipModifiers(end)
@@ -286,7 +286,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val name = readName.toTypeName
       val bounds = readTypeParamType(using ctx.withOwner(paramSymbol))
       skipModifiers(end)
-      TypeParam(name, bounds, paramSymbol)
+      createSymbolTree(symbol => TypeParam(name, bounds, symbol), paramSymbol)
     }
     var acc = new ListBuffer[TypeParam]()
     while (reader.nextByte == TYPEPARAM) {
@@ -399,14 +399,21 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       else readTerm(using insideCtx)
     skipModifiers(end)
     tag match {
-      case VALDEF | PARAM => ValDef(name, tpt, rhs, symbol)
+      case VALDEF | PARAM =>
+        createSymbolTree(s => ValDef(name, tpt, rhs, s), symbol)
       case DEFDEF =>
-        DefDef(name, params, tpt, rhs, symbol)
+        createSymbolTree(s => DefDef(name, params, tpt, rhs, s), symbol)
     }
   }
 
   def readTerms(end: Addr)(using FileContext): List[Tree] =
     reader.until(end)(readTerm)
+
+  def createSymbolTree[S <: Symbol, T <: Tree](createTree: S => T, symbol: S): T = {
+    val tree = createTree(symbol)
+    symbol.withTree(tree)
+    tree
+  }
 
   def readTerm(using FileContext): Tree = reader.nextByte match {
     case IDENT =>
@@ -514,7 +521,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val typ = readType
       val term = readTerm
       skipModifiers(end)
-      Bind(name, term, ctx.getSymbol(start, RegularSymbolFactory))
+      createSymbolTree(bindSymbol => Bind(name, term, bindSymbol), ctx.getSymbol(start, RegularSymbolFactory))
     case ALTERNATIVE =>
       reader.readByte()
       val end = reader.readEnd()
