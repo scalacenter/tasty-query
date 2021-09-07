@@ -23,7 +23,7 @@ object Contexts {
   }
 
   /** BaseContext is used throughout unpickling an entire project. */
-  class BaseContext private[Contexts](val defn: Definitions) {
+  class BaseContext private[Contexts] (val defn: Definitions) {
     def withFile(filename: String): FileContext =
       new FileContext(defn, defn.RootPackage, filename)
 
