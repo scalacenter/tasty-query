@@ -1,14 +1,14 @@
 package tastyquery.api
 
+import org.apache.commons.io.{FileUtils, IOUtils}
 import tastyquery.Contexts
-import tastyquery.reader.{TastyUnpickler, TreeUnpickler}
 import tastyquery.ast.Trees.Tree
+import tastyquery.reader.{TastyUnpickler, TreeUnpickler}
 
-import scala.jdk.CollectionConverters.*
 import java.io.{File, InputStream}
+import java.nio.file.{Files, Paths}
 import java.util.jar.JarFile
-import org.apache.commons.io.IOUtils
-import org.apache.commons.io.FileUtils
+import scala.jdk.CollectionConverters.*
 
 class ProjectReader {
   def read(classpath: List[String]): TastyQuery = {
@@ -25,8 +25,15 @@ class ProjectReader {
   }
 
   private def classpathToEntries(classpath: List[String]): List[ClasspathEntry] =
-    // TODO: check isdir
-    classpath.map(e => if (e.endsWith(".jar")) Jar(e) else Directory(e))
+    classpath.map(e =>
+      if (Files.exists(Paths.get(e))) {
+        if (e.endsWith(".jar")) Jar(e)
+        else if (Files.isDirectory(Paths.get(e))) Directory(e)
+        else InvalidEntry(e)
+      } else {
+        InvalidEntry(e)
+      }
+    )
 }
 
 sealed abstract class ClasspathEntry(val path: String) {
@@ -57,4 +64,8 @@ final case class Directory(override val path: String) extends ClasspathEntry(pat
       .asScala
       .flatMap(f => op(f.getAbsolutePath(), FileUtils.openInputStream(f)))
       .toList
+}
+
+final case class InvalidEntry(override val path: String) extends ClasspathEntry(path) {
+  override def walkTastyFiles(op: (String, InputStream) => List[Tree]): List[Tree] = Nil
 }
