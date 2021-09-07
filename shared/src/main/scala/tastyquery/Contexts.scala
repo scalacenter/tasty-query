@@ -14,16 +14,16 @@ object Contexts {
   /** The current context */
   inline def ctx(using ctx: FileContext): FileContext = ctx
 
-  def empty: ContextBase =
-    new ContextBase(new Definitions())
+  def empty: BaseContext =
+    new BaseContext(new Definitions())
 
   def empty(filename: String): FileContext = {
     val defn = new Definitions()
     new FileContext(defn, defn.RootPackage, filename)
   }
 
-  /** ContextBase is used throughout unpickling an entire project. */
-  class ContextBase private[Contexts] (val defn: Definitions) {
+  /** BaseContext is used throughout unpickling an entire project. */
+  class BaseContext private[Contexts](val defn: Definitions) {
     def withFile(filename: String): FileContext =
       new FileContext(defn, defn.RootPackage, filename)
 
@@ -76,13 +76,13 @@ object Contexts {
   }
 
   /** FileContext is used when unpickling a given .tasty file.
-    * It extends the ContextBase with the information,local to the file, and keeps track of the current owner.
+    * It extends the BaseContext with the information,local to the file, and keeps track of the current owner.
     */
   class FileContext private[Contexts] (
     override val defn: Definitions,
     val owner: Symbol,
     private val fileLocalInfo: FileLocalInfo
-  ) extends ContextBase(defn) {
+  ) extends BaseContext(defn) {
     def this(defn: Definitions, owner: Symbol, filename: String) = this(defn, owner, new FileLocalInfo(filename))
 
     def withEnclosingLambda(addr: Addr, tl: TypeLambda): FileContext =
