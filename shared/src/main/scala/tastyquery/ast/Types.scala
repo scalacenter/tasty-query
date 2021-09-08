@@ -3,7 +3,7 @@ package tastyquery.ast
 import tastyquery.Contexts.BaseContext
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
-import tastyquery.ast.Symbols.Symbol
+import tastyquery.ast.Symbols._
 import tastyquery.ast.Trees.{Tree, TypeParam}
 
 object Types {
@@ -49,9 +49,13 @@ object Types {
     def isOverloaded: Boolean = false
   }
 
+  trait Symbolic {
+    def resolveToSymbol(using BaseContext): Symbol
+  }
+
   // ----- Type Proxies -------------------------------------------------
 
-  abstract class NamedType extends TypeProxy with ValueType {
+  abstract class NamedType extends TypeProxy with ValueType with Symbolic {
     self =>
 
     type ThisType >: this.type <: NamedType
@@ -80,6 +84,26 @@ object Types {
     private def computeName: Name = designator match {
       case name: Name  => name
       case sym: Symbol => sym.name
+    }
+
+    // overridden in package references
+    override def resolveToSymbol(using BaseContext): Symbol = {
+      if (!designator.isInstanceOf[Symbol]) {
+        val name = designator.asInstanceOf[Name]
+        if (prefix == NoPrefix) {
+          // TODO: explanation
+          throw new SymbolLookupException(name)
+        }
+        val prefixSym = prefix.asInstanceOf[Symbolic] match {
+          case t: TermRef => t.underlying.asInstanceOf[Symbolic].resolveToSymbol
+          case other      => other.resolveToSymbol
+        }
+        designator = {
+          val symOption = prefixSym.asInstanceOf[DeclaringSymbol].getDecl(name)
+          symOption.getOrElse(throw new SymbolLookupException(name))
+        }
+      }
+      designator.asInstanceOf[Symbol]
     }
   }
 
@@ -111,11 +135,17 @@ object Types {
     def implicitName: TermName = name
 
     def underlyingRef: TermRef = this
-
-    def resolveToSymbol: Symbol = ???
   }
 
-  class PackageRef(val packageName: Name) extends TermRef(NoPrefix, packageName) {
+  class PackageRef(val packageName: TermName) extends TermRef(NoPrefix, packageName) {
+    override def resolveToSymbol(using ctx: BaseContext): PackageClassSymbol = {
+      val symOption = ctx.defn.RootPackage.findPackageSymbol(packageName)
+      if (symOption.isEmpty) {
+        throw new SymbolLookupException(packageName)
+      } else
+        symOption.get
+    }
+
     override def toString: String = s"PackageRef($packageName)"
   }
 
@@ -137,11 +167,16 @@ object Types {
 
   case object NoPrefix extends Type
 
-  // TODO: store the package type symbol
-  class PackageTypeRef(packageName: Name) extends TypeRef(NoPrefix, packageName)
+  class PackageTypeRef(packageName: TermName) extends TypeRef(NoPrefix, packageName) {
+    private val packageRef = PackageRef(packageName)
 
-  case class ThisType(tref: TypeRef) extends TypeProxy with SingletonType {
+    override def resolveToSymbol(using BaseContext): Symbol = packageRef.resolveToSymbol
+  }
+
+  case class ThisType(tref: TypeRef) extends TypeProxy with SingletonType with Symbolic {
     override def underlying(using BaseContext): Type = ???
+
+    override def resolveToSymbol(using BaseContext): Symbol = tref.resolveToSymbol
   }
 
   /** A constant type with single `value`. */

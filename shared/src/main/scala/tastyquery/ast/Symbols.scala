@@ -6,6 +6,9 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Trees.{Tree, EmptyTree}
 
 object Symbols {
+  class SymbolLookupException(name: Name)
+      extends RuntimeException(s"Could not find symbol for name ${name.toDebugString}")
+
   val NoSymbol = new RegularSymbol(Names.EmptyTermName, null)
 
   abstract class Symbol private[Symbols] (val name: Name, val owner: Symbol) {
