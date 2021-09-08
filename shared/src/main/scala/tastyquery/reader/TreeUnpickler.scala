@@ -776,8 +776,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val typeName = readName.toTypeName
       val typ = readType
-      // TODO: assign type
-      TypeIdent(typeName)
+      TypeIdent(typeName).withType(typ)
     case SINGLETONtpt =>
       reader.readByte()
       SingletonTypeTree(readTerm)

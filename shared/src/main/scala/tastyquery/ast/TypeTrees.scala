@@ -3,16 +3,30 @@ package tastyquery.ast
 import tastyquery.ast.Names.{EmptyTermName, EmptyTypeName, TypeName}
 import tastyquery.ast.Symbols.RegularSymbol
 import tastyquery.ast.Trees.{DefTree, Tree, TypeParam}
-import tastyquery.ast.Types.{Type, TypeBounds}
+import tastyquery.ast.Types.{NoType, Type, TypeBounds}
 
 object TypeTrees {
-  abstract class TypeTree
+  abstract class TypeTree {
+    protected var tpe: Type = NoType
+
+    protected def calculateType(): Type = throw UnsupportedOperationException(s"Can't convert $this to type")
+    final def toType: Type = {
+      if (tpe == NoType) tpe = calculateType()
+      tpe
+    }
+    final def withType(typ: Type): this.type = {
+      tpe = typ
+      this
+    }
+  }
 
   case class TypeIdent(name: TypeName) extends TypeTree
 
   object EmptyTypeIdent extends TypeIdent(EmptyTypeName)
 
-  case class TypeWrapper(tp: Type) extends TypeTree
+  case class TypeWrapper(tp: Type) extends TypeTree {
+    override protected def calculateType(): Type = tp
+  }
 
   /** ref.type */
   case class SingletonTypeTree(ref: Tree) extends TypeTree

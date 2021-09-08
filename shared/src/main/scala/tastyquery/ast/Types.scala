@@ -237,4 +237,6 @@ object Types {
   case class OrType(first: Type, second: Type) extends GroundType with ValueType
 
   case class AndType(first: Type, second: Type) extends GroundType with ValueType
+
+  case object NoType extends GroundType
 }
