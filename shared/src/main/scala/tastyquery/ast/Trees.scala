@@ -2,13 +2,20 @@ package tastyquery.ast
 
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
-import tastyquery.ast.Types.{Type, TypeBounds}
+import tastyquery.ast.Types.{NoType, Type, TypeBounds}
 import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Symbols.{ClassSymbol, NoSymbol, PackageClassSymbol, RegularSymbol, Symbol}
 
 object Trees {
 
-  abstract class Tree
+  abstract class Tree {
+    protected var myType: Type = NoType
+
+    protected def calculateType(): Type = throw UnsupportedOperationException(s"Can't calculate type of $this")
+    final def tpe: Type =
+      if (myType == NoType) calculateType()
+      myType
+  }
 
   trait DefTree(val symbol: Symbol)
 
@@ -70,7 +77,9 @@ object Trees {
   /** mods val name: tpt = rhs */
   case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: RegularSymbol)
       extends Tree
-      with DefTree(symbol)
+      with DefTree(symbol) {
+    override protected def calculateType(): Type = tpt.toType
+  }
 
   type ParamsClause = List[ValDef] | List[TypeParam]
 
