@@ -128,7 +128,10 @@ object Types {
 
     override protected def designator_=(d: Designator): Unit = myDesignator = d
 
-    override def underlying(using ctx: BaseContext): Type = ???
+    override def underlying(using ctx: BaseContext): Type = {
+      val termSymbol = resolveToSymbol
+      termSymbol.tree.tpe
+    }
 
     override def isOverloaded: Boolean = ???
 
