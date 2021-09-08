@@ -1,5 +1,6 @@
 package tastyquery.ast
 
+import tastyquery.Contexts.BaseContext
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
 import tastyquery.ast.Symbols.Symbol
@@ -20,7 +21,7 @@ object Types {
   abstract class TypeProxy extends Type {
 
     /** The type to which this proxy forwards operations. */
-    def underlying: Type
+    def underlying(using BaseContext): Type
   }
 
   /** Non-proxy types */
@@ -103,7 +104,7 @@ object Types {
 
     override protected def designator_=(d: Designator): Unit = myDesignator = d
 
-    override def underlying: Type = ???
+    override def underlying(using ctx: BaseContext): Type = ???
 
     override def isOverloaded: Boolean = ???
 
@@ -131,7 +132,7 @@ object Types {
 
     override protected def designator_=(d: Designator): Unit = myDesignator = d
 
-    override def underlying: Type = ???
+    override def underlying(using BaseContext): Type = ???
   }
 
   case object NoPrefix extends Type
@@ -140,43 +141,43 @@ object Types {
   class PackageTypeRef(packageName: Name) extends TypeRef(NoPrefix, packageName)
 
   case class ThisType(tref: TypeRef) extends TypeProxy with SingletonType {
-    override def underlying: Type = ???
+    override def underlying(using BaseContext): Type = ???
   }
 
   /** A constant type with single `value`. */
   case class ConstantType(value: Constant) extends TypeProxy with SingletonType {
-    override def underlying: Type = ???
+    override def underlying(using BaseContext): Type = ???
   }
 
   /** A type application `C[T_1, ..., T_n]`
     * Typebounds for wildcard application: C[_], C[?]
     */
   case class AppliedType(tycon: Type, args: List[Type | TypeBounds]) extends TypeProxy with ValueType {
-    override def underlying: Type = tycon
+    override def underlying(using BaseContext): Type = tycon
   }
 
   /** A by-name parameter type of the form `=> T`, or the type of a method with no parameter list. */
   case class ExprType(resType: Type) extends TypeProxy with MethodicType {
-    override def underlying: Type = resType
+    override def underlying(using BaseContext): Type = resType
   }
 
   case class TypeLambda(params: List[TypeParam], resultTypeCtor: TypeLambda => Type) extends TypeProxy with TermType {
     val resultType = resultTypeCtor(this)
 
-    override def underlying: Type = ???
+    override def underlying(using BaseContext): Type = ???
 
     override def toString: String = s"TypeLambda($params, $resultType)"
   }
 
   case class TypeParamRef(binder: TypeLambda, num: Int) extends TypeProxy with ValueType {
-    override def underlying: Type = ???
+    override def underlying(using BaseContext): Type = ???
 
     override def toString: String = binder.params(num).name.toString
   }
 
   /** typ @ annot */
   case class AnnotatedType(typ: Type, annotation: Tree) extends TypeProxy with ValueType {
-    override def underlying: Type = typ
+    override def underlying(using BaseContext): Type = typ
   }
 
   /** A refined type parent { refinement }
@@ -185,7 +186,7 @@ object Types {
     *  @param refinedInfo The info of the refinement declaration
     */
   case class RefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds) extends TypeProxy with ValueType {
-    override def underlying: Type = parent
+    override def underlying(using BaseContext): Type = parent
   }
 
   trait TypeBounds(low: Type, high: Type)
@@ -193,7 +194,7 @@ object Types {
   case class RealTypeBounds(low: Type, high: Type) extends TypeBounds(low, high)
 
   case class TypeAlias(alias: Type) extends TypeProxy with TypeBounds(alias, alias) {
-    override def underlying: Type = alias
+    override def underlying(using BaseContext): Type = alias
   }
 
   // ----- Ground Types -------------------------------------------------
