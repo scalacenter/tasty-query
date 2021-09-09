@@ -6,10 +6,16 @@ import tastyquery.ast.Trees.{DefTree, Tree, TypeParam}
 import tastyquery.ast.Types.{NoType, Type, TypeBounds}
 
 object TypeTrees {
+  class TypeTreeToTypeError(val typeTree: TypeTree) extends RuntimeException(s"Could not convert $typeTree to type")
+
+  object TypeTreeToTypeError {
+    def unapply(e: TypeTreeToTypeError): Option[TypeTree] = Some(e.typeTree)
+  }
+
   abstract class TypeTree {
     protected var tpe: Type = NoType
 
-    protected def calculateType(): Type = throw UnsupportedOperationException(s"Can't convert $this to type")
+    protected def calculateType(): Type = throw new TypeTreeToTypeError(this)
     final def toType: Type = {
       if (tpe == NoType) tpe = calculateType()
       tpe

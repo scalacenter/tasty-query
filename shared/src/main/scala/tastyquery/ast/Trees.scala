@@ -7,11 +7,16 @@ import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Symbols.{ClassSymbol, NoSymbol, PackageClassSymbol, RegularSymbol, Symbol}
 
 object Trees {
+  class TypeComputationError(val tree: Tree) extends RuntimeException(s"Could not compute type of $tree")
+
+  object TypeComputationError {
+    def unapply(e: TypeComputationError): Option[Tree] = Some(e.tree)
+  }
 
   abstract class Tree {
     protected var myType: Type = NoType
 
-    protected def calculateType(): Type = throw UnsupportedOperationException(s"Can't calculate type of $this")
+    protected def calculateType(): Type = throw new TypeComputationError(this)
     final def tpe: Type = {
       if (myType == NoType) myType = calculateType()
       myType
