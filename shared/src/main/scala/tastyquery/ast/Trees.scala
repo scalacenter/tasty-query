@@ -12,9 +12,10 @@ object Trees {
     protected var myType: Type = NoType
 
     protected def calculateType(): Type = throw UnsupportedOperationException(s"Can't calculate type of $this")
-    final def tpe: Type =
-      if (myType == NoType) calculateType()
+    final def tpe: Type = {
+      if (myType == NoType) myType = calculateType()
       myType
+    }
   }
 
   trait DefTree(val symbol: Symbol)
