@@ -3,11 +3,20 @@ package tastyquery.ast
 import scala.collection.mutable
 import tastyquery.ast.Names.*
 import dotty.tools.tasty.TastyFormat.NameTags
-import tastyquery.ast.Trees.{Tree, EmptyTree}
+import tastyquery.ast.Trees.{EmptyTree, Tree}
 
 object Symbols {
-  class SymbolLookupException(name: Name)
-      extends RuntimeException(s"Could not find symbol for name ${name.toDebugString}")
+  class SymbolLookupException(val name: Name, explanation: String = "")
+      extends RuntimeException(
+        SymbolLookupException.addExplanation(s"Could not find symbol for name ${name.toDebugString}", explanation)
+      )
+
+  object SymbolLookupException {
+    def unapply(e: SymbolLookupException): Option[Name] = Some(e.name)
+
+    def addExplanation(msg: String, explanation: String): String =
+      if (explanation.isEmpty) msg else s"$msg: $explanation"
+  }
 
   val NoSymbol = new RegularSymbol(Names.EmptyTermName, null)
 

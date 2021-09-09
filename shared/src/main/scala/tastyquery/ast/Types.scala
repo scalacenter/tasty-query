@@ -91,12 +91,20 @@ object Types {
       if (!designator.isInstanceOf[Symbol]) {
         val name = designator.asInstanceOf[Name]
         if (prefix == NoPrefix) {
-          // TODO: explanation
-          throw new SymbolLookupException(name)
+          throw new SymbolLookupException(name, "reference by name to a local symbol")
         }
         val prefixSym = prefix.asInstanceOf[Symbolic] match {
-          case t: TermRef => t.underlying.asInstanceOf[Symbolic].resolveToSymbol
-          case other      => other.resolveToSymbol
+          case t: TermRef =>
+            val underlyingType = t.underlying
+            if (underlyingType == NoType)
+              throw new ReferenceResolutionError(t, s"the term does not have a type")
+            if (!underlyingType.isInstanceOf[Symbolic])
+              throw new ReferenceResolutionError(
+                t,
+                s"only references to terms, whose type is a combination of typeref, termref and thistype, are supported. Got type $underlyingType"
+              )
+            underlyingType.asInstanceOf[Symbolic].resolveToSymbol
+          case other => other.resolveToSymbol
         }
         designator = {
           val symOption = prefixSym.asInstanceOf[DeclaringSymbol].getDecl(name)
@@ -115,6 +123,18 @@ object Types {
     def underlyingRef: TermRef
   }
 
+  class ReferenceResolutionError(val ref: TermRef, explanation: String = "")
+      extends RuntimeException(
+        ReferenceResolutionError.addExplanation(s"Could not compute type of the term, referenced by $ref", explanation)
+      )
+
+  object ReferenceResolutionError {
+    def unapply(e: ReferenceResolutionError): Option[TermRef] = Some(e.ref)
+
+    def addExplanation(msg: String, explanation: String): String =
+      if (explanation.isEmpty) msg else s"$msg: $explanation"
+  }
+
   /** The singleton type for path prefix#myDesignator. */
   case class TermRef(override val prefix: Type, var myDesignator: Designator)
       extends NamedType
@@ -130,7 +150,11 @@ object Types {
 
     override def underlying(using ctx: BaseContext): Type = {
       val termSymbol = resolveToSymbol
-      termSymbol.tree.tpe
+      try {
+        termSymbol.tree.tpe
+      } catch {
+        case e => throw new ReferenceResolutionError(this, e.getMessage)
+      }
     }
 
     override def isOverloaded: Boolean = ???
