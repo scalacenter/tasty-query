@@ -1,10 +1,11 @@
 package tastyquery.ast
 
+import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.Contexts.BaseContext
 import tastyquery.ast.Constants.Constant
-import tastyquery.ast.Names.{Name, TermName, TypeName}
-import tastyquery.ast.Symbols._
-import tastyquery.ast.Trees.{Tree, TypeParam}
+import tastyquery.ast.Names.{Name, QualifiedName, SimpleName, TermName, TypeName}
+import tastyquery.ast.Symbols.*
+import tastyquery.ast.Trees.{EmptyTree, Tree, TypeParam}
 
 object Types {
   type Designator = Symbol | Name
@@ -51,6 +52,8 @@ object Types {
 
   trait Symbolic {
     def resolveToSymbol(using BaseContext): Symbol
+
+    private[Types] def isStandard: Boolean
   }
 
   // ----- Type Proxies -------------------------------------------------
@@ -86,6 +89,34 @@ object Types {
       case sym: Symbol => sym.name
     }
 
+    /** This is a temprorary hack to create symbols for standard types and objects, because Java classes and
+      * Scala 2 standard library don't have .tasty files.
+      */
+    // overridden in package references
+    private[Types] def createStandardSymbol(name: Name)(using ctx: BaseContext): Symbol = {
+      val prefixSym = prefix.asInstanceOf[Symbolic] match {
+        case t: TermRef =>
+          val refType = t.underlying
+          if (!refType.isInstanceOf[Symbolic])
+            throw new ReferenceResolutionError(
+              t,
+              s"only references to terms, whose type is a combination of typeref, termref and thistype, are supported. Got type $refType"
+            )
+          refType.asInstanceOf[Symbolic].resolveToSymbol
+        case other => other.resolveToSymbol
+      }
+      val newSymbol = name match {
+        case tn: TypeName   => ClassSymbolFactory.createSymbol(name, prefixSym)
+        case sn: SimpleName => RegularSymbolFactory.createSymbol(name, prefixSym)
+        case _              => throw new SymbolLookupException(name, "unexpected name format")
+      }
+      prefixSym.asInstanceOf[DeclaringSymbol].addDecl(newSymbol)
+
+      newSymbol
+    }
+
+    override def isStandard: Boolean = prefix.asInstanceOf[Symbolic].isStandard
+
     // overridden in package references
     override def resolveToSymbol(using BaseContext): Symbol = {
       if (!designator.isInstanceOf[Symbol]) {
@@ -108,7 +139,7 @@ object Types {
         }
         designator = {
           val symOption = prefixSym.asInstanceOf[DeclaringSymbol].getDecl(name)
-          symOption.getOrElse(throw new SymbolLookupException(name))
+          symOption.getOrElse(if (isStandard) createStandardSymbol(name) else throw new SymbolLookupException(name))
         }
       }
       designator.asInstanceOf[Symbol]
@@ -165,12 +196,30 @@ object Types {
   }
 
   class PackageRef(val packageName: TermName) extends TermRef(NoPrefix, packageName) {
+    var packageSymbol: PackageClassSymbol = null
+
+    override def isStandard: Boolean = {
+      def isStandard(name: TermName): Boolean =
+        name match {
+          case QualifiedName(NameTags.QUALIFIED, prefix, _) => isStandard(prefix)
+          case SimpleName(name)                             => name == "java" || name == "scala"
+          case _ => throw IllegalArgumentException(s"Unexpected package name: $packageName")
+        }
+      isStandard(packageName)
+    }
+
+    override def createStandardSymbol(name: Name)(using ctx: BaseContext): Symbol =
+      ctx.createPackageSymbolIfNew(name.asInstanceOf[TermName], ctx.defn.RootPackage)
+
     override def resolveToSymbol(using ctx: BaseContext): PackageClassSymbol = {
-      val symOption = ctx.defn.RootPackage.findPackageSymbol(packageName)
-      if (symOption.isEmpty) {
-        throw new SymbolLookupException(packageName)
-      } else
-        symOption.get
+      if (packageSymbol == null) {
+        val symOption = ctx.defn.RootPackage.findPackageSymbol(packageName)
+        packageSymbol = symOption.getOrElse(
+          if (isStandard) ctx.createPackageSymbolIfNew(packageName, ctx.defn.RootPackage)
+          else throw new SymbolLookupException(packageName)
+        )
+      }
+      packageSymbol
     }
 
     override def toString: String = s"PackageRef($packageName)"
@@ -197,6 +246,11 @@ object Types {
   class PackageTypeRef(packageName: TermName) extends TypeRef(NoPrefix, packageName) {
     private val packageRef = PackageRef(packageName)
 
+    override def isStandard: Boolean = packageRef.isStandard
+
+    override private[Types] def createStandardSymbol(name: Name)(using BaseContext) =
+      packageRef.createStandardSymbol(name)
+
     override def resolveToSymbol(using BaseContext): Symbol = packageRef.resolveToSymbol
   }
 
@@ -204,6 +258,8 @@ object Types {
     override def underlying(using BaseContext): Type = ???
 
     override def resolveToSymbol(using BaseContext): Symbol = tref.resolveToSymbol
+
+    override private[Types] def isStandard = tref.isStandard
   }
 
   /** A constant type with single `value`. */
