@@ -277,7 +277,4 @@ object Trees {
   case object EmptyTree extends Tree
 
   val EmptyValDef: ValDef = ValDef(Names.Wildcard, EmptyTypeTree, EmptyTree, NoSymbol)
-
-  /* ---------------------------------- Helper methods -------------------------------------------------------- */
-
 }
