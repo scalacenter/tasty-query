@@ -195,8 +195,20 @@ object Types {
     def underlyingRef: TermRef = this
   }
 
-  class PackageRef(val packageName: TermName) extends TermRef(NoPrefix, packageName) {
+  class PackageRef(val packageName: TermName) extends NamedType with SingletonType {
     var packageSymbol: PackageClassSymbol = null
+
+    override def designator: Designator =
+      if (packageSymbol == null) packageName else packageSymbol
+
+    override protected def designator_=(d: Designator): Unit = throw UnsupportedOperationException(
+      s"Can't assign designator of a package"
+    )
+
+    override def underlying(using BaseContext): Type = ???
+
+    // TODO: root package?
+    override val prefix: Type = NoType
 
     override def isStandard: Boolean = {
       def isStandard(name: TermName): Boolean =
