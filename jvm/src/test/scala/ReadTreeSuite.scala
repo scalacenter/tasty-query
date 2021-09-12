@@ -14,32 +14,8 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
   type StructureCheck = PartialFunction[Tree, Unit]
   type TypeStructureCheck = PartialFunction[Type, Unit]
 
-  def containsSubtree(p: StructureCheck)(t: Tree): Boolean = {
-    def rec(t: Tree): Boolean = containsSubtree(p)(t)
-    p.isDefinedAt(t) || (t match {
-      case PackageDef(_, stats) => stats.exists(rec)
-      case Class(_, rhs, _)     => rec(rhs)
-      case Template(constr, parents, self, body) =>
-        rec(constr) || rec(self) || parents.collect { case p: Tree => p }.exists(rec) || body.exists(rec)
-      case ValDef(_, tpt, rhs, _) => rec(rhs)
-      case DefDef(_, params, tpt, rhs, _) =>
-        params.flatten.exists(rec) || rec(rhs)
-      case Select(qualifier, _)         => rec(qualifier)
-      case Apply(fun, args)             => rec(fun) || args.exists(rec)
-      case Block(stats, expr)           => stats.exists(rec) || rec(expr)
-      case If(cond, thenPart, elsePart) => rec(cond) || rec(thenPart) || rec(elsePart)
-      case Match(selector, cases)       => rec(selector) || cases.exists(rec)
-      case TypeApply(fun, _)            => rec(fun)
-
-      // Trees, inside which the existing tests do not descend
-      case _: New | _: Alternative | _: CaseDef | _: While | _: Assign | _: Throw | _: Typed | _: SeqLiteral | _: This |
-          _: Lambda | _: NamedArg | _: Super | _: TypeMember | _: TypeParam | _: Inlined =>
-        false
-
-      // Nowhere to walk
-      case _: ImportSelector | _: Import | _: Export | Ident(_) | Literal(_) | EmptyTree => false
-    })
-  }
+  def containsSubtree(p: StructureCheck)(t: Tree): Boolean =
+    t.walkTree(p.isDefinedAt)(_ || _, false)
 
   val isJavaLangObject: StructureCheck = {
     case Apply(

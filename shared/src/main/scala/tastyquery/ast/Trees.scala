@@ -21,6 +21,75 @@ object Trees {
       if (myType == NoType) myType = calculateType()
       myType
     }
+
+    protected def subtrees: List[Tree] = this match {
+      case PackageDef(pid, stats)                   => stats
+      case ImportSelector(imported, renamed, bound) => imported :: renamed :: Nil
+      case Import(expr, selectors)                  => expr :: selectors
+      case Export(expr, selectors)                  => expr :: selectors
+      case Class(name, rhs, symbol)                 => rhs :: Nil
+      case Template(constr, parents, self, body) =>
+        (constr :: parents.collect { case p if p.isInstanceOf[Tree] => p.asInstanceOf[Tree] }) ++ (self :: body)
+      case ValDef(name, tpt, rhs, symbol)         => rhs :: Nil
+      case DefDef(name, params, tpt, rhs, symbol) => params.flatten :+ rhs
+      case Select(qualifier, name)                => qualifier :: Nil
+      case Super(qual, mix)                       => qual :: Nil
+      case Apply(fun, args)                       => fun :: args
+      case TypeApply(fun, args)                   => fun :: Nil
+      case Typed(expr, tpt)                       => expr :: Nil
+      case Assign(lhs, rhs)                       => lhs :: rhs :: Nil
+      case NamedArg(name, arg)                    => arg :: Nil
+      case Block(stats, expr)                     => stats :+ expr
+      case If(cond, thenPart, elsePart)           => cond :: thenPart :: elsePart :: Nil
+      case Lambda(meth, tpt)                      => meth :: Nil
+      case Match(selector, cases)                 => selector :: cases
+      case CaseDef(pattern, guard, body)          => pattern :: guard :: body :: Nil
+      case Bind(name, body, symbol)               => body :: Nil
+      case Alternative(trees)                     => trees
+      case Unapply(fun, implicits, patterns)      => fun :: implicits ++ patterns
+      case SeqLiteral(elems, elemtpt)             => elems
+      case While(cond, body)                      => cond :: body :: Nil
+      case Throw(expr)                            => expr :: Nil
+      case Try(expr, cases, finalizer)            => (expr :: cases) :+ finalizer
+      case Return(expr, from)                     => expr :: from :: Nil
+      case Inlined(expr, caller, bindings)        => expr :: bindings
+
+      case _: TypeMember | _: TypeParam | _: Ident | _: ReferencedPackage | _: This | _: New | _: Literal | EmptyTree =>
+        Nil
+    }
+
+    protected def typeTrees: List[TypeTree] = this match {
+      case ImportSelector(imported, renamed, bound) => bound :: Nil
+      case TypeMember(_, rhs, _) =>
+        if (rhs.isInstanceOf[TypeTree]) rhs.asInstanceOf[TypeTree] :: Nil else Nil
+      case Template(constr, parents, self, body) =>
+        parents.collect { case p if p.isInstanceOf[TypeTree] => p.asInstanceOf[TypeTree] }
+      case ValDef(name, tpt, rhs, symbol)         => tpt :: Nil
+      case DefDef(name, params, tpt, rhs, symbol) => tpt :: Nil
+      case TypeApply(fun, args)                   => args
+      case New(tpt)                               => tpt :: Nil
+      case Typed(expr, tpt)                       => tpt :: Nil
+      case Lambda(meth, tpt)                      => tpt :: Nil
+      case SeqLiteral(elems, elemtpt)             => elemtpt :: Nil
+
+      // no type tree inside
+      case _ => Nil
+    }
+
+    def walkTree[R](op: Tree => R)(reduce: (R, R) => R, default: => R): R = {
+      // Apply the operation to the tree itself and all its sutbrees. Reduce the result with the given @reduce function
+      def rec(t: Tree): R = reduce(op(t), t.subtrees.map(rec).foldLeft(default)(reduce))
+      rec(this)
+    }
+
+    /* If the operation does not produce a result, simply apply it to all subtrees of the tree */
+    def walkTree(op: Tree => Unit): Unit = walkTree[Unit](op)((_, _) => (), ())
+
+    def walkTypeTrees[R](op: TypeTree => R)(reduce: (R, R) => R, default: => R): R =
+      // Apply the operation to all type trees of the current tree and all type trees of all subtrees
+      walkTree(_.typeTrees.foldLeft(default)((curRes, tpt) => reduce(curRes, op(tpt))))(reduce, default)
+
+    def walkTypeTrees(op: TypeTree => Unit): Unit = walkTypeTrees[Unit](op)((_, _) => (), ())
   }
 
   trait DefTree(val symbol: Symbol)
