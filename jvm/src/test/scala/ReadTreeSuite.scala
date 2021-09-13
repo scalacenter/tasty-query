@@ -38,7 +38,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
     assert({
       {
         case PackageDef(
-              Symbol(SimpleName("empty_class")),
+              s @ Symbol(SimpleName("empty_class")),
               List(
                 Class(
                   TypeName(SimpleName("EmptyClass")),
@@ -61,7 +61,9 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
                   _
                 )
               )
-            ) if isJavaLangObject.isDefinedAt(parent) =>
+              // tree of package symbols is never set, because one package symbol corresponds to multiple trees
+              // (defined in different files)
+            ) if isJavaLangObject.isDefinedAt(parent) && s.tree == EmptyTree =>
       }: StructureCheck
     }.isDefinedAt(clue(unpickle("empty_class/EmptyClass"))))
   }
@@ -181,11 +183,11 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
       case DefDef(
             SimpleName("id"),
             // no type params, one param -- x: Int
-            List(List(ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("Int"))), EmptyTree, _))),
+            List(List(ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("Int"))), EmptyTree, valSymbol))),
             TypeIdent(TypeName(SimpleName("Int"))),
             Ident(SimpleName("x")),
-            _
-          ) =>
+            defSymbol
+          ) if valSymbol.tree.isInstanceOf[ValDef] && defSymbol.tree.isInstanceOf[DefDef] =>
     }
     assert(containsSubtree(identityMatch)(clue(unpickle("simple_trees/IdentityMethod"))))
   }
@@ -360,13 +362,13 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
               Unapply(
                 Select(Ident(SimpleName("FirstCase")), SignedName(SimpleName("unapply"), _, _)),
                 Nil,
-                List(Bind(SimpleName("x"), Ident(Wildcard), _))
+                List(Bind(SimpleName("x"), Ident(Wildcard), bindSymbol))
               ),
               _
             ),
             EmptyTree,
             body: Block
-          ) =>
+          ) if bindSymbol.tree.isInstanceOf[Bind] =>
     }
     assert(containsSubtree(guardWithAlternatives)(clue(tree)))
   }
@@ -575,8 +577,8 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
             SimpleName("x"),
             TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int")))),
             Literal(Constant(1)),
-            _
-          ) =>
+            symbol
+          ) if symbol.tree.isInstanceOf[ValDef] =>
     }
     val setterMatch: StructureCheck = {
       case DefDef(
@@ -639,8 +641,8 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
       case Class(
             TypeName(SimpleName("ChildCallsParentWithDefaultParameter")),
             Template(_, List(Block(_, _)), _, _),
-            _
-          ) =>
+            symbol
+          ) if symbol.tree.isInstanceOf[Class] =>
     }
     assert(containsSubtree(blockParent)(clue(tree)))
   }
@@ -885,7 +887,8 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
 
     // simple type member
     val typeMember: StructureCheck = {
-      case TypeMember(TypeName(SimpleName("TypeMember")), TypeIdent(TypeName(SimpleName("Int"))), _) =>
+      case TypeMember(TypeName(SimpleName("TypeMember")), TypeIdent(TypeName(SimpleName("Int"))), symbol)
+          if symbol.tree.isInstanceOf[TypeMember] =>
     }
     assert(containsSubtree(typeMember)(clue(tree)))
 
@@ -960,7 +963,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
                         TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
                         TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
                       ),
-                      _
+                      firstTypeParamSymbol
                     )
                   ),
                   List()
@@ -977,11 +980,13 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
                 ),
-                _
+                secondTypeParamSymbol
               ) :: _
             ),
-            _
-          ) =>
+            classSymbol
+          )
+          if classSymbol.tree.isInstanceOf[Class] && firstTypeParamSymbol.tree
+            .isInstanceOf[TypeParam] && secondTypeParamSymbol.tree.isInstanceOf[TypeParam] =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
   }
@@ -1076,8 +1081,8 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
                 _
               ) :: _
             ),
-            _
-          ) =>
+            symbol
+          ) if symbol.tree.isInstanceOf[Class] =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
   }
@@ -1119,10 +1124,10 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
                 ),
                 _
-              ) :: Class(TypeName(SimpleName("NestedGeneric")), _, _) :: _
+              ) :: Class(TypeName(SimpleName("NestedGeneric")), _, innerSymbol) :: _
             ),
-            _
-          ) =>
+            outerSymbol
+          ) if outerSymbol.tree.isInstanceOf[Class] && innerSymbol.tree.isInstanceOf[Class] =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
 
@@ -1160,8 +1165,8 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
                 _
               ) :: _
             ),
-            _
-          ) =>
+            symbol
+          ) if symbol.tree.isInstanceOf[Class] =>
     }
     assert(containsSubtree(nestedClass)(clue(tree)))
   }

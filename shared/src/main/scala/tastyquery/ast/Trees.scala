@@ -2,13 +2,26 @@ package tastyquery.ast
 
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, TermName, TypeName}
-import tastyquery.ast.Types.{Type, TypeBounds}
+import tastyquery.ast.Types.{NoType, Type, TypeBounds}
 import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Symbols.{ClassSymbol, NoSymbol, PackageClassSymbol, RegularSymbol, Symbol}
 
 object Trees {
+  class TypeComputationError(val tree: Tree) extends RuntimeException(s"Could not compute type of $tree")
+
+  object TypeComputationError {
+    def unapply(e: TypeComputationError): Option[Tree] = Some(e.tree)
+  }
 
   abstract class Tree {
+    protected var myType: Type = NoType
+
+    protected def calculateType(): Type = throw new TypeComputationError(this)
+    final def tpe: Type = {
+      if (myType == NoType) myType = calculateType()
+      myType
+    }
+
     protected def subtrees: List[Tree] = this match {
       case PackageDef(pid, stats)                   => stats
       case ImportSelector(imported, renamed, bound) => imported :: renamed :: Nil
@@ -139,7 +152,9 @@ object Trees {
   /** mods val name: tpt = rhs */
   case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: RegularSymbol)
       extends Tree
-      with DefTree(symbol)
+      with DefTree(symbol) {
+    override protected def calculateType(): Type = tpt.toType
+  }
 
   type ParamsClause = List[ValDef] | List[TypeParam]
 

@@ -1,14 +1,34 @@
 package tastyquery.ast
 
 import scala.collection.mutable
-import tastyquery.ast.Names._
-
+import tastyquery.ast.Names.*
 import dotty.tools.tasty.TastyFormat.NameTags
+import tastyquery.ast.Trees.{EmptyTree, Tree}
 
 object Symbols {
+  class SymbolLookupException(val name: Name, explanation: String = "")
+      extends RuntimeException(
+        SymbolLookupException.addExplanation(s"Could not find symbol for name ${name.toDebugString}", explanation)
+      )
+
+  object SymbolLookupException {
+    def unapply(e: SymbolLookupException): Option[Name] = Some(e.name)
+
+    def addExplanation(msg: String, explanation: String): String =
+      if (explanation.isEmpty) msg else s"$msg: $explanation"
+  }
+
   val NoSymbol = new RegularSymbol(Names.EmptyTermName, null)
 
   abstract class Symbol private[Symbols] (val name: Name, val owner: Symbol) {
+    protected var myTree: Tree = EmptyTree
+    // overridden in package symbol
+    def withTree(t: Tree): this.type = {
+      myTree = t
+      this
+    }
+    final def tree: Tree = myTree
+
     override def toString: String = s"symbol[$name]"
     def toDebugString = toString
   }
@@ -57,6 +77,10 @@ object Symbols {
 
     private def getPackageDecl(packageName: TermName): Option[PackageClassSymbol] =
       getDecl(packageName).map(_.asInstanceOf[PackageClassSymbol])
+
+    override def withTree(t: Tree): PackageClassSymbol.this.type = throw new UnsupportedOperationException(
+      s"Multiple trees correspond to one package, a single tree cannot be assigned"
+    )
   }
 
   abstract class SymbolFactory[T <: Symbol] {
