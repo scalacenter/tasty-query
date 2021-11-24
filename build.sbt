@@ -15,7 +15,7 @@ lazy val tastyQuery =
     .settings(
       libraryDependencies += "org.scala-lang" %% "tasty-core" % "3.0.0",
       libraryDependencies += "commons-io" % "commons-io" % "2.11.0",
-      libraryDependencies += "org.scalameta" %% "munit" % "0.7.26" % Test,
+      libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test,
       testFrameworks += new TestFramework("munit.Framework")
     )
     .settings(javaOptions += {
