@@ -9,7 +9,8 @@ import scala.io.Codec
 object Names {
 
   /** The term name represented by the empty string */
-  val EmptyTermName: SimpleName = SimpleName("")
+  val EmptySimpleName: SimpleName = SimpleName("")
+  val EmptyTermName: SimpleName = EmptySimpleName
   val EmptyTypeName: TypeName = TypeName(EmptyTermName)
   val RootName: SimpleName = SimpleName("<root>")
   val EmptyPackageName: SimpleName = SimpleName("<empty>")

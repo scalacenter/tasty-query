@@ -1549,7 +1549,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite {
                 List(
                   TypeCaseDef(
                     TypeTreeBind(
-                      TypeName(Wildcard),
+                      TypeName(UniqueName("_$", EmptySimpleName, 1)),
                       BoundedTypeTree(
                         TypeBoundsTree(
                           TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
