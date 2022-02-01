@@ -70,7 +70,7 @@ object Types {
 
     protected def designator_=(d: Designator): Unit
 
-    private var myName: Name = null
+    private var myName: ThisName | Null = null
 
     def isType: Boolean = isInstanceOf[TypeRef]
 
@@ -80,14 +80,18 @@ object Types {
       * of the designator symbol.
       */
     final def name: ThisName = {
-      if (myName == null) myName = computeName
-      myName.asInstanceOf[ThisName]
+      val local = myName
+      if local == null then
+        val computed = computeName
+        myName = computed
+        computed
+      else local
     }
 
-    private def computeName: Name = designator match {
+    private def computeName: ThisName = (designator match {
       case name: Name  => name
       case sym: Symbol => sym.name
-    }
+    }).asInstanceOf[ThisName]
 
     /** This is a temprorary hack to create symbols for standard types and objects, because Java classes and
       * Scala 2 standard library don't have .tasty files.
@@ -184,7 +188,9 @@ object Types {
       try {
         termSymbol.tree.tpe
       } catch {
-        case e => throw new ReferenceResolutionError(this, e.getMessage)
+        case e =>
+          val msg = e.getMessage
+          throw new ReferenceResolutionError(this, if msg == null then "" else msg)
       }
     }
 
@@ -196,10 +202,11 @@ object Types {
   }
 
   class PackageRef(val packageName: TermName) extends NamedType with SingletonType {
-    var packageSymbol: PackageClassSymbol = null
+    var packageSymbol: PackageClassSymbol | Null = null
 
     override def designator: Designator =
-      if (packageSymbol == null) packageName else packageSymbol
+      val pkgOpt = packageSymbol
+      if pkgOpt == null then packageName else pkgOpt
 
     override protected def designator_=(d: Designator): Unit = throw UnsupportedOperationException(
       s"Can't assign designator of a package"
@@ -224,14 +231,16 @@ object Types {
       ctx.createPackageSymbolIfNew(name.asInstanceOf[TermName], ctx.defn.RootPackage)
 
     override def resolveToSymbol(using ctx: BaseContext): PackageClassSymbol = {
-      if (packageSymbol == null) {
+      val local = packageSymbol
+      if (local == null) {
         val symOption = ctx.defn.RootPackage.findPackageSymbol(packageName)
-        packageSymbol = symOption.getOrElse(
+        val resolved = symOption.getOrElse(
           if (isStandard) ctx.createPackageSymbolIfNew(packageName, ctx.defn.RootPackage)
           else throw new SymbolLookupException(packageName)
         )
-      }
-      packageSymbol
+        packageSymbol = resolved
+        resolved
+      } else local
     }
 
     override def toString: String = s"PackageRef($packageName)"

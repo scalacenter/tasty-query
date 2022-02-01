@@ -39,13 +39,19 @@ object Names {
     termName(bs, offset, len).toTypeName
 
   /** Create a type name from a string */
-  def typeName(s: String): TypeName = typeName(s.toCharArray, 0, s.length)
+  def typeName(s: String): TypeName = {
+    import scala.language.unsafeNulls
+    typeName(s.toCharArray, 0, s.length)
+  }
 
   /** Create a term name from a string.
     * See `sliceToTermName` in `Decorators` for a more efficient version
     * which however requires a Context for its operation.
     */
-  def termName(s: String): SimpleName = termName(s.toCharArray, 0, s.length)
+  def termName(s: String): SimpleName = {
+    import scala.language.unsafeNulls
+    termName(s.toCharArray, 0, s.length)
+  }
 
   /** Create a term name from the characters in cs[offset..offset+len-1].
     * Assume they are already encoded.
@@ -80,15 +86,22 @@ object Names {
   abstract class TermName extends Name {
     def tag: Int
 
-    private var myTypeName: TypeName = null
+    private var myTypeName: TypeName | Null = null
 
     override def toTypeName: TypeName = {
-      if (myTypeName == null) {
+      val local1 = myTypeName
+      if local1 == null then {
         synchronized {
-          if (myTypeName == null) myTypeName = new TypeName(this)
+          val local2 = myTypeName
+          if local2 == null then
+            val asType = TypeName(this)
+            myTypeName = asType
+            asType
+          else local2
         }
+      } else {
+        local1
       }
-      myTypeName
     }
   }
 

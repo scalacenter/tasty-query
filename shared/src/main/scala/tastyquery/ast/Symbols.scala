@@ -20,7 +20,7 @@ object Symbols {
 
   val NoSymbol = new RegularSymbol(Names.EmptyTermName, null)
 
-  abstract class Symbol private[Symbols] (val name: Name, val owner: Symbol) {
+  abstract class Symbol private[Symbols] (val name: Name, val owner: Symbol | Null) {
     protected var myTree: Tree = EmptyTree
     // overridden in package symbol
     def withTree(t: Tree): this.type = {
@@ -37,9 +37,10 @@ object Symbols {
     def unapply(s: Symbol): Option[Name] = Some(s.name)
   }
 
-  final class RegularSymbol(override val name: Name, override val owner: Symbol) extends Symbol(name, owner)
+  final class RegularSymbol(override val name: Name, override val owner: Symbol | Null) extends Symbol(name, owner)
 
-  abstract class DeclaringSymbol(override val name: Name, override val owner: Symbol) extends Symbol(name, owner) {
+  abstract class DeclaringSymbol(override val name: Name, override val owner: Symbol | Null)
+      extends Symbol(name, owner) {
     /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
     protected val myDeclarations: mutable.HashMap[Name, Symbol] = mutable.HashMap[Name, Symbol]()
@@ -52,10 +53,10 @@ object Symbols {
       s"${super.toString} with declarations [${myDeclarations.keys.map(_.toDebugString).mkString(", ")}]"
   }
 
-  class ClassSymbol(override val name: Name, override val owner: Symbol) extends DeclaringSymbol(name, owner)
+  class ClassSymbol(override val name: Name, override val owner: Symbol | Null) extends DeclaringSymbol(name, owner)
 
   // TODO: typename or term name?
-  class PackageClassSymbol(override val name: Name, override val owner: PackageClassSymbol)
+  class PackageClassSymbol(override val name: Name, override val owner: PackageClassSymbol | Null)
       extends ClassSymbol(name, owner) {
     if (owner != null) {
       // A package symbol is always a declaration in its owner package

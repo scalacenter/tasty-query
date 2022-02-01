@@ -11,6 +11,7 @@ import java.util.jar.JarFile
 import scala.jdk.CollectionConverters.*
 
 class ProjectReader {
+
   def read(classpath: List[String]): TastyQuery = {
     val unpicklingCtx = Contexts.empty
     val trees = classpathToEntries(classpath).flatMap(
@@ -20,7 +21,11 @@ class ProjectReader {
   }
 
   private def getTreeUnpickler(fileStream: InputStream): TreeUnpickler = {
-    val unpickler = new TastyUnpickler(IOUtils.toByteArray(fileStream))
+    val bytes = {
+      import scala.language.unsafeNulls
+      IOUtils.toByteArray(fileStream)
+    }
+    val unpickler = new TastyUnpickler(bytes)
     unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get
   }
 
@@ -46,24 +51,30 @@ final case class Jar(override val path: String) extends ClasspathEntry(path) {
   override def walkTastyFiles(op: (String, InputStream) => List[Tree]): List[Tree] = {
     val jar = JarFile(path)
     // TODO: a nicer way to force?
-    jar
-      .stream()
-      // force the execution of filter + map on the stream:
+    import scala.language.unsafeNulls
+    val stream = jar.stream()
+    // force the execution of filter + map on the stream:
+    stream
       .iterator()
       .asScala
-      .filter(je => je.getName().endsWith(".tasty"))
+      .filter { je =>
+        val name = je.getName
+        name.endsWith(".tasty")
+      }
       .flatMap(je => op(getFullPath(je.getName()), jar.getInputStream(je)))
       .toList
   }
 }
 
 final case class Directory(override val path: String) extends ClasspathEntry(path) {
-  override def walkTastyFiles(op: (String, InputStream) => List[Tree]): List[Tree] =
+  override def walkTastyFiles(op: (String, InputStream) => List[Tree]): List[Tree] = {
+    import scala.language.unsafeNulls
     FileUtils
       .listFiles(new File(path), Array("tasty"), true)
       .asScala
       .flatMap(f => op(f.getAbsolutePath(), FileUtils.openInputStream(f)))
       .toList
+  }
 }
 
 final case class InvalidEntry(override val path: String) extends ClasspathEntry(path) {
