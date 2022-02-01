@@ -8,23 +8,26 @@ import scala.io.Codec
 
 object Names {
 
-  /** The term name represented by the empty string */
-  val EmptySimpleName: SimpleName = SimpleName("")
-  val EmptyTermName: SimpleName = EmptySimpleName
-  val EmptyTypeName: TypeName = TypeName(EmptyTermName)
-  val RootName: SimpleName = SimpleName("<root>")
-  val EmptyPackageName: SimpleName = SimpleName("<empty>")
-  val Wildcard: SimpleName = SimpleName("_")
-
-  val SuperAccessorPrefix: String = "super$"
-  val InlineAccessorPrefix: String = "inline$"
-  val BodyRetainerSuffix: String = "$retainedBody"
+  given Ordering[SimpleName] = Ordering.by(_.name)
 
   import scala.jdk.CollectionConverters._
 
   // A map from the name to itself. Used to keep only one instance of SimpleName by underlying String
   private val nameTable: scala.collection.concurrent.Map[SimpleName, SimpleName] =
     new ConcurrentHashMap[SimpleName, SimpleName]().asScala
+
+  /** The term name represented by the empty string */
+  val EmptySimpleName: SimpleName = termName("")
+  val EmptyTermName: SimpleName = EmptySimpleName
+  val EmptyTypeName: TypeName = EmptyTermName.toTypeName
+  val RootName: SimpleName = termName("<root>")
+  val EmptyPackageName: SimpleName = termName("<empty>")
+  val Constructor: SimpleName = termName("<init>")
+  val Wildcard: SimpleName = termName("_")
+
+  val SuperAccessorPrefix: String = "super$"
+  val InlineAccessorPrefix: String = "inline$"
+  val BodyRetainerSuffix: String = "$retainedBody"
 
   /** Create a type name from the characters in cs[offset..offset+len-1].
     * Assume they are already encoded.
@@ -75,6 +78,9 @@ object Names {
     /** This name converted to a type name */
     def toTypeName: TypeName
 
+    /** This name converted to a term name */
+    def toTermName: TermName
+
     /** This name downcasted to a simple term name */
     def asSimpleName: SimpleName
 
@@ -85,6 +91,8 @@ object Names {
 
   abstract class TermName extends Name {
     def tag: Int
+
+    override def toTermName: TermName = this
 
     private var myTypeName: TypeName | Null = null
 
@@ -103,6 +111,8 @@ object Names {
         local1
       }
     }
+
+    infix def select(name: SimpleName): QualifiedName = QualifiedName(NameTags.QUALIFIED, this, name)
   }
 
   final case class SimpleName(name: String) extends TermName {
@@ -176,7 +186,7 @@ object Names {
     override def toString: String = s"$underlying$$default$num"
   }
 
-  final case class TypeName(val toTermName: TermName) extends Name {
+  final case class TypeName(override val toTermName: TermName) extends Name {
     override def toTypeName: TypeName = this
 
     override def asSimpleName: SimpleName = toTermName.asSimpleName

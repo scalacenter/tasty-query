@@ -13,9 +13,8 @@ lazy val tastyQuery =
     .in(file("."))
     .settings(name := "tasty-query", version := "0.1-SNAPSHOT")
     .settings(
-      libraryDependencies += "org.scala-lang" %% "tasty-core" % "3.1.0",
-      libraryDependencies += "commons-io" % "commons-io" % "2.11.0",
-      libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test,
+      libraryDependencies += "org.scala-lang" %% "tasty-core" % "3.1.0", // TODO: publish for JS or shade?
+      libraryDependencies += "org.scalameta" %%% "munit" % "0.7.29" % Test,
       testFrameworks += new TestFramework("munit.Framework"),
       scalacOptions += "-Yexplicit-nulls"
     )
@@ -25,5 +24,11 @@ lazy val tastyQuery =
       assert(testSourcesProducts.size == 1)
       "-Dtest-resources=" + testSourcesProducts.map(_.getAbsolutePath).head
     })
-    .jvmSettings(fork := true)
-    .jsSettings(scalaJSUseMainModuleInitializer := true)
+    .jvmSettings(
+      fork := true,
+      libraryDependencies += "commons-io" % "commons-io" % "2.11.0",
+    )
+    .jsSettings(
+      scalaJSUseMainModuleInitializer := true,
+      scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.ESModule))
+    )

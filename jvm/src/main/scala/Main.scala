@@ -2,18 +2,23 @@ import java.nio.file.{Files, Paths}
 import tastyquery.reader.TastyUnpickler
 import tastyquery.Contexts
 import tastyquery.api.ProjectReader
+import tastyquery.jdk.ClasspathLoaders
 
 import java.net.URL
 import java.net.URLClassLoader
+import tastyquery.Contexts.BaseContext
 
 object Main {
   def main(args: Array[String]): Unit =
     args.toList match {
-      case "-cp" :: classpath =>
+      case "-cp" :: cp :: classes =>
         val reader = new ProjectReader
-        reader.read(classpath)
+        val cpElems = ClasspathLoaders.splitClasspath(cp)
+        val classpath = ClasspathLoaders.read(cpElems, Set(ClasspathLoaders.FileKind.Tasty))
+        given BaseContext = Contexts.empty(classpath)
+        reader.read(classes*)
       case _ =>
         println("""Usage:
-                  |-cp <path: String>[ <path: String>[ <path: String>...]]""".stripMargin)
+                  |-cp <paths> <classname>...""".stripMargin)
     }
 }

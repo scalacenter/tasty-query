@@ -9,6 +9,6 @@ object Main {
 
   def main(args: Array[String]): Unit = {
     val filename = "/home/cache-nez/work/scala/sandbox/example/target/scala-3.0.0-M1/classes/mypackage/X.tasty"
-    val unpickler = new TastyUnpickler(new Int8Array(readFileSync(filename).buffer).toArray)
+    val unpickler = new TastyUnpickler(IArray.from(new Int8Array(readFileSync(filename).buffer)))
   }
 }

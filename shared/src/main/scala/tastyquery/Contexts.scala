@@ -8,24 +8,34 @@ import tastyquery.ast.Types.TypeLambda
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
+import tastyquery.reader.classfiles.Classpaths
+import tastyquery.reader.classfiles.Classpaths.Classpath
 
 object Contexts {
 
   /** The current context */
   inline def ctx(using ctx: FileContext): FileContext = ctx
+  transparent inline def baseCtx(using baseCtx: BaseContext): BaseContext = baseCtx
+  transparent inline def defn(using baseCtx: BaseContext): baseCtx.defn.type = baseCtx.defn
 
   def empty: BaseContext =
-    new BaseContext(new Definitions())
+    new BaseContext(new Definitions(), Classpaths.Classpath.Empty.loader)
 
-  def empty(filename: String): FileContext = {
+  def empty(filename: String): FileContext =
+    empty(filename, Classpaths.Classpath.Empty)
+
+  def empty(filename: String, classpath: Classpath): FileContext = {
     val defn = new Definitions()
-    new FileContext(defn, defn.RootPackage, filename)
+    new FileContext(defn, defn.RootPackage, filename, classpath.loader)
   }
 
+  def empty(classpath: Classpath): BaseContext =
+    new BaseContext(new Definitions(), classpath.loader)
+
   /** BaseContext is used throughout unpickling an entire project. */
-  class BaseContext private[Contexts] (val defn: Definitions) {
+  class BaseContext private[Contexts] (val defn: Definitions, val classloader: Classpaths.Loader) {
     def withFile(filename: String): FileContext =
-      new FileContext(defn, defn.RootPackage, filename)
+      new FileContext(defn, defn.RootPackage, filename, classloader)
 
     def createPackageSymbolIfNew(name: TermName, owner: Symbol): PackageClassSymbol = {
       def create(): PackageClassSymbol = {
@@ -81,16 +91,18 @@ object Contexts {
   class FileContext private[Contexts] (
     override val defn: Definitions,
     val owner: Symbol,
-    private val fileLocalInfo: FileLocalInfo
-  ) extends BaseContext(defn) {
-    def this(defn: Definitions, owner: Symbol, filename: String) = this(defn, owner, new FileLocalInfo(filename))
+    private val fileLocalInfo: FileLocalInfo,
+    override val classloader: Classpaths.Loader
+  ) extends BaseContext(defn, classloader) {
+    def this(defn: Definitions, owner: Symbol, filename: String, classloader: Classpaths.Loader) =
+      this(defn, owner, new FileLocalInfo(filename), classloader)
 
     def withEnclosingLambda(addr: Addr, tl: TypeLambda): FileContext =
-      new FileContext(defn, owner, fileLocalInfo.addEnclosingLambda(addr, tl))
+      new FileContext(defn, owner, fileLocalInfo.addEnclosingLambda(addr, tl), classloader)
 
     def withOwner(newOwner: Symbol): FileContext =
       if (newOwner == owner) this
-      else new FileContext(defn, newOwner, fileLocalInfo)
+      else new FileContext(defn, newOwner, fileLocalInfo, classloader)
 
     def getFile: String = fileLocalInfo.filename
 
