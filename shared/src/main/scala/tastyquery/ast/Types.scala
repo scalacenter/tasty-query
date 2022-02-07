@@ -1,7 +1,7 @@
 package tastyquery.ast
 
 import dotty.tools.tasty.TastyFormat.NameTags
-import tastyquery.Contexts.BaseContext
+import tastyquery.Contexts.{BaseContext, baseCtx, defn}
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, QualifiedName, SimpleName, TermName, TypeName}
 import tastyquery.ast.Symbols.*
@@ -112,6 +112,11 @@ object Types {
           case other => other.resolveToSymbol
         }
         designator = {
+          prefixSym match {
+            case p: PackageClassSymbol =>
+              baseCtx.classloader.scanPackage(p)
+            case _ =>
+          }
           val symOption = prefixSym.asInstanceOf[DeclaringSymbol].getDecl(name)
           symOption.getOrElse(throw new SymbolLookupException(name))
         }
@@ -187,11 +192,16 @@ object Types {
     // TODO: root package?
     override val prefix: Type = NoType
 
-    override def resolveToSymbol(using ctx: BaseContext): PackageClassSymbol = {
+    override def resolveToSymbol(using BaseContext): PackageClassSymbol = {
       val local = packageSymbol
       if (local == null) {
-        val symOption = ctx.defn.RootPackage.findPackageSymbol(packageName)
-        val resolved = symOption.getOrElse(throw new SymbolLookupException(packageName))
+        def searchPkg = defn.RootPackage.findPackageSymbol(packageName)
+        def slowSearchPkg = {
+          baseCtx.classloader.initPackages()
+          searchPkg
+        }
+        val symOption = searchPkg
+        val resolved = symOption.orElse(slowSearchPkg).getOrElse(throw new SymbolLookupException(packageName))
         packageSymbol = resolved
         resolved
       } else local

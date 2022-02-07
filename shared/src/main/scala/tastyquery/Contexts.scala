@@ -37,7 +37,25 @@ object Contexts {
     def withFile(filename: String): FileContext =
       new FileContext(defn, defn.RootPackage, filename, classloader)
 
-    def createPackageSymbolIfNew(name: TermName, owner: Symbol): PackageClassSymbol = {
+    def createClassSymbolIfNew(name: Name, owner: DeclaringSymbol): ClassSymbol =
+      owner.getDecl(name) match {
+        case None =>
+          val cls = ClassSymbolFactory.createSymbol(name, owner)
+          owner.addDecl(cls)
+          cls
+        case Some(clazz) => ClassSymbolFactory.castSymbol(clazz)
+      }
+
+    def createSymbolIfNew(name: Name, owner: DeclaringSymbol): RegularSymbol =
+      owner.getDecl(name) match {
+        case None =>
+          val sym = RegularSymbolFactory.createSymbol(name, owner)
+          owner.addDecl(sym)
+          sym
+        case Some(sym) => RegularSymbolFactory.castSymbol(sym)
+      }
+
+    def createPackageSymbolIfNew(name: TermName, owner: PackageClassSymbol): PackageClassSymbol = {
       def create(): PackageClassSymbol = {
         val trueOwner = if (owner == defn.EmptyPackage) defn.RootPackage else owner
         val sym = PackageClassSymbolFactory.createSymbol(name, trueOwner)
@@ -93,7 +111,7 @@ object Contexts {
     val owner: Symbol,
     private val fileLocalInfo: FileLocalInfo,
     override val classloader: Classpaths.Loader
-  ) extends BaseContext(defn, classloader) {
+  ) extends BaseContext(defn, classloader) { base =>
     def this(defn: Definitions, owner: Symbol, filename: String, classloader: Classpaths.Loader) =
       this(defn, owner, new FileLocalInfo(filename), classloader)
 
@@ -135,7 +153,10 @@ object Contexts {
       fileLocalInfo.localSymbols(addr).asInstanceOf[T]
     }
 
-    def createPackageSymbolIfNew(name: TermName): PackageClassSymbol = super.createPackageSymbolIfNew(name, owner)
+    def createPackageSymbolIfNew(name: TermName): PackageClassSymbol = owner match {
+      case owner: PackageClassSymbol => base.createPackageSymbolIfNew(name, owner)
+      case owner                     => assert(false, s"Unexpected non-package owner: $owner")
+    }
 
     def getSymbol(addr: Addr): Symbol =
       fileLocalInfo.localSymbols(addr)

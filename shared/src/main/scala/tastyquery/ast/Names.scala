@@ -10,6 +10,10 @@ object Names {
 
   given Ordering[SimpleName] = Ordering.by(_.name)
 
+  object str {
+    val topLevelSuffix = "$package"
+  }
+
   import scala.jdk.CollectionConverters._
 
   // A map from the name to itself. Used to keep only one instance of SimpleName by underlying String
@@ -113,6 +117,20 @@ object Names {
     }
 
     infix def select(name: SimpleName): QualifiedName = QualifiedName(NameTags.QUALIFIED, this, name)
+
+    def subnames: TermName.SubNamesOps = new TermName.SubNamesOps(this)
+  }
+
+  object TermName {
+    class SubNamesOps(val termName: TermName) extends AnyVal {
+      def foreach(f: TermName => Unit): Unit = {
+        def addStack(name: TermName): Unit = name match
+          case name @ QualifiedName(NameTags.QUALIFIED, pre, _) => { addStack(pre); f(name) }
+          case name @ SimpleName(_)                             => f(name)
+          case _                                                => ()
+        addStack(termName)
+      }
+    }
   }
 
   final case class SimpleName(name: String) extends TermName {
@@ -196,5 +214,7 @@ object Names {
     override def toString: String = toTermName.toString
 
     override def toDebugString: String = s"$toString/T"
+
+    def toObjectName: TypeName = SuffixedName(NameTags.OBJECTCLASS, toTermName).toTypeName
   }
 }
