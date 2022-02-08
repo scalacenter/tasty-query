@@ -50,6 +50,10 @@ object Classpaths {
     private var index: Map[PackageClassSymbol, IArray[ClassData]] = Map.empty
     private var uninitialised: Map[ClassSymbol, ClassData] = Map.empty
 
+    /** sentinel value, it proves that `baseCtx.withRoot` can only be called from `scanClass` */
+    opaque type LoadRoot = Null
+    protected final given loadRoot: LoadRoot = null
+
     def lookupTasty(fullClassName: String): Option[TastyData] =
       def packageAndClass(fullClassName: String): (SimpleName, SimpleName) = {
         val lastSep = fullClassName.lastIndexOf('.')
@@ -65,6 +69,16 @@ object Classpaths {
       classpath.packages.find(_.name == pkg) match {
         case Some(pkg) => pkg.tastys.find(_.simpleName == cls)
         case _         => None
+      }
+
+    def scanClass(cls: ClassSymbol)(using baseCtx: BaseContext): Unit =
+      uninitialised.get(cls) match {
+        case Some(classRoot) =>
+          uninitialised -= cls
+          if !cls.initialised then // may have been initialised by TASTy
+            ClassfileParser.loadInfo(classRoot)(using baseCtx.withRoot(cls)).toTry.get
+            cls.initialised = true
+        case _ =>
       }
 
     def scanPackage(pkg: PackageClassSymbol)(using BaseContext): Unit = {

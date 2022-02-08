@@ -1598,7 +1598,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(includeClasses = false) {
                   TypeCaseDef(
                     AppliedTypeTree(
                       TypeIdent(TypeName(SimpleName("List"))),
-                      TypeTreeBind(TypeName(SimpleName("t")), TypeIdent(TypeName(Wildcard)), _) :: Nil
+                      TypeTreeBind(TypeName(SimpleName("t")), NamedTypeBoundsTree(TypeName(Wildcard), _), _) :: Nil
                     ),
                     TypeIdent(TypeName(SimpleName("t")))
                   )

@@ -43,17 +43,29 @@ object Symbols {
       extends Symbol(name, owner) {
     /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
-    protected val myDeclarations: mutable.HashMap[Name, Symbol] = mutable.HashMap[Name, Symbol]()
+    protected val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
+      mutable.HashMap[Name, mutable.HashSet[Symbol]]()
 
-    def addDecl(decl: Symbol): Unit = myDeclarations(decl.name) = decl
-    def getDecl(name: Name): Option[Symbol] = myDeclarations.get(name)
-    def declarations: List[Symbol] = myDeclarations.values.toList
+    def addDecl(decl: Symbol): Unit = myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet) += decl
+    def getDecl(name: Name): Option[Symbol] = name match {
+      case overloaded: SignedName => resolveOverloaded(overloaded)
+      case name =>
+        myDeclarations.get(name).collect {
+          case set if set.sizeIs == 1 => set.head
+        }
+    }
+    def resolveOverloaded(name: SignedName): Option[Symbol] =
+      getDecl(name.underlying) // TODO: look at signature to filter overloads
+
+    def declarations: List[Symbol] = myDeclarations.values.toList.flatten
 
     override def toDebugString: String =
       s"${super.toString} with declarations [${myDeclarations.keys.map(_.toDebugString).mkString(", ")}]"
   }
 
-  class ClassSymbol(override val name: Name, override val owner: Symbol | Null) extends DeclaringSymbol(name, owner)
+  class ClassSymbol(override val name: Name, override val owner: Symbol | Null) extends DeclaringSymbol(name, owner) {
+    private[tastyquery] var initialised: Boolean = false
+  }
 
   // TODO: typename or term name?
   class PackageClassSymbol(override val name: Name, override val owner: PackageClassSymbol | Null)

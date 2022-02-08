@@ -57,12 +57,14 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       case TYPEDEF =>
         val end = reader.readEnd()
         val name = readName.toTypeName
-        val newOwner = if (reader.nextByte == TEMPLATE) {
+        val tag = reader.nextByte
+        val newOwner = if tag == TEMPLATE then {
           ctx.createSymbolIfNew(start, name, ClassSymbolFactory, addToDecls = true)
         } else {
           ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls = true)
         }
         reader.until(end)(createSymbols(using ctx.withOwner(newOwner)))
+        if tag == TEMPLATE then newOwner.asInstanceOf[ClassSymbol].initialised = true
       case DEFDEF | VALDEF | PARAM | TYPEPARAM =>
         val end = reader.readEnd()
         val name = if (tag == TYPEPARAM) readName.toTypeName else readName
@@ -157,6 +159,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     }
 
   def readName: TermName = nameAtRef(reader.readNameRef())
+
+  def readSignedName(): SignedName = readName.asInstanceOf[SignedName]
 
   def readTopLevelStat(using FileContext): Tree = reader.nextByte match {
     case PACKAGE =>
@@ -454,11 +458,10 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case SELECTin =>
       reader.readByte()
       val end = reader.readEnd()
-      val name = readName
+      val name = readSignedName()
       val qual = readTerm
-      // TODO: use owner
-      val owner = readType
-      Select(qual, name)
+      val owner = readTypeRef()
+      SelectIn(qual, name, owner)
     case NEW =>
       reader.readByte()
       val cls = readTypeTree
@@ -602,10 +605,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case TERMREFsymbol =>
       reader.readByte()
       val sym = readSymRef
-      val typ = readType
+      val pre = readType
       assert(sym.name.isInstanceOf[TermName], posErrorMsg)
-      // TODO: assign type
-      Ident(sym.name.asInstanceOf[TermName])
+      TermRefTree(sym.name.asInstanceOf[TermName], TermRef(pre, sym))
     case SHAREDtype =>
       reader.readByte()
       forkAt(reader.readAddr()).readTerm
@@ -655,6 +657,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     assert(ctx.hasSymbolAt(symAddr), posErrorMsg)
     ctx.getSymbol(symAddr)
   }
+
+  def readTypeRef()(using FileContext): TypeRef =
+    readType.asInstanceOf[TypeRef]
 
   def readType(using FileContext): Type = reader.nextByte match {
     case TYPEREF =>
@@ -776,7 +781,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val typeName = readName.toTypeName
       val typ = readType
-      TypeIdent(typeName).withType(typ)
+      TypeIdent(typeName)(typ)
     case SINGLETONtpt =>
       reader.readByte()
       SingletonTypeTree(readTerm)
@@ -840,8 +845,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         reader.readByte()
         val typeName = readName.toTypeName
         val typ = readTypeBounds
-        // TODO: assign type
-        TypeIdent(typeName)
+        NamedTypeBoundsTree(typeName, typ)
       } else readTypeTree
       skipModifiers(end)
       TypeTreeBind(name, body, ctx.getSymbol(start, RegularSymbolFactory))

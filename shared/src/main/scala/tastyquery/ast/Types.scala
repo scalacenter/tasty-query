@@ -6,9 +6,12 @@ import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, QualifiedName, SimpleName, TermName, TypeName}
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.{EmptyTree, Tree, TypeParam}
+import tastyquery.ast.Names.SignedName
 
 object Types {
-  type Designator = Symbol | Name
+  type Designator = Symbol | Name | LookupIn
+
+  case class LookupIn(pre: TypeRef, sel: SignedName)
 
   abstract class Type
 
@@ -87,18 +90,29 @@ object Types {
     }
 
     private def computeName: ThisName = (designator match {
-      case name: Name  => name
-      case sym: Symbol => sym.name
+      case name: Name       => name
+      case sym: Symbol      => sym.name
+      case LookupIn(_, sel) => sel
     }).asInstanceOf[ThisName]
 
+    def selectIn(name: SignedName, in: TypeRef): TermRef =
+      TermRef(this, LookupIn(in, name))
+
+    def select(name: Name): NamedType =
+      if name.isTermName then TermRef(this, name)
+      else TypeRef(this, name)
+
     // overridden in package references
-    override def resolveToSymbol(using BaseContext): Symbol = {
-      if (!designator.isInstanceOf[Symbol]) {
-        val name = designator.asInstanceOf[Name]
-        if (prefix == NoPrefix) {
-          throw new SymbolLookupException(name, "reference by name to a local symbol")
-        }
-        val prefixSym = prefix.asInstanceOf[Symbolic] match {
+    override def resolveToSymbol(using BaseContext): Symbol = designator match {
+      case sym: Symbol => sym
+      case LookupIn(pre, name) =>
+        val sym = TypeRef(pre, name).resolveToSymbol
+        designator = sym
+        sym
+      case name: Name =>
+        val prefixSym = prefix match {
+          case NoPrefix =>
+            throw new SymbolLookupException(name, "reference by name to a local symbol")
           case t: TermRef =>
             val underlyingType = t.underlying
             if (underlyingType == NoType)
@@ -109,19 +123,31 @@ object Types {
                 s"only references to terms, whose type is a combination of typeref, termref and thistype, are supported. Got type $underlyingType"
               )
             underlyingType.asInstanceOf[Symbolic].resolveToSymbol
-          case other => other.resolveToSymbol
+          case other: Symbolic => other.resolveToSymbol
+          case prefix =>
+            throw new SymbolLookupException(name, s"unexpected prefix type $prefix")
         }
-        designator = {
-          prefixSym match {
-            case p: PackageClassSymbol =>
-              baseCtx.classloader.scanPackage(p)
+        val sym = {
+          val symOption = prefixSym match {
+            case declaring: DeclaringSymbol =>
+              def force() = declaring match {
+                case p: PackageClassSymbol =>
+                  baseCtx.classloader.scanPackage(p)
+                case p: ClassSymbol =>
+                  baseCtx.classloader.scanClass(p)
+                case _ =>
+              }
+              declaring.getDecl(name).orElse {
+                force()
+                declaring.getDecl(name)
+              }
             case _ =>
+              throw SymbolLookupException(name, s"$prefixSym is not a package or class")
           }
-          val symOption = prefixSym.asInstanceOf[DeclaringSymbol].getDecl(name)
-          symOption.getOrElse(throw new SymbolLookupException(name))
+          symOption.getOrElse(throw new SymbolLookupException(name, s"not a member of $prefixSym"))
         }
-      }
-      designator.asInstanceOf[Symbol]
+        designator = sym
+        sym
     }
   }
 

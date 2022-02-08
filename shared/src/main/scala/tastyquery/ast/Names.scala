@@ -14,6 +14,19 @@ object Names {
     val topLevelSuffix = "$package"
   }
 
+  object attr {
+    val TASTY = termName("TASTY")
+    val Scala = termName("Scala")
+    val ScalaSig = termName("ScalaSig")
+    val RuntimeVisibleAnnotations = termName("RuntimeVisibleAnnotations") // RetentionPolicy.RUNTIME
+    val RuntimeInvisibleAnnotations = termName("RuntimeInvisibleAnnotations") // RetentionPolicy.CLASS
+  }
+
+  object annot {
+    val ScalaSignature = termName("Lscala/reflect/ScalaSignature;")
+    val ScalaLongSignature = termName("Lscala/reflect/ScalaLongSignature;")
+  }
+
   import scala.jdk.CollectionConverters._
 
   // A map from the name to itself. Used to keep only one instance of SimpleName by underlying String
@@ -87,6 +100,9 @@ object Names {
 
     /** This name downcasted to a simple term name */
     def asSimpleName: SimpleName
+
+    final def isTypeName: Boolean = this.isInstanceOf[TypeName]
+    final def isTermName: Boolean = !isTypeName
 
     def isEmpty: Boolean
 

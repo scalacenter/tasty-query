@@ -16,6 +16,7 @@ object Contexts {
   /** The current context */
   inline def ctx(using ctx: FileContext): FileContext = ctx
   transparent inline def baseCtx(using baseCtx: BaseContext): BaseContext = baseCtx
+  transparent inline def clsCtx(using clsCtx: ClassContext): ClassContext = clsCtx
   transparent inline def defn(using baseCtx: BaseContext): baseCtx.defn.type = baseCtx.defn
 
   def empty: BaseContext =
@@ -36,6 +37,9 @@ object Contexts {
   class BaseContext private[Contexts] (val defn: Definitions, val classloader: Classpaths.Loader) {
     def withFile(filename: String): FileContext =
       new FileContext(defn, defn.RootPackage, filename, classloader)
+
+    def withRoot(root: ClassSymbol)(using classloader.LoadRoot): ClassContext =
+      new ClassContext(defn, classloader, root)
 
     def createClassSymbolIfNew(name: Name, owner: DeclaringSymbol): ClassSymbol =
       owner.getDecl(name) match {
@@ -82,6 +86,23 @@ object Contexts {
     }
 
     def getPackageSymbol(name: TermName): PackageClassSymbol = defn.RootPackage.findPackageSymbol(name).get
+  }
+
+  class ClassContext private[Contexts] (
+    override val defn: Definitions,
+    override val classloader: Classpaths.Loader,
+    val owner: ClassSymbol
+  ) extends BaseContext(defn, classloader) {
+
+    def createSymbolIfNew[T <: Symbol](name: Name, factory: SymbolFactory[T], addToDecls: Boolean = false): T =
+      owner.getDecl(name) match {
+        case Some(sym) => factory.castSymbol(sym)
+        case _ =>
+          val sym = factory.createSymbol(name, owner)
+          if (addToDecls) owner.addDecl(sym)
+          sym
+      }
+
   }
 
   /** FileLocalInfo maintains file-local information, used during unpickling:
