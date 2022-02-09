@@ -19,10 +19,10 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import scala.annotation.targetName
 import tastyquery.ast.Names
 
-abstract class BaseUnpicklingSuite(val includeClasses: Boolean) extends munit.FunSuite { outer =>
+abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean) extends munit.FunSuite { outer =>
   given TestPlatform = tastyquery.testutil.jdk.JavaTestPlatform // TODO: make abstract so we can test scala.js
 
-  lazy val testClasspath = testPlatform.loadClasspath(includeClasses)
+  lazy val testClasspath = testPlatform.loadClasspath(includeClasses = withClasses, includeStdLib = withStdLib)
 
   def unpickleCtx(path: TopLevelDeclPath): FileContext = {
     val (ctx, _) = unpickleFull(path)

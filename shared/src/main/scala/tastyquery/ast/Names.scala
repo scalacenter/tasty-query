@@ -1,10 +1,14 @@
 package tastyquery.ast
 
+import tastyquery.unsafe
+import tastyquery.util.syntax.chaining.given
+
 import java.util.concurrent.ConcurrentHashMap
 
 import dotty.tools.tasty.TastyFormat.NameTags
 
 import scala.io.Codec
+import scala.annotation.targetName
 
 object Names {
 
@@ -41,6 +45,7 @@ object Names {
   val EmptyPackageName: SimpleName = termName("<empty>")
   val Constructor: SimpleName = termName("<init>")
   val Wildcard: SimpleName = termName("_")
+  val RefinementClass = typeName("<refinement>")
 
   val SuperAccessorPrefix: String = "super$"
   val InlineAccessorPrefix: String = "inline$"
@@ -58,26 +63,28 @@ object Names {
   def typeName(bs: Array[Byte], offset: Int, len: Int): TypeName =
     termName(bs, offset, len).toTypeName
 
+  @targetName("typeNameFromImmutableBytes")
+  def typeName(bs: IArray[Byte], offset: Int, len: Int): TypeName =
+    termName(bs, offset, len).toTypeName
+
   /** Create a type name from a string */
-  def typeName(s: String): TypeName = {
-    import scala.language.unsafeNulls
-    typeName(s.toCharArray, 0, s.length)
-  }
+  def typeName(s: String): TypeName =
+    termName(s).toTypeName
 
   /** Create a term name from a string.
     * See `sliceToTermName` in `Decorators` for a more efficient version
     * which however requires a Context for its operation.
     */
-  def termName(s: String): SimpleName = {
-    import scala.language.unsafeNulls
-    termName(s.toCharArray, 0, s.length)
-  }
+  def termName(s: String): SimpleName =
+    cache(SimpleName(s))
 
   /** Create a term name from the characters in cs[offset..offset+len-1].
     * Assume they are already encoded.
     */
-  def termName(cs: Array[Char], offset: Int, len: Int): SimpleName = {
-    val newName = SimpleName(cs.slice(offset, offset + len).mkString)
+  def termName(cs: Array[Char], offset: Int, len: Int): SimpleName =
+    cache(SimpleName(cs.slice(offset, offset + len).mkString))
+
+  private def cache(newName: SimpleName): SimpleName = {
     val oldName = nameTable.putIfAbsent(newName, newName)
     oldName.getOrElse(newName)
   }
@@ -90,7 +97,11 @@ object Names {
     termName(chars, 0, chars.length)
   }
 
-  abstract class Name {
+  @targetName("termNameFromImmutableBytes")
+  def termName(bs: IArray[Byte], offset: Int, len: Int): SimpleName =
+    termName(unsafe.asByteArray(bs), offset, len)
+
+  sealed abstract class Name derives CanEqual {
 
     /** This name converted to a type name */
     def toTypeName: TypeName
@@ -121,10 +132,7 @@ object Names {
       if local1 == null then {
         synchronized {
           val local2 = myTypeName
-          if local2 == null then
-            val asType = TypeName(this)
-            myTypeName = asType
-            asType
+          if local2 == null then TypeName(this).useWith { myTypeName = _ }
           else local2
         }
       } else {

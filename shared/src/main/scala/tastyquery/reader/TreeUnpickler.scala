@@ -59,23 +59,24 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         val name = readName.toTypeName
         val tag = reader.nextByte
         val newOwner = if tag == TEMPLATE then {
-          ctx.createSymbolIfNew(start, name, ClassSymbolFactory, addToDecls = true)
+          ctx.createSymbolIfNew(start, name, ClassSymbolFactory, addToDecls = ctx.owner.isClass)
         } else {
-          ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls = true)
+          ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls = ctx.owner.isClass)
         }
         reader.until(end)(createSymbols(using ctx.withOwner(newOwner)))
         if tag == TEMPLATE then newOwner.asInstanceOf[ClassSymbol].initialised = true
       case DEFDEF | VALDEF | PARAM | TYPEPARAM =>
         val end = reader.readEnd()
         val name = if (tag == TYPEPARAM) readName.toTypeName else readName
+        val addToDecls = tag != TYPEPARAM && ctx.owner.isClass
         val newSymbol =
-          ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls = (tag != TYPEPARAM))
+          ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls)
         reader.until(end)(createSymbols(using ctx.withOwner(newSymbol)))
       case BIND =>
         val end = reader.readEnd()
         var name: Name = readName
         if (tagFollowShared == TYPEBOUNDS) name = name.toTypeName
-        ctx.createSymbolIfNew(start, name, RegularSymbolFactory)
+        ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls = false)
         // bind is never an owner
         reader.until(end)(createSymbols)
 

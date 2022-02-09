@@ -8,6 +8,7 @@ import tastyquery.ast.Symbols.{ClassSymbol, NoSymbol, PackageClassSymbol, Regula
 import tastyquery.ast.Names.SignedName
 import tastyquery.ast.Types.TermRef
 import tastyquery.ast.Types.PackageRef
+import tastyquery.util.syntax.chaining.given
 
 object Trees {
   class TypeComputationError(val tree: Tree) extends RuntimeException(s"Could not compute type of $tree")
@@ -25,11 +26,7 @@ object Trees {
     final def tpe: Type = {
       val local = myType
       if local != null then local
-      else {
-        val tpe = calculateType
-        myType = tpe
-        tpe
-      }
+      else calculateType.useWith { myType = _ }
     }
 
     protected def subtrees: List[Tree] = this match {

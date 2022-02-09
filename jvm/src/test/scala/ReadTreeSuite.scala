@@ -10,7 +10,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 
 import java.nio.file.{Files, Paths}
 
-class ReadTreeSuite extends BaseUnpicklingSuite(includeClasses = false) {
+class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false) {
   import BaseUnpicklingSuite.Decls.*
 
   type StructureCheck = PartialFunction[Tree, Unit]

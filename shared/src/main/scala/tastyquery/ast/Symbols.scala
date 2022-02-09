@@ -20,7 +20,7 @@ object Symbols {
 
   val NoSymbol = new RegularSymbol(Names.EmptyTermName, null)
 
-  abstract class Symbol private[Symbols] (val name: Name, val owner: Symbol | Null) {
+  abstract class Symbol private[Symbols] (val name: Name, rawowner: Symbol | Null) {
     protected var myTree: Tree = EmptyTree
     // overridden in package symbol
     def withTree(t: Tree): this.type = {
@@ -29,7 +29,25 @@ object Symbols {
     }
     final def tree: Tree = myTree
 
-    override def toString: String = s"symbol[$name]"
+    final def outer: Symbol = rawowner match {
+      case owner: Symbol => owner
+      case null          => assert(false, s"cannot access outer, $this was not declared within any scope")
+    }
+
+    final def enclosingDecl: DeclaringSymbol = rawowner match {
+      case owner: DeclaringSymbol => owner
+      case _: Symbol | null       => assert(false, s"cannot access owner, $this is a local symbol or has no owner")
+    }
+
+    final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
+
+    override def toString: String = {
+      val kind = this match
+        case _: PackageClassSymbol => "package "
+        case _: ClassSymbol        => "class "
+        case _                     => ""
+      s"symbol[$kind$name]"
+    }
     def toDebugString = toString
   }
 
@@ -37,10 +55,9 @@ object Symbols {
     def unapply(s: Symbol): Option[Name] = Some(s.name)
   }
 
-  final class RegularSymbol(override val name: Name, override val owner: Symbol | Null) extends Symbol(name, owner)
+  final class RegularSymbol(override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner)
 
-  abstract class DeclaringSymbol(override val name: Name, override val owner: Symbol | Null)
-      extends Symbol(name, owner) {
+  abstract class DeclaringSymbol(override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner) {
     /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
     protected val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
@@ -63,16 +80,16 @@ object Symbols {
       s"${super.toString} with declarations [${myDeclarations.keys.map(_.toDebugString).mkString(", ")}]"
   }
 
-  class ClassSymbol(override val name: Name, override val owner: Symbol | Null) extends DeclaringSymbol(name, owner) {
+  class ClassSymbol(override val name: Name, rawowner: Symbol | Null) extends DeclaringSymbol(name, rawowner) {
     private[tastyquery] var initialised: Boolean = false
   }
 
   // TODO: typename or term name?
-  class PackageClassSymbol(override val name: Name, override val owner: PackageClassSymbol | Null)
-      extends ClassSymbol(name, owner) {
-    if (owner != null) {
+  class PackageClassSymbol(override val name: Name, rawowner: PackageClassSymbol | Null)
+      extends ClassSymbol(name, rawowner) {
+    if (rawowner != null) {
       // A package symbol is always a declaration in its owner package
-      owner.addDecl(this)
+      rawowner.addDecl(this)
     } else {
       // Root package is the only symbol that is allowed to not have an owner
       assert(name == RootName)

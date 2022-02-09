@@ -4,6 +4,7 @@ import tastyquery.ast.Names.{EmptyTermName, EmptyTypeName, TypeName}
 import tastyquery.ast.Symbols.RegularSymbol
 import tastyquery.ast.Trees.{DefTree, Tree, TypeParam}
 import tastyquery.ast.Types.{Type, TypeBounds, NoType}
+import tastyquery.util.syntax.chaining.given
 
 object TypeTrees {
   class TypeTreeToTypeError(val typeTree: TypeTree) extends RuntimeException(s"Could not convert $typeTree to type")
@@ -18,11 +19,8 @@ object TypeTrees {
     protected def calculateType: Type = throw new TypeTreeToTypeError(this)
     final def toType: Type = {
       val local = myType
-      if local == null then {
-        val tpe = calculateType
-        myType = tpe
-        tpe
-      } else local
+      if local == null then calculateType.useWith { myType = _ }
+      else local
     }
   }
 

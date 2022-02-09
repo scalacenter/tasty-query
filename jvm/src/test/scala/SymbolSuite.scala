@@ -3,7 +3,7 @@ import tastyquery.Contexts.FileContext
 import tastyquery.ast.Names.{EmptyPackageName, Name, SimpleName, TypeName}
 import tastyquery.ast.Symbols.{DeclaringSymbol, PackageClassSymbol, Symbol}
 
-class SymbolSuite extends BaseUnpicklingSuite(includeClasses = false) {
+class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false) {
   import BaseUnpicklingSuite.Decls.*
   import BaseUnpicklingSuite.toDebugString
 

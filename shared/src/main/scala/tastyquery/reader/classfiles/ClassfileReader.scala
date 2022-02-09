@@ -4,8 +4,10 @@ import tastyquery.ast.Names.{SimpleName, termName, annot}
 import tastyquery.util.{Forked, loop, accumulate}
 import tastyquery.util.syntax.chaining.given
 import tastyquery.reader.classfiles.Classpaths.ClassData
+import tastyquery.unsafe
 import ClassfileReader.*
 import ClassfileReader.Access.*
+import tastyquery.reader.pickles.ByteCodecs
 
 final class ClassfileReader private () {
 
@@ -62,12 +64,27 @@ final class ClassfileReader private () {
         throw ReadException(s"Expected UTF8 at index $idx")
     }
 
-    def sigbytes(idx: Idx): IArray[Byte] = this.apply(idx) match {
+    def sigbytes(idx: Idx): IArray[Byte] =
+      unsafeDecodeSigBytes(encodedSigbytes(idx))
+
+    def sigbytes(idxs: IArray[Idx]): IArray[Byte] =
+      unsafeDecodeSigBytes(idxs.flatMap(encodedSigbytes))
+
+    private def encodedSigbytes(idx: Idx): IArray[Byte] = this.apply(idx) match {
       case ConstantInfo.Utf8(forked: Forked[DataStream]) =>
         forked.use(data.readSlice(data.readU2()))
       case _ =>
         throw ReadException(s"Expected unforced UTF8 constant at index $idx")
     }
+
+    /** returns a new IArray with the decoded bytes, mutates `bytes` in-place, so `bytes` should not be shared
+      * after passing to this method.
+      */
+    private def unsafeDecodeSigBytes(bytes: IArray[Byte]): IArray[Byte] =
+      // Ok to allow mutation of `bytes`, we will not share it.
+      val mutableView = unsafe.asByteArray(bytes)
+      val decodedLength = ByteCodecs.decode(mutableView)
+      bytes.slice(0, decodedLength) // `bytes` underlying array was mutated by `ByteCodecs.decode`
 
     private[ClassfileReader] def idx(i: Int): Idx = Indexing.idx(this, i)
 

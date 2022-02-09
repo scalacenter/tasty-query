@@ -94,6 +94,18 @@ object Contexts {
     val owner: ClassSymbol
   ) extends BaseContext(defn, classloader) {
 
+    def classRoot: ClassSymbol = owner
+
+    def moduleClassRoot: ClassSymbol = {
+      val pkg = classRoot.enclosingDecl
+      pkg.getDecl(classRoot.name.toTypeName.toObjectName).get.asInstanceOf[ClassSymbol]
+    }
+
+    def moduleRoot: RegularSymbol = {
+      val pkg = classRoot.enclosingDecl
+      pkg.getDecl(classRoot.name.toTermName).get.asInstanceOf[RegularSymbol]
+    }
+
     def createSymbolIfNew[T <: Symbol](name: Name, factory: SymbolFactory[T], addToDecls: Boolean = false): T =
       owner.getDecl(name) match {
         case Some(sym) => factory.castSymbol(sym)
@@ -151,8 +163,10 @@ object Contexts {
 
     private def registerSym(addr: Addr, sym: Symbol, addToDecls: Boolean): Unit = {
       fileLocalInfo.localSymbols(addr) = sym
-      if (addToDecls && owner.isInstanceOf[DeclaringSymbol])
-        owner.asInstanceOf[DeclaringSymbol].addDecl(sym)
+      if addToDecls then
+        owner match
+          case owner: DeclaringSymbol => owner.addDecl(sym)
+          case _ => throw IllegalArgumentException(s"can not add $sym to decls of non-declaring symbol $owner")
     }
 
     /** Creates a new symbol at @addr with @name. The symbol is added to the owner's declarations if both
@@ -162,12 +176,7 @@ object Contexts {
       *    Example: a method is added to the declarations of its class, but a nested method is not added
       *    to declarations of its owner method.
       */
-    def createSymbolIfNew[T <: Symbol](
-      addr: Addr,
-      name: Name,
-      factory: SymbolFactory[T],
-      addToDecls: Boolean = false
-    ): T = {
+    def createSymbolIfNew[T <: Symbol](addr: Addr, name: Name, factory: SymbolFactory[T], addToDecls: Boolean): T = {
       if (!hasSymbolAt(addr)) {
         registerSym(addr, factory.createSymbol(name, owner), addToDecls)
       }

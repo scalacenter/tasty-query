@@ -2,12 +2,14 @@ package tastyquery.reader.classfiles
 
 import tastyquery.util.Forked
 import tastyquery.ast.Names.attr
+import tastyquery.ast.Names.annot
+import tastyquery.ast.Names.SimpleName
 import tastyquery.ast.Symbols.RegularSymbolFactory
 import tastyquery.Contexts.{ClassContext, clsCtx}
+import tastyquery.reader.pickles.Unpickler
 
-import ClassfileReader.{DataStream, ReadException, data}
 import Classpaths.ClassData
-import tastyquery.ast.Names.SimpleName
+import ClassfileReader.{DataStream, ReadException, Annotation, AnnotationValue, data}
 
 object ClassfileParser {
 
@@ -18,6 +20,26 @@ object ClassfileParser {
     val methods: Forked[DataStream],
     val attributes: Forked[DataStream]
   )(using val pool: reader.ConstantPool)
+
+  def loadScala2Class(structure: Structure, runtimeAnnotStart: Forked[DataStream])(using ClassContext): Unit = {
+    import structure.{reader, given}
+
+    val Some(Annotation(tpe, args)) = runtimeAnnotStart.use {
+      reader.readAnnotation(Set(annot.ScalaLongSignature, annot.ScalaSignature))
+    }
+
+    val sigBytes = tpe match {
+      case annot.ScalaSignature =>
+        val bytesArg = args.head.asInstanceOf[AnnotationValue.Const[pool.type]]
+        pool.sigbytes(bytesArg.valueIdx)
+      case annot.ScalaLongSignature =>
+        val bytesArrArg = args.head.asInstanceOf[AnnotationValue.Arr[pool.type]]
+        val idxs = bytesArrArg.values.map(_.asInstanceOf[AnnotationValue.Const[pool.type]].valueIdx)
+        pool.sigbytes(idxs)
+    }
+    Unpickler.loadInfo(sigBytes)
+
+  }
 
   def loadJavaClass(structure: Structure)(using ClassContext): Unit = {
     import structure.{reader, given}
@@ -68,7 +90,10 @@ object ClassfileParser {
         isScalaRaw &= !isTASTY
       }
       if isScala then {
-        println(s"class file for ${structure.binaryName} is a scala 2 class, ignoring")
+        println(s"class file for ${structure.binaryName} is a scala 2 class")
+        val annots = runtimeAnnotStart
+        if annots != null then loadScala2Class(structure, annots)
+        else throw ReadException(s"class file for ${classRoot.simpleName} is a scala 2 class, but has no annotations")
       } else if isTASTY then {
         println(s"class file for ${structure.binaryName} is a tasty class, ignoring")
       } else if isScalaRaw then {
@@ -97,8 +122,8 @@ object ClassfileParser {
   }
 
   def toplevel(classRoot: ClassData)(using ClassContext): Structure = {
-    val root = clsCtx.owner
-    println(s"loading class file for ${root.owner.nn.name}.${root.name} with ${classRoot.bytes.size} bytes")
+    val root = clsCtx.classRoot
+    println(s"loading class file for ${root.enclosingDecl.name}.${root.name} with ${classRoot.bytes.size} bytes")
 
     def headerAndStructure(reader: ClassfileReader)(using DataStream) = {
       reader.acceptHeader()
