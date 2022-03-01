@@ -17,9 +17,15 @@ object TastyUnpickler {
     def unpickle(reader: TastyReader, nameAtRef: NameTable): R
   }
 
-  class TreeSectionUnpickler extends SectionUnpickler[TreeUnpickler]("ASTs") {
+  class TreeSectionUnpickler(posUnpickler: Option[PositionUnpickler])
+  extends SectionUnpickler[TreeUnpickler]("ASTs") {
     def unpickle(reader: TastyReader, nameAtRef: NameTable): TreeUnpickler =
-      new TreeUnpickler(reader, nameAtRef)
+      new TreeUnpickler(reader, nameAtRef, posUnpickler)
+  }
+
+  class PositionSectionUnpickler extends SectionUnpickler[PositionUnpickler]("Positions") {
+    def unpickle(reader: TastyReader, nameAtRef: NameTable): PositionUnpickler =
+      new PositionUnpickler(reader, nameAtRef)
   }
 
   class NameTable extends (NameRef => TermName) {
@@ -45,6 +51,8 @@ class TastyUnpickler(reader: TastyReader) {
     this(new TastyReader(unsafe.asByteArray(bytes)))
 
   private val sectionReader = new mutable.HashMap[String, TastyReader]
+  /** Reserved for PositionUnpickler */
+  private val sectionReaderCloned = new mutable.HashMap[String, TastyReader]
   val nameAtRef: NameTable = new NameTable
 
   private def readName(): TermName = nameAtRef(readNameRef())

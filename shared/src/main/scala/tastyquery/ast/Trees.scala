@@ -7,6 +7,8 @@ import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Symbols.*
 import tastyquery.util.syntax.chaining.given
 import tastyquery.Contexts.BaseContext
+import tastyquery.reader.PositionUnpickler
+import dotty.tools.dotc.util.Spans.{Span, NoSpan}
 
 object Trees {
   class TypeComputationError(val tree: Tree) extends RuntimeException(s"Could not compute type of $tree")
@@ -26,6 +28,10 @@ object Trees {
       if local != null then local
       else calculateType.useWith { myType = _ }
     }
+
+    protected var mySpan: Span = NoSpan
+    final def setSpan(span: Span): Unit = mySpan = span
+    final def span: Span = mySpan
 
     protected def subtrees: List[Tree] = this match {
       case PackageDef(pid, stats)                   => stats
