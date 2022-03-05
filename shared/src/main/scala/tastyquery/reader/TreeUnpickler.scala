@@ -14,6 +14,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.util.NotGiven
 import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyReader}
+import dotty.tools.dotc.util.Spans.{Span, NoSpan}
 import TastyBuffer.*
 import TastyFormat.*
 
@@ -23,8 +24,11 @@ sealed trait AbstractCaseDefFactory[CaseDefType]
 case object CaseDefFactory extends AbstractCaseDefFactory[CaseDef]
 case object TypeCaseDefFactory extends AbstractCaseDefFactory[TypeCaseDef]
 
-class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
-
+class TreeUnpickler(
+  protected val reader: TastyReader,
+  nameAtRef: NameTable,
+  posUnpicklerOpt: Option[PositionUnpickler]
+) {
   def unpickle(using FileContext): List[Tree] =
     @tailrec
     def read(acc: ListBuffer[Tree]): List[Tree] =
@@ -114,8 +118,19 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   private def posErrorMsg(using FileContext): String = s"at address ${reader.currentAddr} in file ${fileCtx.getFile}"
   private def posErrorMsg(atAddr: Addr)(using FileContext): String = s"at address $atAddr in file ${fileCtx.getFile}"
 
+  def spanAt(addr: Addr): Span =
+    posUnpicklerOpt match {
+      case Some(posUnpickler) =>
+        posUnpickler.spanAt(addr)
+      case _ =>
+        NoSpan
+    }
+
+  def span: Span =
+    spanAt(reader.currentAddr)
+
   def forkAt(start: Addr): TreeUnpickler =
-    new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef)
+    new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt)
 
   def fork: TreeUnpickler =
     forkAt(reader.currentAddr)
@@ -172,6 +187,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
   def readTopLevelStat(using FileContext): Tree = reader.nextByte match {
     case PACKAGE =>
+      val spn = span
       reader.readByte()
       val packageEnd = reader.readEnd()
       val pid = readPotentiallyShared({
@@ -179,7 +195,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         // Symbol is already created during symbol creation phase
         fileCtx.getPackageSymbol(readName)
       })
-      PackageDef(pid, reader.until(packageEnd)(readTopLevelStat(using fileCtx.withOwner(pid))))
+      PackageDef(pid, reader.until(packageEnd)(readTopLevelStat(using fileCtx.withOwner(pid))))(spn)
     case _ => readStat
   }
 
@@ -190,41 +206,45 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case IMPORT | EXPORT =>
       def readSelector: ImportSelector = {
         assert(reader.nextByte == IMPORTED, posErrorMsg)
+        val nameSpan = span
         reader.readByte()
-        val name = ImportIdent(readName)
+        val name = ImportIdent(readName)(nameSpan)
         // IMPORTED can be followed by RENAMED or BOUNDED
         reader.nextByte match {
           case RENAMED =>
+            val renamedSpan = span
             reader.readByte()
-            val renamed = ImportIdent(readName)
-            ImportSelector(name, renamed)
+            val renamed = ImportIdent(readName)(renamedSpan)
+            ImportSelector(name, renamed)(nameSpan)
           case BOUNDED =>
             reader.readByte()
             val bound = readTypeTree
-            ImportSelector(name, EmptyTree, bound)
-          case _ => ImportSelector(name)
+            ImportSelector(name, EmptyTree, bound)(nameSpan)
+          case _ => ImportSelector(name)(nameSpan)
         }
       }
+      val spn = span
       val tag = reader.readByte()
       val end = reader.readEnd()
       val qual = readTerm
       val selectors = reader.until(end)(readSelector)
-      if (tag == IMPORT) Import(qual, selectors) else Export(qual, selectors)
+      if (tag == IMPORT) Import(qual, selectors)(spn) else Export(qual, selectors)(spn)
     case TYPEDEF =>
+      val spn = span
       val start = reader.currentAddr
       reader.readByte()
       val end = reader.readEnd()
       val name = readName.toTypeName
       val typedef: ClassDef | TypeMember = if (reader.nextByte == TEMPLATE) {
         val classSymbol = fileCtx.getSymbol(start, ClassSymbolFactory)
-        ClassDef(name, readTemplate(using fileCtx.withOwner(classSymbol)), classSymbol).definesTreeOf(classSymbol)
+        ClassDef(name, readTemplate(using fileCtx.withOwner(classSymbol)), classSymbol)(spn).definesTreeOf(classSymbol)
       } else {
         val symbol = fileCtx.getSymbol(start, RegularSymbolFactory)
         val localCtx = fileCtx.withOwner(symbol)
         val typeBounds: TypeTree | TypeBounds =
           if tagFollowShared == TYPEBOUNDS then readTypeBounds(using localCtx)
           else readTypeTree(using localCtx)
-        TypeMember(name, typeBounds, symbol).definesTreeOf(symbol)
+        TypeMember(name, typeBounds, symbol)(spn).definesTreeOf(symbol)
       }
       // TODO: read modifiers
       skipModifiers(end)
@@ -292,6 +312,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     }
 
     def readTypeParam: TypeParam = {
+      val spn = span
       val start = reader.currentAddr
       val paramSymbol = fileCtx.getSymbol(start, RegularSymbolFactory)
       reader.readByte()
@@ -299,7 +320,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val name = readName.toTypeName
       val bounds = readTypeParamType(using fileCtx.withOwner(paramSymbol))
       skipModifiers(end)
-      TypeParam(name, bounds, paramSymbol).definesTreeOf(paramSymbol)
+      TypeParam(name, bounds, paramSymbol)(spn).definesTreeOf(paramSymbol)
     }
     var acc = new ListBuffer[TypeParam]()
     while (reader.nextByte == TYPEPARAM) {
@@ -331,6 +352,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
   // TODO: classinfo of the owner
   def readTemplate(using FileContext): Template = {
+    val spn = span
     reader.readByte()
     val end = reader.readEnd()
     val tparams = readTypeParams
@@ -349,7 +371,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     // The first entry is the constructor
     val cstr = readStat.asInstanceOf[DefDef]
     val body = readStats(end)
-    Template(cstr, parents, self, tparams ++ params ++ body)
+    Template(cstr, parents, self, tparams ++ params ++ body)(spn)
   }
 
   def readAllParams(using FileContext): List[ParamsClause] =
@@ -390,14 +412,16 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     if (reader.nextByte != SELFDEF) {
       reusable.EmptyValDef
     } else {
+      val spn = span
       reader.readByte()
       val name = readName
       val tpt = readTypeTree
       // no symbol for self, because it's never referred to by symbol
-      ValDef(name, tpt, EmptyTree, NoSymbol)
+      ValDef(name, tpt, EmptyTree, NoSymbol)(spn)
     }
 
   def readValOrDefDef(using FileContext): Tree = {
+    val spn = span
     val start = reader.currentAddr
     val tag = reader.readByte()
     val end = reader.readEnd()
@@ -414,10 +438,10 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     tag match {
       case VALDEF | PARAM =>
         symbol.withDeclaredType(tpt.toType)
-        ValDef(name, tpt, rhs, symbol).definesTreeOf(symbol)
+        ValDef(name, tpt, rhs, symbol)(spn).definesTreeOf(symbol)
       case DEFDEF =>
         symbol.withDeclaredType(makeDefDefType(params, tpt))
-        DefDef(name, params, tpt, rhs, symbol).definesTreeOf(symbol)
+        DefDef(name, params, tpt, rhs, symbol)(spn).definesTreeOf(symbol)
     }
   }
 
@@ -452,100 +476,118 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
   def readTerm(using FileContext): Tree = reader.nextByte match {
     case IDENT =>
+      val spn = span
       reader.readByte()
       val name = readName
       val typ = readType
-      FreeIdent(name, typ)
+      FreeIdent(name, typ)(spn)
     case APPLY =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val fn = readTerm
       val args = readTerms(end)
-      Apply(fn, args)
+      Apply(fn, args)(spn) // TOCHECK
     case NAMEDARG =>
+      val spn = span
       reader.readByte()
-      NamedArg(readName, readTerm)
+      NamedArg(readName, readTerm)(spn)
     case TYPEAPPLY =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val fn = readTerm
-      TypeApply(fn, reader.until(end)(readTypeTree))
+      TypeApply(fn, reader.until(end)(readTypeTree))(spn)
     case SELECT =>
+      val spn = span
       reader.readByte()
       val name = readName
       val qual = readTerm
-      Select(qual, name)
+      Select(qual, name)(spn)
     case QUALTHIS =>
+      val spn = span
       reader.readByte()
       val qualifier = readTypeTree.asInstanceOf[TypeIdent]
-      This(Some(qualifier))
+      This(Some(qualifier))(spn)
     case SUPER =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val qual = readTerm
       val mixin = reader.ifBefore(end)(Some(readTypeTree.asInstanceOf[TypeIdent]), None)
-      Super(qual, mixin)
+      Super(qual, mixin)(spn)
     case SELECTin =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val name = readSignedName()
       val qual = readTerm
       val owner = readTypeRef()
-      SelectIn(qual, name, owner)
+      SelectIn(qual, name, owner)(spn)
     case NEW =>
+      val spn = span
       reader.readByte()
       val cls = readTypeTree
-      New(cls)
+      New(cls)(spn)
     case TYPED =>
+      val spn = span
       reader.readByte()
       reader.readEnd()
-      Typed(readTerm, readTypeTree)
+      Typed(readTerm, readTypeTree)(spn) // TOCHECK
     case THROW =>
+      val spn = span
       reader.readByte()
       val thrown = readTerm
-      Throw(thrown)
+      Throw(thrown)(spn)
     case TRY =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val expr = readTerm
       val catchCases = readCases[CaseDef](CaseDefFactory, end)
       val finalizer = reader.ifBefore(end)(readTerm, EmptyTree)
-      Try(expr, catchCases, finalizer)
+      Try(expr, catchCases, finalizer)(spn)
     case ASSIGN =>
+      val spn = span
       reader.readByte()
       reader.readEnd()
-      Assign(readTerm, readTerm)
+      Assign(readTerm, readTerm)(spn) // TOCHECK
     case BLOCK =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val expr = readTerm
-      Block(readStats(end), expr)
+      Block(readStats(end), expr)(spn)
     case IF =>
+      val spn = span
       reader.readByte()
       reader.readEnd()
       if (reader.nextByte == INLINE) {
         reader.readByte()
-        new InlineIf(readTerm, readTerm, readTerm)
+        new InlineIf(readTerm, readTerm, readTerm)(spn)
       } else {
-        If(readTerm, readTerm, readTerm)
+        If(readTerm, readTerm, readTerm)(spn)
       }
     case LAMBDA =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val method = readTerm
       val tpt = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
-      Lambda(method, tpt)
+      Lambda(method, tpt)(spn)
     case MATCH =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       if (reader.nextByte == IMPLICIT) {
         reader.readByte()
-        new InlineMatch(EmptyTree, readCases[CaseDef](CaseDefFactory, end))
+        new InlineMatch(EmptyTree, readCases[CaseDef](CaseDefFactory, end))(spn)
       } else if (reader.nextByte == INLINE) {
         reader.readByte()
-        new InlineMatch(readTerm, readCases[CaseDef](CaseDefFactory, end))
-      } else Match(readTerm, readCases[CaseDef](CaseDefFactory, end))
+        new InlineMatch(readTerm, readCases[CaseDef](CaseDefFactory, end))(spn)
+      } else Match(readTerm, readCases[CaseDef](CaseDefFactory, end))(spn)
     case BIND =>
+      val spn = span
       val start = reader.currentAddr
       reader.readByte()
       val end = reader.readEnd()
@@ -555,12 +597,14 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val term = readTerm
       skipModifiers(end)
       val symbol = fileCtx.getSymbol(start, RegularSymbolFactory)
-      Bind(name, term, symbol).definesTreeOf(symbol)
+      Bind(name, term, symbol)(spn).definesTreeOf(symbol)
     case ALTERNATIVE =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
-      Alternative(reader.until(end)(readTerm))
+      Alternative(reader.until(end)(readTerm))(spn)
     case UNAPPLY =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val fun = readTerm
@@ -571,25 +615,30 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       // TODO: use pattern type
       val patType = readType
       val patterns = reader.until(end)(readTerm)
-      Unapply(fun, args, patterns)
+      Unapply(fun, args, patterns)(spn)
     case REPEATED =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val elemType = readTypeTree
-      SeqLiteral(reader.until(end)(readTerm), elemType)
+      SeqLiteral(reader.until(end)(readTerm), elemType)(spn)
     case WHILE =>
+      val spn = span
       reader.readByte()
       reader.readEnd()
-      While(readTerm, readTerm)
+      While(readTerm, readTerm)(spn)
     case RETURN =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
+      val trtSpan = spn
       val from = readSymRef
       val expr = reader.ifBefore(end)(readTerm, EmptyTree)
       // TODO: always just taking the name?
       // return always returns from a method, i.e. something with a TermName
-      Return(expr, TermRefTree(from.name.asInstanceOf[TermName], TermRef(NoPrefix, from)))
+      Return(expr, TermRefTree(from.name.asInstanceOf[TermName], TermRef(NoPrefix, from))(trtSpan))(spn)
     case INLINED =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val expr = readTerm
@@ -603,44 +652,52 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
           EmptyTypeIdent
         )
       val bindings = reader.until(end)(readValOrDefDef)
-      Inlined(expr, caller, bindings)
+      Inlined(expr, caller, bindings)(spn)
     case SHAREDterm =>
+      val spn = span
       reader.readByte()
       forkAt(reader.readAddr()).readTerm
 
     // paths
     case THIS =>
+      val spn = span
       reader.readByte()
       val typ = readType
       // TODO: assign type
-      This(None)
+      This(None)(spn)
     case TERMREF =>
+      val spn = span
       reader.readByte()
       val name = readName
       val prefix = readType
-      TermRefTree(name, TermRef(prefix, name))
+      TermRefTree(name, TermRef(prefix, name))(spn)
     case TERMREFpkg =>
+      val spn = span
       reader.readByte()
       val name = readName
       // TODO: create a termref and store as a tpe
-      new ReferencedPackage(name)
+      new ReferencedPackage(name)(spn)
     case TERMREFdirect =>
+      val spn = span
       reader.readByte()
       val sym = readSymRef
       assert(sym.name.isInstanceOf[TermName], posErrorMsg)
       val tpe = TermRef(NoPrefix, sym)
-      TermRefTree(sym.name.asInstanceOf[TermName], tpe)
+      TermRefTree(sym.name.asInstanceOf[TermName], tpe)(spn)
     case TERMREFsymbol =>
+      val spn = span
       reader.readByte()
       val sym = readSymRef
       val pre = readType
       assert(sym.name.isInstanceOf[TermName], posErrorMsg)
-      TermRefTree(sym.name.asInstanceOf[TermName], TermRef(pre, sym))
+      TermRefTree(sym.name.asInstanceOf[TermName], TermRef(pre, sym))(spn)
     case SHAREDtype =>
+      val spn = span
       reader.readByte()
       forkAt(reader.readAddr()).readTerm
     case tag if isConstantTag(tag) =>
-      Literal(readConstant)
+      val spn = span
+      Literal(readConstant)(spn)
     case tag =>
       throw TreeUnpicklerException(s"Unexpected term tag ${astTagToString(tag)} $posErrorMsg")
   }
@@ -672,9 +729,10 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     val end = reader.readEnd()
     factory match {
       case CaseDefFactory =>
+        val spn = span
         val pattern = readTerm
         val body = readTerm
-        CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body)
+        CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body)(spn)
       case TypeCaseDefFactory =>
         TypeCaseDef(readTypeTree, readTypeTree)
     }
@@ -776,10 +834,11 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       // skip the result type: it might refer to the parameters, which we haven't read yet
       skipTree()
       val params = reader.until(end)({
+        val tpSpan = span
         val bounds = readTypeBounds
         val name = readName.toTypeName
         // cannot have symbols inside types
-        TypeParam(name, bounds, NoSymbol)
+        TypeParam(name, bounds, NoSymbol)(tpSpan)
       })
       TypeLambda(params)((b: Binders) => resultUnpickler.readType(using fileCtx.withEnclosingBinders(lambdaAddr, b)))
     case PARAMtype =>

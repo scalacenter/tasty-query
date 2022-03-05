@@ -13,14 +13,14 @@ import TastyBuffer.{Addr, NameRef}
 
 /** Unpickler for tree positions */
 class PositionUnpickler(reader: TastyReader, nameAtRef: NameRef => TermName) {
-  import reader._
+  import reader.*
 
   private var myLineSizes: Array[Int] = _
   private var mySpans: util.HashMap[Addr, Span] = _
   private var mySourcePaths: util.HashMap[Addr, String] = _
   private var isDefined = false
 
-  def ensureDefined(): Unit = {
+  def ensureDefined(): Unit =
     if (!isDefined) {
       val lines = readNat()
       myLineSizes = new Array[Int](lines)
@@ -39,8 +39,7 @@ class PositionUnpickler(reader: TastyReader, nameAtRef: NameRef => TermName) {
         if (header == SOURCE) {
           val path = nameAtRef(readNameRef()).toString
           mySourcePaths(Addr(curIndex)) = path
-        }
-        else {
+        } else {
           val addrDelta = header >> 3
           val hasStart = (header & 4) != 0
           val hasEnd = (header & 2) != 0
@@ -56,7 +55,6 @@ class PositionUnpickler(reader: TastyReader, nameAtRef: NameRef => TermName) {
       }
       isDefined = true
     }
-  }
 
   private def spans: util.ReadOnlyMap[Addr, Span] = {
     ensureDefined()
