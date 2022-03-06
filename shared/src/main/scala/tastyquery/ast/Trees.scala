@@ -17,7 +17,7 @@ object Trees {
     def unapply(e: TypeComputationError): Option[Tree] = Some(e.tree)
   }
 
-  abstract class Tree(span: Span) {
+  abstract class Tree(val span: Span) {
     protected var myType: Type | Null = null
 
     /** Calculating a type should be a pure and fast operation, that does not resolve symbols. */
