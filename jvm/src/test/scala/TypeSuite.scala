@@ -30,7 +30,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val boxedSym = resolve(BoxedJava / name"boxed")
 
-    val (JavaDefinedRef @ _: Symbolic) = boxedSym.tree.tpe
+    val (JavaDefinedRef @ _: Symbolic) = boxedSym.tree.tpe: @unchecked
 
     forceAbsentSymbol(JavaDefined)(JavaDefinedRef.resolveToSymbol)
   }
@@ -43,9 +43,9 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val xMethodSym = resolve(BoxedJava / name"xMethod")
 
-    val DefDef(_, _, _, Apply(getXSelection, _), _) = xMethodSym.tree
+    val DefDef(_, _, _, Apply(getXSelection, _), _) = xMethodSym.tree: @unchecked
 
-    val (getXRef @ _: Symbolic) = getXSelection.tpe
+    val (getXRef @ _: Symbolic) = getXSelection.tpe: @unchecked
 
     forceAbsentSymbol(getX)(getXRef.resolveToSymbol)
   }
@@ -58,9 +58,9 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val xFieldSym = resolve(BoxedJava / name"xField")
 
-    val DefDef(_, _, _, xSelection, _) = xFieldSym.tree
+    val DefDef(_, _, _, xSelection, _) = xFieldSym.tree: @unchecked
 
-    val (xRef @ _: Symbolic) = xSelection.tpe
+    val (xRef @ _: Symbolic) = xSelection.tpe: @unchecked
 
     forceAbsentSymbol(x)(xRef.resolveToSymbol)
   }
@@ -73,7 +73,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val boxedSym = resolve(BoxedCons / name"boxed")
 
-    val (AppliedType(ConsRef @ _: Symbolic, _)) = boxedSym.tree.tpe
+    val (AppliedType(ConsRef @ _: Symbolic, _)) = boxedSym.tree.tpe: @unchecked
 
     forceAbsentSymbol(::)(ConsRef.resolveToSymbol)
   }
@@ -86,9 +86,9 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val fooSym = resolve(BoxedCons / name"foo")
 
-    val DefDef(_, _, _, Apply(canEqualSelection, _), _) = fooSym.tree
+    val DefDef(_, _, _, Apply(canEqualSelection, _), _) = fooSym.tree: @unchecked
 
-    val (canEqualRef @ _: Symbolic) = canEqualSelection.tpe
+    val (canEqualRef @ _: Symbolic) = canEqualSelection.tpe: @unchecked
 
     forceAbsentSymbol(canEqual)(canEqualRef.resolveToSymbol)
   }

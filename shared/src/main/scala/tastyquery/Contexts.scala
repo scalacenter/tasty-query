@@ -4,7 +4,7 @@ import dotty.tools.tasty.TastyBuffer.Addr
 import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
-import tastyquery.ast.Types.TypeLambda
+import tastyquery.ast.Types.Binders
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
@@ -122,18 +122,18 @@ object Contexts {
     * @param localSymbols -- map of the symbols, created when unpickling the current file.
     *                     A symbol can be referred to from anywhere in the file, therefore once the symbol is added
     *                     to the file info, it is kept in the context and its subcontexts.
-    *  @param enclosingLambdas -- map of the type lambdas which have the current address in scope.
-    *                          A type lambda can only be referred to if it encloses the referring address.
+    *  @param enclosingBinders -- map of the type binders which have the current address in scope.
+    *                          A type binder can only be referred to if it encloses the referring address.
     *                          A new FileLocalInfo (hence a new FileContext) is created when an enclosing is added
     *                          to mimic the scoping.
     */
   class FileLocalInfo(
     val filename: String,
     val localSymbols: mutable.HashMap[Addr, Symbol] = mutable.HashMap.empty,
-    val enclosingLambdas: Map[Addr, TypeLambda] = Map.empty
+    val enclosingBinders: Map[Addr, Binders] = Map.empty
   ) {
-    def addEnclosingLambda(addr: Addr, tl: TypeLambda): FileLocalInfo =
-      new FileLocalInfo(filename, localSymbols, enclosingLambdas.updated(addr, tl))
+    def addEnclosingBinders(addr: Addr, b: Binders): FileLocalInfo =
+      new FileLocalInfo(filename, localSymbols, enclosingBinders.updated(addr, b))
   }
 
   /** FileContext is used when unpickling a given .tasty file.
@@ -148,8 +148,8 @@ object Contexts {
     def this(defn: Definitions, owner: Symbol, filename: String, classloader: Classpaths.Loader) =
       this(defn, owner, new FileLocalInfo(filename), classloader)
 
-    def withEnclosingLambda(addr: Addr, tl: TypeLambda): FileContext =
-      new FileContext(defn, owner, fileLocalInfo.addEnclosingLambda(addr, tl), classloader)
+    def withEnclosingBinders(addr: Addr, b: Binders): FileContext =
+      new FileContext(defn, owner, fileLocalInfo.addEnclosingBinders(addr, b), classloader)
 
     def withOwner(newOwner: Symbol): FileContext =
       if (newOwner == owner) this
@@ -157,7 +157,7 @@ object Contexts {
 
     def getFile: String = fileLocalInfo.filename
 
-    def getEnclosingLambda(addr: Addr): TypeLambda = fileLocalInfo.enclosingLambdas(addr)
+    def getEnclosingBinders(addr: Addr): Binders = fileLocalInfo.enclosingBinders(addr)
 
     def hasSymbolAt(addr: Addr): Boolean = fileLocalInfo.localSymbols.contains(addr)
 

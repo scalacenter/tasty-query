@@ -61,7 +61,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
                     // a single parent -- java.lang.Object
                     List(parent: Apply),
                     // self not specified => EmptyValDef
-                    EmptyValDef,
+                    reusable.EmptyValDef,
                     // empty body
                     List()
                   ),
@@ -136,7 +136,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
       case Import(
             // TODO: SELECTtpt?
             Select(ReferencedPackage(SimpleName("imported_files")), SimpleName("Givens")),
-            List(ImportSelector(Ident(EmptyTermName), EmptyTree, EmptyTypeTree))
+            List(ImportSelector(Ident(nme.EmptyTermName), EmptyTree, EmptyTypeTree))
           ) =>
     }
     assert(containsSubtree(importMatch)(clue(unpickle(imports / tname"ImportGiven"))))
@@ -149,7 +149,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
       case Import(
             // TODO: SELECTtpt?
             Select(ReferencedPackage(SimpleName("imported_files")), SimpleName("Givens")),
-            ImportSelector(Ident(EmptyTermName), EmptyTree, TypeIdent(TypeName(SimpleName("A")))) :: Nil
+            ImportSelector(Ident(nme.EmptyTermName), EmptyTree, TypeIdent(TypeName(SimpleName("A")))) :: Nil
           ) =>
     }
     assert(containsSubtree(importMatch)(clue(tree)))
@@ -169,8 +169,8 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
       case Export(
             Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("second")),
             // An omitting selector is simply a rename to _
-            ImportSelector(Ident(SimpleName("status")), Ident(Wildcard), EmptyTypeTree) ::
-            ImportSelector(Ident(Wildcard), EmptyTree, EmptyTypeTree) :: Nil
+            ImportSelector(Ident(SimpleName("status")), Ident(nme.Wildcard), EmptyTypeTree) ::
+            ImportSelector(Ident(nme.Wildcard), EmptyTree, EmptyTypeTree) :: Nil
           ) =>
     }
     assert(containsSubtree(omittedAndWildcardExport)(clue(tree)))
@@ -179,7 +179,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
       case Export(
             Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("givens")),
             // A given selector has an empty name
-            ImportSelector(Ident(EmptyTermName), EmptyTree, TypeIdent(TypeName(SimpleName("AnyRef")))) :: Nil
+            ImportSelector(Ident(nme.EmptyTermName), EmptyTree, TypeIdent(TypeName(SimpleName("AnyRef")))) :: Nil
           ) =>
     }
     assert(containsSubtree(givenExport)(clue(tree)))
@@ -342,7 +342,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
 
     val defaultWithCondition: StructureCheck = {
       case CaseDef(
-            Ident(Wildcard),
+            Ident(nme.Wildcard),
             Apply(
               Select(
                 Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("%"), _, _)), Literal(Constant(2)) :: Nil),
@@ -355,7 +355,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     }
     assert(containsSubtree(defaultWithCondition)(clue(tree)))
 
-    val default: StructureCheck = { case CaseDef(Ident(Wildcard), EmptyTree, body: Block) =>
+    val default: StructureCheck = { case CaseDef(Ident(nme.Wildcard), EmptyTree, body: Block) =>
     }
     assert(containsSubtree(default)(clue(tree)))
   }
@@ -369,7 +369,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
               Unapply(
                 Select(Ident(SimpleName("FirstCase")), SignedName(SimpleName("unapply"), _, _)),
                 Nil,
-                List(Bind(SimpleName("x"), Ident(Wildcard), bindSymbol))
+                List(Bind(SimpleName("x"), Ident(nme.Wildcard), bindSymbol))
               ),
               _
             ),
@@ -415,7 +415,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     val tryMatch: StructureCheck = {
       case Try(
             _,
-            CaseDef(Ident(Wildcard), EmptyTree, Block(Nil, Literal(Constant(0)))) :: Nil,
+            CaseDef(Ident(nme.Wildcard), EmptyTree, Block(Nil, Literal(Constant(0)))) :: Nil,
             Block(Nil, Literal(Constant(())))
           ) =>
     }
@@ -476,7 +476,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     val tree = unpickle(simple_trees / tname"ScalaObject")
 
     val selfDefMatch: StructureCheck = {
-      case ValDef(Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject"))), EmptyTree, NoSymbol) =>
+      case ValDef(nme.Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject"))), EmptyTree, NoSymbol) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
 
@@ -590,7 +590,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     val setterMatch: StructureCheck = {
       case DefDef(
             SimpleName("x_="),
-            List(ValDef(SimpleName("x$1"), _, _, _) :: Nil),
+            ((ValDef(SimpleName("x$1"), _, _, _): Matchable) :: Nil) :: Nil,
             TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Unit")))),
             Literal(Constant(())),
             _
@@ -688,7 +688,13 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
 
     val traitMatch: StructureCheck = {
       case Template(
-            DefDef(SimpleName("<init>"), List(ValDef(SimpleName("param"), _, _, _) :: Nil), _, EmptyTree, _),
+            DefDef(
+              SimpleName("<init>"),
+              List((ValDef(SimpleName("param"), _, _, _): Matchable) :: Nil),
+              _,
+              EmptyTree,
+              _
+            ),
             TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Object")))) :: Nil,
             _,
             ValDef(SimpleName("param"), _, _, _) :: Nil
@@ -804,7 +810,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
               List(
                 DefDef(
                   SimpleName("$anonfun"),
-                  List(ValDef(SimpleName("second"), _, _, _) :: Nil),
+                  ((ValDef(SimpleName("second"), _, _, _): Matchable) :: Nil) :: Nil,
                   _,
                   Apply(
                     Apply(
@@ -1374,8 +1380,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             RealTypeBounds(
               nothing,
               tl @ TypeLambda(
-                TypeParam(TypeName(UniqueName("_$", EmptyTermName, 1)), RealTypeBounds(nothing2, any), _) :: Nil,
-                _
+                TypeParam(TypeName(UniqueName("_$", nme.EmptyTermName, 1)), RealTypeBounds(nothing2, any), _) :: Nil
               )
             ),
             _
@@ -1384,13 +1389,18 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(typeLambda)(clue(tree)))
   }
 
+  object TyParamRef:
+    def unapply(t: TypeParamRef): Some[Name] = Some(t.paramName)
+
   test("type-lambda-type-result-depends-on-param") {
     val tree = unpickle(simple_trees / tname"HigherKindedWithParam")
 
     // Type lambda result is List[X]
     val typeLambdaResultIsListOf: TypeStructureCheck = {
-      case AppliedType(TypeRef(PackageRef(_), TypeName(SimpleName("List"))), TypeParamRef(lambda, paramNum) :: Nil)
-          if lambda.params(paramNum).name == TypeName(SimpleName("X")) =>
+      case AppliedType(
+            TypeRef(PackageRef(_), TypeName(SimpleName("List"))),
+            TyParamRef(TypeName(SimpleName("X"))) :: Nil
+          ) =>
     }
 
     // A[X] <: List[X], i.e. A >: Nothing <: [X] =>> List[X]
@@ -1399,7 +1409,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             TypeName(SimpleName("A")),
             RealTypeBounds(
               nothing,
-              tl @ TypeLambda(TypeParam(TypeName(SimpleName("X")), RealTypeBounds(nothing2, any), _) :: Nil, _)
+              tl @ TypeLambda(TypeParam(TypeName(SimpleName("X")), RealTypeBounds(nothing2, any), _) :: Nil)
             ),
             _
           ) if typeLambdaResultIsListOf.isDefinedAt(tl.resultType) =>
@@ -1414,7 +1424,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
       case DefDef(
             SimpleName("takesVarargs"),
             List(
-              ValDef(
+              (ValDef(
                 SimpleName("xs"),
                 AnnotatedTypeTree(
                   // Int* ==> Seq[Int]
@@ -1432,7 +1442,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
                 ),
                 EmptyTree,
                 _
-              ) :: Nil
+              ): Matchable) :: Nil
             ),
             _,
             _,
@@ -1556,7 +1566,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
                 List(
                   TypeCaseDef(
                     TypeTreeBind(
-                      TypeName(UniqueName("_$", EmptySimpleName, 1)),
+                      TypeName(UniqueName("_$", nme.EmptySimpleName, 1)),
                       BoundedTypeTree(
                         TypeBoundsTree(
                           TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
@@ -1598,7 +1608,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
                   TypeCaseDef(
                     AppliedTypeTree(
                       TypeIdent(TypeName(SimpleName("List"))),
-                      TypeTreeBind(TypeName(SimpleName("t")), NamedTypeBoundsTree(TypeName(Wildcard), _), _) :: Nil
+                      TypeTreeBind(TypeName(SimpleName("t")), NamedTypeBoundsTree(TypeName(nme.Wildcard), _), _) :: Nil
                     ),
                     TypeIdent(TypeName(SimpleName("t")))
                   )

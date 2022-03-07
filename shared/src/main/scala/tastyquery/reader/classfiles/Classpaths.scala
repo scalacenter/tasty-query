@@ -4,7 +4,7 @@ import tastyquery.ast.Names.SimpleName
 import scala.reflect.NameTransformer
 import tastyquery.Contexts.{BaseContext, baseCtx, defn}
 import scala.collection.mutable
-import tastyquery.ast.Names.{TermName, EmptyPackageName, termName, str}
+import tastyquery.ast.Names.{TermName, nme, termName, str}
 import tastyquery.ast.Symbols.PackageClassSymbol
 import tastyquery.ast.Symbols.ClassSymbol
 import tastyquery.ast.Symbols.DeclaringSymbol
@@ -57,7 +57,7 @@ object Classpaths {
     def lookupTasty(fullClassName: String): Option[TastyData] =
       def packageAndClass(fullClassName: String): (SimpleName, SimpleName) = {
         val lastSep = fullClassName.lastIndexOf('.')
-        if (lastSep == -1) (EmptyPackageName, termName(fullClassName))
+        if (lastSep == -1) (nme.EmptyPackageName, termName(fullClassName))
         else {
           import scala.language.unsafeNulls
           val packageName = termName(fullClassName.substring(0, lastSep))
@@ -127,7 +127,7 @@ object Classpaths {
             packageNameCache.getOrElseUpdate(name, name)
 
           def toPackageName(parts: IndexedSeq[String]): TermName =
-            if parts.isEmpty then EmptyPackageName
+            if parts.isEmpty then nme.EmptyPackageName
             else parts.view.drop(1).foldLeft(cached(termName(parts.head)))((name, p) => cached(name select termName(p)))
 
           val packageNames =

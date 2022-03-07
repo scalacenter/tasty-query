@@ -10,12 +10,32 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import scala.io.Codec
 import scala.annotation.targetName
 
+import scala.jdk.CollectionConverters.*
+
+import Names.SimpleName
+
+private[ast] object NameCache {
+
+  // A map from the name to itself. Used to keep only one instance of SimpleName by underlying String
+  private val nameTable: scala.collection.concurrent.Map[SimpleName, SimpleName] =
+    new ConcurrentHashMap[SimpleName, SimpleName]().asScala
+
+  private[ast] def cache(newName: SimpleName): SimpleName = {
+    val oldName = nameTable.putIfAbsent(newName, newName)
+    oldName.getOrElse(newName)
+  }
+
+}
+
 object Names {
 
   given Ordering[SimpleName] = Ordering.by(_.name)
 
   object str {
     val topLevelSuffix = "$package"
+    val SuperAccessorPrefix: String = "super$"
+    val InlineAccessorPrefix: String = "inline$"
+    val BodyRetainerSuffix: String = "$retainedBody"
   }
 
   object attr {
@@ -31,25 +51,18 @@ object Names {
     val ScalaLongSignature = termName("Lscala/reflect/ScalaLongSignature;")
   }
 
-  import scala.jdk.CollectionConverters._
+  object nme {
 
-  // A map from the name to itself. Used to keep only one instance of SimpleName by underlying String
-  private val nameTable: scala.collection.concurrent.Map[SimpleName, SimpleName] =
-    new ConcurrentHashMap[SimpleName, SimpleName]().asScala
-
-  /** The term name represented by the empty string */
-  val EmptySimpleName: SimpleName = termName("")
-  val EmptyTermName: SimpleName = EmptySimpleName
-  val EmptyTypeName: TypeName = EmptyTermName.toTypeName
-  val RootName: SimpleName = termName("<root>")
-  val EmptyPackageName: SimpleName = termName("<empty>")
-  val Constructor: SimpleName = termName("<init>")
-  val Wildcard: SimpleName = termName("_")
-  val RefinementClass = typeName("<refinement>")
-
-  val SuperAccessorPrefix: String = "super$"
-  val InlineAccessorPrefix: String = "inline$"
-  val BodyRetainerSuffix: String = "$retainedBody"
+    /** The term name represented by the empty string */
+    val EmptySimpleName: SimpleName = termName("")
+    val EmptyTermName: SimpleName = EmptySimpleName
+    val EmptyTypeName: TypeName = EmptyTermName.toTypeName
+    val RootName: SimpleName = termName("<root>")
+    val EmptyPackageName: SimpleName = termName("<empty>")
+    val Constructor: SimpleName = termName("<init>")
+    val Wildcard: SimpleName = termName("_")
+    val RefinementClass = typeName("<refinement>")
+  }
 
   /** Create a type name from the characters in cs[offset..offset+len-1].
     * Assume they are already encoded.
@@ -76,18 +89,13 @@ object Names {
     * which however requires a Context for its operation.
     */
   def termName(s: String): SimpleName =
-    cache(SimpleName(s))
+    NameCache.cache(SimpleName(s))
 
   /** Create a term name from the characters in cs[offset..offset+len-1].
     * Assume they are already encoded.
     */
   def termName(cs: Array[Char], offset: Int, len: Int): SimpleName =
-    cache(SimpleName(cs.slice(offset, offset + len).mkString))
-
-  private def cache(newName: SimpleName): SimpleName = {
-    val oldName = nameTable.putIfAbsent(newName, newName)
-    oldName.getOrElse(newName)
-  }
+    NameCache.cache(SimpleName(cs.slice(offset, offset + len).mkString))
 
   /** Create a term name from the UTF8 encoded bytes in bs[offset..offset+len-1].
     * Assume they are already encoded.

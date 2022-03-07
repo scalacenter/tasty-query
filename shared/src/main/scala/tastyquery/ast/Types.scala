@@ -7,6 +7,9 @@ import tastyquery.ast.Names.{Name, QualifiedName, SimpleName, TermName, TypeName
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.{EmptyTree, Tree, TypeParam}
 import tastyquery.ast.Names.SignedName
+import annotation.constructorOnly
+
+import tastyquery.util.syntax.chaining.given
 
 object Types {
   type Designator = Symbol | Name | LookupIn
@@ -164,6 +167,8 @@ object Types {
         ReferenceResolutionError.addExplanation(s"Could not compute type of the term, referenced by $ref", explanation)
       )
 
+  class CyclicReference(val kind: String) extends Exception(s"cyclic evaluation of $kind")
+
   object ReferenceResolutionError {
     def unapply(e: ReferenceResolutionError): Option[TermRef] = Some(e.ref)
 
@@ -283,18 +288,34 @@ object Types {
     override def underlying(using BaseContext): Type = resType
   }
 
-  case class TypeLambda(params: List[TypeParam], resultTypeCtor: TypeLambda => Type) extends TypeProxy with TermType {
-    val resultType = resultTypeCtor(this)
+  /** Encapsulates the binders associated with a TypeParamRef. */
+  opaque type Binders = TypeLambda
+
+  case class TypeLambda(params: List[TypeParam])(@constructorOnly rest: Binders => Type)
+      extends TypeProxy
+      with TermType {
+    private var evaluating: Boolean = false
+    private val myResult: Type =
+      evaluating = true
+      rest(this: @unchecked /* safe as long as `rest` does not call `resultType` */ ).andThen { evaluating = false }
+
+    def resultType: Type =
+      if evaluating then throw CyclicReference(s"type lambda [$params] =>> ???")
+      else myResult
 
     override def underlying(using BaseContext): Type = ???
 
-    override def toString: String = s"TypeLambda($params, $resultType)"
+    override def toString: String =
+      if evaluating then s"TypeLambda($params)(<evaluating>)"
+      else s"TypeLambda($params)($myResult)"
   }
 
-  case class TypeParamRef(binder: TypeLambda, num: Int) extends TypeProxy with ValueType {
+  case class TypeParamRef(binders: Binders, num: Int) extends TypeProxy with ValueType {
     override def underlying(using BaseContext): Type = ???
 
-    override def toString: String = binder.params(num).name.toString
+    def paramName = binders.params(num).name
+
+    override def toString: String = paramName.toString
   }
 
   /** typ @ annot */

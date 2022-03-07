@@ -1,7 +1,6 @@
 package tastyquery.reader.pickles
 
-import tastyquery.ast.Names.{TermName, termName, TypeName, typeName}
-import tastyquery.ast.Names
+import tastyquery.ast.Names.{TermName, termName, TypeName, typeName, nme}
 import tastyquery.ast.Symbols.{Symbol, NoSymbol}
 import tastyquery.Contexts.{ClassContext, clsCtx}
 
@@ -173,7 +172,7 @@ class PickleReader {
       val tag = pkl.readByte().toInt
       assert(tag == CLASSsym)
       pkl.readNat() // read length
-      val result = readNameRef() == Names.RefinementClass
+      val result = readNameRef() == nme.RefinementClass
       result
     }
 

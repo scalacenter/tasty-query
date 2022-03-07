@@ -1,7 +1,7 @@
 package tastyquery.ast
 
 import scala.collection.mutable
-import tastyquery.ast.Names.*
+import tastyquery.ast.Names.{Name, TermName, SignedName, SimpleName, QualifiedName, nme}
 import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Trees.{EmptyTree, Tree}
 
@@ -18,7 +18,7 @@ object Symbols {
       if (explanation.isEmpty) msg else s"$msg: $explanation"
   }
 
-  val NoSymbol = new RegularSymbol(Names.EmptyTermName, null)
+  val NoSymbol = new RegularSymbol(nme.EmptyTermName, null)
 
   abstract class Symbol private[Symbols] (val name: Name, rawowner: Symbol | Null) {
     protected var myTree: Tree = EmptyTree
@@ -92,7 +92,7 @@ object Symbols {
       rawowner.addDecl(this)
     } else {
       // Root package is the only symbol that is allowed to not have an owner
-      assert(name == RootName)
+      assert(name == nme.RootName)
     }
     def findPackageSymbol(packageName: TermName): Option[PackageClassSymbol] = packageName match {
       case _: SimpleName => getPackageDecl(packageName)

@@ -380,7 +380,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
   def readSelf(using FileContext): ValDef =
     if (reader.nextByte != SELFDEF) {
-      EmptyValDef
+      reusable.EmptyValDef
     } else {
       reader.readByte()
       val name = readName
@@ -754,13 +754,13 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         // cannot have symbols inside types
         TypeParam(name, bounds, NoSymbol)
       })
-      TypeLambda(params, (tl: TypeLambda) => resultUnpickler.readType(using ctx.withEnclosingLambda(lambdaAddr, tl)))
+      TypeLambda(params)((b: Binders) => resultUnpickler.readType(using ctx.withEnclosingBinders(lambdaAddr, b)))
     case PARAMtype =>
       reader.readByte()
       reader.readEnd()
       val lambdaAddr = reader.readAddr()
       val num = reader.readNat()
-      TypeParamRef(ctx.getEnclosingLambda(lambdaAddr), num)
+      TypeParamRef(ctx.getEnclosingBinders(lambdaAddr), num)
     case REFINEDtype =>
       reader.readByte()
       reader.readEnd()

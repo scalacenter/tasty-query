@@ -2,7 +2,7 @@ import tastyquery.reader.TastyUnpickler
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
-import js.typedarray._
+import js.typedarray.*
 
 object Main {
   @js.native @JSImport("fs", "readFileSync") def readFileSync(name: String): js.typedarray.Uint8Array = js.native

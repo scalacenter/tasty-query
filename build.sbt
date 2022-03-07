@@ -12,7 +12,7 @@ val commonSettings = Seq(
 )
 
 val strictCompileSettings = Seq(
-  scalacOptions ++= Seq("-Yexplicit-nulls"),
+  scalacOptions ++= Seq("-Yexplicit-nulls", "-Ysafe-init", "-source:future"),
 )
 
 lazy val root = project.in(file("."))

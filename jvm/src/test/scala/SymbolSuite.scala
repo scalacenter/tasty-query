@@ -1,6 +1,6 @@
 import tastyquery.Contexts
 import tastyquery.Contexts.FileContext
-import tastyquery.ast.Names.{EmptyPackageName, Name, SimpleName, TypeName}
+import tastyquery.ast.Names.{nme, Name, SimpleName, TypeName}
 import tastyquery.ast.Symbols.{DeclaringSymbol, PackageClassSymbol, Symbol}
 
 class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false) {
@@ -96,8 +96,8 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
     // simple_trees is not a subpackage of empty package
     assertForallWithPrefix(
       ctx,
-      EmptyPackageName.singleton,
-      s => s.name == EmptyPackageName || !s.isInstanceOf[PackageClassSymbol]
+      nme.EmptyPackageName.singleton,
+      s => s.name == nme.EmptyPackageName || !s.isInstanceOf[PackageClassSymbol]
     )
   }
 

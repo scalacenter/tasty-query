@@ -2,6 +2,7 @@ import tastyquery.Contexts
 import tastyquery.Contexts.{FileContext, defn}
 import tastyquery.ast.Trees.Tree
 import tastyquery.ast.Types.Type
+import tastyquery.ast.Names.{TypeName, SuffixedName, nme}
 import tastyquery.reader.TastyUnpickler
 
 import tastyquery.testutil.{testPlatform, TestPlatform}
@@ -13,11 +14,8 @@ import BaseUnpicklingSuite.Decls.*
 import tastyquery.ast.Symbols.{DeclaringSymbol, PackageClassSymbol, Symbol}
 import tastyquery.ast.Names.SimpleName
 import tastyquery.Contexts.BaseContext
-import tastyquery.ast.Names.TypeName
-import tastyquery.ast.Names.SuffixedName
 import dotty.tools.tasty.TastyFormat.NameTags
 import scala.annotation.targetName
-import tastyquery.ast.Names
 
 abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean) extends munit.FunSuite { outer =>
   given TestPlatform = tastyquery.testutil.jdk.JavaTestPlatform // TODO: make abstract so we can test scala.js
@@ -72,7 +70,7 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean) ex
 
   private def select(root: DeclaringSymbol, next: Name): Either[String, Symbol] = {
     val sel = (root, next) match {
-      case (p: PackageClassSymbol, s: SimpleName) if p.name != tastyquery.ast.Names.RootName =>
+      case (p: PackageClassSymbol, s: SimpleName) if p.name != nme.RootName =>
         p.name.toTermName.select(s)
       case _ => next
     }

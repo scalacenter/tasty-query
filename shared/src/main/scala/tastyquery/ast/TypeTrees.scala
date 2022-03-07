@@ -1,6 +1,6 @@
 package tastyquery.ast
 
-import tastyquery.ast.Names.{EmptyTermName, EmptyTypeName, TypeName}
+import tastyquery.ast.Names.{nme, TypeName}
 import tastyquery.ast.Symbols.RegularSymbol
 import tastyquery.ast.Trees.{DefTree, Tree, TypeParam}
 import tastyquery.ast.Types.{Type, TypeBounds, NoType}
@@ -28,7 +28,7 @@ object TypeTrees {
     myType = tpe
   }
 
-  object EmptyTypeIdent extends TypeIdent(EmptyTypeName)(NoType)
+  object EmptyTypeIdent extends TypeIdent(nme.EmptyTypeName)(NoType)
 
   case class TypeWrapper(tp: Type) extends TypeTree {
     override protected def calculateType: Type = tp

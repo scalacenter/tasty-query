@@ -26,7 +26,7 @@ object ClassfileParser {
 
     val Some(Annotation(tpe, args)) = runtimeAnnotStart.use {
       reader.readAnnotation(Set(annot.ScalaLongSignature, annot.ScalaSignature))
-    }
+    }: @unchecked
 
     val sigBytes = tpe match {
       case annot.ScalaSignature =>

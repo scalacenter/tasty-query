@@ -11,7 +11,7 @@ import scala.jdk.CollectionConverters.*
 import tastyquery.reader.classfiles.Classpaths.{Classpath, PackageData, ClassData, TastyData}
 import org.apache.commons.io.IOUtils
 import java.nio.file.FileSystems
-import tastyquery.ast.Names.{SimpleName, EmptyPackageName, termName}
+import tastyquery.ast.Names.{SimpleName, termName, nme}
 import scala.util.Using
 import scala.collection.mutable
 import java.nio.file.Path
@@ -48,7 +48,7 @@ object ClasspathLoaders {
       def classAndPackage(binaryName: SimpleName): (SimpleName, SimpleName) = {
         val name = binaryName.name
         val lastSep = name.lastIndexOf('.')
-        if (lastSep == -1) (EmptyPackageName, termName(NameTransformer.decode(name)))
+        if (lastSep == -1) (nme.EmptyPackageName, termName(NameTransformer.decode(name)))
         else
           import scala.language.unsafeNulls
           val pre = name.substring(0, lastSep)
@@ -66,7 +66,7 @@ object ClasspathLoaders {
         classpathToEntries(classpath).flatMap { entry =>
           val map = {
             entry.walkFiles(kinds.toSeq*) { (kind, fileWithExt, path, bytes) =>
-              val (s"$file.${kind.`ext`}") = fileWithExt
+              val (s"$file.${kind.`ext`}") = fileWithExt: @unchecked
               val bin = binaryName(file)
               val (packageName, simpleName) = classAndPackage(bin)
               kind match {

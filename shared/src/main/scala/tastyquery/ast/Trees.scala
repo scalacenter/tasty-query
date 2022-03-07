@@ -1,7 +1,7 @@
 package tastyquery.ast
 
 import tastyquery.ast.Constants.Constant
-import tastyquery.ast.Names.{Name, TermName, TypeName}
+import tastyquery.ast.Names.{Name, TermName, TypeName, nme}
 import tastyquery.ast.Types.{NoType, Type, TypeBounds, TypeRef}
 import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Symbols.{ClassSymbol, NoSymbol, PackageClassSymbol, RegularSymbol, Symbol}
@@ -109,7 +109,7 @@ object Trees {
     val isGiven: Boolean = imported.name.isEmpty
 
     /** It's a `given` or `_` selector */
-    val isWildcard: Boolean = isGiven || imported.name == Names.Wildcard
+    val isWildcard: Boolean = isGiven || imported.name == nme.Wildcard
 
     /** The imported name, EmptyTermName if it's a given selector */
     val name: TermName = imported.name.asInstanceOf[TermName]
@@ -315,5 +315,8 @@ object Trees {
 
   case object EmptyTree extends Tree
 
-  val EmptyValDef: ValDef = ValDef(Names.Wildcard, EmptyTypeTree, EmptyTree, NoSymbol)
+  object reusable {
+    val EmptyValDef: ValDef = ValDef(nme.Wildcard, EmptyTypeTree, EmptyTree, NoSymbol)
+  }
+
 }
