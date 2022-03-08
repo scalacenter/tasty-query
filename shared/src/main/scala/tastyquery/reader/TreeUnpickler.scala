@@ -215,11 +215,12 @@ class TreeUnpickler(
             val renamedSpan = span
             reader.readByte()
             val renamed = ImportIdent(readName)(renamedSpan)
-            ImportSelector(name, renamed)(nameSpan)
+            ImportSelector(name, renamed)(nameSpan.union(renamedSpan))
           case BOUNDED =>
             reader.readByte()
+            val boundSpan = span
             val bound = readTypeTree
-            ImportSelector(name, EmptyTree, bound)(nameSpan)
+            ImportSelector(name, EmptyTree, bound)(nameSpan.union(boundSpan))
           case _ => ImportSelector(name)(nameSpan)
         }
       }
@@ -415,6 +416,7 @@ class TreeUnpickler(
       val spn = span
       reader.readByte()
       val name = readName
+      // TODO: Add span to TypeTree
       val tpt = readTypeTree
       // no symbol for self, because it's never referred to by symbol
       ValDef(name, tpt, EmptyTree, NoSymbol)(spn)
@@ -726,6 +728,7 @@ class TreeUnpickler(
 
   def readCaseDef[T <: CaseDef | TypeCaseDef](factory: AbstractCaseDefFactory[T])(using FileContext): T = {
     assert(reader.readByte() == CASEDEF, posErrorMsg)
+    val curSpan = span
     val end = reader.readEnd()
     factory match {
       case CaseDefFactory =>
