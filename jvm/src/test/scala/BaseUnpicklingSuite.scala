@@ -32,12 +32,14 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean) ex
     tree
   }
 
+  class MissingTopLevelDecl(path: TopLevelDeclPath)
+      extends Exception(s"Missing top-level declaration ${path.fullClassName}, perhaps it is not on the classpath?")
+
   def unpickleFull(path: TopLevelDeclPath): (FileContext, Tree) = {
     val base: BaseContext = Contexts.empty(testClasspath)
     val tasty = base.classloader.lookupTasty(path.fullClassName) match
       case Some(tasty) => tasty
-      case _ =>
-        fail(s"could not find TASTy for top level class ${path.fullClassName}, perhaps it is not on the classpath?")
+      case _           => throw MissingTopLevelDecl(path)
     val ctx = base.withFile(tasty.debugPath)
     val unpickler = new TastyUnpickler(tasty.bytes)
     val tree = unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using ctx).head
