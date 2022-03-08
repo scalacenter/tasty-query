@@ -1,5 +1,7 @@
+package tastyquery
+
 import tastyquery.Contexts
-import tastyquery.Contexts.{FileContext, defn}
+import tastyquery.Contexts.{defn, BaseContext}
 import tastyquery.ast.Trees.Tree
 import tastyquery.ast.Types.Type
 import tastyquery.ast.Names.{TypeName, SuffixedName, nme}
@@ -13,37 +15,39 @@ import tastyquery.ast.Names.Name
 import BaseUnpicklingSuite.Decls.*
 import tastyquery.ast.Symbols.{DeclaringSymbol, PackageClassSymbol, Symbol}
 import tastyquery.ast.Names.SimpleName
-import tastyquery.Contexts.BaseContext
 import dotty.tools.tasty.TastyFormat.NameTags
 import scala.annotation.targetName
+import tastyquery.ast.Symbols.ClassSymbol
 
 abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean) extends munit.FunSuite { outer =>
   given TestPlatform = tastyquery.testutil.jdk.JavaTestPlatform // TODO: make abstract so we can test scala.js
 
   lazy val testClasspath = testPlatform.loadClasspath(includeClasses = withClasses, includeStdLib = withStdLib)
 
-  def unpickleCtx(path: TopLevelDeclPath): FileContext = {
-    val (ctx, _) = unpickleFull(path)
-    ctx
+  def getUnpicklingContext(path: TopLevelDeclPath): BaseContext = {
+    val (base, _) = findTopLevelClass(path)
+    base
   }
 
   def unpickle(path: TopLevelDeclPath): Tree = {
-    val (_, tree) = unpickleFull(path)
+    val (base, classRoot) = findTopLevelClass(path)
+    val tree = base.classloader.topLevelTasty(classRoot)(using base) match
+      case Some(trees) => trees.head
+      case _           => fail(s"Missing tasty for ${path.fullClassName}, $classRoot")
     tree
   }
 
   class MissingTopLevelDecl(path: TopLevelDeclPath)
       extends Exception(s"Missing top-level declaration ${path.fullClassName}, perhaps it is not on the classpath?")
 
-  def unpickleFull(path: TopLevelDeclPath): (FileContext, Tree) = {
+  private def findTopLevelClass(path: TopLevelDeclPath): (BaseContext, ClassSymbol) = {
     val base: BaseContext = Contexts.empty(testClasspath)
-    val tasty = base.classloader.lookupTasty(path.fullClassName) match
-      case Some(tasty) => tasty
-      case _           => throw MissingTopLevelDecl(path)
-    val ctx = base.withFile(tasty.debugPath)
-    val unpickler = new TastyUnpickler(tasty.bytes)
-    val tree = unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using ctx).head
-    (ctx, tree)
+    val classRoot = base.getClassIfDefined(path.fullClassName) match
+      case Some(cls) => cls
+      case _         => throw MissingTopLevelDecl(path)
+    if !base.classloader.scanClass(classRoot)(using base) then
+      fail(s"could not initialise ${path.fullClassName}, $classRoot")
+    (base, classRoot)
   }
 
   def resolve(path: DeclarationPath)(implicit ctx: BaseContext): Symbol =
@@ -78,7 +82,7 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean) ex
     }
     root.getDecl(sel) match {
       case Some(someSym) => Right(someSym)
-      case _             => Left(s"No declaration for ${next.toDebugString} in ${root.toDebugString}")
+      case _ => Left(s"No declaration for ${next.toDebugString} [${sel.toDebugString}] in ${root.toDebugString}")
     }
   }
 

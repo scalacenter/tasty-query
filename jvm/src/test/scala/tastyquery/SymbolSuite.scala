@@ -1,7 +1,9 @@
-import tastyquery.Contexts
-import tastyquery.Contexts.FileContext
+package tastyquery
+
+import tastyquery.Contexts.{BaseContext, baseCtx}
 import tastyquery.ast.Names.{nme, Name, SimpleName, TypeName}
 import tastyquery.ast.Symbols.{DeclaringSymbol, PackageClassSymbol, Symbol}
+import tastyquery.ast.Symbols.ClassSymbol
 
 class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false) {
   import BaseUnpicklingSuite.Decls.*
@@ -11,16 +13,13 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
   val simple_trees = name"simple_trees".singleton
   val `simple_trees.nested` = simple_trees / name"nested"
 
-  def getUnpicklingContext(path: TopLevelDeclPath): FileContext =
-    unpickleCtx(path)
-
-  def assertContainsDeclaration(ctx: FileContext, path: DeclarationPath): Unit =
+  def assertContainsDeclaration(ctx: BaseContext, path: DeclarationPath): Unit =
     resolve(path)(using ctx)
 
-  def assertMissingDeclaration(ctx: FileContext, path: DeclarationPath): Unit =
+  def assertMissingDeclaration(ctx: BaseContext, path: DeclarationPath): Unit =
     absent(path)(using ctx)
 
-  def getDeclsByPrefix(ctx: FileContext, prefix: DeclarationPath): Seq[Symbol] = {
+  def getDeclsByPrefix(ctx: BaseContext, prefix: DeclarationPath): Seq[Symbol] = {
     def symbolsInSubtree(root: Symbol): Seq[Symbol] =
       if (root.isInstanceOf[DeclaringSymbol]) {
         root +: root.asInstanceOf[DeclaringSymbol].declarations.toSeq.flatMap(symbolsInSubtree(_))
@@ -30,13 +29,13 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
     symbolsInSubtree(followPath(ctx.defn.RootPackage, prefix)).tail // discard prefix
   }
 
-  def assertForallWithPrefix(ctx: FileContext, prefix: DeclarationPath, condition: Symbol => Boolean): Unit =
+  def assertForallWithPrefix(ctx: BaseContext, prefix: DeclarationPath, condition: Symbol => Boolean): Unit =
     assert(
       getDeclsByPrefix(ctx, prefix).forall(condition),
       s"Condition does not hold for ${getDeclsByPrefix(ctx, prefix).filter(!condition(_))}"
     )
 
-  def assertContainsExactly(ctx: FileContext, prefix: DeclarationPath, symbolPaths: Set[DeclarationPath]): Unit = {
+  def assertContainsExactly(ctx: BaseContext, prefix: DeclarationPath, symbolPaths: Set[DeclarationPath]): Unit = {
     val decls = getDeclsByPrefix(ctx, prefix)
     val expected = symbolPaths.toList.map(p => resolve(p)(using ctx))
     // each declaration is in the passed set
@@ -156,13 +155,20 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
     )
   }
 
-  test("laziness-of-package-loading") {
+  test("sibling-top-level-class-loading") {
     val Constants = simple_trees / tname"Constants"
     val NestedMethod = simple_trees / tname"NestedMethod"
-    val ctx = getUnpicklingContext(Constants)
-    assertContainsDeclaration(ctx, Constants)
+    val outerMethod = NestedMethod / name"outerMethod"
+    val unitVal = Constants / name"unitVal"
 
-    // `NestedMethod` is in same package, but unforced as TASTy is not scanned
-    assertMissingDeclaration(ctx, NestedMethod)
+    val ctx = getUnpicklingContext(Constants)
+
+    assertContainsDeclaration(ctx, Constants) // we should have loaded Constants, we requested it
+    assertContainsDeclaration(ctx, unitVal) // outerMethod is a member of Constants, it should be seen.
+
+    assertContainsDeclaration(ctx, NestedMethod) // sibling top-level class is also seen in same package
+    assertMissingDeclaration(ctx, outerMethod) // members of sibling top-level class are not seen unless requested.
+
   }
+
 }

@@ -4,12 +4,14 @@ import dotty.tools.tasty.TastyBuffer.Addr
 import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
-import tastyquery.ast.Types.Binders
+import tastyquery.ast.Types.{Type, Symbolic, Binders, PackageRef, TypeRef}
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import tastyquery.reader.classfiles.Classpaths
 import tastyquery.reader.classfiles.Classpaths.Classpath
+import scala.util.Try
+import scala.util.control.NonFatal
 
 object Contexts {
 
@@ -18,6 +20,12 @@ object Contexts {
   transparent inline def baseCtx(using baseCtx: BaseContext): BaseContext = baseCtx
   transparent inline def clsCtx(using clsCtx: ClassContext): ClassContext = clsCtx
   transparent inline def defn(using baseCtx: BaseContext): baseCtx.defn.type = baseCtx.defn
+
+  object permissions:
+    opaque type InitAll = Unit
+
+    private[Contexts] inline def withInitAllPrivelege[T](inline op: InitAll ?=> T): T =
+      op(using ())
 
   def empty: BaseContext =
     new BaseContext(new Definitions(), Classpaths.Classpath.Empty.loader)
@@ -33,31 +41,70 @@ object Contexts {
   def empty(classpath: Classpath): BaseContext =
     new BaseContext(new Definitions(), classpath.loader)
 
+  private[Contexts] def moduleClassRoot(classRoot: ClassSymbol): ClassSymbol = {
+    val pkg = classRoot.enclosingDecl
+    ClassSymbolFactory.castSymbol(pkg.getDecl(classRoot.name.toTypeName.toObjectName).get)
+  }
+
+  private[Contexts] def moduleRoot(classRoot: ClassSymbol): RegularSymbol = {
+    val pkg = classRoot.enclosingDecl
+    RegularSymbolFactory.castSymbol(pkg.getDecl(classRoot.name.toTermName).get)
+  }
+
+  private[tastyquery] def initialisedRoot(classRoot: ClassSymbol): Boolean =
+    classRoot.initialised || moduleClassRoot(classRoot).initialised
+
   /** BaseContext is used throughout unpickling an entire project. */
   class BaseContext private[Contexts] (val defn: Definitions, val classloader: Classpaths.Loader) {
-    def withFile(filename: String): FileContext =
-      new FileContext(defn, defn.RootPackage, filename, classloader)
 
-    def withRoot(root: ClassSymbol)(using classloader.LoadRoot): ClassContext =
+    private inline given thisCtx: this.type = this
+
+    def withFile(root: ClassSymbol, filename: String)(using Classpaths.permissions.LoadRoot): FileContext =
+      new FileContext(defn, root, filename, classloader)
+
+    def withRoot(root: ClassSymbol)(using Classpaths.permissions.LoadRoot): ClassContext =
       new ClassContext(defn, classloader, root)
 
-    def createClassSymbolIfNew(name: Name, owner: DeclaringSymbol): ClassSymbol =
-      owner.getDecl(name) match {
+    def getClassIfDefined(fullClassName: String): Option[ClassSymbol] =
+      def packageAndClass(fullClassName: String): TypeRef = {
+        val lastSep = fullClassName.lastIndexOf('.')
+        if (lastSep == -1) TypeRef(PackageRef(nme.EmptyPackageName), typeName(fullClassName))
+        else {
+          import scala.language.unsafeNulls
+          val packageName = fullClassName.substring(0, lastSep)
+          val className = typeName(fullClassName.substring(lastSep + 1))
+          TypeRef(PackageRef(classloader.toPackageName(packageName)), className)
+        }
+      }
+      val typeRef = packageAndClass(fullClassName)
+      permissions.withInitAllPrivelege(classloader.initPackages())
+      val symOpt =
+        try Some(typeRef.resolveToSymbol)
+        catch
+          case NonFatal(e) =>
+            println(s"[error] Cannot resolve class $fullClassName: $e")
+            None
+      symOpt match
+        case Some(cls: ClassSymbol) => Some(cls)
+        case _                      => None
+
+    def createClassSymbol(name: Name, owner: DeclaringSymbol): ClassSymbol =
+      owner.getDecl(name) match
         case None =>
           val cls = ClassSymbolFactory.createSymbol(name, owner)
           owner.addDecl(cls)
           cls
-        case Some(clazz) => ClassSymbolFactory.castSymbol(clazz)
-      }
+        case some =>
+          throw ExistingDefinitionException(owner, name)
 
-    def createSymbolIfNew(name: Name, owner: DeclaringSymbol): RegularSymbol =
-      owner.getDecl(name) match {
+    def createSymbol(name: Name, owner: DeclaringSymbol): RegularSymbol =
+      owner.getDecl(name) match
         case None =>
           val sym = RegularSymbolFactory.createSymbol(name, owner)
           owner.addDecl(sym)
           sym
-        case Some(sym) => RegularSymbolFactory.castSymbol(sym)
-      }
+        case some =>
+          throw ExistingDefinitionException(owner, name)
 
     def createPackageSymbolIfNew(name: TermName, owner: PackageClassSymbol): PackageClassSymbol = {
       def create(): PackageClassSymbol = {
@@ -96,24 +143,18 @@ object Contexts {
 
     def classRoot: ClassSymbol = owner
 
-    def moduleClassRoot: ClassSymbol = {
-      val pkg = classRoot.enclosingDecl
-      pkg.getDecl(classRoot.name.toTypeName.toObjectName).get.asInstanceOf[ClassSymbol]
-    }
+    def moduleClassRoot: ClassSymbol = Contexts.moduleClassRoot(classRoot)
 
-    def moduleRoot: RegularSymbol = {
-      val pkg = classRoot.enclosingDecl
-      pkg.getDecl(classRoot.name.toTermName).get.asInstanceOf[RegularSymbol]
-    }
+    def moduleRoot: RegularSymbol = Contexts.moduleRoot(classRoot)
 
-    def createSymbolIfNew[T <: Symbol](name: Name, factory: SymbolFactory[T], addToDecls: Boolean = false): T =
-      owner.getDecl(name) match {
-        case Some(sym) => factory.castSymbol(sym)
-        case _ =>
+    def createSymbol[T <: Symbol](name: Name, factory: SymbolFactory[T], addToDecls: Boolean = false): T =
+      owner.getDecl(name) match
+        case None =>
           val sym = factory.createSymbol(name, owner)
           if (addToDecls) owner.addDecl(sym)
           sym
-      }
+        case some =>
+          throw ExistingDefinitionException(owner, name)
 
   }
 
@@ -141,19 +182,25 @@ object Contexts {
     */
   class FileContext private[Contexts] (
     override val defn: Definitions,
+    val classRoot: ClassSymbol,
     val owner: Symbol,
     private val fileLocalInfo: FileLocalInfo,
     override val classloader: Classpaths.Loader
   ) extends BaseContext(defn, classloader) { base =>
-    def this(defn: Definitions, owner: Symbol, filename: String, classloader: Classpaths.Loader) =
-      this(defn, owner, new FileLocalInfo(filename), classloader)
+
+    private[Contexts] def this(
+      defn: Definitions,
+      classRoot: ClassSymbol,
+      filename: String,
+      classloader: Classpaths.Loader
+    ) = this(defn, classRoot, defn.RootPackage, new FileLocalInfo(filename), classloader)
 
     def withEnclosingBinders(addr: Addr, b: Binders): FileContext =
-      new FileContext(defn, owner, fileLocalInfo.addEnclosingBinders(addr, b), classloader)
+      new FileContext(defn, classRoot, owner, fileLocalInfo.addEnclosingBinders(addr, b), classloader)
 
     def withOwner(newOwner: Symbol): FileContext =
       if (newOwner == owner) this
-      else new FileContext(defn, newOwner, fileLocalInfo, classloader)
+      else new FileContext(defn, classRoot, newOwner, fileLocalInfo, classloader)
 
     def getFile: String = fileLocalInfo.filename
 
@@ -161,27 +208,46 @@ object Contexts {
 
     def hasSymbolAt(addr: Addr): Boolean = fileLocalInfo.localSymbols.contains(addr)
 
-    private def registerSym(addr: Addr, sym: Symbol, addToDecls: Boolean): Unit = {
+    private def registerSym[T <: Symbol](addr: Addr, sym: T, addToDecls: Boolean): T =
       fileLocalInfo.localSymbols(addr) = sym
       if addToDecls then
         owner match
           case owner: DeclaringSymbol => owner.addDecl(sym)
           case _ => throw IllegalArgumentException(s"can not add $sym to decls of non-declaring symbol $owner")
-    }
+      sym
 
-    /** Creates a new symbol at @addr with @name. The symbol is added to the owner's declarations if both
-      * 1) @addToDecls is true.
-      *    Example: true for valdef and defdef, false for parameters and type parameters
-      * 2) the owner is a declaring symbol.
-      *    Example: a method is added to the declarations of its class, but a nested method is not added
-      *    to declarations of its owner method.
+    /** Creates a new symbol at @addr with @name. If `addToDecls` is true, the symbol is added to the owner's
+      * declarations: this requires that the owner is a `DeclaringSymbol`, or else throws.
+      *
+      * @note `addToDecls` should be `true` for ValDef and DefDef, `false` for parameters and type parameters.
+      * @note A method is added to the declarations of its class, but a nested method should not added
+      *    to declarations of the outer method.
       */
-    def createSymbolIfNew[T <: Symbol](addr: Addr, name: Name, factory: SymbolFactory[T], addToDecls: Boolean): T = {
-      if (!hasSymbolAt(addr)) {
-        registerSym(addr, factory.createSymbol(name, owner), addToDecls)
-      }
-      fileLocalInfo.localSymbols(addr).asInstanceOf[T]
-    }
+    def createSymbol[T <: Symbol](addr: Addr, name: Name, factory: SymbolFactory[T], addToDecls: Boolean): T =
+
+      extension (s: ClassSymbol)
+        def isModuleClassRoot: Boolean = s.name.toTermName match
+          case SuffixedName(NameTags.OBJECTCLASS, module) => module == classRoot.name.toTermName
+          case _                                          => false
+
+      extension (s: RegularSymbol)
+        def isModuleRoot: Boolean =
+          s.name == classRoot.name.toTermName
+
+      def mkSymbol(name: Name, owner: Symbol): T =
+        if owner == classRoot.enclosingDecl then
+          owner.lookup(name) match
+            case Some(sym) =>
+              (factory, sym) match
+                case (ClassSymbolFactory, `classRoot`)                               => classRoot
+                case (ClassSymbolFactory, sym: ClassSymbol) if sym.isModuleClassRoot => sym
+                case (RegularSymbolFactory, sym: RegularSymbol) if sym.isModuleRoot  => sym
+                case _ => throw ExistingDefinitionException(owner, name, explanation = s"existing symbol: $sym")
+            case _ => factory.createSymbol(name, owner)
+        else factory.createSymbol(name, owner)
+
+      if !hasSymbolAt(addr) then registerSym(addr, mkSymbol(name, owner), addToDecls)
+      else throw ExistingDefinitionException(owner, name)
 
     def createPackageSymbolIfNew(name: TermName): PackageClassSymbol = owner match {
       case owner: PackageClassSymbol => base.createPackageSymbolIfNew(name, owner)

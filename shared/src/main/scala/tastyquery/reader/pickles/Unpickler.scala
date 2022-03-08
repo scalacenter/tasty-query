@@ -5,7 +5,7 @@ import PickleReader.{PklStream, index, pkl}
 import tastyquery.Contexts.ClassContext
 
 object Unpickler {
-  def loadInfo(sigBytes: IArray[Byte])(using ClassContext): Unit = {
+  def loadInfo(sigBytes: IArray[Byte])(using ClassContext): Either[PickleReader.BadSignature, Unit] = {
 
     def run(reader: PickleReader, structure: reader.Structure)(using PklStream): Unit = {
       import structure.given
@@ -13,8 +13,7 @@ object Unpickler {
         if (reader.missingSymbolEntry(i)) {
           pkl.unsafeFork(offset) {
             val sym = reader.readSymbol()
-            // if sym.exists then
-            //   entries(i) = sym
+            if sym.exists then reader.addEntry(i, sym)
             //   sym.infoOrCompleter match {
             //     case info: ClassUnpickler => info.init()
             //     case _                    =>
@@ -40,7 +39,8 @@ object Unpickler {
 
     PklStream.read(sigBytes) {
       val reader = PickleReader()
-      run(reader, reader.readStructure())
+      try Right(run(reader, reader.readStructure()))
+      catch case e: PickleReader.BadSignature => Left(e)
     }
   }
 

@@ -214,7 +214,12 @@ object Names {
       extends DerivedName(underlying) {
     override def toString: String = tag match {
       case NameTags.BODYRETAINER => ???
-      case NameTags.OBJECTCLASS  => s"$underlying$$"
+      case NameTags.OBJECTCLASS  => underlying.toString
+    }
+
+    override def toDebugString: String = tag match {
+      case NameTags.BODYRETAINER => ???
+      case NameTags.OBJECTCLASS  => s"$underlying[$$]"
     }
   }
 
@@ -245,8 +250,14 @@ object Names {
 
     override def toString: String = toTermName.toString
 
-    override def toDebugString: String = s"$toString/T"
+    override def toDebugString: String = s"${toTermName.toDebugString}/T"
 
-    def toObjectName: TypeName = SuffixedName(NameTags.OBJECTCLASS, toTermName).toTypeName
+    def wrapsObjectName: Boolean = toTermName match
+      case SuffixedName(NameTags.OBJECTCLASS, _) => true
+      case _                                     => false
+
+    def toObjectName: TypeName =
+      if wrapsObjectName then this
+      else SuffixedName(NameTags.OBJECTCLASS, toTermName).toTypeName
   }
 }

@@ -1,3 +1,5 @@
+package tastyquery
+
 import tastyquery.Contexts.BaseContext
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
@@ -6,9 +8,6 @@ import tastyquery.ast.Types.*
 
 class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = true) {
   import BaseUnpicklingSuite.Decls.*
-
-  def getUnpicklingContext(path: TopLevelDeclPath): BaseContext =
-    unpickleCtx(path)
 
   def assertMissingDeclaration(path: DeclarationPath)(using BaseContext): Unit =
     absent(path)
@@ -209,6 +208,41 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val (canEqualRef @ _: Symbolic) = canEqualSelection.tpe: @unchecked
 
     forceAbsentSymbol(canEqual)(canEqualRef.resolveToSymbol)
+  }
+
+  test("select-field-from-tasty-in-other-package:dependency-from-class-file") {
+    val BoxedConstants = name"crosspackagetasty" / tname"BoxedConstants"
+    val unitVal = name"simple_trees" / tname"Constants" / name"unitVal"
+
+    given BaseContext = getUnpicklingContext(BoxedConstants)
+
+    val boxedUnitValSym = resolve(BoxedConstants / name"boxedUnitVal")
+
+    val DefDef(_, _, _, unitValSelection, _) = boxedUnitValSym.tree: @unchecked
+
+    val (unitValRef @ _: Symbolic) = unitValSelection.tpe: @unchecked
+
+    forceAbsentSymbol(unitVal)(unitValRef.resolveToSymbol)
+  }
+
+  test("select-method-from-java-class-same-package-as-tasty") {
+    // This tests reading top level classes in the same package, defined by
+    // both Java and Tasty. If we strictly require that all symbols are defined
+    // exactly once, then we must be careful to not redefine `ScalaBox`/`JavaBox`
+    // when scanning a package from the classpath.
+
+    val ScalaBox = name"mixjavascala" / tname"ScalaBox"
+    val getX = name"mixjavascala" / tname"JavaBox" / name"getX"
+
+    given BaseContext = getUnpicklingContext(ScalaBox)
+
+    val xMethodSym = resolve(ScalaBox / name"xMethod")
+
+    val DefDef(_, _, _, Apply(getXSelection, _), _) = xMethodSym.tree: @unchecked
+
+    val (getXRef @ _: Symbolic) = getXSelection.tpe: @unchecked
+
+    forceAbsentSymbol(getX)(getXRef.resolveToSymbol)
   }
 
 }
