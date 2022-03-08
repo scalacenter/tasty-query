@@ -51,8 +51,7 @@ object ClasspathLoaders {
         if (lastSep == -1) (nme.EmptyPackageName, termName(NameTransformer.decode(name)))
         else
           import scala.language.unsafeNulls
-          val pre = name.substring(0, lastSep)
-          val packageName = pre.split('.').map(NameTransformer.decode).mkString(".")
+          val packageName = name.substring(0, lastSep) // Do not decode package names
           val simpleName = NameTransformer.decode(name.substring(lastSep + 1))
           (termName(packageName), termName(simpleName))
       }

@@ -9,7 +9,6 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
 
   val empty_class = name"empty_class".singleton
   val simple_trees = name"simple_trees".singleton
-  val symbolic_>> = name"symbolic_>>".singleton
   val `simple_trees.nested` = simple_trees / name"nested"
 
   def getUnpicklingContext(path: TopLevelDeclPath): FileContext =
@@ -64,12 +63,11 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
     )
   }
 
-  test("basic-symbol-structure-symbolic-names".ignore) {
-    // TODO: this test is inconsistent as long as https://github.com/lampepfl/dotty/issues/14448 is unresolved.
-    val symbolicClassInSymbollicPackage = symbolic_>> / tname"#::" // these will be encoded in the class path
-    val ctx = getUnpicklingContext(symbolicClassInSymbollicPackage)
-    assertContainsDeclaration(ctx, symbolicClassInSymbollicPackage)
-    assertContainsExactly(ctx, symbolic_>>, Set(symbolic_>> / tname"#::", symbolic_>> / tname"#::" / name"<init>"))
+  test("fail-on-symbolic-package:it-should-be-missing") {
+    intercept[MissingTopLevelDecl] {
+      getUnpicklingContext(name"symbolic_>>" / tname"#::") // this will fail, we can't find a symbolic package
+    }
+    val ctx = getUnpicklingContext(name"symbolic_$$greater$$greater" / tname"#::") // can only find encoded version
   }
 
   test("basic-symbol-structure-nested") {
