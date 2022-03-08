@@ -1,8 +1,9 @@
 package tastyquery.reader
 
-import tastyquery.ast.Names._
+import tastyquery.ast.Names.{nme, *}
 import tastyquery.ast.{ParamSig, Signature, TermSig, TypeLenSig}
 import tastyquery.reader.TreeUnpickler
+import tastyquery.unsafe
 
 import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyHeaderUnpickler, TastyReader}
 import TastyBuffer.{Addr, NameRef}
@@ -33,13 +34,15 @@ object TastyUnpickler {
 
 }
 
-import tastyquery.reader.TastyUnpickler._
+import tastyquery.reader.TastyUnpickler.*
 
 class TastyUnpickler(reader: TastyReader) {
 
-  import reader._
+  import reader.*
 
-  def this(bytes: Array[Byte]) = this(new TastyReader(bytes))
+  def this(bytes: IArray[Byte]) =
+    // ok to use as Array because TastyReader is readOnly
+    this(new TastyReader(unsafe.asByteArray(bytes)))
 
   private val sectionReader = new mutable.HashMap[String, TastyReader]
   val nameAtRef: NameTable = new NameTable
@@ -71,7 +74,7 @@ class TastyUnpickler(reader: TastyReader) {
         val separator = readName().toString
         val num = readNat()
         val originals = reader.until(end)(readName())
-        val original = if (originals.isEmpty) EmptyTermName else originals.head
+        val original = if (originals.isEmpty) nme.EmptyTermName else originals.head
         new UniqueName(separator, original, num)
       case NameTags.DEFAULTGETTER =>
         new DefaultGetterName(readName(), readNat())

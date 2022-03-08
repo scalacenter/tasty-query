@@ -1,14 +1,20 @@
 package tastyquery.ast
 
 import dotty.tools.tasty.TastyFormat.NameTags
-import tastyquery.Contexts.BaseContext
+import tastyquery.Contexts.{BaseContext, baseCtx, defn}
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, QualifiedName, SimpleName, TermName, TypeName}
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.{EmptyTree, Tree, TypeParam}
+import tastyquery.ast.Names.SignedName
+import annotation.constructorOnly
+
+import tastyquery.util.syntax.chaining.given
 
 object Types {
-  type Designator = Symbol | Name
+  type Designator = Symbol | Name | LookupIn
+
+  case class LookupIn(pre: TypeRef, sel: SignedName)
 
   abstract class Type
 
@@ -52,8 +58,6 @@ object Types {
 
   trait Symbolic {
     def resolveToSymbol(using BaseContext): Symbol
-
-    private[Types] def isStandard: Boolean
   }
 
   // ----- Type Proxies -------------------------------------------------
@@ -70,7 +74,7 @@ object Types {
 
     protected def designator_=(d: Designator): Unit
 
-    private var myName: Name = null
+    private var myName: ThisName | Null = null
 
     def isType: Boolean = isInstanceOf[TypeRef]
 
@@ -80,51 +84,38 @@ object Types {
       * of the designator symbol.
       */
     final def name: ThisName = {
-      if (myName == null) myName = computeName
-      myName.asInstanceOf[ThisName]
+      val local = myName
+      if local == null then
+        val computed = computeName
+        myName = computed
+        computed
+      else local
     }
 
-    private def computeName: Name = designator match {
-      case name: Name  => name
-      case sym: Symbol => sym.name
-    }
+    private def computeName: ThisName = (designator match {
+      case name: Name       => name
+      case sym: Symbol      => sym.name
+      case LookupIn(_, sel) => sel
+    }).asInstanceOf[ThisName]
 
-    /** This is a temprorary hack to create symbols for standard types and objects, because Java classes and
-      * Scala 2 standard library don't have .tasty files.
-      */
-    // overridden in package references
-    private[Types] def createStandardSymbol(name: Name)(using ctx: BaseContext): Symbol = {
-      val prefixSym = prefix.asInstanceOf[Symbolic] match {
-        case t: TermRef =>
-          val refType = t.underlying
-          if (!refType.isInstanceOf[Symbolic])
-            throw new ReferenceResolutionError(
-              t,
-              s"only references to terms, whose type is a combination of typeref, termref and thistype, are supported. Got type $refType"
-            )
-          refType.asInstanceOf[Symbolic].resolveToSymbol
-        case other => other.resolveToSymbol
-      }
-      val newSymbol = name match {
-        case tn: TypeName   => ClassSymbolFactory.createSymbol(name, prefixSym)
-        case sn: SimpleName => RegularSymbolFactory.createSymbol(name, prefixSym)
-        case _              => throw new SymbolLookupException(name, "unexpected name format")
-      }
-      prefixSym.asInstanceOf[DeclaringSymbol].addDecl(newSymbol)
+    def selectIn(name: SignedName, in: TypeRef): TermRef =
+      TermRef(this, LookupIn(in, name))
 
-      newSymbol
-    }
-
-    override def isStandard: Boolean = prefix.asInstanceOf[Symbolic].isStandard
+    def select(name: Name): NamedType =
+      if name.isTermName then TermRef(this, name)
+      else TypeRef(this, name)
 
     // overridden in package references
-    override def resolveToSymbol(using BaseContext): Symbol = {
-      if (!designator.isInstanceOf[Symbol]) {
-        val name = designator.asInstanceOf[Name]
-        if (prefix == NoPrefix) {
-          throw new SymbolLookupException(name, "reference by name to a local symbol")
-        }
-        val prefixSym = prefix.asInstanceOf[Symbolic] match {
+    override def resolveToSymbol(using BaseContext): Symbol = designator match {
+      case sym: Symbol => sym
+      case LookupIn(pre, name) =>
+        val sym = TypeRef(pre, name).resolveToSymbol
+        designator = sym
+        sym
+      case name: Name =>
+        val prefixSym = prefix match {
+          case NoPrefix =>
+            throw new SymbolLookupException(name, "reference by name to a local symbol")
           case t: TermRef =>
             val underlyingType = t.underlying
             if (underlyingType == NoType)
@@ -135,14 +126,31 @@ object Types {
                 s"only references to terms, whose type is a combination of typeref, termref and thistype, are supported. Got type $underlyingType"
               )
             underlyingType.asInstanceOf[Symbolic].resolveToSymbol
-          case other => other.resolveToSymbol
+          case other: Symbolic => other.resolveToSymbol
+          case prefix =>
+            throw new SymbolLookupException(name, s"unexpected prefix type $prefix")
         }
-        designator = {
-          val symOption = prefixSym.asInstanceOf[DeclaringSymbol].getDecl(name)
-          symOption.getOrElse(if (isStandard) createStandardSymbol(name) else throw new SymbolLookupException(name))
+        val sym = {
+          val symOption = prefixSym match {
+            case declaring: DeclaringSymbol =>
+              def force() = declaring match {
+                case p: PackageClassSymbol =>
+                  baseCtx.classloader.scanPackage(p)
+                case p: ClassSymbol =>
+                  baseCtx.classloader.scanClass(p)
+                case _ =>
+              }
+              declaring.getDecl(name).orElse {
+                force()
+                declaring.getDecl(name)
+              }
+            case _ =>
+              throw SymbolLookupException(name, s"$prefixSym is not a package or class")
+          }
+          symOption.getOrElse(throw new SymbolLookupException(name, s"not a member of $prefixSym"))
         }
-      }
-      designator.asInstanceOf[Symbol]
+        designator = sym
+        sym
     }
   }
 
@@ -158,6 +166,8 @@ object Types {
       extends RuntimeException(
         ReferenceResolutionError.addExplanation(s"Could not compute type of the term, referenced by $ref", explanation)
       )
+
+  class CyclicReference(val kind: String) extends Exception(s"cyclic evaluation of $kind")
 
   object ReferenceResolutionError {
     def unapply(e: ReferenceResolutionError): Option[TermRef] = Some(e.ref)
@@ -184,7 +194,9 @@ object Types {
       try {
         termSymbol.tree.tpe
       } catch {
-        case e => throw new ReferenceResolutionError(this, e.getMessage)
+        case e =>
+          val msg = e.getMessage
+          throw new ReferenceResolutionError(this, if msg == null then "" else msg)
       }
     }
 
@@ -196,10 +208,11 @@ object Types {
   }
 
   class PackageRef(val packageName: TermName) extends NamedType with SingletonType {
-    var packageSymbol: PackageClassSymbol = null
+    var packageSymbol: PackageClassSymbol | Null = null
 
     override def designator: Designator =
-      if (packageSymbol == null) packageName else packageSymbol
+      val pkgOpt = packageSymbol
+      if pkgOpt == null then packageName else pkgOpt
 
     override protected def designator_=(d: Designator): Unit = throw UnsupportedOperationException(
       s"Can't assign designator of a package"
@@ -210,28 +223,19 @@ object Types {
     // TODO: root package?
     override val prefix: Type = NoType
 
-    override def isStandard: Boolean = {
-      def isStandard(name: TermName): Boolean =
-        name match {
-          case QualifiedName(NameTags.QUALIFIED, prefix, _) => isStandard(prefix)
-          case SimpleName(name)                             => name == "java" || name == "scala"
-          case _ => throw IllegalArgumentException(s"Unexpected package name: $packageName")
+    override def resolveToSymbol(using BaseContext): PackageClassSymbol = {
+      val local = packageSymbol
+      if (local == null) {
+        def searchPkg = defn.RootPackage.findPackageSymbol(packageName)
+        def slowSearchPkg = {
+          baseCtx.classloader.initPackages()
+          searchPkg
         }
-      isStandard(packageName)
-    }
-
-    override def createStandardSymbol(name: Name)(using ctx: BaseContext): Symbol =
-      ctx.createPackageSymbolIfNew(name.asInstanceOf[TermName], ctx.defn.RootPackage)
-
-    override def resolveToSymbol(using ctx: BaseContext): PackageClassSymbol = {
-      if (packageSymbol == null) {
-        val symOption = ctx.defn.RootPackage.findPackageSymbol(packageName)
-        packageSymbol = symOption.getOrElse(
-          if (isStandard) ctx.createPackageSymbolIfNew(packageName, ctx.defn.RootPackage)
-          else throw new SymbolLookupException(packageName)
-        )
-      }
-      packageSymbol
+        val symOption = searchPkg
+        val resolved = symOption.orElse(slowSearchPkg).getOrElse(throw new SymbolLookupException(packageName))
+        packageSymbol = resolved
+        resolved
+      } else local
     }
 
     override def toString: String = s"PackageRef($packageName)"
@@ -258,11 +262,6 @@ object Types {
   class PackageTypeRef(packageName: TermName) extends TypeRef(NoPrefix, packageName) {
     private val packageRef = PackageRef(packageName)
 
-    override def isStandard: Boolean = packageRef.isStandard
-
-    override private[Types] def createStandardSymbol(name: Name)(using BaseContext) =
-      packageRef.createStandardSymbol(name)
-
     override def resolveToSymbol(using BaseContext): Symbol = packageRef.resolveToSymbol
   }
 
@@ -270,8 +269,6 @@ object Types {
     override def underlying(using BaseContext): Type = ???
 
     override def resolveToSymbol(using BaseContext): Symbol = tref.resolveToSymbol
-
-    override private[Types] def isStandard = tref.isStandard
   }
 
   /** A constant type with single `value`. */
@@ -291,18 +288,34 @@ object Types {
     override def underlying(using BaseContext): Type = resType
   }
 
-  case class TypeLambda(params: List[TypeParam], resultTypeCtor: TypeLambda => Type) extends TypeProxy with TermType {
-    val resultType = resultTypeCtor(this)
+  /** Encapsulates the binders associated with a TypeParamRef. */
+  opaque type Binders = TypeLambda
+
+  case class TypeLambda(params: List[TypeParam])(@constructorOnly rest: Binders => Type)
+      extends TypeProxy
+      with TermType {
+    private var evaluating: Boolean = false
+    private val myResult: Type =
+      evaluating = true
+      rest(this: @unchecked /* safe as long as `rest` does not call `resultType` */ ).andThen { evaluating = false }
+
+    def resultType: Type =
+      if evaluating then throw CyclicReference(s"type lambda [$params] =>> ???")
+      else myResult
 
     override def underlying(using BaseContext): Type = ???
 
-    override def toString: String = s"TypeLambda($params, $resultType)"
+    override def toString: String =
+      if evaluating then s"TypeLambda($params)(<evaluating>)"
+      else s"TypeLambda($params)($myResult)"
   }
 
-  case class TypeParamRef(binder: TypeLambda, num: Int) extends TypeProxy with ValueType {
+  case class TypeParamRef(binders: Binders, num: Int) extends TypeProxy with ValueType {
     override def underlying(using BaseContext): Type = ???
 
-    override def toString: String = binder.params(num).name.toString
+    def paramName = binders.params(num).name
+
+    override def toString: String = paramName.toString
   }
 
   /** typ @ annot */

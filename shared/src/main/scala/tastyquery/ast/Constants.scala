@@ -1,6 +1,7 @@
 package tastyquery.ast
 
 import tastyquery.ast.Types.Type
+import compiletime.asMatchable
 
 object Constants {
   final val NoTag = 0
@@ -17,7 +18,7 @@ object Constants {
   final val NullTag = 11
   final val ClazzTag = 12
 
-  class Constant(val value: Any, val tag: Int) {
+  class Constant(val value: Matchable, val tag: Int) {
     import java.lang.Double.doubleToRawLongBits
     import java.lang.Float.floatToRawIntBits
 
@@ -32,7 +33,7 @@ object Constants {
     def isAnyVal: Boolean = UnitTag <= tag && tag <= DoubleTag
 
     /** We need the equals method to take account of tags as well as values. */
-    override def equals(other: Any): Boolean = other match {
+    override def equals(other: Any): Boolean = other.asMatchable match {
       case that: Constant =>
         this.tag == that.tag && equalHashValue == that.equalHashValue
       case _ => false
@@ -145,7 +146,7 @@ object Constants {
     }
 
     override def hashCode: Int = {
-      import scala.util.hashing.MurmurHash3._
+      import scala.util.hashing.MurmurHash3.*
       val seed = 17
       var h = seed
       h = mix(h, tag.##) // include tag in the hash, otherwise 0, 0d, 0L, 0f collide.

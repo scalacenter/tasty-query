@@ -1,30 +1,68 @@
 package tastyquery.ast
 
+import tastyquery.unsafe
+import tastyquery.util.syntax.chaining.given
+
 import java.util.concurrent.ConcurrentHashMap
 
 import dotty.tools.tasty.TastyFormat.NameTags
 
 import scala.io.Codec
+import scala.annotation.targetName
 
-object Names {
+import scala.jdk.CollectionConverters.*
 
-  /** The term name represented by the empty string */
-  val EmptySimpleName: SimpleName = SimpleName("")
-  val EmptyTermName: SimpleName = EmptySimpleName
-  val EmptyTypeName: TypeName = TypeName(EmptyTermName)
-  val RootName: SimpleName = SimpleName("<root>")
-  val EmptyPackageName: SimpleName = SimpleName("<empty>")
-  val Wildcard: SimpleName = SimpleName("_")
+import Names.SimpleName
 
-  val SuperAccessorPrefix: String = "super$"
-  val InlineAccessorPrefix: String = "inline$"
-  val BodyRetainerSuffix: String = "$retainedBody"
-
-  import scala.jdk.CollectionConverters._
+private[ast] object NameCache {
 
   // A map from the name to itself. Used to keep only one instance of SimpleName by underlying String
   private val nameTable: scala.collection.concurrent.Map[SimpleName, SimpleName] =
     new ConcurrentHashMap[SimpleName, SimpleName]().asScala
+
+  private[ast] def cache(newName: SimpleName): SimpleName = {
+    val oldName = nameTable.putIfAbsent(newName, newName)
+    oldName.getOrElse(newName)
+  }
+
+}
+
+object Names {
+
+  given Ordering[SimpleName] = Ordering.by(_.name)
+
+  object str {
+    val topLevelSuffix = "$package"
+    val SuperAccessorPrefix: String = "super$"
+    val InlineAccessorPrefix: String = "inline$"
+    val BodyRetainerSuffix: String = "$retainedBody"
+  }
+
+  object attr {
+    val TASTY = termName("TASTY")
+    val Scala = termName("Scala")
+    val ScalaSig = termName("ScalaSig")
+    val RuntimeVisibleAnnotations = termName("RuntimeVisibleAnnotations") // RetentionPolicy.RUNTIME
+    val RuntimeInvisibleAnnotations = termName("RuntimeInvisibleAnnotations") // RetentionPolicy.CLASS
+  }
+
+  object annot {
+    val ScalaSignature = termName("Lscala/reflect/ScalaSignature;")
+    val ScalaLongSignature = termName("Lscala/reflect/ScalaLongSignature;")
+  }
+
+  object nme {
+
+    /** The term name represented by the empty string */
+    val EmptySimpleName: SimpleName = termName("")
+    val EmptyTermName: SimpleName = EmptySimpleName
+    val EmptyTypeName: TypeName = EmptyTermName.toTypeName
+    val RootName: SimpleName = termName("<root>")
+    val EmptyPackageName: SimpleName = termName("<empty>")
+    val Constructor: SimpleName = termName("<init>")
+    val Wildcard: SimpleName = termName("_")
+    val RefinementClass = typeName("<refinement>")
+  }
 
   /** Create a type name from the characters in cs[offset..offset+len-1].
     * Assume they are already encoded.
@@ -38,23 +76,26 @@ object Names {
   def typeName(bs: Array[Byte], offset: Int, len: Int): TypeName =
     termName(bs, offset, len).toTypeName
 
+  @targetName("typeNameFromImmutableBytes")
+  def typeName(bs: IArray[Byte], offset: Int, len: Int): TypeName =
+    termName(bs, offset, len).toTypeName
+
   /** Create a type name from a string */
-  def typeName(s: String): TypeName = typeName(s.toCharArray, 0, s.length)
+  def typeName(s: String): TypeName =
+    termName(s).toTypeName
 
   /** Create a term name from a string.
     * See `sliceToTermName` in `Decorators` for a more efficient version
     * which however requires a Context for its operation.
     */
-  def termName(s: String): SimpleName = termName(s.toCharArray, 0, s.length)
+  def termName(s: String): SimpleName =
+    NameCache.cache(SimpleName(s))
 
   /** Create a term name from the characters in cs[offset..offset+len-1].
     * Assume they are already encoded.
     */
-  def termName(cs: Array[Char], offset: Int, len: Int): SimpleName = {
-    val newName = SimpleName(cs.slice(offset, offset + len).mkString)
-    val oldName = nameTable.putIfAbsent(newName, newName)
-    oldName.getOrElse(newName)
-  }
+  def termName(cs: Array[Char], offset: Int, len: Int): SimpleName =
+    NameCache.cache(SimpleName(cs.slice(offset, offset + len).mkString))
 
   /** Create a term name from the UTF8 encoded bytes in bs[offset..offset+len-1].
     * Assume they are already encoded.
@@ -64,13 +105,23 @@ object Names {
     termName(chars, 0, chars.length)
   }
 
-  abstract class Name {
+  @targetName("termNameFromImmutableBytes")
+  def termName(bs: IArray[Byte], offset: Int, len: Int): SimpleName =
+    termName(unsafe.asByteArray(bs), offset, len)
+
+  sealed abstract class Name derives CanEqual {
 
     /** This name converted to a type name */
     def toTypeName: TypeName
 
+    /** This name converted to a term name */
+    def toTermName: TermName
+
     /** This name downcasted to a simple term name */
     def asSimpleName: SimpleName
+
+    final def isTypeName: Boolean = this.isInstanceOf[TypeName]
+    final def isTermName: Boolean = !isTypeName
 
     def isEmpty: Boolean
 
@@ -80,15 +131,37 @@ object Names {
   abstract class TermName extends Name {
     def tag: Int
 
-    private var myTypeName: TypeName = null
+    override def toTermName: TermName = this
+
+    private var myTypeName: TypeName | Null = null
 
     override def toTypeName: TypeName = {
-      if (myTypeName == null) {
+      val local1 = myTypeName
+      if local1 == null then {
         synchronized {
-          if (myTypeName == null) myTypeName = new TypeName(this)
+          val local2 = myTypeName
+          if local2 == null then TypeName(this).useWith { myTypeName = _ }
+          else local2
         }
+      } else {
+        local1
       }
-      myTypeName
+    }
+
+    infix def select(name: SimpleName): QualifiedName = QualifiedName(NameTags.QUALIFIED, this, name)
+
+    def subnames: TermName.SubNamesOps = new TermName.SubNamesOps(this)
+  }
+
+  object TermName {
+    class SubNamesOps(val termName: TermName) extends AnyVal {
+      def foreach(f: TermName => Unit): Unit = {
+        def addStack(name: TermName): Unit = name match
+          case name @ QualifiedName(NameTags.QUALIFIED, pre, _) => { addStack(pre); f(name) }
+          case name @ SimpleName(_)                             => f(name)
+          case _                                                => ()
+        addStack(termName)
+      }
     }
   }
 
@@ -163,7 +236,7 @@ object Names {
     override def toString: String = s"$underlying$$default$num"
   }
 
-  final case class TypeName(val toTermName: TermName) extends Name {
+  final case class TypeName(override val toTermName: TermName) extends Name {
     override def toTypeName: TypeName = this
 
     override def asSimpleName: SimpleName = toTermName.asSimpleName
@@ -173,5 +246,7 @@ object Names {
     override def toString: String = toTermName.toString
 
     override def toDebugString: String = s"$toString/T"
+
+    def toObjectName: TypeName = SuffixedName(NameTags.OBJECTCLASS, toTermName).toTypeName
   }
 }

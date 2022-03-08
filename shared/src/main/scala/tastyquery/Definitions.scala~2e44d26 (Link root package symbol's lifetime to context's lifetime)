@@ -1,8 +1,0 @@
-package tastyquery
-
-import tastyquery.ast.Names.{EmptyPackageName, RootName}
-import tastyquery.ast.Symbols.{NoSymbol, PackageClassSymbol}
-
-class Definitions {
-  val RootPackage  = PackageClassSymbol(RootName, NoSymbol)
-}

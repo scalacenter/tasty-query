@@ -1,9 +1,10 @@
 package tastyquery.ast
 
-import tastyquery.ast.Names.{EmptyTermName, EmptyTypeName, TypeName}
+import tastyquery.ast.Names.{nme, TypeName}
 import tastyquery.ast.Symbols.RegularSymbol
 import tastyquery.ast.Trees.{DefTree, Tree, TypeParam}
-import tastyquery.ast.Types.{NoType, Type, TypeBounds}
+import tastyquery.ast.Types.{Type, TypeBounds, NoType}
+import tastyquery.util.syntax.chaining.given
 
 object TypeTrees {
   class TypeTreeToTypeError(val typeTree: TypeTree) extends RuntimeException(s"Could not convert $typeTree to type")
@@ -13,25 +14,24 @@ object TypeTrees {
   }
 
   abstract class TypeTree {
-    protected var tpe: Type = NoType
+    protected var myType: Type | Null = null
 
-    protected def calculateType(): Type = throw new TypeTreeToTypeError(this)
+    protected def calculateType: Type = throw new TypeTreeToTypeError(this)
     final def toType: Type = {
-      if (tpe == NoType) tpe = calculateType()
-      tpe
-    }
-    final def withType(typ: Type): this.type = {
-      tpe = typ
-      this
+      val local = myType
+      if local == null then calculateType.useWith { myType = _ }
+      else local
     }
   }
 
-  case class TypeIdent(name: TypeName) extends TypeTree
+  case class TypeIdent(name: TypeName)(tpe: Type) extends TypeTree {
+    myType = tpe
+  }
 
-  object EmptyTypeIdent extends TypeIdent(EmptyTypeName)
+  object EmptyTypeIdent extends TypeIdent(nme.EmptyTypeName)(NoType)
 
   case class TypeWrapper(tp: Type) extends TypeTree {
-    override protected def calculateType(): Type = tp
+    override protected def calculateType: Type = tp
   }
 
   /** ref.type */
@@ -73,6 +73,7 @@ object TypeTrees {
     *  >: lo <: hi = alias  for RHS of bounded opaque type
     */
   case class BoundedTypeTree(bounds: TypeBoundsTree, alias: TypeTree) extends TypeTree
+  case class NamedTypeBoundsTree(name: TypeName, bounds: TypeBounds) extends TypeTree
 
   case class TypeLambdaTree(tparams: List[TypeParam], body: TypeTree) extends TypeTree
 }

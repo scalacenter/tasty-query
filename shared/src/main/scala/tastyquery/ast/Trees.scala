@@ -1,10 +1,14 @@
 package tastyquery.ast
 
 import tastyquery.ast.Constants.Constant
-import tastyquery.ast.Names.{Name, TermName, TypeName}
-import tastyquery.ast.Types.{NoType, Type, TypeBounds}
+import tastyquery.ast.Names.{Name, TermName, TypeName, nme}
+import tastyquery.ast.Types.{NoType, Type, TypeBounds, TypeRef}
 import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Symbols.{ClassSymbol, NoSymbol, PackageClassSymbol, RegularSymbol, Symbol}
+import tastyquery.ast.Names.SignedName
+import tastyquery.ast.Types.TermRef
+import tastyquery.ast.Types.PackageRef
+import tastyquery.util.syntax.chaining.given
 
 object Trees {
   class TypeComputationError(val tree: Tree) extends RuntimeException(s"Could not compute type of $tree")
@@ -14,12 +18,15 @@ object Trees {
   }
 
   abstract class Tree {
-    protected var myType: Type = NoType
+    protected var myType: Type | Null = null
 
-    protected def calculateType(): Type = throw new TypeComputationError(this)
+    /** Calculating a type should be a pure and fast operation, that does not resolve symbols. */
+    protected def calculateType: Type = throw new TypeComputationError(this)
+
     final def tpe: Type = {
-      if (myType == NoType) myType = calculateType()
-      myType
+      val local = myType
+      if local != null then local
+      else calculateType.useWith { myType = _ }
     }
 
     protected def subtrees: List[Tree] = this match {
@@ -102,7 +109,7 @@ object Trees {
     val isGiven: Boolean = imported.name.isEmpty
 
     /** It's a `given` or `_` selector */
-    val isWildcard: Boolean = isGiven || imported.name == Names.Wildcard
+    val isWildcard: Boolean = isGiven || imported.name == nme.Wildcard
 
     /** The imported name, EmptyTermName if it's a given selector */
     val name: TermName = imported.name.asInstanceOf[TermName]
@@ -153,7 +160,7 @@ object Trees {
   case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: RegularSymbol)
       extends Tree
       with DefTree(symbol) {
-    override protected def calculateType(): Type = tpt.toType
+    override protected def calculateType: Type = tpt.toType
   }
 
   type ParamsClause = List[ValDef] | List[TypeParam]
@@ -171,6 +178,12 @@ object Trees {
   /** name */
   case class Ident(name: TermName) extends Tree
 
+  abstract class SimpleRef(name: TermName, tpe: Type) extends Ident(name) {
+    myType = tpe
+  }
+
+  class TermRefTree(name: TermName, tpe: Type) extends SimpleRef(name, tpe)
+
   /** reference to a package, seen as a term */
   class ReferencedPackage(override val name: TermName) extends Ident(name) {
     override def toString: String = s"ReferencedPackage($name)"
@@ -181,7 +194,18 @@ object Trees {
   }
 
   /** qualifier.termName */
-  case class Select(qualifier: Tree, name: TermName) extends Tree
+  case class Select(qualifier: Tree, name: TermName) extends Tree {
+    override def calculateType: Type =
+      qualifier.tpe.asInstanceOf[TermRef].select(name) // TODO: what about holes, poly functions etc?
+  }
+
+  class SelectIn(qualifier: Tree, name: SignedName, selectOwner: TypeRef) extends Select(qualifier, name) {
+
+    override def calculateType: Type =
+      selectOwner.selectIn(name, selectOwner)
+
+    override def toString: String = s"SelectIn($qualifier, $name, $selectOwner)"
+  }
 
   /** qual.this */
   case class This(qualifier: Option[TypeIdent]) extends Tree
@@ -291,5 +315,8 @@ object Trees {
 
   case object EmptyTree extends Tree
 
-  val EmptyValDef: ValDef = ValDef(Names.Wildcard, EmptyTypeTree, EmptyTree, NoSymbol)
+  object reusable {
+    val EmptyValDef: ValDef = ValDef(nme.Wildcard, EmptyTypeTree, EmptyTree, NoSymbol)
+  }
+
 }
