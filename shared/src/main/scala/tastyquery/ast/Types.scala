@@ -16,7 +16,19 @@ object Types {
 
   case class LookupIn(pre: TypeRef, sel: SignedName)
 
-  abstract class Type
+  abstract class Type {
+    def isRef(sym: Symbol)(using BaseContext): Boolean =
+      this match {
+        case tpe: NamedType => tpe.resolveToSymbol == sym
+        case _              => false
+      }
+
+    def isOfClass(sym: Symbol)(using BaseContext): Boolean =
+      this match {
+        case tpe: TermRef => tpe.underlying.isOfClass(sym)
+        case _            => this.isRef(sym)
+      }
+  }
 
   // ----- Type categories ----------------------------------------------
 
@@ -192,7 +204,7 @@ object Types {
     override def underlying(using ctx: BaseContext): Type = {
       val termSymbol = resolveToSymbol
       try {
-        termSymbol.tree.tpe
+        termSymbol.thisType
       } catch {
         case e =>
           val msg = e.getMessage
@@ -209,6 +221,10 @@ object Types {
 
   class PackageRef(val packageName: TermName) extends NamedType with SingletonType {
     var packageSymbol: PackageClassSymbol | Null = null
+
+    def this(packageSym: PackageClassSymbol) =
+      this(packageSym.name.toTermName)
+      packageSymbol = packageSym
 
     override def designator: Designator =
       val pkgOpt = packageSymbol

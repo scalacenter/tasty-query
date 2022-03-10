@@ -4,6 +4,7 @@ import scala.collection.mutable
 import tastyquery.ast.Names.{Name, TermName, SignedName, SimpleName, QualifiedName, nme}
 import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Trees.{EmptyTree, Tree}
+import tastyquery.ast.Types.*
 
 object Symbols {
   class SymbolLookupException(val name: Name, explanation: String = "")
@@ -28,6 +29,8 @@ object Symbols {
       this
     }
     final def tree: Tree = myTree
+
+    def thisType: Type = tree.tpe
 
     final def outer: Symbol = rawowner match {
       case owner: Symbol => owner
@@ -104,6 +107,8 @@ object Symbols {
           findPackageSymbol(prefix).flatMap(_.findPackageSymbol(packageName))
       case _ => throw IllegalArgumentException(s"Unexpected package name: $name")
     }
+
+    override lazy val thisType: Type = PackageRef(this)
 
     private def getPackageDecl(packageName: TermName): Option[PackageClassSymbol] =
       getDecl(packageName).map(_.asInstanceOf[PackageClassSymbol])

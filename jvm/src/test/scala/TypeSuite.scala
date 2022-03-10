@@ -1,9 +1,8 @@
-import tastyquery.ast.Types.Symbolic
 import tastyquery.Contexts.BaseContext
-import tastyquery.ast.Symbols.Symbol
-import tastyquery.ast.Trees.DefDef
-import tastyquery.ast.Trees.Apply
-import tastyquery.ast.Types.AppliedType
+import tastyquery.ast.Names.*
+import tastyquery.ast.Symbols.*
+import tastyquery.ast.Trees.*
+import tastyquery.ast.Types.*
 
 class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = true) {
   import BaseUnpicklingSuite.Decls.*
@@ -20,6 +19,125 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val didForce = resolve(path)
     assert(found eq didForce)
     found
+  }
+
+  test("basic-local-val") {
+    val AssignPath = name"simple_trees" / tname"Assign"
+
+    given BaseContext = getUnpicklingContext(AssignPath)
+
+    val fSym = resolve(AssignPath / name"f")
+    val fTree = fSym.tree.asInstanceOf[DefDef]
+
+    val List(List(xParamDef: ValDef)) = fTree.params: @unchecked
+
+    // HACK: Get scala.Int to load
+    xParamDef.tpe.asInstanceOf[Symbolic].resolveToSymbol
+
+    val IntClass = resolve(name"scala" / tname"Int")
+    assert(xParamDef.tpe.isRef(IntClass))
+
+    val x = SimpleName("x")
+    val y = SimpleName("y")
+
+    var xCount = 0
+    var yCount = 0
+
+    fTree.walkTree { tree =>
+      tree match {
+        case Ident(`x`) =>
+          xCount += 1
+          assert(tree.tpe.isOfClass(IntClass), clue(tree.tpe))
+        case Ident(`y`) =>
+          yCount += 1
+          assert(tree.tpe.isOfClass(IntClass), clue(tree.tpe))
+        case _ =>
+          ()
+      }
+    }
+
+    assert(xCount == 2, clue(xCount))
+    assert(yCount == 1, clue(yCount))
+  }
+
+  test("term-ref") {
+    val RepeatedPath = name"simple_trees" / tname"Repeated"
+
+    given BaseContext = getUnpicklingContext(RepeatedPath)
+
+    val fSym = resolve(RepeatedPath / name"f")
+    val fTree = fSym.tree.asInstanceOf[DefDef]
+
+    var bitSetIdentCount = 0
+
+    fTree.walkTree { tree =>
+      tree match {
+        case Ident(SimpleName("BitSet")) =>
+          bitSetIdentCount += 1
+          val sym = tree.tpe.asInstanceOf[Symbolic].resolveToSymbol
+          assert(sym.name == name"BitSet", clue(sym.name.toDebugString))
+          ()
+        case _ =>
+          ()
+      }
+    }
+
+    assert(bitSetIdentCount == 1, clue(bitSetIdentCount))
+  }
+
+  test("free-ident") {
+    val MatchPath = name"simple_trees" / tname"Match"
+
+    given BaseContext = getUnpicklingContext(MatchPath)
+
+    val fSym = resolve(MatchPath / name"f")
+    val fTree = fSym.tree.asInstanceOf[DefDef]
+
+    val List(List(xParamDef: ValDef)) = fTree.params: @unchecked
+
+    // HACK: Get scala.Int to load
+    xParamDef.tpe.asInstanceOf[Symbolic].resolveToSymbol
+
+    val IntClass = resolve(name"scala" / tname"Int")
+    assert(xParamDef.tpe.isRef(IntClass))
+
+    var freeIdentCount = 0
+
+    fTree.walkTree { tree =>
+      tree match {
+        case tree: FreeIdent =>
+          freeIdentCount += 1
+          assert(tree.name == nme.Wildcard, clue(tree.name))
+          assert(tree.tpe.isOfClass(IntClass), clue(tree.tpe))
+        case _ =>
+          ()
+      }
+    }
+
+    assert(freeIdentCount == 2, clue(freeIdentCount))
+  }
+
+  test("return-ident") {
+    val ReturnPath = name"simple_trees" / tname"Return"
+
+    given BaseContext = getUnpicklingContext(ReturnPath)
+
+    val withReturnSym = resolve(ReturnPath / name"withReturn")
+    val withReturnTree = withReturnSym.tree.asInstanceOf[DefDef]
+
+    var returnCount = 0
+
+    withReturnTree.walkTree { tree =>
+      tree match {
+        case Return(expr, from: Ident) =>
+          returnCount += 1
+          assert(from.tpe.isRef(withReturnSym), clue(from.tpe))
+        case _ =>
+          ()
+      }
+    }
+
+    assert(returnCount == 1, clue(returnCount))
   }
 
   test("basic-java-class-dependency") {
