@@ -21,25 +21,12 @@ object Contexts {
   transparent inline def clsCtx(using clsCtx: ClassContext): ClassContext = clsCtx
   transparent inline def defn(using baseCtx: BaseContext): baseCtx.defn.type = baseCtx.defn
 
-  object permissions:
-    opaque type InitAll = Unit
-
-    private[Contexts] inline def withInitAllPrivelege[T](inline op: InitAll ?=> T): T =
-      op(using ())
-
-  def empty: BaseContext =
-    new BaseContext(new Definitions(), Classpaths.Classpath.Empty.loader)
-
-  def empty(filename: String): FileContext =
-    empty(filename, Classpaths.Classpath.Empty)
-
-  def empty(filename: String, classpath: Classpath): FileContext = {
-    val defn = new Definitions()
-    new FileContext(defn, defn.RootPackage, filename, classpath.loader)
-  }
-
-  def empty(classpath: Classpath): BaseContext =
-    new BaseContext(new Definitions(), classpath.loader)
+  def init(classpath: Classpath): BaseContext =
+    classpath.loader { classloader =>
+      val baseCtx = BaseContext(Definitions(), classloader)
+      baseCtx.classloader.initPackages()(using baseCtx)
+      baseCtx
+    }
 
   private[Contexts] def moduleClassRoot(classRoot: ClassSymbol): ClassSymbol = {
     val pkg = classRoot.enclosingDecl
@@ -56,8 +43,6 @@ object Contexts {
 
   /** BaseContext is used throughout unpickling an entire project. */
   class BaseContext private[Contexts] (val defn: Definitions, val classloader: Classpaths.Loader) {
-
-    private inline given thisCtx: this.type = this
 
     def withFile(root: ClassSymbol, filename: String)(using Classpaths.permissions.LoadRoot): FileContext =
       new FileContext(defn, root, filename, classloader)
@@ -76,10 +61,8 @@ object Contexts {
           TypeRef(PackageRef(classloader.toPackageName(packageName)), className)
         }
       }
-      val typeRef = packageAndClass(fullClassName)
-      permissions.withInitAllPrivelege(classloader.initPackages())
       val symOpt =
-        try Some(typeRef.resolveToSymbol)
+        try Some(packageAndClass(fullClassName).resolveToSymbol(using this))
         catch
           case NonFatal(e) =>
             println(s"[error] Cannot resolve class $fullClassName: $e")

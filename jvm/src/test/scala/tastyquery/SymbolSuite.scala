@@ -201,6 +201,6 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
       // package in tasty - the owners of the classroot do not match
       forceTopLevel(`symbolic_$greater$greater.#::`)
 
-    runTest(using Contexts.empty(testClasspath))
+    runTest(using Contexts.init(testClasspath))
   }
 }

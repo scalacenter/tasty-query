@@ -49,7 +49,9 @@ object Classpaths {
   }
 
   sealed abstract class Classpath protected (val packages: IArray[PackageData]) {
-    def loader: Loader = Loader(this)
+
+    def loader[T](op: Loader => T): T = op(Loader(this))
+
   }
 
   object Classpath {
@@ -190,7 +192,7 @@ object Classpaths {
       }
     }
 
-    def initPackages()(using baseCtx: BaseContext)(using Contexts.permissions.InitAll): Unit =
+    def initPackages()(using baseCtx: BaseContext): Unit =
       if !searched then {
         searched = true
 

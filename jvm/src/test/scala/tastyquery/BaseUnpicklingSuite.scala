@@ -41,7 +41,7 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean) ex
       extends Exception(s"Missing top-level declaration ${path.fullClassName}, perhaps it is not on the classpath?")
 
   private def findTopLevelClass(path: TopLevelDeclPath): (BaseContext, ClassSymbol) = {
-    val base: BaseContext = Contexts.empty(testClasspath)
+    val base: BaseContext = Contexts.init(testClasspath)
     val classRoot = base.getClassIfDefined(path.fullClassName) match
       case Some(cls) => cls
       case _         => throw MissingTopLevelDecl(path)

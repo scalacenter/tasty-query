@@ -15,7 +15,7 @@ object Main {
         val reader = new ProjectReader
         val cpElems = ClasspathLoaders.splitClasspath(cp)
         val classpath = ClasspathLoaders.read(cpElems, Set(ClasspathLoaders.FileKind.Tasty))
-        given BaseContext = Contexts.empty(classpath)
+        given BaseContext = Contexts.init(classpath)
         reader.read(classes*)
       case _ =>
         println("""Usage:
