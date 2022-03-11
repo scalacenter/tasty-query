@@ -176,7 +176,20 @@ object Trees {
       with DefTree(symbol)
 
   /** name */
-  case class Ident(name: TermName) extends Tree
+  abstract case class Ident(name: TermName) extends Tree
+
+  /** A free identifier, that has no defining symbol.
+    *
+    * This seems to always be a wildcard.
+    */
+  final class FreeIdent(name: TermName, tpe: Type) extends Ident(name) {
+    myType = tpe
+  }
+
+  /** An identifier appearing in an `import` clause; it has no type. */
+  final class ImportIdent(name: TermName) extends Ident(name) {
+    myType = NoType
+  }
 
   abstract class SimpleRef(name: TermName, tpe: Type) extends Ident(name) {
     myType = tpe

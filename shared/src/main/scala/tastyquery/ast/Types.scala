@@ -16,7 +16,19 @@ object Types {
 
   case class LookupIn(pre: TypeRef, sel: SignedName)
 
-  abstract class Type
+  abstract class Type {
+    def isRef(sym: Symbol)(using BaseContext): Boolean =
+      this match {
+        case tpe: NamedType => tpe.resolveToSymbol == sym
+        case _              => false
+      }
+
+    def isOfClass(sym: Symbol)(using BaseContext): Boolean =
+      this match {
+        case tpe: TermRef => tpe.underlying.isOfClass(sym)
+        case _            => this.isRef(sym)
+      }
+  }
 
   // ----- Type categories ----------------------------------------------
 
@@ -162,10 +174,14 @@ object Types {
     def underlyingRef: TermRef
   }
 
-  class ReferenceResolutionError(val ref: TermRef, explanation: String = "")
+  class ReferenceResolutionError(val ref: TermRef, explanation: String, cause: Throwable | Null)
       extends RuntimeException(
-        ReferenceResolutionError.addExplanation(s"Could not compute type of the term, referenced by $ref", explanation)
-      )
+        ReferenceResolutionError.addExplanation(s"Could not compute type of the term, referenced by $ref", explanation),
+        cause
+      ):
+    def this(ref: TermRef, explanation: String) = this(ref, explanation, null)
+    def this(ref: TermRef) = this(ref, "")
+  end ReferenceResolutionError
 
   class CyclicReference(val kind: String) extends Exception(s"cyclic evaluation of $kind")
 
@@ -192,11 +208,11 @@ object Types {
     override def underlying(using ctx: BaseContext): Type = {
       val termSymbol = resolveToSymbol
       try {
-        termSymbol.tree.tpe
+        termSymbol.thisType
       } catch {
         case e =>
           val msg = e.getMessage
-          throw new ReferenceResolutionError(this, if msg == null then "" else msg)
+          throw new ReferenceResolutionError(this, if msg == null then "" else msg, e)
       }
     }
 
@@ -209,6 +225,10 @@ object Types {
 
   class PackageRef(val packageName: TermName) extends NamedType with SingletonType {
     var packageSymbol: PackageClassSymbol | Null = null
+
+    def this(packageSym: PackageClassSymbol) =
+      this(packageSym.name.toTermName)
+      packageSymbol = packageSym
 
     override def designator: Designator =
       val pkgOpt = packageSymbol

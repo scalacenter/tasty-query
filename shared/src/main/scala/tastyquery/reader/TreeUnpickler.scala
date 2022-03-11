@@ -184,12 +184,12 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       def readSelector: ImportSelector = {
         assert(reader.nextByte == IMPORTED, posErrorMsg)
         reader.readByte()
-        val name = Ident(readName)
+        val name = ImportIdent(readName)
         // IMPORTED can be followed by RENAMED or BOUNDED
         reader.nextByte match {
           case RENAMED =>
             reader.readByte()
-            val renamed = Ident(readName)
+            val renamed = ImportIdent(readName)
             ImportSelector(name, renamed)
           case BOUNDED =>
             reader.readByte()
@@ -425,8 +425,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       reader.readByte()
       val name = readName
       val typ = readType
-      // TODO: assign type
-      Ident(name)
+      FreeIdent(name, typ)
     case APPLY =>
       reader.readByte()
       val end = reader.readEnd()
@@ -558,7 +557,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val expr = reader.ifBefore(end)(readTerm, EmptyTree)
       // TODO: always just taking the name?
       // return always returns from a method, i.e. something with a TermName
-      Return(expr, Ident(from.name.asInstanceOf[TermName]))
+      Return(expr, TermRefTree(from.name.asInstanceOf[TermName], TermRef(NoPrefix, from)))
     case INLINED =>
       reader.readByte()
       val end = reader.readEnd()
@@ -587,10 +586,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case TERMREF =>
       reader.readByte()
       val name = readName
-      val typ = readType
-      // TODO: use type
-      // TODO: this might be more complicated than Ident
-      Ident(name)
+      val prefix = readType
+      TermRefTree(name, TermRef(prefix, name))
     case TERMREFpkg =>
       reader.readByte()
       val name = readName
@@ -599,10 +596,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     case TERMREFdirect =>
       reader.readByte()
       val sym = readSymRef
-      // TODO: assign type
       assert(sym.name.isInstanceOf[TermName], posErrorMsg)
-      Ident(sym.name.asInstanceOf[TermName])
-    // TODO: is it always Ident?
+      val tpe = TermRef(NoPrefix, sym)
+      TermRefTree(sym.name.asInstanceOf[TermName], tpe)
     case TERMREFsymbol =>
       reader.readByte()
       val sym = readSymRef
