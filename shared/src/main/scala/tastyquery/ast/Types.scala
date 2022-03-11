@@ -174,10 +174,14 @@ object Types {
     def underlyingRef: TermRef
   }
 
-  class ReferenceResolutionError(val ref: TermRef, explanation: String = "")
+  class ReferenceResolutionError(val ref: TermRef, explanation: String, cause: Throwable | Null)
       extends RuntimeException(
-        ReferenceResolutionError.addExplanation(s"Could not compute type of the term, referenced by $ref", explanation)
-      )
+        ReferenceResolutionError.addExplanation(s"Could not compute type of the term, referenced by $ref", explanation),
+        cause
+      ):
+    def this(ref: TermRef, explanation: String) = this(ref, explanation, null)
+    def this(ref: TermRef) = this(ref, "")
+  end ReferenceResolutionError
 
   class CyclicReference(val kind: String) extends Exception(s"cyclic evaluation of $kind")
 
@@ -208,7 +212,7 @@ object Types {
       } catch {
         case e =>
           val msg = e.getMessage
-          throw new ReferenceResolutionError(this, if msg == null then "" else msg)
+          throw new ReferenceResolutionError(this, if msg == null then "" else msg, e)
       }
     }
 
