@@ -49,6 +49,24 @@ object Symbols {
         assert(false, s"cannot access owner, ${this.name} is local or not declared within any scope")
     }
 
+    private[Symbol] def maybeOuter: Symbol = rawowner match {
+      case owner: Symbol => owner
+      case null          => NoSymbol
+    }
+
+    private[tastyquery] final def enclosingDecls: Iterator[DeclaringSymbol] =
+      Iterator.iterate(enclosingDecl)(_.enclosingDecl).takeWhile(s => s.maybeOuter.exists)
+
+    final def fullName: Name =
+      if isPackage then name
+      else
+        val scope = maybeOuter
+        val calc =
+          if scope.exists then scope.fullName.toTermName.select(name.asSimpleName)
+          else name
+        if name.isTypeName then calc.toTypeName
+        else calc
+
     final def exists: Boolean = this ne NoSymbol
 
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]

@@ -53,7 +53,14 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         val end = reader.readEnd()
         val pid = readPotentiallyShared({
           assert(reader.readByte() == TERMREFpkg, posErrorMsg)
-          ctx.createPackageSymbolIfNew(readName)
+          val pkg = ctx.createPackageSymbolIfNew(readName)
+          if pkg != defn.EmptyPackage then
+            // can happen for symbolic packages
+            assert(
+              ctx.classRoot.enclosingDecls.exists(_ == pkg),
+              s"unexpected package ${pkg.name} in owners of top level class ${ctx.classRoot.fullName}"
+            )
+          pkg
         })
         reader.until(end)(createSymbols()(using ctx.withOwner(pid)))
       case TYPEDEF =>

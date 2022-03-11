@@ -62,13 +62,6 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
     )
   }
 
-  test("fail-on-symbolic-package:it-should-be-missing") {
-    intercept[MissingTopLevelDecl] {
-      getUnpicklingContext(name"symbolic_>>" / tname"#::") // this will fail, we can't find a symbolic package
-    }
-    val ctx = getUnpicklingContext(name"symbolic_$$greater$$greater" / tname"#::") // can only find encoded version
-  }
-
   test("basic-symbol-structure-nested") {
     val InNestedPackage = `simple_trees.nested` / tname"InNestedPackage"
     val ctx = getUnpicklingContext(InNestedPackage)
@@ -171,4 +164,43 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
 
   }
 
+  test("demo-symbolic-package-leaks".ignore) {
+    // ignore because this passes only on clean builds
+
+    def failingGetTopLevelClass(path: TopLevelDeclPath)(using BaseContext): Nothing =
+      baseCtx.getClassIfDefined(path.fullClassName) match
+        case Some(classRoot) => fail(s"expected no class, but got $classRoot")
+        case _               => throw MissingTopLevelDecl(path)
+
+    def forceTopLevel(path: TopLevelDeclPath)(using BaseContext): Unit = {
+      val classRoot = baseCtx.getClassIfDefined(path.fullClassName) match
+        case Some(cls) => cls
+        case _         => throw MissingTopLevelDecl(path)
+      try
+        baseCtx.classloader.scanClass(classRoot)
+        fail(s"expected failure when scanning class ${path.fullClassName}, $classRoot")
+      catch
+        case err: java.lang.AssertionError =>
+          val msg = err.getMessage.nn
+          assert(
+            msg.contains("unexpected package symbolic_>> in owners of top level class symbolic_$greater$greater.#::")
+          )
+    }
+
+    def runTest(using BaseContext): Unit =
+      val `symbolic_>>.#::` = name"symbolic_>>" / tname"#::"
+      val `symbolic_$greater$greater.#::` = name"symbolic_$$greater$$greater" / tname"#::"
+
+      intercept[MissingTopLevelDecl] {
+        failingGetTopLevelClass(`symbolic_>>.#::`) // this will fail, we can't find a symbolic package
+      }
+      assertMissingDeclaration(baseCtx, `symbolic_>>.#::`) // still does not exist
+      assertMissingDeclaration(baseCtx, `symbolic_$greater$greater.#::`) // not existant yet
+
+      // we will read the TASTy file of this class, causing an assertion error when we read the symbolic
+      // package in tasty - the owners of the classroot do not match
+      forceTopLevel(`symbolic_$greater$greater.#::`)
+
+    runTest(using Contexts.empty(testClasspath))
+  }
 }
