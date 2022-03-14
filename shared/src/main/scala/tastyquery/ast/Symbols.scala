@@ -7,6 +7,12 @@ import tastyquery.ast.Trees.{EmptyTree, Tree}
 import tastyquery.ast.Types.*
 
 object Symbols {
+
+  class ExistingDefinitionException(val scope: Symbol, val name: Name, explanation: String = "")
+      extends Exception(
+        SymbolLookupException.addExplanation(s"$scope has already defined ${name.toDebugString}", explanation)
+      )
+
   class SymbolLookupException(val name: Name, explanation: String = "")
       extends RuntimeException(
         SymbolLookupException.addExplanation(s"Could not find symbol for name ${name.toDebugString}", explanation)
@@ -34,21 +40,47 @@ object Symbols {
 
     final def outer: Symbol = rawowner match {
       case owner: Symbol => owner
-      case null          => assert(false, s"cannot access outer, $this was not declared within any scope")
+      case null          => assert(false, s"cannot access outer, ${this.name} was not declared within any scope")
     }
 
     final def enclosingDecl: DeclaringSymbol = rawowner match {
       case owner: DeclaringSymbol => owner
-      case _: Symbol | null       => assert(false, s"cannot access owner, $this is a local symbol or has no owner")
+      case _: Symbol | null =>
+        assert(false, s"cannot access owner, ${this.name} is local or not declared within any scope")
     }
 
+    private[Symbol] def maybeOuter: Symbol = rawowner match {
+      case owner: Symbol => owner
+      case null          => NoSymbol
+    }
+
+    private[tastyquery] final def enclosingDecls: Iterator[DeclaringSymbol] =
+      Iterator.iterate(enclosingDecl)(_.enclosingDecl).takeWhile(s => s.maybeOuter.exists)
+
+    final def fullName: Name =
+      if isPackage then name
+      else
+        val scope = maybeOuter
+        val calc =
+          if scope.exists then scope.fullName.toTermName.select(name.asSimpleName)
+          else name
+        if name.isTypeName then calc.toTypeName
+        else calc
+
+    final def exists: Boolean = this ne NoSymbol
+
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
+    final def isPackage: Boolean = this.isInstanceOf[PackageClassSymbol]
+
+    final def lookup(name: Name): Option[Symbol] = this match
+      case scope: DeclaringSymbol => scope.getDecl(name)
+      case _                      => None
 
     override def toString: String = {
       val kind = this match
         case _: PackageClassSymbol => "package "
-        case _: ClassSymbol        => "class "
-        case _                     => ""
+        case _: ClassSymbol        => if name.toTypeName.wrapsObjectName then "object class " else "class "
+        case _                     => if exists && outer.isPackage then "object " else ""
       s"symbol[$kind$name]"
     }
     def toDebugString = toString
@@ -63,23 +95,30 @@ object Symbols {
   abstract class DeclaringSymbol(override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner) {
     /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
-    protected val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
+    private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
       mutable.HashMap[Name, mutable.HashSet[Symbol]]()
 
-    def addDecl(decl: Symbol): Unit = myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet) += decl
-    def getDecl(name: Name): Option[Symbol] = name match {
+    private[tastyquery] final def addDecl(decl: Symbol): Unit =
+      myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet) += decl
+
+    private[tastyquery] final def getDecl(name: Name): Option[Symbol] = name match {
       case overloaded: SignedName => resolveOverloaded(overloaded)
       case name =>
-        myDeclarations.get(name).collect {
-          case set if set.sizeIs == 1 => set.head
-        }
+        myDeclarations.get(name) match
+          case Some(decls) =>
+            if decls.sizeIs == 1 then Some(decls.head)
+            else if decls.sizeIs > 1 then
+              throw SymbolLookupException(name, s"unexpected overloads: ${decls.mkString(", ")}")
+            else None
+          case _ => None
     }
-    def resolveOverloaded(name: SignedName): Option[Symbol] =
+
+    final def resolveOverloaded(name: SignedName): Option[Symbol] =
       getDecl(name.underlying) // TODO: look at signature to filter overloads
 
-    def declarations: List[Symbol] = myDeclarations.values.toList.flatten
+    final def declarations: List[Symbol] = myDeclarations.values.toList.flatten
 
-    override def toDebugString: String =
+    final override def toDebugString: String =
       s"${super.toString} with declarations [${myDeclarations.keys.map(_.toDebugString).mkString(", ")}]"
   }
 

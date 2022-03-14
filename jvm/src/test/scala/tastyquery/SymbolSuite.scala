@@ -1,7 +1,9 @@
-import tastyquery.Contexts
-import tastyquery.Contexts.FileContext
+package tastyquery
+
+import tastyquery.Contexts.{BaseContext, baseCtx}
 import tastyquery.ast.Names.{nme, Name, SimpleName, TypeName}
 import tastyquery.ast.Symbols.{DeclaringSymbol, PackageClassSymbol, Symbol}
+import tastyquery.ast.Symbols.ClassSymbol
 
 class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false) {
   import BaseUnpicklingSuite.Decls.*
@@ -11,16 +13,13 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
   val simple_trees = name"simple_trees".singleton
   val `simple_trees.nested` = simple_trees / name"nested"
 
-  def getUnpicklingContext(path: TopLevelDeclPath): FileContext =
-    unpickleCtx(path)
-
-  def assertContainsDeclaration(ctx: FileContext, path: DeclarationPath): Unit =
+  def assertContainsDeclaration(ctx: BaseContext, path: DeclarationPath): Unit =
     resolve(path)(using ctx)
 
-  def assertMissingDeclaration(ctx: FileContext, path: DeclarationPath): Unit =
+  def assertMissingDeclaration(ctx: BaseContext, path: DeclarationPath): Unit =
     absent(path)(using ctx)
 
-  def getDeclsByPrefix(ctx: FileContext, prefix: DeclarationPath): Seq[Symbol] = {
+  def getDeclsByPrefix(ctx: BaseContext, prefix: DeclarationPath): Seq[Symbol] = {
     def symbolsInSubtree(root: Symbol): Seq[Symbol] =
       if (root.isInstanceOf[DeclaringSymbol]) {
         root +: root.asInstanceOf[DeclaringSymbol].declarations.toSeq.flatMap(symbolsInSubtree(_))
@@ -30,13 +29,13 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
     symbolsInSubtree(followPath(ctx.defn.RootPackage, prefix)).tail // discard prefix
   }
 
-  def assertForallWithPrefix(ctx: FileContext, prefix: DeclarationPath, condition: Symbol => Boolean): Unit =
+  def assertForallWithPrefix(ctx: BaseContext, prefix: DeclarationPath, condition: Symbol => Boolean): Unit =
     assert(
       getDeclsByPrefix(ctx, prefix).forall(condition),
       s"Condition does not hold for ${getDeclsByPrefix(ctx, prefix).filter(!condition(_))}"
     )
 
-  def assertContainsExactly(ctx: FileContext, prefix: DeclarationPath, symbolPaths: Set[DeclarationPath]): Unit = {
+  def assertContainsExactly(ctx: BaseContext, prefix: DeclarationPath, symbolPaths: Set[DeclarationPath]): Unit = {
     val decls = getDeclsByPrefix(ctx, prefix)
     val expected = symbolPaths.toList.map(p => resolve(p)(using ctx))
     // each declaration is in the passed set
@@ -61,13 +60,6 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
       empty_class,
       Set(empty_class / tname"EmptyClass", empty_class / tname"EmptyClass" / name"<init>")
     )
-  }
-
-  test("fail-on-symbolic-package:it-should-be-missing") {
-    intercept[MissingTopLevelDecl] {
-      getUnpicklingContext(name"symbolic_>>" / tname"#::") // this will fail, we can't find a symbolic package
-    }
-    val ctx = getUnpicklingContext(name"symbolic_$$greater$$greater" / tname"#::") // can only find encoded version
   }
 
   test("basic-symbol-structure-nested") {
@@ -156,13 +148,59 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
     )
   }
 
-  test("laziness-of-package-loading") {
+  test("sibling-top-level-class-loading") {
     val Constants = simple_trees / tname"Constants"
     val NestedMethod = simple_trees / tname"NestedMethod"
-    val ctx = getUnpicklingContext(Constants)
-    assertContainsDeclaration(ctx, Constants)
+    val outerMethod = NestedMethod / name"outerMethod"
+    val unitVal = Constants / name"unitVal"
 
-    // `NestedMethod` is in same package, but unforced as TASTy is not scanned
-    assertMissingDeclaration(ctx, NestedMethod)
+    val ctx = getUnpicklingContext(Constants)
+
+    assertContainsDeclaration(ctx, Constants) // we should have loaded Constants, we requested it
+    assertContainsDeclaration(ctx, unitVal) // outerMethod is a member of Constants, it should be seen.
+
+    assertContainsDeclaration(ctx, NestedMethod) // sibling top-level class is also seen in same package
+    assertMissingDeclaration(ctx, outerMethod) // members of sibling top-level class are not seen unless requested.
+
+  }
+
+  test("demo-symbolic-package-leaks".ignore) {
+    // ignore because this passes only on clean builds
+
+    def failingGetTopLevelClass(path: TopLevelDeclPath)(using BaseContext): Nothing =
+      baseCtx.getClassIfDefined(path.fullClassName) match
+        case Some(classRoot) => fail(s"expected no class, but got $classRoot")
+        case _               => throw MissingTopLevelDecl(path)
+
+    def forceTopLevel(path: TopLevelDeclPath)(using BaseContext): Unit = {
+      val classRoot = baseCtx.getClassIfDefined(path.fullClassName) match
+        case Some(cls) => cls
+        case _         => throw MissingTopLevelDecl(path)
+      try
+        baseCtx.classloader.scanClass(classRoot)
+        fail(s"expected failure when scanning class ${path.fullClassName}, $classRoot")
+      catch
+        case err: java.lang.AssertionError =>
+          val msg = err.getMessage.nn
+          assert(
+            msg.contains("unexpected package symbolic_>> in owners of top level class symbolic_$greater$greater.#::")
+          )
+    }
+
+    def runTest(using BaseContext): Unit =
+      val `symbolic_>>.#::` = name"symbolic_>>" / tname"#::"
+      val `symbolic_$greater$greater.#::` = name"symbolic_$$greater$$greater" / tname"#::"
+
+      intercept[MissingTopLevelDecl] {
+        failingGetTopLevelClass(`symbolic_>>.#::`) // this will fail, we can't find a symbolic package
+      }
+      assertMissingDeclaration(baseCtx, `symbolic_>>.#::`) // still does not exist
+      assertMissingDeclaration(baseCtx, `symbolic_$greater$greater.#::`) // not existant yet
+
+      // we will read the TASTy file of this class, causing an assertion error when we read the symbolic
+      // package in tasty - the owners of the classroot do not match
+      forceTopLevel(`symbolic_$greater$greater.#::`)
+
+    runTest(using Contexts.init(testClasspath))
   }
 }

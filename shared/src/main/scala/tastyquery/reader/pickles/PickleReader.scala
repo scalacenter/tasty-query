@@ -11,6 +11,9 @@ import tastyquery.ast.Symbols.RegularSymbolFactory
 import tastyquery.ast.Symbols.ClassSymbolFactory
 import tastyquery.ast.Symbols.ClassSymbol
 
+import tastyquery.util.syntax.chaining.given
+import tastyquery.ast.Symbols.DeclaringSymbol
+
 class PickleReader {
   opaque type Entries = Array[AnyRef | Null]
   opaque type Index = IArray[Int]
@@ -124,7 +127,11 @@ class PickleReader {
       // TODO: enter in scope
       sym match {
         case sym: ClassSymbol =>
-        case sym              => sym.enclosingDecl.addDecl(sym)
+        case sym =>
+          sym.outer match {
+            case scope: DeclaringSymbol => scope.addDecl(sym)
+            case _                      =>
+          }
       }
       sym
     }
@@ -137,13 +144,13 @@ class PickleReader {
         // newSymbol(owner, name1, flags1, localMemberUnpickler, privateWithin, coord = start)
 
         // TODO: clsCtx at owner
-        clsCtx.createSymbolIfNew(name1, RegularSymbolFactory, addToDecls = false)
+        clsCtx.createSymbol(name1, RegularSymbolFactory, addToDecls = false)
       case CLASSsym =>
-        if isClassRoot then clsCtx.classRoot
-        else if isModuleClassRoot then clsCtx.moduleClassRoot
-        else clsCtx.createSymbolIfNew(name.toTypeName, ClassSymbolFactory, addToDecls = false)
+        if isClassRoot then clsCtx.classRoot useWith { _.initialised = true }
+        else if isModuleClassRoot then clsCtx.moduleClassRoot useWith { _.initialised = true }
+        else clsCtx.createSymbol(name.toTypeName, ClassSymbolFactory, addToDecls = false)
       case VALsym =>
-        clsCtx.createSymbolIfNew(name.toTermName, RegularSymbolFactory, addToDecls = false)
+        clsCtx.createSymbol(name.toTermName, RegularSymbolFactory, addToDecls = false)
       case MODULEsym =>
         if isModuleRoot then {
           clsCtx.moduleRoot
@@ -160,6 +167,9 @@ class PickleReader {
 
   def missingEntry(index: Int)(using Entries): Boolean =
     entries(index) == null
+
+  def addEntry[A <: AnyRef](index: Int, ref: A)(using Entries): Unit =
+    entries(index) = ref
 
   def isSymbolEntry(i: Int)(using PklStream, Entries, Index): Boolean = {
     val tag = pkl.bytes(index(i)).toInt

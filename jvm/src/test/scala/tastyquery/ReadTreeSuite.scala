@@ -1,3 +1,5 @@
+package tastyquery
+
 import tastyquery.Contexts
 import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.ast.Names.*
@@ -7,8 +9,6 @@ import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Types.*
 import tastyquery.reader.TastyUnpickler
 import dotty.tools.tasty.TastyFormat.NameTags
-
-import java.nio.file.{Files, Paths}
 
 class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false) {
   import BaseUnpicklingSuite.Decls.*

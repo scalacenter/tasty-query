@@ -23,16 +23,18 @@ case object CaseDefFactory extends AbstractCaseDefFactory[CaseDef]
 case object TypeCaseDefFactory extends AbstractCaseDefFactory[TypeCaseDef]
 
 class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
-  def unpickle(using FileContext): List[Tree] = {
-    @tailrec def read(acc: ListBuffer[Tree]): List[Tree] = {
-      acc += readTopLevelStat
-      if (!reader.isAtEnd) read(acc) else acc.toList
-    }
 
-    val symbolFork = fork
-    while (!symbolFork.reader.isAtEnd) symbolFork.createSymbols
+  def unpickle(using FileContext): List[Tree] =
+    @tailrec
+    def read(acc: ListBuffer[Tree]): List[Tree] =
+      acc += readTopLevelStat
+      if !reader.isAtEnd then read(acc) else acc.toList
+
+    fork.enterSymbols()
     read(new ListBuffer[Tree])
-  }
+
+  private def enterSymbols()(using FileContext): Unit =
+    while !reader.isAtEnd do createSymbols()
 
   /* This method walks a TASTy file and creates all symbols in it.
    *
@@ -42,7 +44,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
    * The alternative is to create a symbol when we encounter a forward reference, but it is hard to
    * keep track of the owner in this case.
    * */
-  def createSymbols(using FileContext): Unit = {
+  private def createSymbols()(using FileContext): Unit = {
     val start = reader.currentAddr
     val tag = reader.readByte()
     tag match {
@@ -51,53 +53,57 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         val end = reader.readEnd()
         val pid = readPotentiallyShared({
           assert(reader.readByte() == TERMREFpkg, posErrorMsg)
-          ctx.createPackageSymbolIfNew(readName)
+          val pkg = ctx.createPackageSymbolIfNew(readName)
+          if pkg != defn.EmptyPackage then
+            // can happen for symbolic packages
+            assert(
+              ctx.classRoot.enclosingDecls.exists(_ == pkg),
+              s"unexpected package ${pkg.name} in owners of top level class ${ctx.classRoot.fullName}"
+            )
+          pkg
         })
-        reader.until(end)(createSymbols(using ctx.withOwner(pid)))
+        reader.until(end)(createSymbols()(using ctx.withOwner(pid)))
       case TYPEDEF =>
         val end = reader.readEnd()
         val name = readName.toTypeName
         val tag = reader.nextByte
-        val newOwner = if tag == TEMPLATE then {
-          ctx.createSymbolIfNew(start, name, ClassSymbolFactory, addToDecls = ctx.owner.isClass)
-        } else {
-          ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls = ctx.owner.isClass)
-        }
-        reader.until(end)(createSymbols(using ctx.withOwner(newOwner)))
+        val factory = if tag == TEMPLATE then ClassSymbolFactory else RegularSymbolFactory
+        val newOwner = ctx.createSymbol(start, name, factory, addToDecls = ctx.owner.isClass)
+        reader.until(end)(createSymbols()(using ctx.withOwner(newOwner)))
         if tag == TEMPLATE then newOwner.asInstanceOf[ClassSymbol].initialised = true
       case DEFDEF | VALDEF | PARAM | TYPEPARAM =>
         val end = reader.readEnd()
         val name = if (tag == TYPEPARAM) readName.toTypeName else readName
         val addToDecls = tag != TYPEPARAM && ctx.owner.isClass
         val newSymbol =
-          ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls)
-        reader.until(end)(createSymbols(using ctx.withOwner(newSymbol)))
+          ctx.createSymbol(start, name, RegularSymbolFactory, addToDecls)
+        reader.until(end)(createSymbols()(using ctx.withOwner(newSymbol)))
       case BIND =>
         val end = reader.readEnd()
         var name: Name = readName
         if (tagFollowShared == TYPEBOUNDS) name = name.toTypeName
-        ctx.createSymbolIfNew(start, name, RegularSymbolFactory, addToDecls = false)
+        ctx.createSymbol(start, name, RegularSymbolFactory, addToDecls = false)
         // bind is never an owner
-        reader.until(end)(createSymbols)
+        reader.until(end)(createSymbols())
 
       // ---------- tags with potentially nested symbols --------------------------------
-      case tag if firstASTTreeTag <= tag && tag < firstNatASTTreeTag => createSymbols
+      case tag if firstASTTreeTag <= tag && tag < firstNatASTTreeTag => createSymbols()
       case tag if firstNatASTTreeTag <= tag && tag < firstLengthTreeTag =>
         reader.readNat()
-        createSymbols
+        createSymbols()
       case TEMPLATE | APPLY | TYPEAPPLY | SUPER | TYPED | ASSIGN | BLOCK | INLINED | LAMBDA | IF | MATCH | TRY | WHILE |
           REPEATED | ALTERNATIVE | UNAPPLY | REFINEDtpt | APPLIEDtpt | LAMBDAtpt | TYPEBOUNDStpt | ANNOTATEDtpt |
           MATCHtpt | CASEDEF =>
         val end = reader.readEnd()
-        reader.until(end)(createSymbols)
+        reader.until(end)(createSymbols())
       case SELECTin =>
         val end = reader.readEnd()
         readName
-        reader.until(end)(createSymbols)
+        reader.until(end)(createSymbols())
       case RETURN | SELECTouter =>
         val end = reader.readEnd()
         reader.readNat()
-        reader.until(end)(createSymbols)
+        reader.until(end)(createSymbols())
 
       // ---------- no nested symbols ---------------------------------------------------
       case _ => skipTree(tag)
@@ -210,13 +216,13 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val name = readName.toTypeName
       val typedef: Class | TypeMember = if (reader.nextByte == TEMPLATE) {
         val classSymbol = ctx.getSymbol(start, ClassSymbolFactory)
-        createSymbolTree(s => Class(name, readTemplate(using ctx.withOwner(s)), s), classSymbol)
+        Class(name, readTemplate(using ctx.withOwner(classSymbol)), classSymbol).definesTreeOf(classSymbol)
       } else {
         val symbol = ctx.getSymbol(start, RegularSymbolFactory)
         if (tagFollowShared == TYPEBOUNDS)
-          createSymbolTree(s => TypeMember(name, readTypeBounds(using ctx.withOwner(s)), s), symbol)
+          TypeMember(name, readTypeBounds(using ctx.withOwner(symbol)), symbol).definesTreeOf(symbol)
         else
-          createSymbolTree(s => TypeMember(name, readTypeTree(using ctx.withOwner(s)), s), symbol)
+          TypeMember(name, readTypeTree(using ctx.withOwner(symbol)), symbol).definesTreeOf(symbol)
       }
       // TODO: read modifiers
       skipModifiers(end)
@@ -291,7 +297,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val name = readName.toTypeName
       val bounds = readTypeParamType(using ctx.withOwner(paramSymbol))
       skipModifiers(end)
-      createSymbolTree(symbol => TypeParam(name, bounds, symbol), paramSymbol)
+      TypeParam(name, bounds, paramSymbol).definesTreeOf(paramSymbol)
     }
     var acc = new ListBuffer[TypeParam]()
     while (reader.nextByte == TYPEPARAM) {
@@ -405,20 +411,22 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     skipModifiers(end)
     tag match {
       case VALDEF | PARAM =>
-        createSymbolTree(s => ValDef(name, tpt, rhs, s), symbol)
+        ValDef(name, tpt, rhs, symbol).definesTreeOf(symbol)
       case DEFDEF =>
-        createSymbolTree(s => DefDef(name, params, tpt, rhs, s), symbol)
+        DefDef(name, params, tpt, rhs, symbol).definesTreeOf(symbol)
     }
   }
 
   def readTerms(end: Addr)(using FileContext): List[Tree] =
     reader.until(end)(readTerm)
 
-  def createSymbolTree[S <: Symbol, T <: Tree](createTree: S => T, symbol: S): T = {
-    val tree = createTree(symbol)
-    symbol.withTree(tree)
-    tree
-  }
+  extension [T <: Tree](tree: T)
+    /** Adds `tree` to the `symbol`, returning the tree.
+      * @todo remove and assign tree to symbol in ctor of tree
+      */
+    inline def definesTreeOf[S <: Symbol](symbol: S): T =
+      symbol.withTree(tree)
+      tree
 
   def readTerm(using FileContext): Tree = reader.nextByte match {
     case IDENT =>
@@ -524,7 +532,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val typ = readType
       val term = readTerm
       skipModifiers(end)
-      createSymbolTree(bindSymbol => Bind(name, term, bindSymbol), ctx.getSymbol(start, RegularSymbolFactory))
+      val symbol = ctx.getSymbol(start, RegularSymbolFactory)
+      Bind(name, term, symbol).definesTreeOf(symbol)
     case ALTERNATIVE =>
       reader.readByte()
       val end = reader.readEnd()

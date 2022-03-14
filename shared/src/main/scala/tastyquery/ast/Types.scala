@@ -247,12 +247,7 @@ object Types {
       val local = packageSymbol
       if (local == null) {
         def searchPkg = defn.RootPackage.findPackageSymbol(packageName)
-        def slowSearchPkg = {
-          baseCtx.classloader.initPackages()
-          searchPkg
-        }
-        val symOption = searchPkg
-        val resolved = symOption.orElse(slowSearchPkg).getOrElse(throw new SymbolLookupException(packageName))
+        val resolved = searchPkg.getOrElse(throw new SymbolLookupException(packageName))
         packageSymbol = resolved
         resolved
       } else local

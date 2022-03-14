@@ -6,12 +6,18 @@ import tastyquery.ast.Names.annot
 import tastyquery.ast.Names.SimpleName
 import tastyquery.ast.Symbols.RegularSymbolFactory
 import tastyquery.Contexts.{ClassContext, clsCtx}
-import tastyquery.reader.pickles.Unpickler
+import tastyquery.reader.pickles.{Unpickler, PickleReader}
 
 import Classpaths.ClassData
 import ClassfileReader.{DataStream, ReadException, Annotation, AnnotationValue, data}
 
 object ClassfileParser {
+
+  enum ClassKind:
+    case Scala2(structure: Structure, runtimeAnnotStart: Forked[DataStream])
+    case Java(structure: Structure)
+    case TASTy
+    case Artifact
 
   class Structure(
     val binaryName: SimpleName,
@@ -21,7 +27,9 @@ object ClassfileParser {
     val attributes: Forked[DataStream]
   )(using val pool: reader.ConstantPool)
 
-  def loadScala2Class(structure: Structure, runtimeAnnotStart: Forked[DataStream])(using ClassContext): Unit = {
+  def loadScala2Class(structure: Structure, runtimeAnnotStart: Forked[DataStream])(
+    using ClassContext
+  ): Either[PickleReader.BadSignature, Unit] = {
     import structure.{reader, given}
 
     val Some(Annotation(tpe, args)) = runtimeAnnotStart.use {
@@ -41,31 +49,35 @@ object ClassfileParser {
 
   }
 
-  def loadJavaClass(structure: Structure)(using ClassContext): Unit = {
+  def loadJavaClass(structure: Structure)(using ClassContext): Either[ReadException, Unit] = {
     import structure.{reader, given}
 
     def loadFields(fields: Forked[DataStream]): Unit =
       fields.use {
         reader.readFields { name =>
-          clsCtx.createSymbolIfNew(name, RegularSymbolFactory, addToDecls = true)
+          clsCtx.createSymbol(name, RegularSymbolFactory, addToDecls = true)
         }
       }
 
     def loadMethods(methods: Forked[DataStream]): Unit =
       methods.use {
         reader.readMethods { name =>
-          clsCtx.createSymbolIfNew(name, RegularSymbolFactory, addToDecls = true)
+          clsCtx.createSymbol(name, RegularSymbolFactory, addToDecls = true)
         }
       }
 
-    loadFields(structure.fields)
-    loadMethods(structure.methods)
+    ClassfileReader.read {
+      loadFields(structure.fields)
+      loadMethods(structure.methods) // TODO: move static methods to companion object
+      clsCtx.classRoot.initialised = true
+      clsCtx.moduleClassRoot.initialised = true
+    }
   }
 
-  def parse(classRoot: ClassData, structure: Structure)(using ClassContext): Unit = {
+  private def parse(classRoot: ClassData, structure: Structure)(using ClassContext): ClassKind = {
     import structure.{reader, given}
 
-    def process(attributesStream: Forked[DataStream]): Unit = {
+    def process(attributesStream: Forked[DataStream]): ClassKind =
       var runtimeAnnotStart: Forked[DataStream] | Null = null
       var isScala = false
       var isTASTY = false
@@ -89,25 +101,26 @@ object ClassfileParser {
         }
         isScalaRaw &= !isTASTY
       }
-      if isScala then {
+      if isScala then
         println(s"class file for ${structure.binaryName} is a scala 2 class")
         val annots = runtimeAnnotStart
-        if annots != null then loadScala2Class(structure, annots)
+        if annots != null then ClassKind.Scala2(structure, annots)
         else throw ReadException(s"class file for ${classRoot.simpleName} is a scala 2 class, but has no annotations")
-      } else if isTASTY then {
+      else if isTASTY then
         println(s"class file for ${structure.binaryName} is a tasty class, ignoring")
-      } else if isScalaRaw then {
+        ClassKind.TASTy
+      else if isScalaRaw then
         println(s"class file for ${structure.binaryName} is a scala compiler artifact, ignoring")
-      } else {
+        ClassKind.Artifact
+      else
         println(s"class file for ${structure.binaryName} is a java class")
-        loadJavaClass(structure)
-      }
-    }
+        ClassKind.Java(structure)
+    end process
 
     process(structure.attributes)
   }
 
-  def structure(reader: ClassfileReader)(using reader.ConstantPool)(using DataStream) = {
+  private def structure(reader: ClassfileReader)(using reader.ConstantPool)(using DataStream): Structure = {
     val access = reader.readAccessFlags()
     val thisClass = reader.readThisClass()
     val superClass = reader.readSuperClass()
@@ -121,7 +134,7 @@ object ClassfileParser {
     )
   }
 
-  def toplevel(classRoot: ClassData)(using ClassContext): Structure = {
+  private def toplevel(classRoot: ClassData)(using ClassContext): Structure = {
     val root = clsCtx.classRoot
     println(s"loading class file for ${root.enclosingDecl.name}.${root.name} with ${classRoot.bytes.size} bytes")
 
@@ -133,9 +146,7 @@ object ClassfileParser {
     ClassfileReader.unpickle(classRoot)(headerAndStructure)
   }
 
-  def loadInfo(classRoot: ClassData)(using ClassContext): Either[ReadException, Unit] =
-    ClassfileReader.read {
-      ClassfileParser.parse(classRoot, ClassfileParser.toplevel(classRoot))
-    }
+  def readKind(classRoot: ClassData)(using ClassContext): Either[ReadException, ClassKind] =
+    ClassfileReader.read(parse(classRoot, toplevel(classRoot)))
 
 }
