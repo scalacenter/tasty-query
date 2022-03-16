@@ -36,9 +36,9 @@ sbt test
 
 We have several test suites to add to, depending on the contribution type:
 - For additions of new TASTy tree kinds, please add to [ReadTreeSuite](jvm/src/test/scala/tastyquery/ReadTreeSuite.scala)
-- To test symbol structure of self-contained TASTy files, please add to [SymbolSuite][jvm/src/test/scala/tastyquery/SymbolSuite.scala]
+- To test symbol structure of self-contained TASTy files, please add to [SymbolSuite](jvm/src/test/scala/tastyquery/SymbolSuite.scala)
   - `SymbolSuite` is best avoided unless you are specifically testing reading of symbols defined in TASTy files.
-- To test symbol structure and types of TASTy files, and reading of external dependencies, please add to [TypeSuite][jvm/src/test/scala/tastyquery/TypeSuite.scala]
+- To test symbol structure and types of TASTy files, and reading of external dependencies, please add to [TypeSuite](jvm/src/test/scala/tastyquery/TypeSuite.scala)
 
 for each test suite, it is usually sufficient to copy a pre-existing test and change it for your needs.
 
