@@ -6,7 +6,7 @@ It scans the classpath to build a map of all definitions in a project. Its API w
 
 ## Contributing
 
-TODO
+Thank you for wanting to contribute! Please read our [contributing guide](CONTRIBUTING.md).
 
 ## Example Usage
 
