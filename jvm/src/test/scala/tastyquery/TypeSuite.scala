@@ -6,7 +6,7 @@ import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.*
 import tastyquery.ast.Types.*
 
-class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = true) {
+class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = true, allowDeps = true) {
   import BaseUnpicklingSuite.Decls.*
 
   def assertMissingDeclaration(path: DeclarationPath)(using BaseContext): Unit =

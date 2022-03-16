@@ -19,18 +19,19 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import scala.annotation.targetName
 import tastyquery.ast.Symbols.ClassSymbol
 
-abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean) extends munit.FunSuite { outer =>
+abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean, allowDeps: Boolean)
+    extends munit.FunSuite { outer =>
   given TestPlatform = tastyquery.testutil.jdk.JavaTestPlatform // TODO: make abstract so we can test scala.js
 
   lazy val testClasspath = testPlatform.loadClasspath(includeClasses = withClasses, includeStdLib = withStdLib)
 
-  def getUnpicklingContext(path: TopLevelDeclPath): BaseContext = {
-    val (base, _) = findTopLevelClass(path)
+  def getUnpicklingContext(path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*): BaseContext = {
+    val (base, _) = findTopLevelClass(path)(extraClasspath*)
     base
   }
 
   def unpickle(path: TopLevelDeclPath): Tree = {
-    val (base, classRoot) = findTopLevelClass(path)
+    val (base, classRoot) = findTopLevelClass(path)()
     val tree = base.classloader.topLevelTasty(classRoot)(using base) match
       case Some(trees) => trees.head
       case _           => fail(s"Missing tasty for ${path.fullClassName}, $classRoot")
@@ -40,13 +41,16 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean) ex
   class MissingTopLevelDecl(path: TopLevelDeclPath)
       extends Exception(s"Missing top-level declaration ${path.fullClassName}, perhaps it is not on the classpath?")
 
-  private def findTopLevelClass(path: TopLevelDeclPath): (BaseContext, ClassSymbol) = {
-    val base: BaseContext = Contexts.init(testClasspath)
-    val classRoot = base.getClassIfDefined(path.fullClassName) match
+  private def findTopLevelClass(path: TopLevelDeclPath)(extras: TopLevelDeclPath*): (BaseContext, ClassSymbol) = {
+    val topLevelClass = path.fullClassName
+    val classpath =
+      if allowDeps then testClasspath
+      else testClasspath.withFilter(topLevelClass :: extras.map(_.fullClassName).toList)
+    val base: BaseContext = Contexts.init(classpath)
+    val classRoot = base.getClassIfDefined(topLevelClass) match
       case Some(cls) => cls
       case _         => throw MissingTopLevelDecl(path)
-    if !base.classloader.scanClass(classRoot)(using base) then
-      fail(s"could not initialise ${path.fullClassName}, $classRoot")
+    if !base.classloader.scanClass(classRoot)(using base) then fail(s"could not initialise $topLevelClass, $classRoot")
     (base, classRoot)
   }
 

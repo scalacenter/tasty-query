@@ -52,6 +52,27 @@ object Classpaths {
 
     def loader[T](op: Loader => T): T = op(Loader(this))
 
+    def withFilter(classes: List[String]): Classpath =
+      def packageAndClass(fullClassName: String): (SimpleName, SimpleName) = {
+        val lastSep = fullClassName.lastIndexOf('.')
+        if lastSep == -1 then (nme.EmptyPackageName, termName(fullClassName))
+        else {
+          import scala.language.unsafeNulls
+          val packageName = termName(fullClassName.substring(0, lastSep))
+          val className = termName(fullClassName.substring(lastSep + 1))
+          (packageName, className)
+        }
+      }
+      val formatted = classes.map(packageAndClass)
+      val grouped = formatted.groupMap((pkg, _) => pkg)((_, cls) => cls)
+      val filtered = packages.collect {
+        case pkg if grouped.contains(pkg.name) =>
+          val tastys1 = pkg.tastys.filter(t => grouped(pkg.name).contains(t.simpleName))
+          val classes1 = pkg.classes.filter(c => grouped(pkg.name).contains(c.simpleName))
+          PackageData(pkg.name, classes1, tastys1)
+      }
+      new Classpath(filtered) {}
+    end withFilter
   }
 
   object Classpath {
