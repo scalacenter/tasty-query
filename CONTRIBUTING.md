@@ -20,7 +20,7 @@ The following tools can be installed following our [Scala getting started guide]
 
 A text editor is also useful, we recommend [VS Code](https://code.visualstudio.com) with the [Metals IDE extension](https://marketplace.visualstudio.com/items?itemName=scalameta.metals).
 
-## Try your setup
+## Try your setup / Running Tests
 To test that everything is working, you can run the tests. In a terminal, navigate to the directory of this project and use the command:
 ```script
 sbt test
