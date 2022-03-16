@@ -5,7 +5,7 @@ import tastyquery.ast.Names.{nme, Name, SimpleName, TypeName}
 import tastyquery.ast.Symbols.{DeclaringSymbol, PackageClassSymbol, Symbol}
 import tastyquery.ast.Symbols.ClassSymbol
 
-class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false) {
+class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false, allowDeps = false) {
   import BaseUnpicklingSuite.Decls.*
   import BaseUnpicklingSuite.toDebugString
 
@@ -154,7 +154,7 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
     val outerMethod = NestedMethod / name"outerMethod"
     val unitVal = Constants / name"unitVal"
 
-    val ctx = getUnpicklingContext(Constants)
+    val ctx = getUnpicklingContext(Constants, extraClasspath = NestedMethod)
 
     assertContainsDeclaration(ctx, Constants) // we should have loaded Constants, we requested it
     assertContainsDeclaration(ctx, unitVal) // outerMethod is a member of Constants, it should be seen.
