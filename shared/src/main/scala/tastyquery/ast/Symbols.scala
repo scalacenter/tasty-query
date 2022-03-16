@@ -1,7 +1,7 @@
 package tastyquery.ast
 
 import scala.collection.mutable
-import tastyquery.ast.Names.{Name, TermName, SignedName, SimpleName, QualifiedName, nme}
+import tastyquery.ast.Names.{Name, TermName, SignedName, SimpleName, QualifiedName, TypeName, SuffixedName, nme}
 import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Trees.{EmptyTree, Tree}
 import tastyquery.ast.Types.*
@@ -57,15 +57,24 @@ object Symbols {
     private[tastyquery] final def enclosingDecls: Iterator[DeclaringSymbol] =
       Iterator.iterate(enclosingDecl)(_.enclosingDecl).takeWhile(s => s.maybeOuter.exists)
 
+    private[tastyquery] final def isStatic: Boolean =
+      Iterator
+        .iterate(this)(_.outer)
+        .takeWhile(s => s.maybeOuter.exists)
+        .forall(s => s.isPackage || s.isClass && s.name.toTypeName.wrapsObjectName)
+
     final def fullName: Name =
       if isPackage then name
       else
-        val scope = maybeOuter
-        val calc =
-          if scope.exists then scope.fullName.toTermName.select(name.asSimpleName)
-          else name
-        if name.isTypeName then calc.toTypeName
-        else calc
+        val pre = maybeOuter
+        if pre.exists && pre.isStatic then
+          val withPrefix = name match
+            case TypeName(SuffixedName(NameTags.OBJECTCLASS, module)) =>
+              pre.fullName.toTermName.select(module.asSimpleName).withObjectSuffix
+            case _ => pre.fullName.toTermName.select(name.asSimpleName)
+          if name.isTypeName then withPrefix.toTypeName
+          else withPrefix
+        else name
 
     final def exists: Boolean = this ne NoSymbol
 

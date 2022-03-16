@@ -151,6 +151,8 @@ object Names {
     infix def select(name: SimpleName): QualifiedName = QualifiedName(NameTags.QUALIFIED, this, name)
 
     def subnames: TermName.SubNamesOps = new TermName.SubNamesOps(this)
+
+    def withObjectSuffix: SuffixedName = SuffixedName(NameTags.OBJECTCLASS, this)
   }
 
   object TermName {
@@ -258,6 +260,6 @@ object Names {
 
     def toObjectName: TypeName =
       if wrapsObjectName then this
-      else SuffixedName(NameTags.OBJECTCLASS, toTermName).toTypeName
+      else toTermName.withObjectSuffix.toTypeName
   }
 }

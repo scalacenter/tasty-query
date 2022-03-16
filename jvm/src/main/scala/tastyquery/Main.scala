@@ -1,3 +1,5 @@
+package tastyquery
+
 import java.nio.file.{Files, Paths}
 import tastyquery.reader.TastyUnpickler
 import tastyquery.Contexts
@@ -16,7 +18,7 @@ object Main {
         val cpElems = ClasspathLoaders.splitClasspath(cp)
         val classpath = ClasspathLoaders.read(cpElems, Set(ClasspathLoaders.FileKind.Tasty))
         given BaseContext = Contexts.init(classpath)
-        reader.read(classes*)
+        reader.read(classes*).debugDefinitions
       case _ =>
         println("""Usage:
                   |-cp <paths> <classname>...""".stripMargin)
