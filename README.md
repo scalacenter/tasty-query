@@ -1,13 +1,17 @@
-This is a work-in-progress reader of Scala 3 projects from their .tasty files. Run
+# TASTy Query
+
+TASTy Query will be the basis for all compiler-independent tools that analyze TASTy - an intermediate representation of Scala 3 code.
+
+It scans the classpath to build a map of all definitions in a project. Its API will allow users to query the code for a class, inspect signatures of methods, values and types, and compare them.
+
+## Contributing
+
+TODO
+
+## Example Usage
+
+to scan the TASTy of a several classes, and print the definitions contained within:
 
 ```shell
-sbt "tastyQueryJVM/run -cp whitespace-separated-project-classpath"
+sbt "tastyQueryJVM/run -cp app.jar:lib.jar lib.Foo app.Bar"
 ```
-
-to read a project or
-
-
-```shell
-sbt "tastyQueryJVM/run --standalone path-to-.tasty-file"
-```
-to unpickle a single .tasty file.
