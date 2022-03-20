@@ -1,6 +1,8 @@
+package tastyquery
+
 import tastyquery.Contexts
 import tastyquery.Contexts.FileContext
-import tastyquery.ast.Trees._
+import tastyquery.ast.Trees.*
 import tastyquery.reader.TastyUnpickler
 import tastyquery.reader.PositionUnpickler
 import dotty.tools.dotc.util.Spans.{Span, NoSpan}
@@ -9,27 +11,39 @@ import scala.reflect.TypeTest
 import java.nio.file.{Files, Paths}
 import scala.util.control.Exception.Catch
 
-class PositionSuite extends BaseUnpicklingSuite {
+class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false, allowDeps = false) {
+  import BaseUnpicklingSuite.Decls.*
 
   val ResourceCodeProperty = "test-resources-code"
 
-  def getCodePath(name: String): String =
-    s"${System.getProperty(ResourceCodeProperty)}/main/scala/$name.scala"
+  val empty_class = name"empty_class".singleton
+  val simple_trees = name"simple_trees".singleton
+  val imports = name"imports".singleton
 
-  def unpickleWithCode(filename: String)(using ctx: FileContext = Contexts.empty(filename)): (Tree, String) = {
-    val resourcePath = getResourcePath(filename)
-    val codePath = getCodePath(filename)
-    val bytes = Files.readAllBytes(Paths.get(resourcePath))
+  private def getCodePath(name: String): String =
+    s"${System.getProperty(ResourceCodeProperty)}/main/scala/${name.replace(".", "/")}.scala"
+
+  private def unpickleWithCode(path: TopLevelDeclPath): (Tree, String) = {
+    val (base, classRoot) = findTopLevelClass(path)()
+    val tree = base.classloader.topLevelTasty(classRoot)(using base) match
+      case Some(trees) => trees.head
+      case _           => fail(s"Missing tasty for ${path.fullClassName}, $classRoot")
+
+    val codePath = getCodePath(path.fullClassName)
     val code = Files.readString(Paths.get(codePath))
-
-    val unpickler = new TastyUnpickler(bytes)
-    val tree = unpickler.unpickle(new TastyUnpickler.TreeSectionUnpickler(
-      unpickler.unpickle(new TastyUnpickler.PositionSectionUnpickler))).get.unpickle(using ctx).head
-    (tree, code)
+    code match {
+      case code: String => (tree, code)
+      case _ => fail(s"Missing code for ${path.fullClassName}, $classRoot")
+    }
   }
 
   private def treeToCode(tree: Tree, code: String): String =
-    if tree.span.exists then code.substring(tree.span.start, tree.span.end) else ""
+    if (tree.span.exists) {
+      code.substring(tree.span.start, tree.span.end) match {
+        case sec: String => sec
+        case _ => ""
+      }
+    } else ""
 
   private def printTreeWithCode(tree: Tree, code: String): Unit =
     tree.walkTree(t => {
@@ -53,7 +67,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   /** Basics */
 
   test("var-def") {
-    val (tree, code) = unpickleWithCode("simple_trees/Var")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Var")
     assertEquals(
       collectCode[ValDef](tree, code),
       List("var x = 1")
@@ -61,7 +75,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("literal") {
-    val (tree, code) = unpickleWithCode("simple_trees/Constants")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Constants")
     assertEquals(
       collectCode[Literal](tree, code),
       List(
@@ -82,7 +96,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("assign") {
-    val (tree, code) = unpickleWithCode("simple_trees/Assign")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Assign")
     assertEquals(
       collectCode[Assign](tree, code),
       List("y = x")
@@ -90,7 +104,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("apply") {
-    val (tree, code) = unpickleWithCode("simple_trees/EtaExpansion")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"EtaExpansion")
     assertEquals(
       collectCode[Apply](tree, code), 
       List(
@@ -104,7 +118,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   /** Control structures */
 
   test("if") {
-    val (tree, code) = unpickleWithCode("simple_trees/If")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"If")
     assertEquals(
       collectCode[If](tree, code),
       List("if (x < 0) -x else x")
@@ -112,7 +126,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("while") {
-    val (tree, code) = unpickleWithCode("simple_trees/While")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"While")
     assertEquals(
       collectCode[While](tree, code),
       List(
@@ -124,7 +138,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("match") {
-    val (tree, code) = unpickleWithCode("simple_trees/Match")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Match")
     assertEquals(
       collectCode[Match](tree, code),
       List(
@@ -141,7 +155,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("case-def") {
-    val (tree, code) = unpickleWithCode("simple_trees/Match")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Match")
     assertEquals(
       collectCode[CaseDef](tree, code), 
       Nil
@@ -149,7 +163,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("bind") {
-    val (tree, code) = unpickleWithCode("simple_trees/Bind")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Bind")
     assertEquals(
       collectCode[Bind](tree, code), 
       List(
@@ -164,7 +178,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   /** Functions */
 
   test("def-def") {
-    val (tree, code) = unpickleWithCode("simple_trees/Function")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Function")
     assertEquals(
       collectCode[DefDef](tree, code),
       List(
@@ -175,7 +189,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("def-def-nested") {
-    val (tree, code) = unpickleWithCode("simple_trees/NestedMethod")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"NestedMethod")
     assertEquals(
       collectCode[DefDef](tree, code),
       List(
@@ -188,7 +202,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("named-arg") {
-    val (tree, code) = unpickleWithCode("simple_trees/NamedArgument")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"NamedArgument")
     assertEquals(
       collectCode[NamedArg](tree, code),
       List("second = 1")
@@ -196,7 +210,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("block") {
-    val (tree, code) = unpickleWithCode("simple_trees/Block")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Block")
     assertEquals(
       collectCode[Block](tree, code),
       List(
@@ -210,7 +224,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("lambda") {
-    val (tree, code) = unpickleWithCode("simple_trees/Function")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Function")
     assertEquals(
       collectCode[Lambda](tree, code),
       // NoSpan is the expected behavior
@@ -219,7 +233,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("return") {
-    val (tree, code) = unpickleWithCode("simple_trees/Return")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Return")
     assertEquals(
       collectCode[Return](tree, code),
       List("return 1")
@@ -233,7 +247,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   /** Classes */
 
   test("class") {
-    val (tree, code) = unpickleWithCode("simple_trees/InnerClass")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"InnerClass")
     assertEquals(
       collectCode[Class](tree, code), 
       List(
@@ -248,7 +262,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
   
   test("super") {
-    val (tree, code) = unpickleWithCode("simple_trees/Super")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Super")
     assertEquals(
       collectCode[Super](tree, code), 
       List(
@@ -258,8 +272,9 @@ class PositionSuite extends BaseUnpicklingSuite {
     )
   }
 
-  test("self") {
-    val (tree, code) = unpickleWithCode("simple_trees/ClassWithSelf")
+  test("self".ignore) {
+    // ignore because the span of Self is impossible to construct
+    val (tree, code) = unpickleWithCode(simple_trees / tname"ClassWithSelf")
     assertEquals(
       collectCode[ValDef](tree, code), 
       List(
@@ -271,7 +286,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   /** Import and export */
 
   test("import") {
-    val (tree, code) = unpickleWithCode("imports/Import")
+    val (tree, code) = unpickleWithCode(imports / tname"Import")
     assertEquals(
       collectCode[Import](tree, code), 
       List("import imported_files.A")
@@ -279,7 +294,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("import-selector-multiple") {
-    val (tree, code) = unpickleWithCode("imports/MultipleImports")
+    val (tree, code) = unpickleWithCode(imports / tname"MultipleImports")
     assertEquals(
       collectCode[ImportSelector](tree, code), 
       List("A", "B")
@@ -287,7 +302,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("import-selector-bound") {
-    val (tree, code) = unpickleWithCode("imports/ImportGivenWithBound")
+    val (tree, code) = unpickleWithCode(imports / tname"ImportGivenWithBound")
     assertEquals(
       collectCode[ImportSelector](tree, code), 
       List("A", "given A")
@@ -295,7 +310,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("import-selector-renamed") {
-    val (tree, code) = unpickleWithCode("imports/RenamedImport")
+    val (tree, code) = unpickleWithCode(imports / tname"RenamedImport")
     assertEquals(
       collectCode[ImportSelector](tree, code), 
       List("A => ClassA")
@@ -303,7 +318,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("export") {
-    val (tree, code) = unpickleWithCode("simple_trees/Export")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Export")
     assertEquals(
       collectCode[Export](tree, code), 
       List(
@@ -317,7 +332,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   /** Throw and try-catch */
 
   test("throw") {
-    val (tree, code) = unpickleWithCode("simple_trees/ThrowException")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"ThrowException")
     assertEquals(
       collectCode[Throw](tree, code), 
       List("throw new NullPointerException")
@@ -325,7 +340,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("try") {
-    val (tree, code) = unpickleWithCode("simple_trees/TryCatch")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"TryCatch")
     assertEquals(
       collectCode[Try](tree, code), 
       List(
@@ -344,7 +359,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   /** Types */
 
   test("typed") {
-    val (tree, code) = unpickleWithCode("simple_trees/Typed")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Typed")
     assertEquals(
       collectCode[Typed](tree, code), 
       List("1: Int")
@@ -352,7 +367,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("type-member") {
-    val (tree, code) = unpickleWithCode("simple_trees/TypeMember")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"TypeMember")
     assertEquals(
       collectCode[TypeMember](tree, code), 
       List(
@@ -366,7 +381,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   }
 
   test("type-apply") {
-    val (tree, code) = unpickleWithCode("simple_trees/TypeApply")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"TypeApply")
     assertEquals(
       collectCode[TypeApply](tree, code), 
       List("Seq(1)")
@@ -376,7 +391,7 @@ class PositionSuite extends BaseUnpicklingSuite {
   /** Inlined */
 
   test("inlined") {
-    val (tree, code) = unpickleWithCode("simple_trees/InlinedCall")
+    val (tree, code) = unpickleWithCode(simple_trees / tname"InlinedCall")
     assertEquals(
       collectCode[Inlined](tree, code), 
       List(
