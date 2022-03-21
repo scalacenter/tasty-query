@@ -7,6 +7,7 @@ import tastyquery.ast.Symbols.{ClassSymbol, ClassSymbolFactory, NoSymbol, Regula
 import tastyquery.ast.Trees.*
 import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Types.*
+import tastyquery.ast.Spans.{Span, NoSpan}
 import tastyquery.reader.TastyUnpickler.NameTable
 
 import scala.annotation.tailrec
@@ -14,7 +15,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.util.NotGiven
 import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyReader}
-import dotty.tools.dotc.util.Spans.{Span, NoSpan}
 import TastyBuffer.*
 import TastyFormat.*
 

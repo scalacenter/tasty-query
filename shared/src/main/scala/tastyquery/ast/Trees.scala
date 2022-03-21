@@ -5,10 +5,10 @@ import tastyquery.ast.Names.*
 import tastyquery.ast.Types.*
 import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Symbols.*
+import tastyquery.ast.Spans.{Span, NoSpan}
 import tastyquery.util.syntax.chaining.given
 import tastyquery.Contexts.BaseContext
 import tastyquery.reader.PositionUnpickler
-import dotty.tools.dotc.util.Spans.{Span, NoSpan}
 
 object Trees {
   class TypeComputationError(val tree: Tree) extends RuntimeException(s"Could not compute type of $tree")

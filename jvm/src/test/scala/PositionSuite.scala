@@ -3,9 +3,9 @@ package tastyquery
 import tastyquery.Contexts
 import tastyquery.Contexts.FileContext
 import tastyquery.ast.Trees.*
+import tastyquery.ast.Spans.{Span, NoSpan}
 import tastyquery.reader.TastyUnpickler
 import tastyquery.reader.PositionUnpickler
-import dotty.tools.dotc.util.Spans.{Span, NoSpan}
 
 import scala.io.Source
 import scala.reflect.TypeTest

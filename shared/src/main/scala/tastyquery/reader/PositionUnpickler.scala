@@ -4,9 +4,9 @@ package tastyquery.reader
 
 /** Uses the TermName defined in tastyquery */
 import tastyquery.ast.Names.TermName
+import tastyquery.ast.Spans.{Span, NoSpan}
+import tastyquery.util
 
-import dotty.tools.dotc.util
-import dotty.tools.dotc.util.Spans.{Span, NoSpan}
 import dotty.tools.tasty.{TastyFormat, TastyBuffer, TastyReader}
 import TastyFormat.SOURCE
 import TastyBuffer.{Addr, NameRef}
