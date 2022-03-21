@@ -7,8 +7,8 @@ import tastyquery.reader.TastyUnpickler
 import tastyquery.reader.PositionUnpickler
 import dotty.tools.dotc.util.Spans.{Span, NoSpan}
 
+import scala.io.Source
 import scala.reflect.TypeTest
-import java.nio.file.{Files, Paths}
 import scala.util.control.Exception.Catch
 
 class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false, allowDeps = false) {
@@ -28,25 +28,16 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     val tree = base.classloader.topLevelTasty(classRoot)(using base) match
       case Some(trees) => trees.head
       case _           => fail(s"Missing tasty for ${path.fullClassName}, $classRoot")
-
     val codePath = getCodePath(path.fullClassName)
-    val code = Files.readString(Paths.get(codePath))
-    code match {
-      case code: String => (tree, code)
-      case _ => fail(s"Missing code for ${path.fullClassName}, $classRoot")
-    }
+    val code = Source.fromFile(codePath).mkString
+    (tree, code)
   }
 
   private def treeToCode(tree: Tree, code: String): String =
-    if (tree.span.exists) {
-      code.substring(tree.span.start, tree.span.end) match {
-        case sec: String => sec
-        case _ => ""
-      }
-    } else ""
+    if tree.span.exists then code.slice(tree.span.start, tree.span.end) else ""
 
   private def printTreeWithCode(tree: Tree, code: String): Unit =
-    tree.walkTree(t => {
+    tree.walkTree { t =>
       println(t)
       println("-" * 40)
       if (t.span.exists) {
@@ -55,7 +46,7 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
         println(t.span)
       }
       println("=" * 40)
-    })
+    }
   
   private def collectCode[T <: Tree](tree: Tree, code: String)
       (using tt: TypeTest[Tree, T]): List[String] =
