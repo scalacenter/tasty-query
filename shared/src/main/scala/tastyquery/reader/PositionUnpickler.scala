@@ -5,7 +5,7 @@ package tastyquery.reader
 /** Uses the TermName defined in tastyquery */
 import tastyquery.ast.Names.TermName
 import tastyquery.ast.Spans.{Span, NoSpan}
-import tastyquery.util
+import scala.collection.mutable.HashMap
 
 import dotty.tools.tasty.{TastyFormat, TastyBuffer, TastyReader}
 import TastyFormat.SOURCE
@@ -16,8 +16,8 @@ class PositionUnpickler(reader: TastyReader, nameAtRef: NameRef => TermName) {
   import reader.*
 
   private var myLineSizes: Array[Int] = _
-  private var mySpans: util.HashMap[Addr, Span] = _
-  private var mySourcePaths: util.HashMap[Addr, String] = _
+  private var mySpans: HashMap[Addr, Span] = _
+  private var mySourcePaths: HashMap[Addr, String] = _
   private var isDefined = false
 
   def ensureDefined(): Unit =
@@ -29,8 +29,8 @@ class PositionUnpickler(reader: TastyReader, nameAtRef: NameRef => TermName) {
         myLineSizes(i) += readNat()
         i += 1
 
-      mySpans = util.HashMap[Addr, Span]()
-      mySourcePaths = util.HashMap[Addr, String]()
+      mySpans = HashMap[Addr, Span]()
+      mySourcePaths = HashMap[Addr, String]()
       var curIndex = 0
       var curStart = 0
       var curEnd = 0
@@ -56,12 +56,12 @@ class PositionUnpickler(reader: TastyReader, nameAtRef: NameRef => TermName) {
       isDefined = true
     }
 
-  private def spans: util.ReadOnlyMap[Addr, Span] = {
+  private def spans: HashMap[Addr, Span] = {
     ensureDefined()
     mySpans
   }
 
-  private def sourcePaths: util.ReadOnlyMap[Addr, String] = {
+  private def sourcePaths: HashMap[Addr, String] = {
     ensureDefined()
     mySourcePaths
   }
