@@ -50,9 +50,6 @@ class TastyUnpickler(reader: TastyReader) {
     this(new TastyReader(unsafe.asByteArray(bytes)))
 
   private val sectionReader = new mutable.HashMap[String, TastyReader]
-
-  /** Reserved for PositionUnpickler */
-  private val sectionReaderCloned = new mutable.HashMap[String, TastyReader]
   val nameAtRef: NameTable = new NameTable
 
   private def readName(): TermName = nameAtRef(readNameRef())

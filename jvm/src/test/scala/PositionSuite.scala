@@ -225,14 +225,7 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
 
   test("return") {
     val (tree, code) = unpickleWithCode(simple_trees / tname"Return")
-    assertEquals(
-      collectCode[Return](tree, code),
-      List("return 1")
-    )
-    assertEquals(
-      collectCode[Ident](tree, code),
-      List("1")
-    )
+    assertEquals(collectCode[Return](tree, code), List("return 1"))
   }
 
   /** Classes */
