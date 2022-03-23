@@ -3,6 +3,7 @@ package tastyquery
 import tastyquery.Contexts
 import tastyquery.Contexts.FileContext
 import tastyquery.ast.Trees.*
+import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Spans.{Span, NoSpan}
 import tastyquery.reader.TastyUnpickler
 import tastyquery.reader.PositionUnpickler
@@ -10,6 +11,7 @@ import tastyquery.reader.PositionUnpickler
 import scala.io.Source
 import scala.reflect.TypeTest
 import scala.util.control.Exception.Catch
+import tastyquery.ast.Types.RefinedType
 
 class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false, allowDeps = false) {
   import BaseUnpicklingSuite.Decls.*
@@ -21,7 +23,11 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
   val imports = name"imports".singleton
 
   private def getCodePath(name: String): String =
-    s"${System.getProperty(ResourceCodeProperty)}/main/scala/${name.replace(".", "/")}.scala"
+    var Array(dir, filename) = name.split('.')
+    // A temporary workaround for path
+    // TODO: remove the workaround
+    if filename == "TraitWithSelf" then filename = "ClassWithSelf"
+    s"${System.getProperty(ResourceCodeProperty)}/main/scala/$dir/$filename.scala"
 
   private def unpickleWithCode(path: TopLevelDeclPath): (Tree, String) = {
     val (base, classRoot) = findTopLevelClass(path)()
@@ -36,6 +42,9 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
   private def treeToCode(tree: Tree, code: String): String =
     if tree.span.exists then code.slice(tree.span.start, tree.span.end) else ""
 
+  private def treeToCode(tree: TypeTree, code: String): String =
+    if tree.span.exists then code.slice(tree.span.start, tree.span.end) else ""
+
   private def printTreeWithCode(tree: Tree, code: String): Unit =
     tree.walkTree { t =>
       println(t)
@@ -47,13 +56,34 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
       }
       println("=" * 40)
     }
-  
-  private def collectCode[T <: Tree](tree: Tree, code: String)
-      (using tt: TypeTest[Tree, T]): List[String] =
-    tree.walkTree[List[String]]({
-      case tt(t: T) => List(treeToCode(t, code))
-      case _ => Nil
-    })(_ ::: _, Nil).filter(_ != "")
+
+  private def printTreeWithCodeT(tree: Tree, code: String): Unit =
+    tree.walkTypeTrees { t =>
+      println(t)
+      println("-" * 40)
+      if (t.span.exists) {
+        println(treeToCode(t, code))
+      } else {
+        println(t.span)
+      }
+      println("=" * 40)
+    }
+
+  private def collectCode[T <: Tree](tree: Tree, code: String)(using tt: TypeTest[Tree, T]): List[String] =
+    tree
+      .walkTree[List[String]]({
+        case tt(t: T) => List(treeToCode(t, code))
+        case _        => Nil
+      })(_ ::: _, Nil)
+      .filter(_ != "")
+
+  private def collectCodeT[T <: TypeTree](tree: Tree, code: String)(using tt: TypeTest[TypeTree, T]): List[String] =
+    tree
+      .walkTypeTrees[List[String]]({
+        case tt(t: T) => List(treeToCode(t, code))
+        case _        => Nil
+      })(_ ::: _, Nil)
+      .filter(_ != "")
 
   /** Basics */
 
@@ -100,8 +130,7 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
       collectCode[Apply](tree, code), 
       List(
         "f(0)",
-        "takesFunction(intMethod)",
-        "intMethod"
+        "takesFunction(intMethod)"
       )
     )
   }
@@ -149,7 +178,14 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     val (tree, code) = unpickleWithCode(simple_trees / tname"Match")
     assertEquals(
       collectCode[CaseDef](tree, code), 
-      Nil
+      List(
+        "0 => 0",
+        "1 | -1 | 2 => x + 1",
+        "7 if x == 7 => x - 1",
+        "3 | 4 | 5 if x < 5 => 0",
+        "_ if (x % 2 == 0) => x / 2",
+        "_ => -x"
+      )
     )
   }
 
@@ -233,7 +269,7 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
   test("class") {
     val (tree, code) = unpickleWithCode(simple_trees / tname"InnerClass")
     assertEquals(
-      collectCode[Class](tree, code), 
+      collectCode[ClassDef](tree, code), 
       List(
         """class InnerClass {
         |  val innerInstance = new Inner
@@ -256,15 +292,16 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     )
   }
 
-  test("self".ignore) {
+  test("class-with-self") {
     // ignore because the span of Self is impossible to construct
     val (tree, code) = unpickleWithCode(simple_trees / tname"ClassWithSelf")
-    assertEquals(
-      collectCode[ValDef](tree, code), 
-      List(
-        "self: ClassWithSelf =>"
-      )
-    )
+    assertEquals(collectCode[ValDef](tree, code), Nil)
+  }
+
+  test("trait-with-self") {
+    // ignore because the span of Self is impossible to construct
+    val (tree, code) = unpickleWithCode(simple_trees / tname"TraitWithSelf")
+    assertEquals(collectCode[ValDef](tree, code), List("ClassWithSelf"))
   }
 
   /** Import and export */
@@ -366,10 +403,67 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
 
   test("type-apply") {
     val (tree, code) = unpickleWithCode(simple_trees / tname"TypeApply")
-    assertEquals(
-      collectCode[TypeApply](tree, code), 
-      List("Seq(1)")
-    )
+    assertEquals(collectCode[TypeApply](tree, code), List("Seq[Int]", "A[Int, Seq[String]]"))
+  }
+
+  test("type-ident") {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"Typed")
+    assertEquals(collectCodeT[TypeIdent](tree, code), List("Int"))
+  }
+
+  test("singleton-type") {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"SingletonType")
+    assertEquals(collectCodeT[SingletonTypeTree](tree, code), List("x.type"))
+  }
+
+  test("refined-type") {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"RefinedType")
+    assertEquals(collectCodeT[RefinedTypeTree](tree, code), Nil)
+  }
+
+  test("by-name-type") {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"ByNameParameter")
+    assertEquals(collectCodeT[ByNameTypeTree](tree, code), List("=> Int"))
+  }
+
+  test("applied-type") {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"AppliedTypeAnnotation")
+    assertEquals(collectCodeT[AppliedTypeTree](tree, code), List("Option[Int]"))
+  }
+
+  test("select-type") {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"SelectType")
+    assertEquals(collectCodeT[SelectTypeTree](tree, code), List("util.Random"))
+  }
+
+  test("annotated-type") {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"VarargFunction")
+    assertEquals(collectCodeT[AnnotatedTypeTree](tree, code), List("Int*"))
+  }
+
+  test("match-type".ignore) {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"MatchType")
+    assertEquals(collectCodeT[MatchTypeTree](tree, code), List(""))
+  }
+
+  test("type-tree-bind".ignore) {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"MatchType")
+    assertEquals(collectCodeT[TypeTreeBind](tree, code), List(""))
+  }
+
+  test("bounded-type".ignore) {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"TypeMember")
+    assertEquals(collectCodeT[BoundedTypeTree](tree, code), List(""))
+  }
+
+  test("named-type-bounds".ignore) {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"MatchType")
+    assertEquals(collectCodeT[NamedTypeBoundsTree](tree, code), List(""))
+  }
+
+  test("type-lambda") {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"TypeLambda")
+    assertEquals(collectCodeT[TypeLambdaTree](tree, code), List("[X] =>> List[X]"))
   }
 
   /** Inlined */

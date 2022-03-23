@@ -129,6 +129,9 @@ class TreeUnpickler(
   def span: Span =
     spanAt(reader.currentAddr)
 
+  private def spanSeq(trees: Seq[Tree]): Span = trees.foldLeft(NoSpan)((s, t) => s.union(t.span))
+  private def spanSeqT(trees: Seq[TypeTree]): Span = trees.foldLeft(NoSpan)((s, t) => s.union(t.span))
+
   def forkAt(start: Addr): TreeUnpickler =
     new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt)
 
@@ -333,11 +336,12 @@ class TreeUnpickler(
   /** Reads TYPEBOUNDStpt of a typedef */
   def readBoundedTypeTree(using FileContext): BoundedTypeTree = {
     assert(reader.readByte() == TYPEBOUNDStpt, posErrorMsg)
+    val spn = span
     val end = reader.readEnd()
     val low = readTypeTree
     val high = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
     val alias = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
-    BoundedTypeTree(TypeBoundsTree(low, high), alias)
+    BoundedTypeTree(TypeBoundsTree(low, high), alias)(spn)
   }
 
   def readTypeBoundsTree(using FileContext): TypeBoundsTree = {
@@ -416,10 +420,9 @@ class TreeUnpickler(
       val spn = span
       reader.readByte()
       val name = readName
-      // TODO: Add span to TypeTree
       val tpt = readTypeTree
       // no symbol for self, because it's never referred to by symbol
-      ValDef(name, tpt, EmptyTree, NoSymbol)(spn)
+      ValDef(name, tpt, EmptyTree, NoSymbol)(tpt.span)
     }
 
   def readValOrDefDef(using FileContext): Tree = {
@@ -489,7 +492,7 @@ class TreeUnpickler(
       val end = reader.readEnd()
       val fn = readTerm
       val args = readTerms(end)
-      Apply(fn, args)(spn) // TOCHECK
+      Apply(fn, args)(spn)
     case NAMEDARG =>
       val spn = span
       reader.readByte()
@@ -532,10 +535,11 @@ class TreeUnpickler(
       val cls = readTypeTree
       New(cls)(spn)
     case TYPED =>
-      val spn = span
       reader.readByte()
       reader.readEnd()
-      Typed(readTerm, readTypeTree)(spn) // TOCHECK
+      val expr = readTerm
+      val tpt = readTypeTree
+      Typed(expr, tpt)(expr.span.union(tpt.span))
     case THROW =>
       val spn = span
       reader.readByte()
@@ -550,10 +554,13 @@ class TreeUnpickler(
       val finalizer = reader.ifBefore(end)(readTerm, EmptyTree)
       Try(expr, catchCases, finalizer)(spn)
     case ASSIGN =>
-      val spn = span
       reader.readByte()
       reader.readEnd()
-      Assign(readTerm, readTerm)(spn) // TOCHECK
+      val lhsSpan = span
+      val lhs = readTerm
+      val rhsSpan = span
+      val rhs = readTerm
+      Assign(lhs, rhs)(lhsSpan.union(rhsSpan))
     case BLOCK =>
       val spn = span
       reader.readByte()
@@ -601,10 +608,10 @@ class TreeUnpickler(
       val symbol = fileCtx.getSymbol(start, RegularSymbolFactory)
       Bind(name, term, symbol)(spn).definesTreeOf(symbol)
     case ALTERNATIVE =>
-      val spn = span
       reader.readByte()
       val end = reader.readEnd()
-      Alternative(reader.until(end)(readTerm))(spn)
+      val terms = reader.until(end)(readTerm)
+      Alternative(terms)(spanSeq(terms))
     case UNAPPLY =>
       val spn = span
       reader.readByte()
@@ -728,14 +735,13 @@ class TreeUnpickler(
 
   def readCaseDef[T <: CaseDef | TypeCaseDef](factory: AbstractCaseDefFactory[T])(using FileContext): T = {
     assert(reader.readByte() == CASEDEF, posErrorMsg)
-    val curSpan = span
     val end = reader.readEnd()
     factory match {
       case CaseDefFactory =>
-        val spn = span
         val pattern = readTerm
         val body = readTerm
-        CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body)(spn)
+        println(pattern)
+        CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body)(pattern.span.union(body.span))
       case TypeCaseDefFactory =>
         TypeCaseDef(readTypeTree, readTypeTree)
     }
@@ -837,11 +843,11 @@ class TreeUnpickler(
       // skip the result type: it might refer to the parameters, which we haven't read yet
       skipTree()
       val params = reader.until(end)({
-        val tpSpan = span
+        val spn = span
         val bounds = readTypeBounds
         val name = readName.toTypeName
         // cannot have symbols inside types
-        TypeParam(name, bounds, NoSymbol)(tpSpan)
+        TypeParam(name, bounds, NoSymbol)(spn)
       })
       TypeLambda(params)((b: Binders) => resultUnpickler.readType(using fileCtx.withEnclosingBinders(lambdaAddr, b)))
     case PARAMtype =>
@@ -868,18 +874,22 @@ class TreeUnpickler(
 
   def readTypeTree(using FileContext): TypeTree = reader.nextByte match {
     case IDENTtpt =>
+      val spn = span
       reader.readByte()
       val typeName = readName.toTypeName
       val typ = readType
-      TypeIdent(typeName)(typ)
+      TypeIdent(typeName)(typ)(spn)
     case SINGLETONtpt =>
+      val spn = span
       reader.readByte()
-      SingletonTypeTree(readTerm)
+      SingletonTypeTree(readTerm)(spn)
     case REFINEDtpt =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
-      RefinedTypeTree(readTypeTree, readStats(end))
+      RefinedTypeTree(readTypeTree, readStats(end))(spn)
     case APPLIEDtpt =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val tycon = readTypeTree
@@ -890,26 +900,31 @@ class TreeUnpickler(
           else if (tagFollowShared == TYPEBOUNDStpt) readTypeBoundsTree
           else readTypeTree
         )
-      )
+      )(spn)
     case LAMBDAtpt =>
+      val spn = span
       reader.readByte()
       reader.readEnd()
-      TypeLambdaTree(readTypeParams, readTypeTree)
+      TypeLambdaTree(readTypeParams, readTypeTree)(spn)
     // select type from a term
     case SELECT =>
+      val spn = span
       reader.readByte()
       val name = readName
       val qual = readTerm
-      TermRefTypeTree(qual, name)
+      TermRefTypeTree(qual, name)(spn)
     case SELECTtpt =>
+      val spn = span
       reader.readByte()
       val name = readName.toTypeName
-      SelectTypeTree(readTypeTree, name)
+      SelectTypeTree(readTypeTree, name)(spn)
     case ANNOTATEDtpt =>
+      val spn = span
       reader.readByte()
       reader.readEnd()
-      AnnotatedTypeTree(readTypeTree, readTerm)
+      AnnotatedTypeTree(readTypeTree, readTerm)(spn)
     case MATCHtpt =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val selOrBound = readTypeTree
@@ -917,10 +932,11 @@ class TreeUnpickler(
         if (tagFollowShared == CASEDEF)
           (EmptyTypeTree, selOrBound)
         else (selOrBound, readTypeTree)
-      MatchTypeTree(bound, selector, readCases[TypeCaseDef](TypeCaseDefFactory, end))
+      MatchTypeTree(bound, selector, readCases[TypeCaseDef](TypeCaseDefFactory, end))(spn)
     // TODO: why in TYPEAPPLY?
     // in MATCHtpt, TYPEAPPLY
     case BIND =>
+      val spn = span
       val start = reader.currentAddr
       reader.readByte()
       val end = reader.readEnd()
@@ -932,25 +948,27 @@ class TreeUnpickler(
        * Such a bind has IDENT(_) as its body, which is not a type tree and therefore not expected.
        * Treat it as if it were an IDENTtpt. */
       val body: TypeTree = if (reader.nextByte == IDENT) {
+        val bodySpn = span
         reader.readByte()
         val typeName = readName.toTypeName
         val typ = readTypeBounds
-        NamedTypeBoundsTree(typeName, typ)
+        NamedTypeBoundsTree(typeName, typ)(bodySpn)
       } else readTypeTree
       skipModifiers(end)
       val sym = fileCtx.getSymbol(start, RegularSymbolFactory)
-      TypeTreeBind(name, body, sym).definesTreeOf(sym)
+      TypeTreeBind(name, body, sym)(spn).definesTreeOf(sym)
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree
     case BYNAMEtpt =>
+      val spn = span
       reader.readByte()
-      ByNameTypeTree(readTypeTree)
+      ByNameTypeTree(readTypeTree)(spn)
     case SHAREDterm =>
       reader.readByte()
       forkAt(reader.readAddr()).readTypeTree
     case tag if isTypeTreeTag(tag) =>
       throw TreeUnpicklerException(s"Unexpected type tree tag ${astTagToString(tag)} $posErrorMsg")
-    case _ => TypeWrapper(readType)
+    case _ => TypeWrapper(readType)(span)
   }
 
   def readConstant(using FileContext): Constant = reader.readByte() match {
