@@ -54,15 +54,18 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean, al
     (base, classRoot)
   }
 
-  def resolve(path: DeclarationPath)(implicit ctx: BaseContext): Symbol =
-    followPath(defn.RootPackage, path)
+  /* TODO Currently this only resolves symbols that have already been loaded,
+   * but the intent is that it will load symbols when required.
+   */
+  def resolve(path: DeclarationPath)(using BaseContext): Symbol =
+    followPathImpl(defn.RootPackage, path).fold(fail(_), identity)
 
-  def absent(path: DeclarationPath)(implicit ctx: BaseContext): Unit =
+  def assertSymbolExistsAndIsLoaded(path: DeclarationPath)(implicit ctx: BaseContext): Unit =
+    followPathImpl(defn.RootPackage, path).fold(fail(_), _ => ())
+
+  def assertSymbolNotExistsOrNotLoadedYet(path: DeclarationPath)(implicit ctx: BaseContext): Unit =
     def unexpected(sym: Symbol) = fail(s"expected no symbol, but found ${sym.toDebugString}")
     followPathImpl(defn.RootPackage, path).fold(_ => (), unexpected)
-
-  def followPath(root: DeclaringSymbol, path: DeclarationPath): Symbol =
-    followPathImpl(root, path).fold(fail(_), identity)
 
   private def followPathImpl(root: DeclaringSymbol, path: DeclarationPath): Either[String, Symbol] = {
     def follow(selected: Symbol)(remainder: DeclarationPath): Either[String, Symbol] = selected match {

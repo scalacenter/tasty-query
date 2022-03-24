@@ -13,31 +13,25 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
   val simple_trees = name"simple_trees".singleton
   val `simple_trees.nested` = simple_trees / name"nested"
 
-  def assertContainsDeclaration(ctx: BaseContext, path: DeclarationPath): Unit =
-    resolve(path)(using ctx)
-
-  def assertMissingDeclaration(ctx: BaseContext, path: DeclarationPath): Unit =
-    absent(path)(using ctx)
-
-  def getDeclsByPrefix(ctx: BaseContext, prefix: DeclarationPath): Seq[Symbol] = {
+  def getDeclsByPrefix(prefix: DeclarationPath)(using BaseContext): Seq[Symbol] = {
     def symbolsInSubtree(root: Symbol): Seq[Symbol] =
       if (root.isInstanceOf[DeclaringSymbol]) {
         root +: root.asInstanceOf[DeclaringSymbol].declarations.toSeq.flatMap(symbolsInSubtree(_))
       } else {
         Seq(root)
       }
-    symbolsInSubtree(followPath(ctx.defn.RootPackage, prefix)).tail // discard prefix
+    symbolsInSubtree(resolve(prefix)).tail // discard prefix
   }
 
-  def assertForallWithPrefix(ctx: BaseContext, prefix: DeclarationPath, condition: Symbol => Boolean): Unit =
+  def assertForallWithPrefix(prefix: DeclarationPath, condition: Symbol => Boolean)(using BaseContext): Unit =
     assert(
-      getDeclsByPrefix(ctx, prefix).forall(condition),
-      s"Condition does not hold for ${getDeclsByPrefix(ctx, prefix).filter(!condition(_))}"
+      getDeclsByPrefix(prefix).forall(condition),
+      s"Condition does not hold for ${getDeclsByPrefix(prefix).filter(!condition(_))}"
     )
 
-  def assertContainsExactly(ctx: BaseContext, prefix: DeclarationPath, symbolPaths: Set[DeclarationPath]): Unit = {
-    val decls = getDeclsByPrefix(ctx, prefix)
-    val expected = symbolPaths.toList.map(p => resolve(p)(using ctx))
+  def assertContainsExactly(prefix: DeclarationPath, symbolPaths: Set[DeclarationPath])(using BaseContext): Unit = {
+    val decls = getDeclsByPrefix(prefix)
+    val expected = symbolPaths.toList.map(p => resolve(p))
     // each declaration is in the passed set
     assert(
       decls.forall(decls.contains(_)),
@@ -52,11 +46,10 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
 
   test("basic-symbol-structure") {
     val EmptyClass = empty_class / tname"EmptyClass"
-    val ctx = getUnpicklingContext(EmptyClass)
-    assertContainsDeclaration(ctx, EmptyClass)
+    given BaseContext = getUnpicklingContext(EmptyClass)
+    resolve(EmptyClass)
     // EmptyClass and its constructor are the only declarations in empty_class package
     assertContainsExactly(
-      ctx,
       empty_class,
       Set(empty_class / tname"EmptyClass", empty_class / tname"EmptyClass" / name"<init>")
     )
@@ -64,11 +57,10 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
 
   test("basic-symbol-structure-nested") {
     val InNestedPackage = `simple_trees.nested` / tname"InNestedPackage"
-    val ctx = getUnpicklingContext(InNestedPackage)
-    assertContainsDeclaration(ctx, InNestedPackage)
+    given BaseContext = getUnpicklingContext(InNestedPackage)
+    resolve(InNestedPackage)
     // EmptyClass and its constructor are the only declarations in empty_class package
     assertContainsExactly(
-      ctx,
       `simple_trees.nested`,
       Set(`simple_trees.nested` / tname"InNestedPackage", `simple_trees.nested` / tname"InNestedPackage" / name"<init>")
     )
@@ -76,16 +68,15 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
 
   test("inner-class") {
     val InnerClass = simple_trees / tname"InnerClass"
-    val ctx = getUnpicklingContext(InnerClass)
+    given BaseContext = getUnpicklingContext(InnerClass)
     // Inner is a declaration in InnerClass
-    assertContainsDeclaration(ctx, InnerClass / tname"Inner")
+    resolve(InnerClass / tname"Inner")
   }
 
   test("empty-package-contains-no-packages") {
-    val ctx = getUnpicklingContext(simple_trees / tname"SharedPackageReference$$package")
+    given BaseContext = getUnpicklingContext(simple_trees / tname"SharedPackageReference$$package")
     // simple_trees is not a subpackage of empty package
     assertForallWithPrefix(
-      ctx,
       nme.EmptyPackageName.singleton,
       s => s.name == nme.EmptyPackageName || !s.isInstanceOf[PackageClassSymbol]
     )
@@ -93,9 +84,8 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
 
   test("class-parameter-is-a-decl") {
     val ConstructorWithParameters = simple_trees / tname"ConstructorWithParameters"
-    val ctx = getUnpicklingContext(ConstructorWithParameters)
+    given BaseContext = getUnpicklingContext(ConstructorWithParameters)
     assertContainsExactly(
-      ctx,
       ConstructorWithParameters,
       Set(
         ConstructorWithParameters / name"<init>",
@@ -111,15 +101,14 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
 
   test("class-type-parameter-is-not-a-decl") {
     val GenericClass = simple_trees / tname"GenericClass"
-    val ctx = getUnpicklingContext(GenericClass)
-    assertContainsExactly(ctx, simple_trees, Set(GenericClass, GenericClass / name"<init>"))
+    given BaseContext = getUnpicklingContext(GenericClass)
+    assertContainsExactly(simple_trees, Set(GenericClass, GenericClass / name"<init>"))
   }
 
   test("method-type-parameter-is-not-a-decl") {
     val GenericMethod = simple_trees / tname"GenericMethod"
-    val ctx = getUnpicklingContext(GenericMethod)
+    given BaseContext = getUnpicklingContext(GenericMethod)
     assertContainsExactly(
-      ctx,
       GenericMethod / name"usesTypeParam",
       // No declaratiins as type parameter `T` is not a declaration of `usesTypeParam`
       Set.empty
@@ -128,9 +117,8 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
 
   test("method-term-parameter-is-not-a-decl") {
     val GenericMethod = simple_trees / tname"GenericMethod"
-    val ctx = getUnpicklingContext(GenericMethod)
+    given BaseContext = getUnpicklingContext(GenericMethod)
     assertContainsExactly(
-      ctx,
       GenericMethod / name"usesTermParam",
       // No declaratiins as term parameter `i: Int` is not a declaration of `usesTermParam`
       Set.empty
@@ -139,9 +127,8 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
 
   test("nested-method-is-not-a-decl") {
     val NestedMethod = simple_trees / tname"NestedMethod"
-    val ctx = getUnpicklingContext(NestedMethod)
+    given BaseContext = getUnpicklingContext(NestedMethod)
     assertContainsExactly(
-      ctx,
       NestedMethod / name"outerMethod",
       // local method `innerMethod` is not a declaration of `outerMethod`
       Set.empty
@@ -154,14 +141,13 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
     val outerMethod = NestedMethod / name"outerMethod"
     val unitVal = Constants / name"unitVal"
 
-    val ctx = getUnpicklingContext(Constants, extraClasspath = NestedMethod)
+    given BaseContext = getUnpicklingContext(Constants, extraClasspath = NestedMethod)
 
-    assertContainsDeclaration(ctx, Constants) // we should have loaded Constants, we requested it
-    assertContainsDeclaration(ctx, unitVal) // outerMethod is a member of Constants, it should be seen.
+    assertSymbolExistsAndIsLoaded(Constants) // we should have loaded Constants, we requested it
+    assertSymbolExistsAndIsLoaded(unitVal) // outerMethod is a member of Constants, it should be seen.
 
-    assertContainsDeclaration(ctx, NestedMethod) // sibling top-level class is also seen in same package
-    assertMissingDeclaration(ctx, outerMethod) // members of sibling top-level class are not seen unless requested.
-
+    assertSymbolExistsAndIsLoaded(NestedMethod) // sibling top-level class is also seen in same package
+    assertSymbolNotExistsOrNotLoadedYet(outerMethod) // members of sibling top-level class are not seen unless requested
   }
 
   test("demo-symbolic-package-leaks".ignore) {
@@ -194,8 +180,8 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
       intercept[MissingTopLevelDecl] {
         failingGetTopLevelClass(`symbolic_>>.#::`) // this will fail, we can't find a symbolic package
       }
-      assertMissingDeclaration(baseCtx, `symbolic_>>.#::`) // still does not exist
-      assertMissingDeclaration(baseCtx, `symbolic_$greater$greater.#::`) // not existant yet
+      assertSymbolNotExistsOrNotLoadedYet(`symbolic_>>.#::`) // still does not exist
+      assertSymbolNotExistsOrNotLoadedYet(`symbolic_$greater$greater.#::`) // not existant yet
 
       // we will read the TASTy file of this class, causing an assertion error when we read the symbolic
       // package in tasty - the owners of the classroot do not match
