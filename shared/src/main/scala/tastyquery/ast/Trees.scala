@@ -1,13 +1,10 @@
 package tastyquery.ast
 
 import tastyquery.ast.Constants.Constant
-import tastyquery.ast.Names.{Name, TermName, TypeName, nme}
-import tastyquery.ast.Types.{NoType, Type, TypeBounds, TypeRef}
+import tastyquery.ast.Names.*
+import tastyquery.ast.Types.*
 import tastyquery.ast.TypeTrees.*
-import tastyquery.ast.Symbols.{ClassSymbol, NoSymbol, PackageClassSymbol, RegularSymbol, Symbol}
-import tastyquery.ast.Names.SignedName
-import tastyquery.ast.Types.TermRef
-import tastyquery.ast.Types.PackageRef
+import tastyquery.ast.Symbols.*
 import tastyquery.util.syntax.chaining.given
 
 object Trees {
@@ -233,24 +230,43 @@ object Trees {
   case class TypeApply(fun: Tree, args: List[TypeTree]) extends Tree
 
   /** new tpt, but no constructor call */
-  case class New(tpt: TypeTree) extends Tree
+  case class New(tpt: TypeTree) extends Tree {
+    override def calculateType: Type =
+      tpt.toType
+  }
 
   /** expr : tpt */
-  case class Typed(expr: Tree, tpt: TypeTree) extends Tree
+  case class Typed(expr: Tree, tpt: TypeTree) extends Tree {
+    override def calculateType: Type =
+      tpt.toType
+  }
 
   /** name = arg, outside a parameter list */
-  case class Assign(lhs: Tree, rhs: Tree) extends Tree
+  case class Assign(lhs: Tree, rhs: Tree) extends Tree {
+    override def calculateType: Type =
+      UnitType
+  }
 
   /** name = arg, in a parameter list */
-  case class NamedArg(name: Name, arg: Tree) extends Tree
+  case class NamedArg(name: Name, arg: Tree) extends Tree {
+    override def calculateType: Type =
+      arg.tpe
+  }
 
   /** { stats; expr } */
-  case class Block(stats: List[Tree], expr: Tree) extends Tree
+  case class Block(stats: List[Tree], expr: Tree) extends Tree {
+    override def calculateType: Type =
+      expr.tpe
+  }
 
   /** if cond then thenp else elsep */
   case class If(cond: Tree, thenPart: Tree, elsePart: Tree) extends Tree {
     def isInline = false
+
+    override def calculateType: Type =
+      OrType(thenPart.tpe, elsePart.tpe)
   }
+
   class InlineIf(cond: Tree, thenPart: Tree, elsePart: Tree) extends If(cond, thenPart, elsePart) {
     override def isInline = true
     override def toString = s"InlineIf($cond, $thenPart, $elsePart)"
@@ -259,11 +275,19 @@ object Trees {
   /**  @param meth   A reference to the method.
     *  @param tpt    Not an EmptyTree only if the lambda's type is a SAMtype rather than a function type.
     */
-  case class Lambda(meth: Tree, tpt: TypeTree) extends Tree
+  case class Lambda(meth: Tree, tpt: TypeTree) extends Tree {
+    override def calculateType: Type =
+      if tpt == EmptyTypeTree then
+        super.calculateType // TODO Resolve the method's type to construct the appropriate scala.FunctionN type
+      else tpt.toType
+  }
 
   /** selector match { cases } */
   case class Match(selector: Tree, cases: List[CaseDef]) extends Tree {
     def isInline = false
+
+    override def calculateType: Type =
+      cases.map(_.tpe).reduce(OrType(_, _))
   }
   class InlineMatch(selector: Tree, cases: List[CaseDef]) extends Match(selector, cases) {
     override def isInline = true
@@ -271,10 +295,16 @@ object Trees {
   }
 
   /** case pattern if guard => body; only appears as child of a Match and Try */
-  case class CaseDef(pattern: Tree, guard: Tree, body: Tree) extends Tree
+  case class CaseDef(pattern: Tree, guard: Tree, body: Tree) extends Tree {
+    override def calculateType: Type =
+      body.tpe
+  }
 
   /** pattern in {@link Unapply} */
-  case class Bind(name: Name, body: Tree, override val symbol: RegularSymbol) extends Tree with DefTree(symbol)
+  case class Bind(name: Name, body: Tree, override val symbol: RegularSymbol) extends Tree with DefTree(symbol) {
+    override def calculateType: Type =
+      NoType
+  }
 
   /** tree_1 | ... | tree_n */
   case class Alternative(trees: List[Tree]) extends Tree
@@ -299,17 +329,32 @@ object Trees {
   case class SeqLiteral(elems: List[Tree], elemtpt: TypeTree) extends Tree
 
   /** while (cond) { body } */
-  case class While(cond: Tree, body: Tree) extends Tree
+  case class While(cond: Tree, body: Tree) extends Tree {
+    override def calculateType: Type =
+      UnitType
+  }
 
   /** throw expr */
-  case class Throw(expr: Tree) extends Tree
+  case class Throw(expr: Tree) extends Tree {
+    override def calculateType: Type =
+      NothingType
+  }
 
   /** try block catch cases finally finalizer */
-  case class Try(expr: Tree, cases: List[CaseDef], finalizer: Tree) extends Tree
+  case class Try(expr: Tree, cases: List[CaseDef], finalizer: Tree) extends Tree {
+    override def calculateType: Type =
+      cases.foldLeft(expr.tpe)((prev, caze) => OrType(prev, caze.tpe))
+  }
 
-  case class Literal(constant: Constant) extends Tree
+  case class Literal(constant: Constant) extends Tree {
+    override def calculateType: Type =
+      ConstantType(constant)
+  }
 
-  case class Return(expr: Tree, from: Tree) extends Tree
+  case class Return(expr: Tree, from: Tree) extends Tree {
+    override def calculateType: Type =
+      NothingType
+  }
 
   /** A tree representing inlined code.
     *
@@ -324,9 +369,16 @@ object Trees {
     *
     * { bindings; expr }
     */
-  case class Inlined(expr: Tree, caller: TypeIdent, bindings: List[Tree]) extends Tree
+  case class Inlined(expr: Tree, caller: TypeIdent, bindings: List[Tree]) extends Tree {
+    override def calculateType: Type =
+      // TODO? Do we need to do type avoidance on expr using the bindings, like dotc does?
+      expr.tpe
+  }
 
-  case object EmptyTree extends Tree
+  case object EmptyTree extends Tree {
+    override def calculateType: Type =
+      NoType
+  }
 
   object reusable {
     val EmptyValDef: ValDef = ValDef(nme.Wildcard, EmptyTypeTree, EmptyTree, NoSymbol)
