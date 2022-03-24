@@ -22,6 +22,20 @@ object Constants {
     import java.lang.Double.doubleToRawLongBits
     import java.lang.Float.floatToRawIntBits
 
+    def wideType: Type = tag match
+      case UnitTag    => Types.UnitType
+      case BooleanTag => Types.BooleanType
+      case CharTag    => Types.CharType
+      case ByteTag    => Types.ByteType
+      case ShortTag   => Types.ShortType
+      case IntTag     => Types.IntType
+      case LongTag    => Types.LongType
+      case FloatTag   => Types.FloatType
+      case DoubleTag  => Types.DoubleType
+      case StringTag  => Types.StringType
+      case NullTag    => Types.NullType
+      case ClazzTag   => Types.ClassTypeOf(typeValue)
+
     def isByteRange: Boolean = isIntRange && Byte.MinValue <= intValue && intValue <= Byte.MaxValue
     def isShortRange: Boolean = isIntRange && Short.MinValue <= intValue && intValue <= Short.MaxValue
     def isCharRange: Boolean = isIntRange && Char.MinValue <= intValue && intValue <= Char.MaxValue

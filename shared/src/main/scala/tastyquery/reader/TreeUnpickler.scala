@@ -814,9 +814,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     // select type from a term
     case SELECT =>
       reader.readByte()
-      val name = readName.toTypeName
+      val name = readName
       val qual = readTerm
-      SelectTypeFromTerm(qual, name)
+      TermRefTypeTree(qual, name)
     case SELECTtpt =>
       reader.readByte()
       val name = readName.toTypeName

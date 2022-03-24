@@ -22,11 +22,13 @@ object Contexts {
   transparent inline def defn(using baseCtx: BaseContext): baseCtx.defn.type = baseCtx.defn
 
   def init(classpath: Classpath): BaseContext =
-    classpath.loader { classloader =>
+    val baseCtx = classpath.loader { classloader =>
       val baseCtx = BaseContext(Definitions(), classloader)
       baseCtx.classloader.initPackages()(using baseCtx)
       baseCtx
     }
+    baseCtx.initializeFundamentalClasses()
+    baseCtx
 
   private[Contexts] def moduleClassRoot(classRoot: ClassSymbol): ClassSymbol = {
     val pkg = classRoot.enclosingDecl
@@ -116,6 +118,21 @@ object Contexts {
     }
 
     def getPackageSymbol(name: TermName): PackageClassSymbol = defn.RootPackage.findPackageSymbol(name).get
+
+    private[Contexts] def initializeFundamentalClasses(): Unit = {
+      val scalaPackage = createPackageSymbolIfNew(nme.scalaPackageName, defn.RootPackage)
+
+      // TODO Assign superclasses and create members
+
+      val anyClass = createClassSymbol(typeName("Any"), scalaPackage)
+      anyClass.initialised = true
+
+      val nullClass = createClassSymbol(typeName("Null"), scalaPackage)
+      nullClass.initialised = true
+
+      val nothingClass = createClassSymbol(typeName("Nothing"), scalaPackage)
+      nothingClass.initialised = true
+    }
   }
 
   class ClassContext private[Contexts] (

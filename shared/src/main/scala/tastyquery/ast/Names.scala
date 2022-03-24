@@ -62,6 +62,29 @@ object Names {
     val Constructor: SimpleName = termName("<init>")
     val Wildcard: SimpleName = termName("_")
     val RefinementClass = typeName("<refinement>")
+
+    val scalaPackageName: TermName = termName("scala")
+    val javaPackageName: TermName = termName("java")
+    val javalangPackageName: TermName = javaPackageName.select(termName("lang"))
+  }
+
+  object tpnme {
+    val Nothing: TypeName = typeName("Nothing")
+    val Null: TypeName = typeName("Null")
+
+    val Unit: TypeName = typeName("Unit")
+    val Boolean: TypeName = typeName("Boolean")
+    val Char: TypeName = typeName("Char")
+    val Byte: TypeName = typeName("Byte")
+    val Short: TypeName = typeName("Short")
+    val Int: TypeName = typeName("Int")
+    val Long: TypeName = typeName("Long")
+    val Float: TypeName = typeName("Float")
+    val Double: TypeName = typeName("Double")
+
+    val String: TypeName = typeName("String")
+    val Class: TypeName = typeName("Class")
+    val Object: TypeName = typeName("Object")
   }
 
   /** Create a type name from the characters in cs[offset..offset+len-1].

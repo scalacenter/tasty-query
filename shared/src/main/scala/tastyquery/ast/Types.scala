@@ -6,7 +6,7 @@ import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, QualifiedName, SimpleName, TermName, TypeName}
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.{EmptyTree, Tree, TypeParam}
-import tastyquery.ast.Names.SignedName
+import tastyquery.ast.Names.*
 import annotation.constructorOnly
 
 import tastyquery.util.syntax.chaining.given
@@ -25,10 +25,40 @@ object Types {
 
     def isOfClass(sym: Symbol)(using BaseContext): Boolean =
       this match {
-        case tpe: TermRef => tpe.underlying.isOfClass(sym)
-        case _            => this.isRef(sym)
+        case tpe: TermRef =>
+          tpe.underlying.isOfClass(sym)
+        case tpe: ConstantType =>
+          tpe.underlying.isOfClass(sym)
+        case _ =>
+          this.isRef(sym)
       }
   }
+
+  private def scalaPackage: PackageRef = PackageRef(nme.scalaPackageName)
+
+  private def javalangPackage: PackageRef = PackageRef(nme.javalangPackageName)
+
+  private def scalaDot(name: TypeName): Type =
+    TypeRef(scalaPackage, name)
+
+  private def javalangDot(name: TypeName): Type =
+    TypeRef(javalangPackage, name)
+
+  def NothingType: Type = scalaDot(tpnme.Nothing)
+  def NullType: Type = scalaDot(tpnme.Null)
+
+  def UnitType: Type = scalaDot(tpnme.Unit)
+  def BooleanType: Type = scalaDot(tpnme.Boolean)
+  def CharType: Type = scalaDot(tpnme.Char)
+  def ByteType: Type = scalaDot(tpnme.Byte)
+  def ShortType: Type = scalaDot(tpnme.Short)
+  def IntType: Type = scalaDot(tpnme.Int)
+  def LongType: Type = scalaDot(tpnme.Long)
+  def FloatType: Type = scalaDot(tpnme.Float)
+  def DoubleType: Type = scalaDot(tpnme.Double)
+
+  def StringType: Type = javalangDot(tpnme.String)
+  def ClassTypeOf(cls: Type): Type = AppliedType(javalangDot(tpnme.Class), List(cls))
 
   // ----- Type categories ----------------------------------------------
 
@@ -288,7 +318,8 @@ object Types {
 
   /** A constant type with single `value`. */
   case class ConstantType(value: Constant) extends TypeProxy with SingletonType {
-    override def underlying(using BaseContext): Type = ???
+    override def underlying(using BaseContext): Type =
+      value.wideType
   }
 
   /** A type application `C[T_1, ..., T_n]`
@@ -354,6 +385,10 @@ object Types {
   case class TypeAlias(alias: Type) extends TypeProxy with TypeBounds(alias, alias) {
     override def underlying(using BaseContext): Type = alias
   }
+
+  case class BoundedType(bounds: TypeBounds, alias: Type) extends Type
+
+  case class NamedTypeBounds(name: TypeName, bounds: TypeBounds) extends Type
 
   // ----- Ground Types -------------------------------------------------
 

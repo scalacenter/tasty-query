@@ -1,9 +1,9 @@
 package tastyquery.ast
 
-import tastyquery.ast.Names.{nme, TypeName}
+import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.RegularSymbol
 import tastyquery.ast.Trees.{DefTree, Tree, TypeParam}
-import tastyquery.ast.Types.{Type, TypeBounds, NoType}
+import tastyquery.ast.Types.*
 import tastyquery.util.syntax.chaining.given
 
 object TypeTrees {
@@ -14,9 +14,10 @@ object TypeTrees {
   }
 
   abstract class TypeTree {
-    protected var myType: Type | Null = null
+    private var myType: Type | Null = null
 
-    protected def calculateType: Type = throw new TypeTreeToTypeError(this)
+    protected def calculateType: Type
+
     final def toType: Type = {
       val local = myType
       if local == null then calculateType.useWith { myType = _ }
@@ -25,7 +26,8 @@ object TypeTrees {
   }
 
   case class TypeIdent(name: TypeName)(tpe: Type) extends TypeTree {
-    myType = tpe
+    override protected def calculateType: Type =
+      tpe
   }
 
   object EmptyTypeIdent extends TypeIdent(nme.EmptyTypeName)(NoType)
@@ -35,45 +37,95 @@ object TypeTrees {
   }
 
   /** ref.type */
-  case class SingletonTypeTree(ref: Tree) extends TypeTree
+  case class SingletonTypeTree(ref: Tree) extends TypeTree {
+    override protected def calculateType: Type =
+      ref.tpe
+  }
 
-  case class RefinedTypeTree(underlying: TypeTree, refinements: List[Tree]) extends TypeTree
+  case class RefinedTypeTree(underlying: TypeTree, refinements: List[Tree]) extends TypeTree {
+    override protected def calculateType: Type =
+      throw new TypeTreeToTypeError(this) // TODO
+  }
 
   /** => T */
-  case class ByNameTypeTree(result: TypeTree) extends TypeTree
+  case class ByNameTypeTree(result: TypeTree) extends TypeTree {
+    override protected def calculateType: Type =
+      ExprType(result.toType)
+  }
 
   /** tpt[args]
     * TypeBounds[Tree] for wildcard application: tpt[_], tpt[?]
     */
-  case class AppliedTypeTree(tycon: TypeTree, args: List[TypeTree | TypeBoundsTree | TypeBounds]) extends TypeTree
+  case class AppliedTypeTree(tycon: TypeTree, args: List[TypeTree | TypeBoundsTree | TypeBounds]) extends TypeTree {
+    override protected def calculateType: Type =
+      AppliedType(
+        tycon.toType,
+        args.map {
+          case arg: TypeTree       => arg.toType
+          case arg: TypeBoundsTree => arg.toTypeBounds
+          case arg: TypeBounds     => arg
+        }
+      )
+  }
 
   /** qualifier#name */
-  case class SelectTypeTree(qualifier: TypeTree, name: TypeName) extends TypeTree
+  case class SelectTypeTree(qualifier: TypeTree, name: TypeName) extends TypeTree {
+    override protected def calculateType: Type =
+      TypeRef(qualifier.toType, name)
+  }
 
-  /** qualifier.TypeName */
-  case class SelectTypeFromTerm(qualifier: Tree, name: TypeName) extends TypeTree
+  /** qualifier.name */
+  case class TermRefTypeTree(qualifier: Tree, name: TermName) extends TypeTree {
+    override protected def calculateType: Type =
+      TermRef(qualifier.tpe, name)
+  }
 
   /** arg @annot */
-  case class AnnotatedTypeTree(tpt: TypeTree, annotation: Tree) extends TypeTree
+  case class AnnotatedTypeTree(tpt: TypeTree, annotation: Tree) extends TypeTree {
+    override protected def calculateType: Type =
+      AnnotatedType(tpt.toType, annotation)
+  }
 
   /** [bound] selector match { cases } */
-  case class MatchTypeTree(bound: TypeTree, selector: TypeTree, cases: List[TypeCaseDef]) extends TypeTree
+  case class MatchTypeTree(bound: TypeTree, selector: TypeTree, cases: List[TypeCaseDef]) extends TypeTree {
+    override protected def calculateType: Type =
+      throw new TypeTreeToTypeError(this) // TODO
+  }
 
   case class TypeCaseDef(pattern: TypeTree, body: TypeTree)
 
   case class TypeTreeBind(name: TypeName, body: TypeTree, override val symbol: RegularSymbol)
       extends TypeTree
-      with DefTree(symbol)
+      with DefTree(symbol) {
+    override protected def calculateType: Type =
+      TermRef(NoType, symbol)
+  }
 
-  case object EmptyTypeTree extends TypeTree
+  case object EmptyTypeTree extends TypeTree {
+    override protected def calculateType: Type =
+      NoType
+  }
 
-  case class TypeBoundsTree(low: TypeTree, high: TypeTree)
+  case class TypeBoundsTree(low: TypeTree, high: TypeTree) {
+    def toTypeBounds: TypeBounds =
+      RealTypeBounds(low.toType, high.toType)
+  }
 
   /** >: lo <: hi
     *  >: lo <: hi = alias  for RHS of bounded opaque type
     */
-  case class BoundedTypeTree(bounds: TypeBoundsTree, alias: TypeTree) extends TypeTree
-  case class NamedTypeBoundsTree(name: TypeName, bounds: TypeBounds) extends TypeTree
+  case class BoundedTypeTree(bounds: TypeBoundsTree, alias: TypeTree) extends TypeTree {
+    override protected def calculateType: Type =
+      BoundedType(bounds.toTypeBounds, alias.toType)
+  }
 
-  case class TypeLambdaTree(tparams: List[TypeParam], body: TypeTree) extends TypeTree
+  case class NamedTypeBoundsTree(name: TypeName, bounds: TypeBounds) extends TypeTree {
+    override protected def calculateType: Type =
+      NamedTypeBounds(name, bounds)
+  }
+
+  case class TypeLambdaTree(tparams: List[TypeParam], body: TypeTree) extends TypeTree {
+    override protected def calculateType: Type =
+      TypeLambda(tparams)(_ => body.toType)
+  }
 }

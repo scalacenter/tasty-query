@@ -116,7 +116,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(freeIdentCount == 2, clue(freeIdentCount))
   }
 
-  test("return-ident") {
+  test("return") {
     val ReturnPath = name"simple_trees" / tname"Return"
 
     given BaseContext = getUnpicklingContext(ReturnPath)
@@ -131,12 +131,41 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
         case Return(expr, from: Ident) =>
           returnCount += 1
           assert(from.tpe.isRef(withReturnSym), clue(from.tpe))
+          assert(tree.tpe.isRef(resolve(name"scala" / tname"Nothing")))
         case _ =>
           ()
       }
     }
 
     assert(returnCount == 1, clue(returnCount))
+  }
+
+  test("assign") {
+    val AssignPath = name"simple_trees" / tname"Assign"
+
+    given BaseContext = getUnpicklingContext(AssignPath)
+
+    val fSym = resolve(AssignPath / name"f")
+    val fTree = fSym.tree.asInstanceOf[DefDef]
+
+    var assignCount = 0
+
+    fTree.walkTree { tree =>
+      tree match {
+        case Assign(lhs, rhs) =>
+          assignCount += 1
+
+          // HACK: Get scala.Unit to load
+          tree.tpe.asInstanceOf[Symbolic].resolveToSymbol
+
+          val UnitClass = resolve(name"scala" / tname"Unit")
+          assert(tree.tpe.isOfClass(UnitClass), clue(tree.tpe))
+        case _ =>
+          ()
+      }
+    }
+
+    assert(assignCount == 1, clue(assignCount))
   }
 
   test("basic-java-class-dependency") {
