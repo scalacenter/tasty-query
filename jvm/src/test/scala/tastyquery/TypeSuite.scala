@@ -24,9 +24,6 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val List(List(xParamDef: ValDef)) = fTree.params: @unchecked
 
-    // HACK: Get scala.Int to load
-    xParamDef.tpe.asInstanceOf[Symbolic].resolveToSymbol
-
     val IntClass = resolve(name"scala" / tname"Int")
     assert(xParamDef.tpe.isRef(IntClass))
 
@@ -88,9 +85,6 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val List(List(xParamDef: ValDef)) = fTree.params: @unchecked
 
-    // HACK: Get scala.Int to load
-    xParamDef.tpe.asInstanceOf[Symbolic].resolveToSymbol
-
     val IntClass = resolve(name"scala" / tname"Int")
     assert(xParamDef.tpe.isRef(IntClass))
 
@@ -148,10 +142,6 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
       tree match {
         case Assign(lhs, rhs) =>
           assignCount += 1
-
-          // HACK: Get scala.Unit to load
-          tree.tpe.asInstanceOf[Symbolic].resolveToSymbol
-
           val UnitClass = resolve(name"scala" / tname"Unit")
           assert(tree.tpe.isOfClass(UnitClass), clue(tree.tpe))
         case _ =>

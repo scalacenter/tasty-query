@@ -1,5 +1,7 @@
 package tastyquery
 
+import scala.annotation.tailrec
+
 import dotty.tools.tasty.TastyBuffer.Addr
 import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Names.*
@@ -30,21 +32,22 @@ object Contexts {
     baseCtx.initializeFundamentalClasses()
     baseCtx
 
-  private[Contexts] def moduleClassRoot(classRoot: ClassSymbol): ClassSymbol = {
+  private[Contexts] def moduleClassRoot(classRoot: ClassSymbol)(using BaseContext): ClassSymbol = {
     val pkg = classRoot.enclosingDecl
     ClassSymbolFactory.castSymbol(pkg.getDecl(classRoot.name.toTypeName.toObjectName).get)
   }
 
-  private[Contexts] def moduleRoot(classRoot: ClassSymbol): RegularSymbol = {
+  private[Contexts] def moduleRoot(classRoot: ClassSymbol)(using BaseContext): RegularSymbol = {
     val pkg = classRoot.enclosingDecl
     RegularSymbolFactory.castSymbol(pkg.getDecl(classRoot.name.toTermName).get)
   }
 
-  private[tastyquery] def initialisedRoot(classRoot: ClassSymbol): Boolean =
+  private[tastyquery] def initialisedRoot(classRoot: ClassSymbol)(using BaseContext): Boolean =
     classRoot.initialised || moduleClassRoot(classRoot).initialised
 
   /** BaseContext is used throughout unpickling an entire project. */
   class BaseContext private[Contexts] (val defn: Definitions, val classloader: Classpaths.Loader) {
+    private given BaseContext = this
 
     def withFile(root: ClassSymbol, filename: String)(using Classpaths.permissions.LoadRoot): FileContext =
       new FileContext(defn, root, filename, classloader)
@@ -73,8 +76,23 @@ object Contexts {
         case Some(cls: ClassSymbol) => Some(cls)
         case _                      => None
 
+    def findSymbolFromRoot(path: List[Name]): Symbol =
+      @tailrec
+      def rec(owner: Symbol, path: List[Name]): Symbol =
+        path match
+          case Nil =>
+            owner
+          case name :: pathRest =>
+            val sym = owner.lookup(name).getOrElse {
+              throw new IllegalArgumentException(s"cannot find member ${name.toDebugString} in $owner")
+            }
+            rec(sym, pathRest)
+
+      rec(defn.RootPackage, path)
+    end findSymbolFromRoot
+
     def createClassSymbol(name: Name, owner: DeclaringSymbol): ClassSymbol =
-      owner.getDecl(name) match
+      owner.getDeclInternal(name) match
         case None =>
           val cls = ClassSymbolFactory.createSymbol(name, owner)
           owner.addDecl(cls)
@@ -83,7 +101,7 @@ object Contexts {
           throw ExistingDefinitionException(owner, name)
 
     def createSymbol(name: Name, owner: DeclaringSymbol): RegularSymbol =
-      owner.getDecl(name) match
+      owner.getDeclInternal(name) match
         case None =>
           val sym = RegularSymbolFactory.createSymbol(name, owner)
           owner.addDecl(sym)
@@ -143,12 +161,12 @@ object Contexts {
 
     def classRoot: ClassSymbol = owner
 
-    def moduleClassRoot: ClassSymbol = Contexts.moduleClassRoot(classRoot)
+    def moduleClassRoot: ClassSymbol = Contexts.moduleClassRoot(classRoot)(using this)
 
-    def moduleRoot: RegularSymbol = Contexts.moduleRoot(classRoot)
+    def moduleRoot: RegularSymbol = Contexts.moduleRoot(classRoot)(using this)
 
     def createSymbol[T <: Symbol](name: Name, factory: SymbolFactory[T], addToDecls: Boolean = false): T =
-      owner.getDecl(name) match
+      owner.getDeclInternal(name) match
         case None =>
           val sym = factory.createSymbol(name, owner)
           if (addToDecls) owner.addDecl(sym)
@@ -236,7 +254,10 @@ object Contexts {
 
       def mkSymbol(name: Name, owner: Symbol): T =
         if owner == classRoot.enclosingDecl then
-          owner.lookup(name) match
+          val existing = owner match
+            case owner: DeclaringSymbol => owner.getDeclInternal(name)
+            case _                      => None
+          existing match
             case Some(sym) =>
               (factory, sym) match
                 case (ClassSymbolFactory, `classRoot`)                               => classRoot

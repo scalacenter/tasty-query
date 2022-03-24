@@ -54,11 +54,8 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean, al
     (base, classRoot)
   }
 
-  /* TODO Currently this only resolves symbols that have already been loaded,
-   * but the intent is that it will load symbols when required.
-   */
   def resolve(path: DeclarationPath)(using BaseContext): Symbol =
-    followPathImpl(defn.RootPackage, path).fold(fail(_), identity)
+    summon[BaseContext].findSymbolFromRoot(path.toNameList)
 
   def assertSymbolExistsAndIsLoaded(path: DeclarationPath)(implicit ctx: BaseContext): Unit =
     followPathImpl(defn.RootPackage, path).fold(fail(_), _ => ())
@@ -87,7 +84,7 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean, al
         p.name.toTermName.select(s)
       case _ => next
     }
-    root.getDecl(sel) match {
+    root.getDeclInternal(sel) match {
       case Some(someSym) => Right(someSym)
       case _ => Left(s"No declaration for ${next.toDebugString} [${sel.toDebugString}] in ${root.toDebugString}")
     }
@@ -130,6 +127,7 @@ object BaseUnpicklingSuite {
       @targetName("selectMemberFromMember") def /(x: Name): MemberDeclPath = member :+ x
     }
     extension (path: DeclarationPath) {
+      def toNameList: List[Name] = path
       def root: Name = path.head
       def foldRemainder[T](whenEmpty: => T)(follow: DeclarationPath => T): T = path.tail match {
         case Nil => whenEmpty
