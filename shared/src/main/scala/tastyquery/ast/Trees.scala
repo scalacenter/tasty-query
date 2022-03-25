@@ -35,7 +35,7 @@ object Trees {
       case Template(constr, parents, self, body) =>
         (constr :: parents.collect { case p if p.isInstanceOf[Tree] => p.asInstanceOf[Tree] }) ++ (self :: body)
       case ValDef(name, tpt, rhs, symbol)         => rhs :: Nil
-      case DefDef(name, params, tpt, rhs, symbol) => params.flatten :+ rhs
+      case DefDef(name, params, tpt, rhs, symbol) => params.flatMap(_.merge) :+ rhs
       case Select(qualifier, name)                => qualifier :: Nil
       case Super(qual, mix)                       => qual :: Nil
       case Apply(fun, args)                       => fun :: args
@@ -142,7 +142,14 @@ object Trees {
     name: TypeName,
     bounds: TypeBoundsTree | TypeBounds | TypeLambdaTree,
     override val symbol: RegularSymbol
-  ) extends TypeDef(name, symbol)
+  ) extends TypeDef(name, symbol) {
+    private[tastyquery] def computeDeclarationTypeBounds(): TypeBounds = bounds match
+      case tbt: TypeBoundsTree => tbt.toTypeBounds
+      case bounds: TypeBounds  => bounds
+      case tlt: TypeLambdaTree =>
+        // TODO See the <init> in HigherKinded and HigherKindedWithParam
+        RealTypeBounds(NothingType, AnyType)
+  }
 
   /** extends parents { self => body }
     *
@@ -160,13 +167,13 @@ object Trees {
     override protected def calculateType: Type = tpt.toType
   }
 
-  type ParamsClause = List[ValDef] | List[TypeParam]
+  type ParamsClause = Either[List[ValDef], List[TypeParam]]
 
   /** mods def name[tparams](vparams_1)...(vparams_n): tpt = rhs */
   case class DefDef(
     name: TermName,
-    params: List[ParamsClause],
-    tpt: TypeTree,
+    paramLists: List[ParamsClause],
+    resultTpt: TypeTree,
     rhs: Tree,
     override val symbol: RegularSymbol
   ) extends Tree
@@ -196,6 +203,9 @@ object Trees {
 
   /** reference to a package, seen as a term */
   class ReferencedPackage(override val name: TermName) extends Ident(name) {
+    override def calculateType: Type =
+      PackageRef(name)
+
     override def toString: String = s"ReferencedPackage($name)"
   }
 
@@ -206,7 +216,7 @@ object Trees {
   /** qualifier.termName */
   case class Select(qualifier: Tree, name: TermName) extends Tree {
     override def calculateType: Type =
-      qualifier.tpe.asInstanceOf[TermRef].select(name) // TODO: what about holes, poly functions etc?
+      qualifier.tpe.asInstanceOf[NamedType].select(name) // TODO: what about holes, poly functions etc?
   }
 
   class SelectIn(qualifier: Tree, name: SignedName, selectOwner: TypeRef) extends Select(qualifier, name) {

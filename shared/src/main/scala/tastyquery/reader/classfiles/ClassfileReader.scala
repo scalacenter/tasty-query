@@ -16,7 +16,6 @@ final class ClassfileReader private () {
   def acceptHeader()(using DataStream): Unit = {
     acceptMagicNumber()
     acceptVersion()
-    println("end of header")
   }
 
   private def acceptMagicNumber()(using DataStream): Unit = {
@@ -35,12 +34,10 @@ final class ClassfileReader private () {
 
   def readConstantPool()(using DataStream): ConstantPool = {
     val count = data.readU2()
-    println(s"constant pool count: $count, [${count - 1} entries]")
     val cp = ConstantPool(count)
     given ConstantPool = cp
     var doAdd = true
     while doAdd do doAdd = pool.add(acceptConstantInfo())
-    println("loaded constant pool")
     pool
   }
 
@@ -108,7 +105,7 @@ final class ClassfileReader private () {
           case _ => doprint
         }
       }
-      debug()
+      //debug()
       val jump = info match {
         case ConstantInfo.Long(_) | ConstantInfo.Double(_) => 2
         case _                                             => 1
@@ -134,13 +131,11 @@ final class ClassfileReader private () {
 
   def readAccessFlags()(using DataStream): AccessFlags = {
     val flags = data.readU2()
-    println(s"access flags: ${flags.toHexString}")
     AccessFlags(flags)
   }
 
   def readThisClass()(using DataStream, ConstantPool): ConstantInfo.Class[pool.type] = {
     val entry = pool(pool.idx(data.readU2())).asInstanceOf[ConstantInfo.Class[pool.type]]
-    println(s"this class: ${pool.utf8(entry.nameIdx)}")
     entry
   }
 
@@ -149,23 +144,19 @@ final class ClassfileReader private () {
     val entry =
       if idx == 0 then None
       else Some(pool(pool.idx(idx)).asInstanceOf[ConstantInfo.Class[pool.type]])
-    println(s"super class: ${entry.map(cls => pool.utf8(cls.nameIdx))}")
     entry
   }
 
   def readInterfaces()(using DataStream, ConstantPool): IArray[ConstantInfo.Class[pool.type]] = {
     val count = data.readU2()
-    println(s"interfaces count: $count")
     val interfaces =
       for i <- 0 until count yield pool(pool.idx(data.readU2())).asInstanceOf[ConstantInfo.Class[pool.type]]
-    println(s"loaded interfaces: ${interfaces.map(cls => pool.utf8(cls.nameIdx))}")
     IArray.from(interfaces)
   }
 
   def skipFields()(using DataStream): Forked[DataStream] = {
     val fieldReader = data.fork
     val count = data.readU2()
-    println(s"fields count: $count")
     loop(count) {
       data.skip(6) // access flags, name index, descriptor index
       loop(data.readU2()) {
@@ -173,20 +164,17 @@ final class ClassfileReader private () {
         data.skip(data.readU4()) // attribute length and info
       }
     }
-    println(s"skipped fields")
     fieldReader
   }
 
   def readFields(op: SimpleName => Unit)(using DataStream, ConstantPool): Unit = {
     val count = data.readU2()
-    println(s"fields count: $count")
     loop(count) {
       val accessFlags = data.readU2()
       val nameIdx = pool.idx(data.readU2())
       val name = pool.utf8(nameIdx)
       op(name)
       val descriptorIdx = data.readU2()
-      println(s"field $name: $descriptorIdx")
       val attributesCount = data.readU2()
       loop(attributesCount) {
         data.skip(2) // name index
@@ -198,7 +186,6 @@ final class ClassfileReader private () {
   def skipMethods()(using DataStream): Forked[DataStream] = {
     val methodReader = data.fork
     val count = data.readU2()
-    println(s"methods count: $count")
     loop(count) {
       data.skip(6) // access flags, name index, descriptor index
       loop(data.readU2()) {
@@ -206,20 +193,17 @@ final class ClassfileReader private () {
         data.skip(data.readU4()) // attribute length and info
       }
     }
-    println(s"skipped methods")
     methodReader
   }
 
   def readMethods(op: SimpleName => Unit)(using DataStream, ConstantPool): Unit = {
     val count = data.readU2()
-    println(s"methods count: $count")
     loop(count) {
       val accessFlags = data.readU2()
       val nameIdx = pool.idx(data.readU2())
       val name = pool.utf8(nameIdx)
       op(name)
       val descriptorIdx = data.readU2()
-      println(s"method $name: $descriptorIdx")
       val attributesCount = data.readU2()
       loop(attributesCount) {
         data.skip(2) // name index
@@ -231,12 +215,10 @@ final class ClassfileReader private () {
   def skipAttributes()(using DataStream): Forked[DataStream] = {
     val attrReader = data.fork
     val count = data.readU2()
-    println(s"attributes count: $count")
     loop(count) {
       data.skip(2) // name index
       data.skip(data.readU4()) // attribute length and info
     }
-    println(s"skipped attributes")
     attrReader
   }
 

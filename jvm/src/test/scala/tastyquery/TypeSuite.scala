@@ -20,12 +20,19 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     given BaseContext = getUnpicklingContext(AssignPath)
 
     val fSym = resolve(AssignPath / name"f")
-    val fTree = fSym.tree.asInstanceOf[DefDef]
+    val fTree = fSym.tree.get.asInstanceOf[DefDef]
 
-    val List(List(xParamDef: ValDef)) = fTree.params: @unchecked
+    val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
     val IntClass = resolve(name"scala" / tname"Int")
     assert(xParamDef.tpe.isRef(IntClass))
+
+    fSym.declaredType match
+      case MethodType(_, List(paramTpe), resultTpe) =>
+        assert(paramTpe.isRef(IntClass))
+        assert(resultTpe.isRef(IntClass))
+      case _ =>
+        fail(s"$fSym does not have a MethodType", clues(fSym.declaredType))
 
     val x = SimpleName("x")
     val y = SimpleName("y")
@@ -56,7 +63,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     given BaseContext = getUnpicklingContext(RepeatedPath)
 
     val fSym = resolve(RepeatedPath / name"f")
-    val fTree = fSym.tree.asInstanceOf[DefDef]
+    val fTree = fSym.tree.get.asInstanceOf[DefDef]
 
     var bitSetIdentCount = 0
 
@@ -81,9 +88,9 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     given BaseContext = getUnpicklingContext(MatchPath)
 
     val fSym = resolve(MatchPath / name"f")
-    val fTree = fSym.tree.asInstanceOf[DefDef]
+    val fTree = fSym.tree.get.asInstanceOf[DefDef]
 
-    val List(List(xParamDef: ValDef)) = fTree.params: @unchecked
+    val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
     val IntClass = resolve(name"scala" / tname"Int")
     assert(xParamDef.tpe.isRef(IntClass))
@@ -110,7 +117,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     given BaseContext = getUnpicklingContext(ReturnPath)
 
     val withReturnSym = resolve(ReturnPath / name"withReturn")
-    val withReturnTree = withReturnSym.tree.asInstanceOf[DefDef]
+    val withReturnTree = withReturnSym.tree.get.asInstanceOf[DefDef]
 
     var returnCount = 0
 
@@ -134,7 +141,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     given BaseContext = getUnpicklingContext(AssignPath)
 
     val fSym = resolve(AssignPath / name"f")
-    val fTree = fSym.tree.asInstanceOf[DefDef]
+    val fTree = fSym.tree.get.asInstanceOf[DefDef]
 
     var assignCount = 0
 
@@ -160,7 +167,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val boxedSym = resolve(BoxedJava / name"boxed")
 
-    val (JavaDefinedRef @ _: Symbolic) = boxedSym.tree.tpe: @unchecked
+    val (JavaDefinedRef @ _: Symbolic) = boxedSym.declaredType: @unchecked
 
     assertIsSymbolWithPath(JavaDefined)(JavaDefinedRef.resolveToSymbol)
   }
@@ -173,7 +180,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val xMethodSym = resolve(BoxedJava / name"xMethod")
 
-    val DefDef(_, _, _, Apply(getXSelection, _), _) = xMethodSym.tree: @unchecked
+    val Some(DefDef(_, _, _, Apply(getXSelection, _), _)) = xMethodSym.tree: @unchecked
 
     val (getXRef @ _: Symbolic) = getXSelection.tpe: @unchecked
 
@@ -188,7 +195,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val xFieldSym = resolve(BoxedJava / name"xField")
 
-    val DefDef(_, _, _, xSelection, _) = xFieldSym.tree: @unchecked
+    val Some(DefDef(_, _, _, xSelection, _)) = xFieldSym.tree: @unchecked
 
     val (xRef @ _: Symbolic) = xSelection.tpe: @unchecked
 
@@ -203,7 +210,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val boxedSym = resolve(BoxedCons / name"boxed")
 
-    val (AppliedType(ConsRef @ _: Symbolic, _)) = boxedSym.tree.tpe: @unchecked
+    val (AppliedType(ConsRef @ _: Symbolic, _)) = boxedSym.declaredType: @unchecked
 
     assertIsSymbolWithPath(::)(ConsRef.resolveToSymbol)
   }
@@ -216,7 +223,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val fooSym = resolve(BoxedCons / name"foo")
 
-    val DefDef(_, _, _, Apply(canEqualSelection, _), _) = fooSym.tree: @unchecked
+    val Some(DefDef(_, _, _, Apply(canEqualSelection, _), _)) = fooSym.tree: @unchecked
 
     val (canEqualRef @ _: Symbolic) = canEqualSelection.tpe: @unchecked
 
@@ -231,7 +238,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val boxedUnitValSym = resolve(BoxedConstants / name"boxedUnitVal")
 
-    val DefDef(_, _, _, unitValSelection, _) = boxedUnitValSym.tree: @unchecked
+    val Some(DefDef(_, _, _, unitValSelection, _)) = boxedUnitValSym.tree: @unchecked
 
     val (unitValRef @ _: Symbolic) = unitValSelection.tpe: @unchecked
 
@@ -251,7 +258,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val xMethodSym = resolve(ScalaBox / name"xMethod")
 
-    val DefDef(_, _, _, Apply(getXSelection, _), _) = xMethodSym.tree: @unchecked
+    val Some(DefDef(_, _, _, Apply(getXSelection, _), _)) = xMethodSym.tree: @unchecked
 
     val (getXRef @ _: Symbolic) = getXSelection.tpe: @unchecked
 

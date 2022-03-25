@@ -96,13 +96,7 @@ object ClasspathLoaders {
 
       compress(streamPackages())
     }
-    println(s"load class data")
     val cp = load()
-    val totalClassMB = cp.map(_.classes.map(_.bytes).map(_.size: BigInt).sum).sum / 1024 / 1024
-    val totalTastyMB = cp.map(_.tastys.map(_.bytes).map(_.size: BigInt).sum).sum / 1024 / 1024
-    println(s"loaded class data: ${cp.map(_.classes.size).sum} classes, $totalClassMB MB")
-    println(s"loaded tasty data: ${cp.map(_.tastys.size).sum} tastys, $totalTastyMB MB")
-    println(s"packages: ${cp.map(_.name).mkString("\n", "\n", "")}")
     Classpath.from(cp)
   }
 

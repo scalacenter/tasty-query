@@ -109,21 +109,10 @@ object Classpaths {
       qualified(IArray.unsafeFromArray(dotSeparated.split('.')))
 
     private[tastyquery] def topLevelTasty(cls: ClassSymbol)(using BaseContext): Option[List[Tree]] =
-      if !cls.outer.isPackage then
-        println(s"No top-level tasty for $cls: it is not top-level")
-        None
-      else if !Contexts.initialisedRoot(cls) then
-        println(s"No top-level tasty for $cls: it is not initialised")
-        None
-      else if cls.name.toTypeName.wrapsObjectName then
-        println(s"No top-level tasty for $cls: it is an object class")
-        None
-      else
-        topLevelTastys.get(cls) match
-          case None =>
-            println(s"No top-level tasty for $cls: it has no associated TASTy")
-            None
-          case some => some
+      if !cls.outer.isPackage then None
+      else if !Contexts.initialisedRoot(cls) then None
+      else if cls.name.toTypeName.wrapsObjectName then None
+      else topLevelTastys.get(cls)
 
     /** @return true if loaded the classes inner definitions */
     private[tastyquery] def scanClass(cls: ClassSymbol)(using baseCtx: BaseContext): Boolean =
@@ -195,7 +184,6 @@ object Classpaths {
           }
 
           packages -= pkg
-          println(s"initialising root classes from $pkg")
 
           if data.classes.isEmpty then
             for tasty <- data.tastys if !isNestedOrModuleClassName(tasty.simpleName) do
@@ -218,8 +206,6 @@ object Classpaths {
         searched = true
 
         def enterPackages(packages: IArray[PackageData]) = {
-          println(s"begin enter packages")
-
           packageNameCache.sizeHint(packages.size)
 
           val packageNames = packages.map(pkg => toPackageName(pkg.name.name))
@@ -237,10 +223,6 @@ object Classpaths {
 
           loader.packages =
             Map.from(for (pkgName, data) <- packageNames.zip(packages) yield createSubpackages(pkgName) -> data)
-
-          // println(s"init classpath with:\n${classes.map(_.className).mkString("\n")}")
-          // println(s"init classpath with packages:\n${debugPackages.map(_.toDebugString).mkString("\n")}")
-          println(s"end enter packages: $debugPackageCount")
         }
 
         enterPackages(classpath.packages)

@@ -3,7 +3,7 @@ package tastyquery.ast
 import scala.collection.mutable
 import tastyquery.ast.Names.{Name, TermName, SignedName, SimpleName, QualifiedName, TypeName, SuffixedName, nme}
 import dotty.tools.tasty.TastyFormat.NameTags
-import tastyquery.ast.Trees.{EmptyTree, Tree}
+import tastyquery.ast.Trees.{DefTree, Tree}
 import tastyquery.ast.Types.*
 import tastyquery.Contexts.BaseContext
 
@@ -29,15 +29,24 @@ object Symbols {
   val NoSymbol = new RegularSymbol(nme.EmptyTermName, null)
 
   abstract class Symbol private[Symbols] (val name: Name, rawowner: Symbol | Null) {
-    protected var myTree: Tree = EmptyTree
+    protected var myTree: Option[DefTree] = None
     // overridden in package symbol
-    def withTree(t: Tree): this.type = {
-      myTree = t
+    def withTree(t: DefTree): this.type = {
+      myTree = Some(t)
       this
     }
-    final def tree: Tree = myTree
+    final def tree: Option[DefTree] = myTree
 
-    def thisType: Type = tree.tpe
+    private var myDeclaredType: Type | Null = null
+
+    private[tastyquery] def withDeclaredType(tpe: Type): this.type =
+      myDeclaredType = tpe
+      this
+
+    def declaredType: Type =
+      val local = myDeclaredType
+      if local != null then local
+      else throw new IllegalStateException(s"$this was not assigned a declared type")
 
     final def outer: Symbol = rawowner match {
       case owner: Symbol => owner
@@ -156,6 +165,9 @@ object Symbols {
       // Root package is the only symbol that is allowed to not have an owner
       assert(name == nme.RootName)
     }
+
+    this.withDeclaredType(PackageRef(this))
+
     def findPackageSymbol(packageName: TermName): Option[PackageClassSymbol] = packageName match {
       case _: SimpleName => getPackageDecl(packageName)
       case QualifiedName(NameTags.QUALIFIED, prefix, suffix) =>
@@ -166,8 +178,6 @@ object Symbols {
           findPackageSymbol(prefix).flatMap(_.findPackageSymbol(packageName))
       case _ => throw IllegalArgumentException(s"Unexpected package name: $name")
     }
-
-    override lazy val thisType: Type = PackageRef(this)
 
     override def getDecl(name: Name)(using BaseContext): Option[Symbol] =
       getDeclInternal(name).orElse {
@@ -188,7 +198,7 @@ object Symbols {
        */
       getDeclInternal(packageName).map(_.asInstanceOf[PackageClassSymbol])
 
-    override def withTree(t: Tree): PackageClassSymbol.this.type = throw new UnsupportedOperationException(
+    override def withTree(t: DefTree): PackageClassSymbol.this.type = throw new UnsupportedOperationException(
       s"Multiple trees correspond to one package, a single tree cannot be assigned"
     )
   }
