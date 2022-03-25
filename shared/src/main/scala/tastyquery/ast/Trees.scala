@@ -35,7 +35,7 @@ object Trees {
       case Template(constr, parents, self, body) =>
         (constr :: parents.collect { case p if p.isInstanceOf[Tree] => p.asInstanceOf[Tree] }) ++ (self :: body)
       case ValDef(name, tpt, rhs, symbol)         => rhs :: Nil
-      case DefDef(name, params, tpt, rhs, symbol) => params.flatten :+ rhs
+      case DefDef(name, params, tpt, rhs, symbol) => params.flatMap(_.merge) :+ rhs
       case Select(qualifier, name)                => qualifier :: Nil
       case Super(qual, mix)                       => qual :: Nil
       case Apply(fun, args)                       => fun :: args
@@ -160,13 +160,13 @@ object Trees {
     override protected def calculateType: Type = tpt.toType
   }
 
-  type ParamsClause = List[ValDef] | List[TypeParam]
+  type ParamsClause = Either[List[ValDef], List[TypeParam]]
 
   /** mods def name[tparams](vparams_1)...(vparams_n): tpt = rhs */
   case class DefDef(
     name: TermName,
-    params: List[ParamsClause],
-    tpt: TypeTree,
+    paramLists: List[ParamsClause],
+    resultTpt: TypeTree,
     rhs: Tree,
     override val symbol: RegularSymbol
   ) extends Tree

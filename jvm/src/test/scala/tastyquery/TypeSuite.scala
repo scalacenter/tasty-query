@@ -22,7 +22,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val fSym = resolve(AssignPath / name"f")
     val fTree = fSym.tree.asInstanceOf[DefDef]
 
-    val List(List(xParamDef: ValDef)) = fTree.params: @unchecked
+    val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
     val IntClass = resolve(name"scala" / tname"Int")
     assert(xParamDef.tpe.isRef(IntClass))
@@ -83,7 +83,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val fSym = resolve(MatchPath / name"f")
     val fTree = fSym.tree.asInstanceOf[DefDef]
 
-    val List(List(xParamDef: ValDef)) = fTree.params: @unchecked
+    val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
     val IntClass = resolve(name"scala" / tname"Int")
     assert(xParamDef.tpe.isRef(IntClass))

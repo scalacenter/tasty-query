@@ -352,11 +352,11 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
   def readAllParams(using FileContext): List[ParamsClause] =
     reader.nextByte match {
-      case PARAM => readParams :: readAllParams
+      case PARAM => Left(readParams) :: readAllParams
       case EMPTYCLAUSE =>
         reader.readByte()
-        Nil :: readAllParams
-      case TYPEPARAM => readTypeParams :: readAllParams
+        Left(Nil) :: readAllParams
+      case TYPEPARAM => Right(readTypeParams) :: readAllParams
       case _         => Nil
     }
 
