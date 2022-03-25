@@ -175,17 +175,7 @@ object Types {
         val sym = {
           val symOption = prefixSym match {
             case declaring: DeclaringSymbol =>
-              def force() = declaring match {
-                case p: PackageClassSymbol =>
-                  baseCtx.classloader.scanPackage(p)
-                case p: ClassSymbol =>
-                  baseCtx.classloader.scanClass(p)
-                case _ =>
-              }
-              declaring.getDecl(name).orElse {
-                force()
-                declaring.getDecl(name)
-              }
+              declaring.getDecl(name)
             case _ =>
               throw SymbolLookupException(name, s"$prefixSym is not a package or class")
           }

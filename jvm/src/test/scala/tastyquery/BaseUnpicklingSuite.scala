@@ -54,15 +54,15 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean, al
     (base, classRoot)
   }
 
-  def resolve(path: DeclarationPath)(implicit ctx: BaseContext): Symbol =
-    followPath(defn.RootPackage, path)
+  def resolve(path: DeclarationPath)(using BaseContext): Symbol =
+    summon[BaseContext].findSymbolFromRoot(path.toNameList)
 
-  def absent(path: DeclarationPath)(implicit ctx: BaseContext): Unit =
+  def assertSymbolExistsAndIsLoaded(path: DeclarationPath)(implicit ctx: BaseContext): Unit =
+    followPathImpl(defn.RootPackage, path).fold(fail(_), _ => ())
+
+  def assertSymbolNotExistsOrNotLoadedYet(path: DeclarationPath)(implicit ctx: BaseContext): Unit =
     def unexpected(sym: Symbol) = fail(s"expected no symbol, but found ${sym.toDebugString}")
     followPathImpl(defn.RootPackage, path).fold(_ => (), unexpected)
-
-  def followPath(root: DeclaringSymbol, path: DeclarationPath): Symbol =
-    followPathImpl(root, path).fold(fail(_), identity)
 
   private def followPathImpl(root: DeclaringSymbol, path: DeclarationPath): Either[String, Symbol] = {
     def follow(selected: Symbol)(remainder: DeclarationPath): Either[String, Symbol] = selected match {
@@ -84,7 +84,7 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean, al
         p.name.toTermName.select(s)
       case _ => next
     }
-    root.getDecl(sel) match {
+    root.getDeclInternal(sel) match {
       case Some(someSym) => Right(someSym)
       case _ => Left(s"No declaration for ${next.toDebugString} [${sel.toDebugString}] in ${root.toDebugString}")
     }
@@ -127,6 +127,7 @@ object BaseUnpicklingSuite {
       @targetName("selectMemberFromMember") def /(x: Name): MemberDeclPath = member :+ x
     }
     extension (path: DeclarationPath) {
+      def toNameList: List[Name] = path
       def root: Name = path.head
       def foldRemainder[T](whenEmpty: => T)(follow: DeclarationPath => T): T = path.tail match {
         case Nil => whenEmpty

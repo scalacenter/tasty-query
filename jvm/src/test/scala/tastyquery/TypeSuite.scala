@@ -9,15 +9,9 @@ import tastyquery.ast.Types.*
 class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = true, allowDeps = true) {
   import BaseUnpicklingSuite.Decls.*
 
-  def assertMissingDeclaration(path: DeclarationPath)(using BaseContext): Unit =
-    absent(path)
-
-  def forceAbsentSymbol(path: DeclarationPath)(action: BaseContext ?=> Symbol)(using BaseContext): Symbol = {
-    assertMissingDeclaration(path)
-    val found = action
-    val didForce = resolve(path)
-    assert(found eq didForce)
-    found
+  def assertIsSymbolWithPath(path: DeclarationPath)(actualSymbol: Symbol)(using BaseContext): Unit = {
+    val expectedSymbol = resolve(path)
+    assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
   }
 
   test("basic-local-val") {
@@ -29,9 +23,6 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val fTree = fSym.tree.asInstanceOf[DefDef]
 
     val List(List(xParamDef: ValDef)) = fTree.params: @unchecked
-
-    // HACK: Get scala.Int to load
-    xParamDef.tpe.asInstanceOf[Symbolic].resolveToSymbol
 
     val IntClass = resolve(name"scala" / tname"Int")
     assert(xParamDef.tpe.isRef(IntClass))
@@ -94,9 +85,6 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val List(List(xParamDef: ValDef)) = fTree.params: @unchecked
 
-    // HACK: Get scala.Int to load
-    xParamDef.tpe.asInstanceOf[Symbolic].resolveToSymbol
-
     val IntClass = resolve(name"scala" / tname"Int")
     assert(xParamDef.tpe.isRef(IntClass))
 
@@ -154,10 +142,6 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
       tree match {
         case Assign(lhs, rhs) =>
           assignCount += 1
-
-          // HACK: Get scala.Unit to load
-          tree.tpe.asInstanceOf[Symbolic].resolveToSymbol
-
           val UnitClass = resolve(name"scala" / tname"Unit")
           assert(tree.tpe.isOfClass(UnitClass), clue(tree.tpe))
         case _ =>
@@ -178,7 +162,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val (JavaDefinedRef @ _: Symbolic) = boxedSym.tree.tpe: @unchecked
 
-    forceAbsentSymbol(JavaDefined)(JavaDefinedRef.resolveToSymbol)
+    assertIsSymbolWithPath(JavaDefined)(JavaDefinedRef.resolveToSymbol)
   }
 
   test("select-method-from-java-class") {
@@ -193,7 +177,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val (getXRef @ _: Symbolic) = getXSelection.tpe: @unchecked
 
-    forceAbsentSymbol(getX)(getXRef.resolveToSymbol)
+    assertIsSymbolWithPath(getX)(getXRef.resolveToSymbol)
   }
 
   test("select-field-from-java-class") {
@@ -208,7 +192,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val (xRef @ _: Symbolic) = xSelection.tpe: @unchecked
 
-    forceAbsentSymbol(x)(xRef.resolveToSymbol)
+    assertIsSymbolWithPath(x)(xRef.resolveToSymbol)
   }
 
   test("basic-scala-2-stdlib-class-dependency") {
@@ -221,7 +205,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val (AppliedType(ConsRef @ _: Symbolic, _)) = boxedSym.tree.tpe: @unchecked
 
-    forceAbsentSymbol(::)(ConsRef.resolveToSymbol)
+    assertIsSymbolWithPath(::)(ConsRef.resolveToSymbol)
   }
 
   test("select-method-from-scala-2-stdlib-class") {
@@ -236,7 +220,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val (canEqualRef @ _: Symbolic) = canEqualSelection.tpe: @unchecked
 
-    forceAbsentSymbol(canEqual)(canEqualRef.resolveToSymbol)
+    assertIsSymbolWithPath(canEqual)(canEqualRef.resolveToSymbol)
   }
 
   test("select-field-from-tasty-in-other-package:dependency-from-class-file") {
@@ -251,7 +235,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val (unitValRef @ _: Symbolic) = unitValSelection.tpe: @unchecked
 
-    forceAbsentSymbol(unitVal)(unitValRef.resolveToSymbol)
+    assertIsSymbolWithPath(unitVal)(unitValRef.resolveToSymbol)
   }
 
   test("select-method-from-java-class-same-package-as-tasty") {
@@ -271,7 +255,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val (getXRef @ _: Symbolic) = getXSelection.tpe: @unchecked
 
-    forceAbsentSymbol(getX)(getXRef.resolveToSymbol)
+    assertIsSymbolWithPath(getX)(getXRef.resolveToSymbol)
   }
 
 }

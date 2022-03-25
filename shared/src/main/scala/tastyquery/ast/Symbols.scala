@@ -5,6 +5,7 @@ import tastyquery.ast.Names.{Name, TermName, SignedName, SimpleName, QualifiedNa
 import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Trees.{EmptyTree, Tree}
 import tastyquery.ast.Types.*
+import tastyquery.Contexts.BaseContext
 
 object Symbols {
 
@@ -81,7 +82,7 @@ object Symbols {
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
     final def isPackage: Boolean = this.isInstanceOf[PackageClassSymbol]
 
-    final def lookup(name: Name): Option[Symbol] = this match
+    def lookup(name: Name)(using BaseContext): Option[Symbol] = this match
       case scope: DeclaringSymbol => scope.getDecl(name)
       case _                      => None
 
@@ -110,8 +111,9 @@ object Symbols {
     private[tastyquery] final def addDecl(decl: Symbol): Unit =
       myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet) += decl
 
-    private[tastyquery] final def getDecl(name: Name): Option[Symbol] = name match {
-      case overloaded: SignedName => resolveOverloaded(overloaded)
+    private[tastyquery] final def getDeclInternal(name: Name): Option[Symbol] = name match {
+      case overloaded: SignedName =>
+        getDeclInternal(overloaded.underlying) // TODO: look at signature to filter overloads
       case name =>
         myDeclarations.get(name) match
           case Some(decls) =>
@@ -122,8 +124,11 @@ object Symbols {
           case _ => None
     }
 
-    final def resolveOverloaded(name: SignedName): Option[Symbol] =
-      getDecl(name.underlying) // TODO: look at signature to filter overloads
+    def getDecl(name: Name)(using BaseContext): Option[Symbol] =
+      getDeclInternal(name)
+
+    final def resolveOverloaded(name: SignedName)(using BaseContext): Option[Symbol] =
+      getDecl(name)
 
     final def declarations: List[Symbol] = myDeclarations.values.toList.flatten
 
@@ -133,6 +138,12 @@ object Symbols {
 
   class ClassSymbol(override val name: Name, rawowner: Symbol | Null) extends DeclaringSymbol(name, rawowner) {
     private[tastyquery] var initialised: Boolean = false
+
+    override def getDecl(name: Name)(using BaseContext): Option[Symbol] =
+      getDeclInternal(name).orElse {
+        summon[BaseContext].classloader.scanClass(this)
+        getDeclInternal(name)
+      }
   }
 
   // TODO: typename or term name?
@@ -158,8 +169,24 @@ object Symbols {
 
     override lazy val thisType: Type = PackageRef(this)
 
+    override def getDecl(name: Name)(using BaseContext): Option[Symbol] =
+      getDeclInternal(name).orElse {
+        summon[BaseContext].classloader.scanPackage(this)
+        getDeclInternal(name)
+      }
+
+    override def lookup(name: Name)(using BaseContext): Option[Symbol] =
+      val sel = name match {
+        case name: SimpleName if this.name != nme.RootName => this.name.toTermName.select(name)
+        case _                                             => name
+      }
+      getDecl(sel)
+
     private def getPackageDecl(packageName: TermName): Option[PackageClassSymbol] =
-      getDecl(packageName).map(_.asInstanceOf[PackageClassSymbol])
+      /* All subpackages are created eagerly when initializing contexts,
+       * so we can use getDeclInternal here.
+       */
+      getDeclInternal(packageName).map(_.asInstanceOf[PackageClassSymbol])
 
     override def withTree(t: Tree): PackageClassSymbol.this.type = throw new UnsupportedOperationException(
       s"Multiple trees correspond to one package, a single tree cannot be assigned"
