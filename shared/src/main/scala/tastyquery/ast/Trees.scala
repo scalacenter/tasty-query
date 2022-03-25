@@ -142,7 +142,14 @@ object Trees {
     name: TypeName,
     bounds: TypeBoundsTree | TypeBounds | TypeLambdaTree,
     override val symbol: RegularSymbol
-  ) extends TypeDef(name, symbol)
+  ) extends TypeDef(name, symbol) {
+    private[tastyquery] def computeDeclarationTypeBounds(): TypeBounds = bounds match
+      case tbt: TypeBoundsTree => tbt.toTypeBounds
+      case bounds: TypeBounds  => bounds
+      case tlt: TypeLambdaTree =>
+        // TODO See the <init> in HigherKinded and HigherKindedWithParam
+        RealTypeBounds(NothingType, AnyType)
+  }
 
   /** extends parents { self => body }
     *
@@ -196,6 +203,9 @@ object Trees {
 
   /** reference to a package, seen as a term */
   class ReferencedPackage(override val name: TermName) extends Ident(name) {
+    override def calculateType: Type =
+      PackageRef(name)
+
     override def toString: String = s"ReferencedPackage($name)"
   }
 
@@ -206,7 +216,7 @@ object Trees {
   /** qualifier.termName */
   case class Select(qualifier: Tree, name: TermName) extends Tree {
     override def calculateType: Type =
-      qualifier.tpe.asInstanceOf[TermRef].select(name) // TODO: what about holes, poly functions etc?
+      qualifier.tpe.asInstanceOf[NamedType].select(name) // TODO: what about holes, poly functions etc?
   }
 
   class SelectIn(qualifier: Tree, name: SignedName, selectOwner: TypeRef) extends Select(qualifier, name) {

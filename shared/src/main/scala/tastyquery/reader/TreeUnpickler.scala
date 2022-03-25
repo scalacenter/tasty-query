@@ -411,11 +411,31 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     skipModifiers(end)
     tag match {
       case VALDEF | PARAM =>
+        symbol.withDeclaredType(tpt.toType)
         ValDef(name, tpt, rhs, symbol).definesTreeOf(symbol)
       case DEFDEF =>
+        symbol.withDeclaredType(makeDefDefType(params, tpt))
         DefDef(name, params, tpt, rhs, symbol).definesTreeOf(symbol)
     }
   }
+
+  private def makeDefDefType(paramLists: List[ParamsClause], resultTpt: TypeTree): Type =
+    def rec(paramLists: List[ParamsClause]): Type =
+      paramLists match
+        case Left(params) :: rest =>
+          val paramNames = params.map(_.name)
+          val paramTypes = params.map(_.tpt.toType)
+          MethodType(paramNames, paramTypes, rec(rest))
+        case Right(tparams) :: rest =>
+          val paramNames = tparams.map(_.name)
+          val paramTypeBounds = tparams.map(_.computeDeclarationTypeBounds())
+          PolyType(paramNames, paramTypeBounds, rec(rest))
+        case Nil =>
+          resultTpt.toType
+
+    if paramLists.isEmpty then ExprType(resultTpt.toType)
+    else rec(paramLists)
+  end makeDefDefType
 
   def readTerms(end: Addr)(using FileContext): List[Tree] =
     reader.until(end)(readTerm)

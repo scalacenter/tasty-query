@@ -27,6 +27,13 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val IntClass = resolve(name"scala" / tname"Int")
     assert(xParamDef.tpe.isRef(IntClass))
 
+    fSym.declaredType match
+      case MethodType(_, List(paramTpe), resultTpe) =>
+        assert(paramTpe.isRef(IntClass))
+        assert(resultTpe.isRef(IntClass))
+      case _ =>
+        fail(s"$fSym does not have a MethodType", clues(fSym.declaredType))
+
     val x = SimpleName("x")
     val y = SimpleName("y")
 
@@ -160,7 +167,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val boxedSym = resolve(BoxedJava / name"boxed")
 
-    val (JavaDefinedRef @ _: Symbolic) = boxedSym.tree.tpe: @unchecked
+    val (JavaDefinedRef @ _: Symbolic) = boxedSym.declaredType: @unchecked
 
     assertIsSymbolWithPath(JavaDefined)(JavaDefinedRef.resolveToSymbol)
   }
@@ -203,7 +210,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val boxedSym = resolve(BoxedCons / name"boxed")
 
-    val (AppliedType(ConsRef @ _: Symbolic, _)) = boxedSym.tree.tpe: @unchecked
+    val (AppliedType(ConsRef @ _: Symbolic, _)) = boxedSym.declaredType: @unchecked
 
     assertIsSymbolWithPath(::)(ConsRef.resolveToSymbol)
   }

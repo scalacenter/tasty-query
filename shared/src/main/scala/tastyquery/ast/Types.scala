@@ -44,6 +44,7 @@ object Types {
   private def javalangDot(name: TypeName): Type =
     TypeRef(javalangPackage, name)
 
+  def AnyType: Type = scalaDot(tpnme.Any)
   def NothingType: Type = scalaDot(tpnme.Nothing)
   def NullType: Type = scalaDot(tpnme.Null)
 
@@ -228,7 +229,7 @@ object Types {
     override def underlying(using ctx: BaseContext): Type = {
       val termSymbol = resolveToSymbol
       try {
-        termSymbol.thisType
+        termSymbol.declaredType
       } catch {
         case e =>
           val msg = e.getMessage
@@ -323,6 +324,11 @@ object Types {
   case class ExprType(resType: Type) extends TypeProxy with MethodicType {
     override def underlying(using BaseContext): Type = resType
   }
+
+  case class MethodType(paramNames: List[TermName], paramTypes: List[Type], resultType: Type) extends MethodicType
+
+  case class PolyType(paramNames: List[TypeName], paramTypeBounds: List[TypeBounds], resultType: Type)
+      extends MethodicType
 
   /** Encapsulates the binders associated with a TypeParamRef. */
   opaque type Binders = TypeLambda
