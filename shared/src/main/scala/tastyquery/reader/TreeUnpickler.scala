@@ -440,7 +440,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
   def readTerms(end: Addr)(using FileContext): List[Tree] =
     reader.until(end)(readTerm)
 
-  extension [T <: Tree](tree: T)
+  extension [T <: DefTree](tree: T)
     /** Adds `tree` to the `symbol`, returning the tree.
       * @todo remove and assign tree to symbol in ctor of tree
       */

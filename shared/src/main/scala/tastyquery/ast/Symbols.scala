@@ -3,7 +3,7 @@ package tastyquery.ast
 import scala.collection.mutable
 import tastyquery.ast.Names.{Name, TermName, SignedName, SimpleName, QualifiedName, TypeName, SuffixedName, nme}
 import dotty.tools.tasty.TastyFormat.NameTags
-import tastyquery.ast.Trees.{EmptyTree, Tree}
+import tastyquery.ast.Trees.{DefTree, Tree}
 import tastyquery.ast.Types.*
 import tastyquery.Contexts.BaseContext
 
@@ -29,13 +29,13 @@ object Symbols {
   val NoSymbol = new RegularSymbol(nme.EmptyTermName, null)
 
   abstract class Symbol private[Symbols] (val name: Name, rawowner: Symbol | Null) {
-    protected var myTree: Tree = EmptyTree
+    protected var myTree: Option[DefTree] = None
     // overridden in package symbol
-    def withTree(t: Tree): this.type = {
-      myTree = t
+    def withTree(t: DefTree): this.type = {
+      myTree = Some(t)
       this
     }
-    final def tree: Tree = myTree
+    final def tree: Option[DefTree] = myTree
 
     private var myDeclaredType: Type | Null = null
 
@@ -198,7 +198,7 @@ object Symbols {
        */
       getDeclInternal(packageName).map(_.asInstanceOf[PackageClassSymbol])
 
-    override def withTree(t: Tree): PackageClassSymbol.this.type = throw new UnsupportedOperationException(
+    override def withTree(t: DefTree): PackageClassSymbol.this.type = throw new UnsupportedOperationException(
       s"Multiple trees correspond to one package, a single tree cannot be assigned"
     )
   }

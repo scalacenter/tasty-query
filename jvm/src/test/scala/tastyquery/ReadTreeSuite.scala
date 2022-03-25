@@ -70,7 +70,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
               )
               // tree of package symbols is never set, because one package symbol corresponds to multiple trees
               // (defined in different files)
-            ) if isJavaLangObject.isDefinedAt(parent) && s.tree == EmptyTree =>
+            ) if isJavaLangObject.isDefinedAt(parent) && s.tree.isEmpty =>
       }: StructureCheck
     }.isDefinedAt(clue(unpickle(empty_class / tname"EmptyClass"))))
   }
@@ -194,7 +194,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             TypeIdent(TypeName(SimpleName("Int"))),
             Ident(SimpleName("x")),
             defSymbol
-          ) if valSymbol.tree.isInstanceOf[ValDef] && defSymbol.tree.isInstanceOf[DefDef] =>
+          ) if valSymbol.tree.exists(_.isInstanceOf[ValDef]) && defSymbol.tree.exists(_.isInstanceOf[DefDef]) =>
     }
     assert(containsSubtree(identityMatch)(clue(unpickle(simple_trees / tname"IdentityMethod"))))
   }
@@ -375,7 +375,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             ),
             EmptyTree,
             body: Block
-          ) if bindSymbol.tree.isInstanceOf[Bind] =>
+          ) if bindSymbol.tree.exists(_.isInstanceOf[Bind]) =>
     }
     assert(containsSubtree(guardWithAlternatives)(clue(tree)))
   }
@@ -585,7 +585,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int")))),
             Literal(Constant(1)),
             symbol
-          ) if symbol.tree.isInstanceOf[ValDef] =>
+          ) if symbol.tree.exists(_.isInstanceOf[ValDef]) =>
     }
     val setterMatch: StructureCheck = {
       case DefDef(
@@ -651,7 +651,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             TypeName(SimpleName("ChildCallsParentWithDefaultParameter")),
             Template(_, List(Block(_, _)), _, _),
             symbol
-          ) if symbol.tree.isInstanceOf[Class] =>
+          ) if symbol.tree.exists(_.isInstanceOf[Class]) =>
     }
     assert(containsSubtree(blockParent)(clue(tree)))
   }
@@ -903,7 +903,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     // simple type member
     val typeMember: StructureCheck = {
       case TypeMember(TypeName(SimpleName("TypeMember")), TypeIdent(TypeName(SimpleName("Int"))), symbol)
-          if symbol.tree.isInstanceOf[TypeMember] =>
+          if symbol.tree.exists(_.isInstanceOf[TypeMember]) =>
     }
     assert(containsSubtree(typeMember)(clue(tree)))
 
@@ -1002,8 +1002,9 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             ),
             classSymbol
           )
-          if classSymbol.tree.isInstanceOf[Class] && firstTypeParamSymbol.tree
-            .isInstanceOf[TypeParam] && secondTypeParamSymbol.tree.isInstanceOf[TypeParam] =>
+          if classSymbol.tree.exists(_.isInstanceOf[Class])
+            && firstTypeParamSymbol.tree.exists(_.isInstanceOf[TypeParam])
+            && secondTypeParamSymbol.tree.exists(_.isInstanceOf[TypeParam]) =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
   }
@@ -1105,7 +1106,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
               ) :: _
             ),
             symbol
-          ) if symbol.tree.isInstanceOf[Class] =>
+          ) if symbol.tree.exists(_.isInstanceOf[Class]) =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
   }
@@ -1152,7 +1153,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
               ) :: Class(TypeName(SimpleName("NestedGeneric")), _, innerSymbol) :: _
             ),
             outerSymbol
-          ) if outerSymbol.tree.isInstanceOf[Class] && innerSymbol.tree.isInstanceOf[Class] =>
+          ) if outerSymbol.tree.exists(_.isInstanceOf[Class]) && innerSymbol.tree.exists(_.isInstanceOf[Class]) =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
 
@@ -1193,7 +1194,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
               ) :: _
             ),
             symbol
-          ) if symbol.tree.isInstanceOf[Class] =>
+          ) if symbol.tree.exists(_.isInstanceOf[Class]) =>
     }
     assert(containsSubtree(nestedClass)(clue(tree)))
   }
