@@ -102,19 +102,12 @@ object ClassfileParser {
         isScalaRaw &= !isTASTY
       }
       if isScala then
-        println(s"class file for ${structure.binaryName} is a scala 2 class")
         val annots = runtimeAnnotStart
         if annots != null then ClassKind.Scala2(structure, annots)
         else throw ReadException(s"class file for ${classRoot.simpleName} is a scala 2 class, but has no annotations")
-      else if isTASTY then
-        println(s"class file for ${structure.binaryName} is a tasty class, ignoring")
-        ClassKind.TASTy
-      else if isScalaRaw then
-        println(s"class file for ${structure.binaryName} is a scala compiler artifact, ignoring")
-        ClassKind.Artifact
-      else
-        println(s"class file for ${structure.binaryName} is a java class")
-        ClassKind.Java(structure)
+      else if isTASTY then ClassKind.TASTy
+      else if isScalaRaw then ClassKind.Artifact
+      else ClassKind.Java(structure)
     end process
 
     process(structure.attributes)
@@ -136,7 +129,6 @@ object ClassfileParser {
 
   private def toplevel(classRoot: ClassData)(using ClassContext): Structure = {
     val root = clsCtx.classRoot
-    println(s"loading class file for ${root.enclosingDecl.name}.${root.name} with ${classRoot.bytes.size} bytes")
 
     def headerAndStructure(reader: ClassfileReader)(using DataStream) = {
       reader.acceptHeader()

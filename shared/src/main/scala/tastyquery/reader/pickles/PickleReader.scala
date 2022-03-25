@@ -38,7 +38,6 @@ class PickleReader {
     given Index = index
     given Entries = entries
 
-    println("read pickles structure")
     Structure()
   }
 
@@ -92,8 +91,7 @@ class PickleReader {
     tag match {
       case NONEsym                 => return NoSymbol
       case EXTref | EXTMODCLASSref =>
-        // return readExtSymbol()
-        println("skipped external symbol")
+        // TODO return readExtSymbol()
         return NoSymbol
       case _ =>
     }
@@ -102,8 +100,6 @@ class PickleReader {
     val nameref = pkl.readNat()
     val name = at(nameref)(readName())
     val owner = readSymbolRef()
-
-    println(s"readSymbol(${name.toDebugString}, $owner)")
 
     val flagsRaw = pkl.readLongNat() // TODO: Decode into flags
 
