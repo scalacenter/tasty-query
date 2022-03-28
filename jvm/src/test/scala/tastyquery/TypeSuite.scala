@@ -52,7 +52,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
     val IntClass = resolve(name"scala" / tname"Int")
-    assert(xParamDef.tpe.isRef(IntClass))
+    assert(xParamDef.symbol.declaredType.isRef(IntClass))
 
     fSym.declaredType match
       case MethodType(_, List(paramTpe), resultTpe) =>
@@ -120,7 +120,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
     val IntClass = resolve(name"scala" / tname"Int")
-    assert(xParamDef.tpe.isRef(IntClass))
+    assert(xParamDef.symbol.declaredType.isRef(IntClass))
 
     var freeIdentCount = 0
 

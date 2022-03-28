@@ -98,7 +98,9 @@ object Trees {
 
   trait DefTree(val symbol: Symbol)
 
-  case class PackageDef(pid: PackageClassSymbol, stats: List[Tree]) extends Tree with DefTree(pid)
+  case class PackageDef(pid: PackageClassSymbol, stats: List[Tree]) extends Tree with DefTree(pid) {
+    override protected final def calculateType: Type = NoType
+  }
 
   case class ImportSelector(imported: Ident, renamed: Tree = EmptyTree, bound: TypeTree = EmptyTypeTree) extends Tree {
 
@@ -116,12 +118,18 @@ object Trees {
       case Ident(rename: TermName) => rename
       case _                       => name
     }
+
+    override protected final def calculateType: Type = NoType
   }
 
-  case class Import(expr: Tree, selectors: List[ImportSelector]) extends Tree
+  case class Import(expr: Tree, selectors: List[ImportSelector]) extends Tree {
+    override protected final def calculateType: Type = NoType
+  }
 
   /** import expr.selectors */
-  case class Export(expr: Tree, selectors: List[ImportSelector]) extends Tree
+  case class Export(expr: Tree, selectors: List[ImportSelector]) extends Tree {
+    override protected final def calculateType: Type = NoType
+  }
 
   /** mods class name template     or
     *  mods trait name template     or
@@ -129,7 +137,9 @@ object Trees {
     *  mods type name >: lo <: hi,          if rhs = TypeBoundsTree(lo, hi)      or
     *  mods type name >: lo <: hi = rhs     if rhs = TypeBoundsTree(lo, hi, alias) and opaque in mods
     */
-  abstract class TypeDef(name: TypeName, override val symbol: Symbol) extends Tree with DefTree(symbol)
+  abstract class TypeDef(name: TypeName, override val symbol: Symbol) extends Tree with DefTree(symbol) {
+    override protected final def calculateType: Type = NoType
+  }
 
   case class ClassDef(name: TypeName, rhs: Template, override val symbol: ClassSymbol) extends TypeDef(name, symbol)
 
@@ -166,7 +176,7 @@ object Trees {
   case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: RegularSymbol)
       extends Tree
       with DefTree(symbol) {
-    override protected def calculateType: Type = tpt.toType
+    override protected final def calculateType: Type = NoType
   }
 
   type ParamsClause = Either[List[ValDef], List[TypeParam]]
@@ -179,7 +189,9 @@ object Trees {
     rhs: Tree,
     override val symbol: RegularSymbol
   ) extends Tree
-      with DefTree(symbol)
+      with DefTree(symbol) {
+    override protected final def calculateType: Type = NoType
+  }
 
   /** name */
   abstract case class Ident(name: TermName) extends Tree
@@ -189,23 +201,23 @@ object Trees {
     * This seems to always be a wildcard.
     */
   final class FreeIdent(name: TermName, tpe: Type) extends Ident(name) {
-    myType = tpe
+    override protected final def calculateType: Type = tpe
   }
 
   /** An identifier appearing in an `import` clause; it has no type. */
   final class ImportIdent(name: TermName) extends Ident(name) {
-    myType = NoType
+    override protected final def calculateType: Type = NoType
   }
 
   abstract class SimpleRef(name: TermName, tpe: Type) extends Ident(name) {
-    myType = tpe
+    override protected final def calculateType: Type = tpe
   }
 
-  class TermRefTree(name: TermName, tpe: Type) extends SimpleRef(name, tpe)
+  final class TermRefTree(name: TermName, tpe: Type) extends SimpleRef(name, tpe)
 
   /** reference to a package, seen as a term */
-  class ReferencedPackage(override val name: TermName) extends Ident(name) {
-    override def calculateType: Type =
+  final class ReferencedPackage(override val name: TermName) extends Ident(name) {
+    override protected final def calculateType: Type =
       PackageRef(name)
 
     override def toString: String = s"ReferencedPackage($name)"
@@ -217,19 +229,20 @@ object Trees {
 
   /** qualifier.termName */
   case class Select(qualifier: Tree, name: TermName) extends Tree {
-    override def calculateType: Type =
+    override protected def calculateType: Type =
       qualifier.tpe.asInstanceOf[NamedType].select(name) // TODO: what about holes, poly functions etc?
   }
 
   class SelectIn(qualifier: Tree, name: SignedName, selectOwner: TypeRef) extends Select(qualifier, name) {
 
-    override def calculateType: Type =
+    override protected def calculateType: Type =
       selectOwner.selectIn(name, selectOwner) // TODO: refine at the prefix of the qualifier
 
     override def toString: String = s"SelectIn($qualifier, $name, $selectOwner)"
   }
 
-  /** qual.this */
+  /** `qual.this` */
+  // TODO: to assign the type if qualifier is empty, traverse the outer contexts to find the first enclosing class
   case class This(qualifier: Option[TypeIdent]) extends Tree
 
   /** C.super[mix], where qual = C.this */
