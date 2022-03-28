@@ -16,7 +16,62 @@ object Types {
 
   case class LookupIn(pre: TypeRef, sel: SignedName)
 
+  object ErasedTypeRef {
+    // TODO: improve this to match dotty:
+    // - types must be erased before converting to TypeName
+    // - use correct type erasure algorithm from Scala 3, with specialisations
+    //   for Java types and Scala 2 types (i.e. varargs, value-classes)
+    def erase(tpe: Type)(using BaseContext): TypeName =
+
+      val scalaArray = ArrayTypeUnapplied.resolveToSymbol
+
+      def specialise(arrayDims: Int, full: TermName): TermName =
+        if arrayDims == 0 then full
+        else
+          val suffix = "[]" * arrayDims
+          (full: @unchecked) match
+            case QualifiedName(NameTags.QUALIFIED, pre, name) =>
+              pre.select(name.append(suffix))
+            case name: SimpleName =>
+              name.append(suffix)
+
+      def rec(arrayDims: Int, tpe: Type): TermName = tpe.widen match
+        case AppliedType(tycon, List(targ)) if tycon.isRef(scalaArray) =>
+          targ match
+            case _: TypeBounds => // TODO: fix
+              rec(arrayDims + 1, ObjectType)
+            case targ: Type =>
+              rec(arrayDims + 1, targ)
+        case AppliedType(tycon, _) =>
+          rec(arrayDims, tycon)
+        case tpe: Symbolic =>
+          tpe.resolveToSymbol match
+            case cls: ClassSymbol =>
+              cls.erasedName.toTermName match
+                case SuffixedName(NameTags.OBJECTCLASS, full) => specialise(arrayDims, full).withObjectSuffix
+                case full                                     => specialise(arrayDims, full)
+            case sym => // TODO: abstract types
+              throw IllegalStateException(s"Cannot erase symbolic type $tpe, with symbol $sym")
+        case tpe =>
+          throw IllegalStateException(s"Cannot erase $tpe")
+
+      tpe match
+        case _: ExprType => tpnme.scalaFunction0
+        case _           => rec(0, tpe).toTypeName
+  }
+
   abstract class Type {
+
+    final def termSymbol(using BaseContext): Symbol = this match
+      case tpe: TermRef        => tpe.resolveToSymbol
+      case tpe: PackageRef     => tpe.resolveToSymbol
+      case tpe: PackageTypeRef => tpe.resolveToSymbol
+      case _                   => NoSymbol
+
+    final def widenOverloads(using BaseContext): Type =
+      this.widen match
+        case tp: TermRef => tp.underlying.widenOverloads
+        case tp          => tp
 
     /** remove singleton types, ExprTypes and AnnotatedTypes */
     final def widen(using BaseContext): Type = this match
@@ -26,6 +81,7 @@ object Types {
       case tp: SingletonType   => tp.underlying.widen
       case tp: ExprType        => tp.resType.widen
       case tp: AnnotatedType   => tp.typ.widen
+      case tp: RefinedType     => tp.parent.widen
       case tp: Application     => tp.underlying.widen
       case tp: TypeApplication => tp.underlying.widen
       case tp                  => tp
@@ -35,6 +91,8 @@ object Types {
         case tpe: NamedType       => tpe.resolveToSymbol == sym
         case tpe: Application     => tpe.underlying.isRef(sym)
         case tpe: TypeApplication => tpe.underlying.isRef(sym)
+        case tpe: AppliedType     => tpe.underlying.isRef(sym)
+        case tpe: ExprType        => tpe.underlying.isRef(sym)
         case _                    => false // todo: add ProxyType (need to fill in implementations of underlying)
       }
 
@@ -53,7 +111,7 @@ object Types {
 
   private def javalangPackage: PackageRef = PackageRef(nme.javalangPackageName)
 
-  private def scalaDot(name: TypeName): Type =
+  private def scalaDot(name: TypeName): TypeRef =
     TypeRef(scalaPackage, name)
 
   private def javalangDot(name: TypeName): Type =
@@ -62,6 +120,8 @@ object Types {
   def AnyType: Type = scalaDot(tpnme.Any)
   def NothingType: Type = scalaDot(tpnme.Nothing)
   def NullType: Type = scalaDot(tpnme.Null)
+
+  def ArrayTypeUnapplied: TypeRef = scalaDot(tpnme.Array)
 
   def UnitType: Type = scalaDot(tpnme.Unit)
   def BooleanType: Type = scalaDot(tpnme.Boolean)
@@ -74,6 +134,7 @@ object Types {
   def DoubleType: Type = scalaDot(tpnme.Double)
 
   def StringType: Type = javalangDot(tpnme.String)
+  def ObjectType: Type = javalangDot(tpnme.Object)
   def ClassTypeOf(cls: Type): Type = AppliedType(javalangDot(tpnme.Class), List(cls))
 
   // ----- Type categories ----------------------------------------------
@@ -114,6 +175,12 @@ object Types {
     def isOverloaded(using BaseContext): Boolean = false
   }
 
+  trait PathType extends TypeProxy with ValueType {
+    final def select(name: Name): NamedType =
+      if name.isTermName then TermRef(this, name)
+      else TypeRef(this, name)
+  }
+
   trait Symbolic {
     def resolveToSymbol(using BaseContext): Symbol
   }
@@ -125,7 +192,7 @@ object Types {
 
   private class Application(funTpe: Type, args: List[Type]) extends TypeProxy with ValueType {
     def underlying(using BaseContext): Type =
-      funTpe.widen match
+      funTpe.widenOverloads match
         case funTpe: MethodType =>
           // todo: check that the arguments correspond to the parameters, substitute when dependent
           funTpe.resultType
@@ -135,14 +202,14 @@ object Types {
 
   private class TypeApplication(funTpe: Type, args: List[Type]) extends TypeProxy with ValueType {
     def underlying(using BaseContext): Type =
-      funTpe.widen match
+      funTpe.widenOverloads match
         case funTpe: PolyType =>
           funTpe.resultType // todo: check that the arguments correspond to the parameters
         case tpe =>
           throw NonMethodReference(s"type application of args ${args.mkString} to $tpe")
   }
 
-  abstract class NamedType extends TypeProxy with ValueType with Symbolic {
+  abstract class NamedType extends PathType with Symbolic {
     self =>
 
     type ThisType >: this.type <: NamedType
@@ -181,10 +248,6 @@ object Types {
     def selectIn(name: SignedName, in: TypeRef): TermRef =
       TermRef(this, LookupIn(in, name))
 
-    def select(name: Name): NamedType =
-      if name.isTermName then TermRef(this, name)
-      else TypeRef(this, name)
-
     // overridden in package references
     override def resolveToSymbol(using BaseContext): Symbol = designator match {
       case sym: Symbol => sym
@@ -211,13 +274,25 @@ object Types {
             throw new SymbolLookupException(name, s"unexpected prefix type $prefix")
         }
         val sym = {
-          val symOption = prefixSym match {
+          prefixSym match
             case declaring: DeclaringSymbol =>
-              declaring.getDecl(name)
+              val candidate = declaring.getDecl(name)
+              candidate.getOrElse {
+                val msg = this match
+                  case TermRef(_, name: SignedName) if declaring.memberIsOverloaded(name) =>
+                    def debugSig(sym: Symbol): String = sym.signature match {
+                      case Some(sig) => sig.toDebugString
+                      case None      => "<Not A Method>"
+                    }
+                    val debugQueried = name.sig.toDebugString
+                    val debugCandidates = declaring.memberOverloads(name).map(debugSig).mkString("\n-  ", "\n-  ", "")
+                    s"could not resolve overload:\nQueried:\n- $debugQueried\nPossible signatures:$debugCandidates"
+                  case _ =>
+                    s"not a member of $prefixSym"
+                throw SymbolLookupException(name, msg)
+              }
             case _ =>
               throw SymbolLookupException(name, s"$prefixSym is not a package or class")
-          }
-          symOption.getOrElse(throw new SymbolLookupException(name, s"not a member of $prefixSym"))
         }
         designator = sym
         sym
@@ -232,11 +307,14 @@ object Types {
     def underlyingRef: TermRef
   }
 
+  abstract class SymResolutionProblem(msg: String, cause: Throwable | Null) extends Exception(msg, cause):
+    def this(msg: String) = this(msg, null)
+
   class CyclicReference(val kind: String) extends Exception(s"cyclic evaluation of $kind")
   class NonMethodReference(val kind: String) extends Exception(s"reference to non method type in $kind")
 
   class ReferenceResolutionError(val ref: TermRef, explanation: String, cause: Throwable | Null)
-      extends RuntimeException(
+      extends SymResolutionProblem(
         ReferenceResolutionError.addExplanation(s"Could not compute type of the term, referenced by $ref", explanation),
         cause
       ):
@@ -287,7 +365,7 @@ object Types {
   }
 
   class PackageRef(val packageName: TermName) extends NamedType with SingletonType {
-    var packageSymbol: PackageClassSymbol | Null = null
+    private var packageSymbol: PackageClassSymbol | Null = null
 
     def this(packageSym: PackageClassSymbol) =
       this(packageSym.name.toTermName)
@@ -343,7 +421,7 @@ object Types {
     override def resolveToSymbol(using BaseContext): Symbol = packageRef.resolveToSymbol
   }
 
-  case class ThisType(tref: TypeRef) extends TypeProxy with SingletonType with Symbolic {
+  case class ThisType(tref: TypeRef) extends PathType with SingletonType with Symbolic {
     override def underlying(using BaseContext): Type = ???
 
     override def resolveToSymbol(using BaseContext): Symbol = tref.resolveToSymbol

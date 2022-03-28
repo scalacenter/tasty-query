@@ -73,6 +73,8 @@ object Names {
     val Nothing: TypeName = typeName("Nothing")
     val Null: TypeName = typeName("Null")
 
+    val Array: TypeName = typeName("Array")
+
     val Unit: TypeName = typeName("Unit")
     val Boolean: TypeName = typeName("Boolean")
     val Char: TypeName = typeName("Char")
@@ -86,6 +88,8 @@ object Names {
     val String: TypeName = typeName("String")
     val Class: TypeName = typeName("Class")
     val Object: TypeName = typeName("Object")
+
+    val scalaFunction0: TypeName = nme.scalaPackageName.select(termName("Function0")).toTypeName
   }
 
   /** Create a type name from the characters in cs[offset..offset+len-1].
@@ -199,6 +203,9 @@ object Names {
     override def isEmpty: Boolean = name.length == 0
 
     override def toString: String = name
+
+    def append(s: String): SimpleName =
+      termName(s"$name$s")
   }
 
   abstract class DerivedName(val underlying: TermName) extends TermName {
@@ -225,6 +232,9 @@ object Names {
       case NameTags.EXPANDPREFIX => "$"
     }
 
+    override def toDebugString: String =
+      s"${prefix.toDebugString}[Qualified $separator $name]"
+
     override def toString: String = s"$prefix$separator$name"
   }
 
@@ -245,7 +255,7 @@ object Names {
 
     override def toDebugString: String = tag match {
       case NameTags.BODYRETAINER => ???
-      case NameTags.OBJECTCLASS  => s"$underlying[$$]"
+      case NameTags.OBJECTCLASS  => s"${underlying.toDebugString}[$$]"
     }
   }
 

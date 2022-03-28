@@ -41,6 +41,47 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
   }
 
+  test("java.lang-is-not-loaded".fail) {
+    getUnpicklingContext(name"java" / name"lang" / tname"String")
+  }
+
+  def applyOverloadedTest(name: String)(callMethod: String, paramCls: DeclarationPath)(using munit.Location): Unit =
+    test(name) {
+      val OverloadedApply = name"simple_trees" / tname"OverloadedApply"
+
+      given BaseContext = getUnpicklingContext(OverloadedApply)
+
+      val callSym = resolve(OverloadedApply / termName(callMethod))
+      val Acls = resolve(paramCls)
+      val UnitClass = resolve(name"scala" / tname"Unit")
+
+      val Some(callTree @ _: DefDef) = callSym.tree: @unchecked
+
+      var callCount = 0
+
+      callTree.walkTree { tree =>
+        tree match
+          case app @ Apply(fooRef @ Select(_, SignedName(SimpleName("foo"), _, _)), _) =>
+            callCount += 1
+            assert(app.tpe.isRef(UnitClass), clue(app)) // todo: resolve overloaded
+            val fooSym = fooRef.tpe.termSymbol
+            val List(List(aSym), _*) = fooSym.paramSymss: @unchecked
+            assert(aSym.declaredType.isRef(Acls), clues(Acls.fullName, aSym.declaredType))
+          case _ => ()
+      }
+
+      assert(callCount == 1)
+    }
+
+  applyOverloadedTest("apply-overloaded-int")("callA", name"scala" / tname"Int")
+  applyOverloadedTest("apply-overloaded-gen")("callB", name"simple_trees" / tname"OverloadedApply" / tname"Box")
+  applyOverloadedTest("apply-overloaded-nestedObj")(
+    "callC",
+    name"simple_trees" / tname"OverloadedApply" / objclass"Foo" / name"Bar"
+  )
+  applyOverloadedTest("apply-overloaded-arrayObj")("callD", name"scala" / tname"Array")
+  applyOverloadedTest("apply-overloaded-byName")("callE", name"simple_trees" / tname"OverloadedApply" / tname"Num")
+
   test("typeapply-recursive") {
     val RecApply = name"simple_trees" / tname"RecApply"
 

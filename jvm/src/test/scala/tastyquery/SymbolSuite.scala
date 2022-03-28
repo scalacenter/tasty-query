@@ -155,13 +155,13 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
 
     def failingGetTopLevelClass(path: TopLevelDeclPath)(using BaseContext): Nothing =
       baseCtx.getClassIfDefined(path.fullClassName) match
-        case Some(classRoot) => fail(s"expected no class, but got $classRoot")
-        case _               => throw MissingTopLevelDecl(path)
+        case Right(classRoot) => fail(s"expected no class, but got $classRoot")
+        case Left(err)        => throw MissingTopLevelDecl(path, err)
 
     def forceTopLevel(path: TopLevelDeclPath)(using BaseContext): Unit = {
       val classRoot = baseCtx.getClassIfDefined(path.fullClassName) match
-        case Some(cls) => cls
-        case _         => throw MissingTopLevelDecl(path)
+        case Right(cls) => cls
+        case Left(err)  => throw MissingTopLevelDecl(path, err)
       try
         baseCtx.classloader.scanClass(classRoot)
         fail(s"expected failure when scanning class ${path.fullClassName}, $classRoot")

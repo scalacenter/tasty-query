@@ -3,7 +3,7 @@ package tastyquery
 import tastyquery.Contexts
 import tastyquery.Contexts.{defn, BaseContext}
 import tastyquery.ast.Trees.Tree
-import tastyquery.ast.Types.Type
+import tastyquery.ast.Types.{Type, SymResolutionProblem}
 import tastyquery.ast.Names.{TypeName, SuffixedName, nme}
 import tastyquery.reader.TastyUnpickler
 
@@ -38,8 +38,11 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean, al
     tree
   }
 
-  class MissingTopLevelDecl(path: TopLevelDeclPath)
-      extends Exception(s"Missing top-level declaration ${path.fullClassName}, perhaps it is not on the classpath?")
+  class MissingTopLevelDecl(path: TopLevelDeclPath, cause: SymResolutionProblem)
+      extends Exception(
+        s"Missing top-level declaration ${path.fullClassName}, perhaps it is not on the classpath?",
+        cause
+      )
 
   private def findTopLevelClass(path: TopLevelDeclPath)(extras: TopLevelDeclPath*): (BaseContext, ClassSymbol) = {
     val topLevelClass = path.fullClassName
@@ -48,8 +51,8 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean, al
       else testClasspath.withFilter(topLevelClass :: extras.map(_.fullClassName).toList)
     val base: BaseContext = Contexts.init(classpath)
     val classRoot = base.getClassIfDefined(topLevelClass) match
-      case Some(cls) => cls
-      case _         => throw MissingTopLevelDecl(path)
+      case Right(cls) => cls
+      case Left(err)  => throw MissingTopLevelDecl(path, err)
     if !base.classloader.scanClass(classRoot)(using base) then fail(s"could not initialise $topLevelClass, $classRoot")
     (base, classRoot)
   }

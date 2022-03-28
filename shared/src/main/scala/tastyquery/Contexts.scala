@@ -6,7 +6,7 @@ import dotty.tools.tasty.TastyBuffer.Addr
 import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
-import tastyquery.ast.Types.{Type, Symbolic, Binders, PackageRef, TypeRef}
+import tastyquery.ast.Types.{Type, Symbolic, Binders, PackageRef, TypeRef, SymResolutionProblem}
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
@@ -55,7 +55,7 @@ object Contexts {
     def withRoot(root: ClassSymbol)(using Classpaths.permissions.LoadRoot): ClassContext =
       new ClassContext(defn, classloader, root)
 
-    def getClassIfDefined(fullClassName: String): Option[ClassSymbol] =
+    def getClassIfDefined(fullClassName: String): Either[SymResolutionProblem, ClassSymbol] =
       def packageAndClass(fullClassName: String): TypeRef = {
         val lastSep = fullClassName.lastIndexOf('.')
         if (lastSep == -1) TypeRef(PackageRef(nme.EmptyPackageName), typeName(fullClassName))
@@ -66,15 +66,14 @@ object Contexts {
           TypeRef(PackageRef(classloader.toPackageName(packageName)), className)
         }
       }
-      val symOpt =
-        try Some(packageAndClass(fullClassName).resolveToSymbol(using this))
+      val symEither =
+        try Right(packageAndClass(fullClassName).resolveToSymbol(using this))
         catch
-          case NonFatal(e) =>
-            println(s"[error] Cannot resolve class $fullClassName: $e")
-            None
-      symOpt match
-        case Some(cls: ClassSymbol) => Some(cls)
-        case _                      => None
+          case e: SymResolutionProblem =>
+            Left(e)
+      (symEither: @unchecked) match
+        case Right(cls: ClassSymbol) => Right(cls)
+        case Left(err)               => Left(err) // let Right of non-class throw - it should not occur
 
     def findSymbolFromRoot(path: List[Name]): Symbol =
       @tailrec

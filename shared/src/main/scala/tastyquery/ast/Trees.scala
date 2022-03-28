@@ -230,7 +230,7 @@ object Trees {
   /** qualifier.termName */
   case class Select(qualifier: Tree, name: TermName) extends Tree {
     override protected def calculateType: Type =
-      qualifier.tpe.asInstanceOf[NamedType].select(name) // TODO: what about holes, poly functions etc?
+      qualifier.tpe.asInstanceOf[PathType].select(name) // TODO: what about holes, poly functions etc?
   }
 
   class SelectIn(qualifier: Tree, name: SignedName, selectOwner: TypeRef) extends Select(qualifier, name) {
@@ -243,7 +243,14 @@ object Trees {
 
   /** `qual.this` */
   // TODO: to assign the type if qualifier is empty, traverse the outer contexts to find the first enclosing class
-  case class This(qualifier: Option[TypeIdent]) extends Tree
+  case class This(qualifier: Option[TypeIdent]) extends Tree {
+    override protected def calculateType: Type =
+      qualifier.fold(NoType)(q =>
+        q.toType match
+          case pkg: PackageTypeRef => pkg
+          case tref: TypeRef       => ThisType(tref)
+      )
+  }
 
   /** C.super[mix], where qual = C.this */
   case class Super(qual: Tree, mix: Option[TypeIdent]) extends Tree
