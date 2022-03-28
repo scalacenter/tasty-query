@@ -31,7 +31,7 @@ object Trees {
       case ImportSelector(imported, renamed, bound) => imported :: renamed :: Nil
       case Import(expr, selectors)                  => expr :: selectors
       case Export(expr, selectors)                  => expr :: selectors
-      case Class(name, rhs, symbol)                 => rhs :: Nil
+      case ClassDef(name, rhs, symbol)              => rhs :: Nil
       case Template(constr, parents, self, body) =>
         (constr :: parents.collect { case p if p.isInstanceOf[Tree] => p.asInstanceOf[Tree] }) ++ (self :: body)
       case ValDef(name, tpt, rhs, symbol)         => rhs :: Nil
@@ -131,7 +131,7 @@ object Trees {
     */
   abstract class TypeDef(name: TypeName, override val symbol: Symbol) extends Tree with DefTree(symbol)
 
-  case class Class(name: TypeName, rhs: Template, override val symbol: ClassSymbol) extends TypeDef(name, symbol)
+  case class ClassDef(name: TypeName, rhs: Template, override val symbol: ClassSymbol) extends TypeDef(name, symbol)
 
   /** A type member has a type tree rhs if the member is defined by the user, or typebounds if it's synthetic */
   case class TypeMember(name: TypeName, rhs: TypeTree | TypeBounds, override val symbol: RegularSymbol)
@@ -151,7 +151,9 @@ object Trees {
         RealTypeBounds(NothingType, AnyType)
   }
 
-  /** extends parents { self => body }
+  /** `constr extends parents { self => body }`
+    *
+    * holder for details of a Class definition
     *
     * @param classParent -- the parent whose constructor is called.
     *                       If the template defines a class, this is its only class parent.
