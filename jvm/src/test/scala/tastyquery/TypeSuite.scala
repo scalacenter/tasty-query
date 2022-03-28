@@ -14,6 +14,33 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
   }
 
+  test("apply-recursive") {
+    val RecApply = name"simple_trees" / tname"RecApply"
+
+    given BaseContext = getUnpicklingContext(RecApply)
+
+    val gcdSym = resolve(RecApply / name"gcd")
+    val NumClass = resolve(RecApply / tname"Num")
+
+    val Some(gcdTree @ _: DefDef) = gcdSym.tree: @unchecked
+
+    var recCallCount = 0
+
+    gcdTree.walkTree { tree =>
+      tree match
+        case recCall @ Apply(gcdRef @ Select(_, SignedName(SimpleName("gcd"), _, _)), _) =>
+          recCallCount += 1
+
+          assert(gcdRef.tpe.isRef(gcdSym), clue(gcdRef))
+
+          assert(recCall.tpe.isRef(NumClass), clue(recCall))
+        case _ => ()
+    }
+
+    assert(recCallCount == 1)
+
+  }
+
   test("basic-local-val") {
     val AssignPath = name"simple_trees" / tname"Assign"
 

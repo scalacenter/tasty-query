@@ -91,6 +91,10 @@ object Symbols {
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
     final def isPackage: Boolean = this.isInstanceOf[PackageClassSymbol]
 
+    private[tastyquery] final def memberIsOverloaded(name: SignedName): Boolean = this match
+      case scope: DeclaringSymbol => scope.hasOverloads(name)
+      case _                      => false
+
     def lookup(name: Name)(using BaseContext): Option[Symbol] = this match
       case scope: DeclaringSymbol => scope.getDecl(name)
       case _                      => None
@@ -132,6 +136,11 @@ object Symbols {
             else None
           case _ => None
     }
+
+    private[Symbols] final def hasOverloads(name: SignedName): Boolean =
+      myDeclarations.get(name.underlying) match
+        case Some(decls) => decls.sizeIs > 1
+        case _           => false
 
     def getDecl(name: Name)(using BaseContext): Option[Symbol] =
       getDeclInternal(name)

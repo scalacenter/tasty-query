@@ -222,7 +222,7 @@ object Trees {
   class SelectIn(qualifier: Tree, name: SignedName, selectOwner: TypeRef) extends Select(qualifier, name) {
 
     override def calculateType: Type =
-      selectOwner.selectIn(name, selectOwner)
+      selectOwner.selectIn(name, selectOwner) // TODO: refine at the prefix of the qualifier
 
     override def toString: String = s"SelectIn($qualifier, $name, $selectOwner)"
   }
@@ -234,7 +234,9 @@ object Trees {
   case class Super(qual: Tree, mix: Option[TypeIdent]) extends Tree
 
   /** fun(args) */
-  case class Apply(fun: Tree, args: List[Tree]) extends Tree
+  case class Apply(fun: Tree, args: List[Tree]) extends Tree:
+    override def calculateType: Type =
+      MethodApplication(fun.tpe, args.map(_.tpe))
 
   /** fun[args] */
   case class TypeApply(fun: Tree, args: List[TypeTree]) extends Tree

@@ -17,13 +17,25 @@ object Types {
   case class LookupIn(pre: TypeRef, sel: SignedName)
 
   abstract class Type {
-    def isRef(sym: Symbol)(using BaseContext): Boolean =
+
+    /** remove singleton types, ExprTypes and AnnotatedTypes */
+    final def widen(using BaseContext): Type = this match
+      case _: TypeRef | _: MethodType | _: PolyType => this // fast path for most frequent cases
+      case tp: TermRef => // fast path for next most frequent case
+        if tp.isOverloaded then tp else tp.underlying.widen
+      case tp: SingletonType => tp.underlying.widen
+      case tp: ExprType      => tp.resType.widen
+      case tp: AnnotatedType => tp.typ.widen
+      case tp                => tp
+
+    final def isRef(sym: Symbol)(using BaseContext): Boolean =
       this match {
-        case tpe: NamedType => tpe.resolveToSymbol == sym
-        case _              => false
+        case tpe: NamedType   => tpe.resolveToSymbol == sym
+        case tpe: Application => tpe.underlying.isRef(sym)
+        case _                => false // todo: add ProxyType (need to fill in implementations of underlying)
       }
 
-    def isOfClass(sym: Symbol)(using BaseContext): Boolean =
+    final def isOfClass(sym: Symbol)(using BaseContext): Boolean =
       this match {
         case tpe: TermRef =>
           tpe.underlying.isOfClass(sym)
@@ -96,7 +108,7 @@ object Types {
     * single non-null value (they might contain null in addition).
     */
   trait SingletonType extends TypeProxy with ValueType {
-    def isOverloaded: Boolean = false
+    def isOverloaded(using BaseContext): Boolean = false
   }
 
   trait Symbolic {
@@ -104,6 +116,17 @@ object Types {
   }
 
   // ----- Type Proxies -------------------------------------------------
+
+  private[tastyquery] def MethodApplication(funTpe: Type, args: List[Type]): Type = Application(funTpe, args)
+
+  private class Application(funTpe: Type, args: List[Type]) extends TypeProxy with ValueType {
+    def underlying(using BaseContext): Type =
+      funTpe.widen match
+        case funTpe: MethodType =>
+          funTpe.resultType // todo: check that the arguments correspond to the parameters
+        case tpe =>
+          throw NonMethodReference(s"application of args ${args.mkString} to $tpe")
+  }
 
   abstract class NamedType extends TypeProxy with ValueType with Symbolic {
     self =>
@@ -152,7 +175,7 @@ object Types {
     override def resolveToSymbol(using BaseContext): Symbol = designator match {
       case sym: Symbol => sym
       case LookupIn(pre, name) =>
-        val sym = TypeRef(pre, name).resolveToSymbol
+        val sym = TermRef(pre, name).resolveToSymbol
         designator = sym
         sym
       case name: Name =>
@@ -195,6 +218,9 @@ object Types {
     def underlyingRef: TermRef
   }
 
+  class CyclicReference(val kind: String) extends Exception(s"cyclic evaluation of $kind")
+  class NonMethodReference(val kind: String) extends Exception(s"reference to non method type in $kind")
+
   class ReferenceResolutionError(val ref: TermRef, explanation: String, cause: Throwable | Null)
       extends RuntimeException(
         ReferenceResolutionError.addExplanation(s"Could not compute type of the term, referenced by $ref", explanation),
@@ -203,8 +229,6 @@ object Types {
     def this(ref: TermRef, explanation: String) = this(ref, explanation, null)
     def this(ref: TermRef) = this(ref, "")
   end ReferenceResolutionError
-
-  class CyclicReference(val kind: String) extends Exception(s"cyclic evaluation of $kind")
 
   object ReferenceResolutionError {
     def unapply(e: ReferenceResolutionError): Option[TermRef] = Some(e.ref)
@@ -237,7 +261,11 @@ object Types {
       }
     }
 
-    override def isOverloaded: Boolean = ???
+    override def isOverloaded(using BaseContext): Boolean =
+      myDesignator match
+        case LookupIn(pre, ref) =>
+          pre.resolveToSymbol.memberIsOverloaded(ref)
+        case _ => false
 
     def implicitName: TermName = name
 
@@ -295,7 +323,7 @@ object Types {
 
   case object NoPrefix extends Type
 
-  class PackageTypeRef(packageName: TermName) extends TypeRef(NoPrefix, packageName) {
+  class PackageTypeRef(packageName: TermName) extends TypeRef(NoPrefix, packageName.toTypeName) {
     private val packageRef = PackageRef(packageName)
 
     override def resolveToSymbol(using BaseContext): Symbol = packageRef.resolveToSymbol
