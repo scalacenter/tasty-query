@@ -41,6 +41,37 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
   }
 
+  test("typeapply-recursive") {
+    val RecApply = name"simple_trees" / tname"RecApply"
+
+    given BaseContext = getUnpicklingContext(RecApply)
+
+    val evalSym = resolve(RecApply / name"eval")
+    val ExprClass = resolve(RecApply / tname"Expr")
+
+    val evalParamss = evalSym.paramSymss
+
+    val List(List(Tsym @ _), List(eSym)) = evalParamss: @unchecked
+
+    val Some(evalTree @ _: DefDef) = evalSym.tree: @unchecked
+
+    var recCallCount = 0
+
+    evalTree.walkTree { tree =>
+      tree match
+        case recCall @ Apply(TypeApply(evalRef @ Select(_, SignedName(SimpleName("eval"), _, _)), _), _) =>
+          recCallCount += 1
+
+          assert(evalRef.tpe.isRef(evalSym), clue(evalRef))
+
+          assert(recCall.tpe.isRef(Tsym), clue(recCall))
+        case _ => ()
+    }
+
+    assert(recCallCount == 4) // 4 calls in the body of `eval`
+
+  }
+
   test("basic-local-val") {
     val AssignPath = name"simple_trees" / tname"Assign"
 

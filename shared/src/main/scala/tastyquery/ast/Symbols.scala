@@ -3,7 +3,7 @@ package tastyquery.ast
 import scala.collection.mutable
 import tastyquery.ast.Names.{Name, TermName, SignedName, SimpleName, QualifiedName, TypeName, SuffixedName, nme}
 import dotty.tools.tasty.TastyFormat.NameTags
-import tastyquery.ast.Trees.{DefTree, Tree}
+import tastyquery.ast.Trees.{DefTree, Tree, DefDef}
 import tastyquery.ast.Types.*
 import tastyquery.Contexts.BaseContext
 
@@ -63,6 +63,15 @@ object Symbols {
       case owner: Symbol => owner
       case null          => NoSymbol
     }
+
+    final def paramSymss: List[List[Symbol]] =
+      def lookup(ddef: DefDef): List[List[Symbol]] = ddef.paramLists.map {
+        case Left(params)   => params.map(_.symbol)
+        case Right(tparams) => tparams.map(_.symbol)
+      }
+      tree match
+        case Some(d: DefDef) => lookup(d)
+        case _               => Nil
 
     private[tastyquery] final def enclosingDecls: Iterator[DeclaringSymbol] =
       Iterator.iterate(enclosingDecl)(_.enclosingDecl).takeWhile(s => s.maybeOuter.exists)

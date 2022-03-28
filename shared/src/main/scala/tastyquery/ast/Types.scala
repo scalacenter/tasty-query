@@ -23,16 +23,19 @@ object Types {
       case _: TypeRef | _: MethodType | _: PolyType => this // fast path for most frequent cases
       case tp: TermRef => // fast path for next most frequent case
         if tp.isOverloaded then tp else tp.underlying.widen
-      case tp: SingletonType => tp.underlying.widen
-      case tp: ExprType      => tp.resType.widen
-      case tp: AnnotatedType => tp.typ.widen
-      case tp                => tp
+      case tp: SingletonType   => tp.underlying.widen
+      case tp: ExprType        => tp.resType.widen
+      case tp: AnnotatedType   => tp.typ.widen
+      case tp: Application     => tp.underlying.widen
+      case tp: TypeApplication => tp.underlying.widen
+      case tp                  => tp
 
     final def isRef(sym: Symbol)(using BaseContext): Boolean =
       this match {
-        case tpe: NamedType   => tpe.resolveToSymbol == sym
-        case tpe: Application => tpe.underlying.isRef(sym)
-        case _                => false // todo: add ProxyType (need to fill in implementations of underlying)
+        case tpe: NamedType       => tpe.resolveToSymbol == sym
+        case tpe: Application     => tpe.underlying.isRef(sym)
+        case tpe: TypeApplication => tpe.underlying.isRef(sym)
+        case _                    => false // todo: add ProxyType (need to fill in implementations of underlying)
       }
 
     final def isOfClass(sym: Symbol)(using BaseContext): Boolean =
@@ -118,14 +121,25 @@ object Types {
   // ----- Type Proxies -------------------------------------------------
 
   private[tastyquery] def MethodApplication(funTpe: Type, args: List[Type]): Type = Application(funTpe, args)
+  private[tastyquery] def MethodTypeApplication(funTpe: Type, args: List[Type]): Type = TypeApplication(funTpe, args)
 
   private class Application(funTpe: Type, args: List[Type]) extends TypeProxy with ValueType {
     def underlying(using BaseContext): Type =
       funTpe.widen match
         case funTpe: MethodType =>
-          funTpe.resultType // todo: check that the arguments correspond to the parameters
+          // todo: check that the arguments correspond to the parameters, substitute when dependent
+          funTpe.resultType
         case tpe =>
           throw NonMethodReference(s"application of args ${args.mkString} to $tpe")
+  }
+
+  private class TypeApplication(funTpe: Type, args: List[Type]) extends TypeProxy with ValueType {
+    def underlying(using BaseContext): Type =
+      funTpe.widen match
+        case funTpe: PolyType =>
+          funTpe.resultType // todo: check that the arguments correspond to the parameters
+        case tpe =>
+          throw NonMethodReference(s"type application of args ${args.mkString} to $tpe")
   }
 
   abstract class NamedType extends TypeProxy with ValueType with Symbolic {

@@ -254,7 +254,10 @@ object Trees {
       MethodApplication(fun.tpe, args.map(_.tpe))
 
   /** fun[args] */
-  case class TypeApply(fun: Tree, args: List[TypeTree]) extends Tree
+  case class TypeApply(fun: Tree, args: List[TypeTree]) extends Tree {
+    override protected def calculateType: Type =
+      MethodTypeApplication(fun.tpe, args.map(_.toType))
+  }
 
   /** new tpt, but no constructor call */
   case class New(tpt: TypeTree) extends Tree {
