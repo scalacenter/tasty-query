@@ -70,13 +70,13 @@ object Symbols {
     }
 
     final def paramSymss: List[List[Symbol]] =
-      def lookup(ddef: DefDef): List[List[Symbol]] = ddef.paramLists.map {
-        case Left(params)   => params.map(_.symbol)
-        case Right(tparams) => tparams.map(_.symbol)
-      }
       tree match
-        case Some(d: DefDef) => lookup(d)
-        case _               => Nil
+        case Some(ddef: DefDef) =>
+          ddef.paramLists.map {
+            case Left(params)   => params.map(_.symbol)
+            case Right(tparams) => tparams.map(_.symbol)
+          }
+        case _ => Nil
 
     private[tastyquery] final def enclosingDecls: Iterator[DeclaringSymbol] =
       Iterator.iterate(enclosingDecl)(_.enclosingDecl).takeWhile(s => s.maybeOuter.exists)

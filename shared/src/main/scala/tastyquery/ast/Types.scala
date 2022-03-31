@@ -187,14 +187,14 @@ object Types {
 
   // ----- Type Proxies -------------------------------------------------
 
-  private[tastyquery] def MethodApplication(funTpe: Type, args: List[Type]): Type = Application(funTpe, args)
-  private[tastyquery] def MethodTypeApplication(funTpe: Type, args: List[Type]): Type = TypeApplication(funTpe, args)
+  private[tastyquery] def MethodTypeApplication(funTpe: Type, args: List[Type]): Type = Application(funTpe, args)
+  private[tastyquery] def PolyTypeApplication(funTpe: Type, args: List[Type]): Type = TypeApplication(funTpe, args)
 
   private class Application(funTpe: Type, args: List[Type]) extends TypeProxy with ValueType {
     def underlying(using BaseContext): Type =
       funTpe.widenOverloads match
         case funTpe: MethodType =>
-          // todo: check that the arguments correspond to the parameters, substitute when dependent
+          // TODO: substitute parameters when dependent
           funTpe.resultType
         case tpe =>
           throw NonMethodReference(s"application of args ${args.mkString} to $tpe")
@@ -204,7 +204,7 @@ object Types {
     def underlying(using BaseContext): Type =
       funTpe.widenOverloads match
         case funTpe: PolyType =>
-          funTpe.resultType // todo: check that the arguments correspond to the parameters
+          funTpe.resultType // TODO: substitute type parameters into result
         case tpe =>
           throw NonMethodReference(s"type application of args ${args.mkString} to $tpe")
   }
