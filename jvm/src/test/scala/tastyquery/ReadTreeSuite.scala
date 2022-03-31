@@ -47,7 +47,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
         case PackageDef(
               s @ Symbol(SimpleName("empty_class")),
               List(
-                Class(
+                ClassDef(
                   TypeName(SimpleName("EmptyClass")),
                   Template(
                     // default constructor: no type params, no arguments, empty body
@@ -647,11 +647,11 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     val tree = unpickle(simple_trees / tname"ChildCallsParentWithDefaultParameter")
 
     val blockParent: StructureCheck = {
-      case Class(
+      case ClassDef(
             TypeName(SimpleName("ChildCallsParentWithDefaultParameter")),
             Template(_, List(Block(_, _)), _, _),
             symbol
-          ) if symbol.tree.exists(_.isInstanceOf[Class]) =>
+          ) if symbol.tree.exists(_.isInstanceOf[ClassDef]) =>
     }
     assert(containsSubtree(blockParent)(clue(tree)))
   }
@@ -965,7 +965,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     and the class's are just typebounds (no associated code location), hence the difference in structures
      */
     val genericClass: StructureCheck = {
-      case Class(
+      case ClassDef(
             TypeName(SimpleName("GenericClass")),
             Template(
               DefDef(
@@ -1002,7 +1002,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             ),
             classSymbol
           )
-          if classSymbol.tree.exists(_.isInstanceOf[Class])
+          if classSymbol.tree.exists(_.isInstanceOf[ClassDef])
             && firstTypeParamSymbol.tree.exists(_.isInstanceOf[TypeParam])
             && secondTypeParamSymbol.tree.exists(_.isInstanceOf[TypeParam]) =>
     }
@@ -1070,7 +1070,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
   test("class-type-bounds") {
     val tree = unpickle(simple_trees / tname"TypeBoundsOnClass")
     val genericClass: StructureCheck = {
-      case Class(
+      case ClassDef(
             TypeName(SimpleName("TypeBoundsOnClass")),
             Template(
               DefDef(
@@ -1106,7 +1106,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
               ) :: _
             ),
             symbol
-          ) if symbol.tree.exists(_.isInstanceOf[Class]) =>
+          ) if symbol.tree.exists(_.isInstanceOf[ClassDef]) =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
   }
@@ -1117,7 +1117,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     val tree = unpickle(simple_trees / tname"GenericClassWithNestedGeneric")
 
     val genericClass: StructureCheck = {
-      case Class(
+      case ClassDef(
             TypeName(SimpleName("GenericClassWithNestedGeneric")),
             Template(
               DefDef(
@@ -1150,15 +1150,15 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
                   TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
                 ),
                 _
-              ) :: Class(TypeName(SimpleName("NestedGeneric")), _, innerSymbol) :: _
+              ) :: ClassDef(TypeName(SimpleName("NestedGeneric")), _, innerSymbol) :: _
             ),
             outerSymbol
-          ) if outerSymbol.tree.exists(_.isInstanceOf[Class]) && innerSymbol.tree.exists(_.isInstanceOf[Class]) =>
+          ) if outerSymbol.tree.exists(_.isInstanceOf[ClassDef]) && innerSymbol.tree.exists(_.isInstanceOf[ClassDef]) =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
 
     val nestedClass: StructureCheck = {
-      case Class(
+      case ClassDef(
             TypeName(SimpleName("NestedGeneric")),
             Template(
               DefDef(
@@ -1194,7 +1194,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
               ) :: _
             ),
             symbol
-          ) if symbol.tree.exists(_.isInstanceOf[Class]) =>
+          ) if symbol.tree.exists(_.isInstanceOf[ClassDef]) =>
     }
     assert(containsSubtree(nestedClass)(clue(tree)))
   }

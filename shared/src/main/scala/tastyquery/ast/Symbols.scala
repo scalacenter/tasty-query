@@ -3,7 +3,7 @@ package tastyquery.ast
 import scala.collection.mutable
 import tastyquery.ast.Names.{Name, TermName, SignedName, SimpleName, QualifiedName, TypeName, SuffixedName, nme}
 import dotty.tools.tasty.TastyFormat.NameTags
-import tastyquery.ast.Trees.{DefTree, Tree}
+import tastyquery.ast.Trees.{DefTree, Tree, DefDef}
 import tastyquery.ast.Types.*
 import tastyquery.Contexts.BaseContext
 
@@ -15,7 +15,7 @@ object Symbols {
       )
 
   class SymbolLookupException(val name: Name, explanation: String = "")
-      extends RuntimeException(
+      extends SymResolutionProblem(
         SymbolLookupException.addExplanation(s"Could not find symbol for name ${name.toDebugString}", explanation)
       )
 
@@ -39,9 +39,14 @@ object Symbols {
 
     private var myDeclaredType: Type | Null = null
 
-    private[tastyquery] def withDeclaredType(tpe: Type): this.type =
-      myDeclaredType = tpe
-      this
+    private[tastyquery] final def withDeclaredType(tpe: Type): this.type =
+      val local = myDeclaredType
+      if local != null then throw new IllegalStateException(s"reassignment of declared type to $this")
+      else
+        myDeclaredType = tpe
+        this
+
+    private[tastyquery] def signature(using BaseContext): Option[Signature]
 
     def declaredType: Type =
       val local = myDeclaredType
@@ -64,6 +69,15 @@ object Symbols {
       case null          => NoSymbol
     }
 
+    final def paramSymss: List[List[Symbol]] =
+      tree match
+        case Some(ddef: DefDef) =>
+          ddef.paramLists.map {
+            case Left(params)   => params.map(_.symbol)
+            case Right(tparams) => tparams.map(_.symbol)
+          }
+        case _ => Nil
+
     private[tastyquery] final def enclosingDecls: Iterator[DeclaringSymbol] =
       Iterator.iterate(enclosingDecl)(_.enclosingDecl).takeWhile(s => s.maybeOuter.exists)
 
@@ -73,23 +87,34 @@ object Symbols {
         .takeWhile(s => s.maybeOuter.exists)
         .forall(s => s.isPackage || s.isClass && s.name.toTypeName.wrapsObjectName)
 
-    final def fullName: Name =
+    private def nameWithPrefix(addPrefix: Symbol => Boolean): Name =
       if isPackage then name
       else
         val pre = maybeOuter
-        if pre.exists && pre.isStatic then
+        if pre.exists && addPrefix(pre) then
           val withPrefix = name match
             case TypeName(SuffixedName(NameTags.OBJECTCLASS, module)) =>
-              pre.fullName.toTermName.select(module.asSimpleName).withObjectSuffix
-            case _ => pre.fullName.toTermName.select(name.asSimpleName)
+              pre.nameWithPrefix(addPrefix).toTermName.select(module.asSimpleName).withObjectSuffix
+            case _ => pre.nameWithPrefix(addPrefix).toTermName.select(name.asSimpleName)
           if name.isTypeName then withPrefix.toTypeName
           else withPrefix
         else name
+
+    final def fullName: Name = nameWithPrefix(_.isStatic)
+    private[tastyquery] final def erasedName: Name = nameWithPrefix(_ => true)
 
     final def exists: Boolean = this ne NoSymbol
 
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
     final def isPackage: Boolean = this.isInstanceOf[PackageClassSymbol]
+
+    private[tastyquery] final def memberIsOverloaded(name: SignedName): Boolean = this match
+      case scope: DeclaringSymbol => scope.hasOverloads(name)
+      case _                      => false
+
+    private[tastyquery] final def memberOverloads(name: SignedName): List[Symbol] = this match
+      case scope: DeclaringSymbol => scope.allOverloads(name)
+      case _                      => Nil
 
     def lookup(name: Name)(using BaseContext): Option[Symbol] = this match
       case scope: DeclaringSymbol => scope.getDecl(name)
@@ -109,9 +134,24 @@ object Symbols {
     def unapply(s: Symbol): Option[Name] = Some(s.name)
   }
 
-  final class RegularSymbol(override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner)
+  final class RegularSymbol(override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner) {
+    private var mySignature: Option[Signature] | Null = null
+
+    private[tastyquery] override final def signature(using BaseContext): Option[Signature] =
+      val local = mySignature
+      if local != null then local
+      else
+        val sig = declaredType match
+          case methodOrPoly: (MethodType | PolyType) => Some(Signature.fromMethodOrPoly(methodOrPoly))
+          case _                                     => None
+        mySignature = sig
+        sig
+  }
 
   abstract class DeclaringSymbol(override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner) {
+
+    private[tastyquery] override final def signature(using BaseContext): Option[Signature] = None
+
     /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
     private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
@@ -122,19 +162,43 @@ object Symbols {
 
     private[tastyquery] final def getDeclInternal(name: Name): Option[Symbol] = name match {
       case overloaded: SignedName =>
-        getDeclInternal(overloaded.underlying) // TODO: look at signature to filter overloads
+        None // need context to resolve overloads
       case name =>
         myDeclarations.get(name) match
           case Some(decls) =>
             if decls.sizeIs == 1 then Some(decls.head)
             else if decls.sizeIs > 1 then
               throw SymbolLookupException(name, s"unexpected overloads: ${decls.mkString(", ")}")
-            else None
+            else None // TODO: this should be an error
           case _ => None
     }
 
+    private[Symbols] final def getDeclBase(name: Name)(using BaseContext): Option[Symbol] = name match
+      case overloaded: SignedName =>
+        distinguishOverloaded(overloaded)
+      case name =>
+        getDeclInternal(name)
+
+    private[Symbols] final def hasOverloads(name: SignedName): Boolean =
+      myDeclarations.get(name.underlying) match
+        case Some(decls) => decls.sizeIs > 1
+        case _           => false
+
+    private[Symbols] final def allOverloads(name: SignedName): List[Symbol] =
+      myDeclarations.get(name.underlying) match
+        case Some(decls) => decls.toList
+        case _           => Nil
+
     def getDecl(name: Name)(using BaseContext): Option[Symbol] =
-      getDeclInternal(name)
+      getDeclBase(name)
+
+    private final def distinguishOverloaded(overloaded: SignedName)(using BaseContext): Option[Symbol] =
+      myDeclarations.get(overloaded.underlying) match
+        case Some(overloads) =>
+          if overloads.sizeIs == 1 then Some(overloads.head) // TODO: verify signature matches?
+          else if overloads.sizeIs > 1 then overloads.find(s => s.signature.exists(_ == overloaded.sig))
+          else None // TODO: this should be an error
+        case None => None
 
     final def resolveOverloaded(name: SignedName)(using BaseContext): Option[Symbol] =
       getDecl(name)
@@ -149,9 +213,9 @@ object Symbols {
     private[tastyquery] var initialised: Boolean = false
 
     override def getDecl(name: Name)(using BaseContext): Option[Symbol] =
-      getDeclInternal(name).orElse {
+      getDeclBase(name).orElse {
         summon[BaseContext].classloader.scanClass(this)
-        getDeclInternal(name)
+        getDeclBase(name)
       }
   }
 
@@ -180,9 +244,9 @@ object Symbols {
     }
 
     override def getDecl(name: Name)(using BaseContext): Option[Symbol] =
-      getDeclInternal(name).orElse {
+      getDeclBase(name).orElse {
         summon[BaseContext].classloader.scanPackage(this)
-        getDeclInternal(name)
+        getDeclBase(name)
       }
 
     override def lookup(name: Name)(using BaseContext): Option[Symbol] =

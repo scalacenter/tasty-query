@@ -14,6 +14,105 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
   }
 
+  test("apply-recursive") {
+    val RecApply = name"simple_trees" / tname"RecApply"
+
+    given BaseContext = getUnpicklingContext(RecApply)
+
+    val gcdSym = resolve(RecApply / name"gcd")
+    val NumClass = resolve(RecApply / tname"Num")
+
+    val Some(gcdTree @ _: DefDef) = gcdSym.tree: @unchecked
+
+    var recCallCount = 0
+
+    gcdTree.walkTree { tree =>
+      tree match
+        case recCall @ Apply(gcdRef @ Select(_, SignedName(SimpleName("gcd"), _, _)), _) =>
+          recCallCount += 1
+
+          assert(gcdRef.tpe.isRef(gcdSym), clue(gcdRef))
+
+          assert(recCall.tpe.isRef(NumClass), clue(recCall))
+        case _ => ()
+    }
+
+    assert(recCallCount == 1)
+
+  }
+
+  test("java.lang-is-not-loaded".fail) {
+    getUnpicklingContext(name"java" / name"lang" / tname"String")
+  }
+
+  def applyOverloadedTest(name: String)(callMethod: String, paramCls: DeclarationPath)(using munit.Location): Unit =
+    test(name) {
+      val OverloadedApply = name"simple_trees" / tname"OverloadedApply"
+
+      given BaseContext = getUnpicklingContext(OverloadedApply)
+
+      val callSym = resolve(OverloadedApply / termName(callMethod))
+      val Acls = resolve(paramCls)
+      val UnitClass = resolve(name"scala" / tname"Unit")
+
+      val Some(callTree @ _: DefDef) = callSym.tree: @unchecked
+
+      var callCount = 0
+
+      callTree.walkTree { tree =>
+        tree match
+          case app @ Apply(fooRef @ Select(_, SignedName(SimpleName("foo"), _, _)), _) =>
+            callCount += 1
+            assert(app.tpe.isRef(UnitClass), clue(app)) // todo: resolve overloaded
+            val fooSym = fooRef.tpe.termSymbol
+            val List(List(aSym), _*) = fooSym.paramSymss: @unchecked
+            assert(aSym.declaredType.isRef(Acls), clues(Acls.fullName, aSym.declaredType))
+          case _ => ()
+      }
+
+      assert(callCount == 1)
+    }
+
+  applyOverloadedTest("apply-overloaded-int")("callA", name"scala" / tname"Int")
+  applyOverloadedTest("apply-overloaded-gen")("callB", name"simple_trees" / tname"OverloadedApply" / tname"Box")
+  applyOverloadedTest("apply-overloaded-nestedObj")(
+    "callC",
+    name"simple_trees" / tname"OverloadedApply" / objclass"Foo" / name"Bar"
+  )
+  applyOverloadedTest("apply-overloaded-arrayObj")("callD", name"scala" / tname"Array")
+  applyOverloadedTest("apply-overloaded-byName")("callE", name"simple_trees" / tname"OverloadedApply" / tname"Num")
+
+  test("typeapply-recursive") {
+    val RecApply = name"simple_trees" / tname"RecApply"
+
+    given BaseContext = getUnpicklingContext(RecApply)
+
+    val evalSym = resolve(RecApply / name"eval")
+    val ExprClass = resolve(RecApply / tname"Expr")
+
+    val evalParamss = evalSym.paramSymss
+
+    val List(List(Tsym @ _), List(eSym)) = evalParamss: @unchecked
+
+    val Some(evalTree @ _: DefDef) = evalSym.tree: @unchecked
+
+    var recCallCount = 0
+
+    evalTree.walkTree { tree =>
+      tree match
+        case recCall @ Apply(TypeApply(evalRef @ Select(_, SignedName(SimpleName("eval"), _, _)), _), _) =>
+          recCallCount += 1
+
+          assert(evalRef.tpe.isRef(evalSym), clue(evalRef))
+
+          assert(recCall.tpe.isRef(Tsym), clue(recCall))
+        case _ => ()
+    }
+
+    assert(recCallCount == 4) // 4 calls in the body of `eval`
+
+  }
+
   test("basic-local-val") {
     val AssignPath = name"simple_trees" / tname"Assign"
 
@@ -25,7 +124,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
     val IntClass = resolve(name"scala" / tname"Int")
-    assert(xParamDef.tpe.isRef(IntClass))
+    assert(xParamDef.symbol.declaredType.isRef(IntClass))
 
     fSym.declaredType match
       case MethodType(_, List(paramTpe), resultTpe) =>
@@ -93,7 +192,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
     val IntClass = resolve(name"scala" / tname"Int")
-    assert(xParamDef.tpe.isRef(IntClass))
+    assert(xParamDef.symbol.declaredType.isRef(IntClass))
 
     var freeIdentCount = 0
 
