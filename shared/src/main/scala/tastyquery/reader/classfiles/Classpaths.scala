@@ -3,7 +3,7 @@ package tastyquery.reader.classfiles
 import tastyquery.ast.Names.SimpleName
 import scala.reflect.NameTransformer
 import tastyquery.Contexts
-import tastyquery.Contexts.{BaseContext, baseCtx, ctx, defn}
+import tastyquery.Contexts.{BaseContext, baseCtx, fileCtx, defn}
 import scala.collection.mutable
 import tastyquery.ast.Names.{TermName, nme, termName, str}
 import tastyquery.ast.Symbols.PackageClassSymbol
@@ -137,7 +137,7 @@ object Classpaths {
       def enterTasty(tastyData: TastyData)(using FileContext): Boolean =
         // TODO: test reading tree from dependency not directly queried??
         val unpickler = TastyUnpickler(tastyData.bytes)
-        val trees = unpickler.unpickle(TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using ctx)
+        val trees = unpickler.unpickle(TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using fileCtx)
         if Contexts.initialisedRoot(cls) then
           topLevelTastys += cls -> trees
           true

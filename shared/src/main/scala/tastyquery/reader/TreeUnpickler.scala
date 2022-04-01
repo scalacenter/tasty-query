@@ -54,36 +54,36 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         val end = reader.readEnd()
         val pid = readPotentiallyShared({
           assert(reader.readByte() == TERMREFpkg, posErrorMsg)
-          val pkg = ctx.createPackageSymbolIfNew(readName)
+          val pkg = fileCtx.createPackageSymbolIfNew(readName)
           if pkg != defn.EmptyPackage then
             // can happen for symbolic packages
             assert(
-              ctx.classRoot.enclosingDecls.exists(_ == pkg),
-              s"unexpected package ${pkg.name} in owners of top level class ${ctx.classRoot.fullName}"
+              fileCtx.classRoot.enclosingDecls.exists(_ == pkg),
+              s"unexpected package ${pkg.name} in owners of top level class ${fileCtx.classRoot.fullName}"
             )
           pkg
         })
-        reader.until(end)(createSymbols()(using ctx.withOwner(pid)))
+        reader.until(end)(createSymbols()(using fileCtx.withOwner(pid)))
       case TYPEDEF =>
         val end = reader.readEnd()
         val name = readName.toTypeName
         val tag = reader.nextByte
         val factory = if tag == TEMPLATE then ClassSymbolFactory else RegularSymbolFactory
-        val newOwner = ctx.createSymbol(start, name, factory, addToDecls = ctx.owner.isClass)
-        reader.until(end)(createSymbols()(using ctx.withOwner(newOwner)))
+        val newOwner = fileCtx.createSymbol(start, name, factory, addToDecls = fileCtx.owner.isClass)
+        reader.until(end)(createSymbols()(using fileCtx.withOwner(newOwner)))
         if tag == TEMPLATE then newOwner.asInstanceOf[ClassSymbol].initialised = true
       case DEFDEF | VALDEF | PARAM | TYPEPARAM =>
         val end = reader.readEnd()
         val name = if (tag == TYPEPARAM) readName.toTypeName else readName
-        val addToDecls = tag != TYPEPARAM && ctx.owner.isClass
+        val addToDecls = tag != TYPEPARAM && fileCtx.owner.isClass
         val newSymbol =
-          ctx.createSymbol(start, name, RegularSymbolFactory, addToDecls)
-        reader.until(end)(createSymbols()(using ctx.withOwner(newSymbol)))
+          fileCtx.createSymbol(start, name, RegularSymbolFactory, addToDecls)
+        reader.until(end)(createSymbols()(using fileCtx.withOwner(newSymbol)))
       case BIND =>
         val end = reader.readEnd()
         var name: Name = readName
         if (tagFollowShared == TYPEBOUNDS) name = name.toTypeName
-        ctx.createSymbol(start, name, RegularSymbolFactory, addToDecls = false)
+        fileCtx.createSymbol(start, name, RegularSymbolFactory, addToDecls = false)
         // bind is never an owner
         reader.until(end)(createSymbols())
 
@@ -111,8 +111,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     }
   }
 
-  private def posErrorMsg(using FileContext): String = s"at address ${reader.currentAddr} in file ${ctx.getFile}"
-  private def posErrorMsg(atAddr: Addr)(using FileContext): String = s"at address $atAddr in file ${ctx.getFile}"
+  private def posErrorMsg(using FileContext): String = s"at address ${reader.currentAddr} in file ${fileCtx.getFile}"
+  private def posErrorMsg(atAddr: Addr)(using FileContext): String = s"at address $atAddr in file ${fileCtx.getFile}"
 
   def forkAt(start: Addr): TreeUnpickler =
     new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef)
@@ -177,9 +177,9 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val pid = readPotentiallyShared({
         assert(reader.readByte() == TERMREFpkg, posErrorMsg)
         // Symbol is already created during symbol creation phase
-        ctx.getPackageSymbol(readName)
+        fileCtx.getPackageSymbol(readName)
       })
-      PackageDef(pid, reader.until(packageEnd)(readTopLevelStat(using ctx.withOwner(pid))))
+      PackageDef(pid, reader.until(packageEnd)(readTopLevelStat(using fileCtx.withOwner(pid))))
     case _ => readStat
   }
 
@@ -216,11 +216,11 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val end = reader.readEnd()
       val name = readName.toTypeName
       val typedef: ClassDef | TypeMember = if (reader.nextByte == TEMPLATE) {
-        val classSymbol = ctx.getSymbol(start, ClassSymbolFactory)
-        ClassDef(name, readTemplate(using ctx.withOwner(classSymbol)), classSymbol).definesTreeOf(classSymbol)
+        val classSymbol = fileCtx.getSymbol(start, ClassSymbolFactory)
+        ClassDef(name, readTemplate(using fileCtx.withOwner(classSymbol)), classSymbol).definesTreeOf(classSymbol)
       } else {
-        val symbol = ctx.getSymbol(start, RegularSymbolFactory)
-        val localCtx = ctx.withOwner(symbol)
+        val symbol = fileCtx.getSymbol(start, RegularSymbolFactory)
+        val localCtx = fileCtx.withOwner(symbol)
         val typeBounds: TypeTree | TypeBounds =
           if tagFollowShared == TYPEBOUNDS then readTypeBounds(using localCtx)
           else readTypeTree(using localCtx)
@@ -293,11 +293,11 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
     def readTypeParam: TypeParam = {
       val start = reader.currentAddr
-      val paramSymbol = ctx.getSymbol(start, RegularSymbolFactory)
+      val paramSymbol = fileCtx.getSymbol(start, RegularSymbolFactory)
       reader.readByte()
       val end = reader.readEnd()
       val name = readName.toTypeName
-      val bounds = readTypeParamType(using ctx.withOwner(paramSymbol))
+      val bounds = readTypeParamType(using fileCtx.withOwner(paramSymbol))
       skipModifiers(end)
       TypeParam(name, bounds, paramSymbol).definesTreeOf(paramSymbol)
     }
@@ -403,8 +403,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     val end = reader.readEnd()
     val name = readName
     // Only for DefDef, but reading works for empty lists
-    val symbol = ctx.getSymbol(start, RegularSymbolFactory)
-    val insideCtx = ctx.withOwner(symbol)
+    val symbol = fileCtx.getSymbol(start, RegularSymbolFactory)
+    val insideCtx = fileCtx.withOwner(symbol)
     val params = readAllParams(using insideCtx)
     val tpt = readTypeTree(using insideCtx)
     val rhs =
@@ -554,7 +554,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
       val typ = readType
       val term = readTerm
       skipModifiers(end)
-      val symbol = ctx.getSymbol(start, RegularSymbolFactory)
+      val symbol = fileCtx.getSymbol(start, RegularSymbolFactory)
       Bind(name, term, symbol).definesTreeOf(symbol)
     case ALTERNATIVE =>
       reader.readByte()
@@ -682,8 +682,8 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
 
   def readSymRef(using FileContext): Symbol = {
     val symAddr = reader.readAddr()
-    assert(ctx.hasSymbolAt(symAddr), posErrorMsg)
-    ctx.getSymbol(symAddr)
+    assert(fileCtx.hasSymbolAt(symAddr), posErrorMsg)
+    fileCtx.getSymbol(symAddr)
   }
 
   def readTypeRef()(using FileContext): TypeRef =
@@ -781,13 +781,13 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         // cannot have symbols inside types
         TypeParam(name, bounds, NoSymbol)
       })
-      TypeLambda(params)((b: Binders) => resultUnpickler.readType(using ctx.withEnclosingBinders(lambdaAddr, b)))
+      TypeLambda(params)((b: Binders) => resultUnpickler.readType(using fileCtx.withEnclosingBinders(lambdaAddr, b)))
     case PARAMtype =>
       reader.readByte()
       reader.readEnd()
       val lambdaAddr = reader.readAddr()
       val num = reader.readNat()
-      TypeParamRef(ctx.getEnclosingBinders(lambdaAddr), num)
+      TypeParamRef(fileCtx.getEnclosingBinders(lambdaAddr), num)
     case REFINEDtype =>
       reader.readByte()
       reader.readEnd()
@@ -876,7 +876,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
         NamedTypeBoundsTree(typeName, typ)
       } else readTypeTree
       skipModifiers(end)
-      val sym = ctx.getSymbol(start, RegularSymbolFactory)
+      val sym = fileCtx.getSymbol(start, RegularSymbolFactory)
       TypeTreeBind(name, body, sym).definesTreeOf(sym)
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree
