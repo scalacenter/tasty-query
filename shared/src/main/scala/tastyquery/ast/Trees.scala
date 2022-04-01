@@ -258,13 +258,30 @@ object Trees {
 
   /** fun(args) */
   case class Apply(fun: Tree, args: List[Tree]) extends Tree:
+
+    private def resolveMethodType(funTpe: Type, args: List[Type])(using BaseContext): Type =
+      funTpe.widenOverloads match
+        case funTpe: MethodType =>
+          // TODO: substitute parameters when dependent
+          funTpe.resultType
+        case tpe =>
+          throw NonMethodReference(s"application of args ${args.mkString} to $tpe")
+
     override def calculateType(using BaseContext): Type =
-      MethodTypeApplication(fun.tpe, args.map(_.tpe))
+      resolveMethodType(fun.tpe, args.map(_.tpe))
 
   /** fun[args] */
   case class TypeApply(fun: Tree, args: List[TypeTree]) extends Tree {
+
+    private def resolvePolyType(funTpe: Type, args: List[Type])(using BaseContext): Type =
+      funTpe.widenOverloads match
+        case funTpe: PolyType =>
+          funTpe.resultType // TODO: substitute type parameters into result
+        case tpe =>
+          throw NonMethodReference(s"type application of args ${args.mkString} to $tpe")
+
     override protected def calculateType(using BaseContext): Type =
-      PolyTypeApplication(fun.tpe, args.map(_.toType))
+      resolvePolyType(fun.tpe, args.map(_.toType))
   }
 
   /** new tpt, but no constructor call */
