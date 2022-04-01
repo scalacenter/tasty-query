@@ -421,7 +421,7 @@ class TreeUnpickler(protected val reader: TastyReader, nameAtRef: NameTable) {
     }
   }
 
-  private def makeDefDefType(paramLists: List[ParamsClause], resultTpt: TypeTree): Type =
+  private def makeDefDefType(paramLists: List[ParamsClause], resultTpt: TypeTree)(using BaseContext): Type =
     def rec(paramLists: List[ParamsClause]): Type =
       paramLists match
         case Left(params) :: rest =>
