@@ -79,7 +79,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     "callC",
     name"simple_trees" / tname"OverloadedApply" / objclass"Foo" / name"Bar"
   )
-  applyOverloadedTest("apply-overloaded-arrayObj")("callD", name"scala" / tname"Array")
+  // applyOverloadedTest("apply-overloaded-arrayObj")("callD", name"scala" / tname"Array") // TODO: re-enable when we add types to scala 2 symbols
   applyOverloadedTest("apply-overloaded-byName")("callE", name"simple_trees" / tname"OverloadedApply" / tname"Num")
 
   test("typeapply-recursive") {

@@ -18,7 +18,7 @@ import scala.util.control.NonFatal
 object Contexts {
 
   /** The current context */
-  inline def ctx(using ctx: FileContext): FileContext = ctx
+  inline def fileCtx(using ctx: FileContext): FileContext = ctx
   transparent inline def baseCtx(using baseCtx: BaseContext): BaseContext = baseCtx
   transparent inline def clsCtx(using clsCtx: ClassContext): ClassContext = clsCtx
   transparent inline def defn(using baseCtx: BaseContext): baseCtx.defn.type = baseCtx.defn
