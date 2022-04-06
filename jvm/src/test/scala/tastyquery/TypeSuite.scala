@@ -14,6 +14,21 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
   }
 
+  extension (tpe: Type | TypeBounds)
+    def typeOrNone: Type = tpe match
+      case tpe: Type       => tpe
+      case tpe: TypeBounds => NoType
+
+  extension (tpe: Type)
+    def isApplied(cls: Type => Boolean, argRefs: Seq[(Type | TypeBounds) => Boolean])(using BaseContext): Boolean =
+      tpe.widen match
+        case AppliedType(tycon, args) if cls(tycon) =>
+          args.corresponds(argRefs)((arg, argRef) => argRef(arg))
+        case _ => false
+
+    def isArrayOf(arg: (Type | TypeBounds) => Boolean)(using BaseContext): Boolean =
+      isApplied(_.isRef(resolve(name"scala" / tname"Array")), Seq(arg))
+
   test("apply-recursive") {
     val RecApply = name"simple_trees" / tname"RecApply"
 
@@ -269,6 +284,41 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val (JavaDefinedRef @ _: Symbolic) = boxedSym.declaredType: @unchecked
 
     assertIsSymbolWithPath(JavaDefined)(JavaDefinedRef.resolveToSymbol)
+  }
+
+  test("bag-of-java-definitions") {
+    val BagOfJavaDefinitions = name"javadefined" / tname"BagOfJavaDefinitions"
+
+    given BaseContext = getUnpicklingContext(BagOfJavaDefinitions)
+    val IntClass = resolve(name"scala" / tname"Int")
+    val UnitClass = resolve(name"scala" / tname"Unit")
+
+    def testDef(path: DeclarationPath)(op: Symbol => Unit): Unit =
+      op(resolve(path))
+
+    testDef(BagOfJavaDefinitions / name"x") { x =>
+      assert(x.declaredType.isRef(IntClass))
+    }
+
+    testDef(BagOfJavaDefinitions / name"printX") { printX =>
+      assert(printX.declaredType.resultType.isRef(UnitClass))
+    }
+
+    testDef(BagOfJavaDefinitions / name"<init>") { ctor =>
+      assert(ctor.declaredType.paramInfos.head.isRef(IntClass))
+      assert(ctor.declaredType.resultType.isRef(UnitClass))
+    }
+
+    testDef(BagOfJavaDefinitions / name"wrapXArray") { wrapXArray =>
+      assert(wrapXArray.declaredType.resultType.isArrayOf(_.typeOrNone.isRef(IntClass)))
+    }
+
+    testDef(BagOfJavaDefinitions / name"arrIdentity") { arrIdentity =>
+      val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
+      assert(arrIdentity.declaredType.paramInfos.head.isArrayOf(_.typeOrNone.isRef(JavaDefinedClass)))
+      assert(arrIdentity.declaredType.resultType.isArrayOf(_.typeOrNone.isRef(JavaDefinedClass)))
+    }
+
   }
 
   test("select-method-from-java-class") {

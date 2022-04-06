@@ -4,8 +4,11 @@ import scala.collection.mutable
 import tastyquery.ast.Names.{Name, TermName, SignedName, SimpleName, QualifiedName, TypeName, SuffixedName, nme}
 import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Trees.{DefTree, Tree, DefDef}
+import tastyquery.ast.Flags, Flags.FlagSet
 import tastyquery.ast.Types.*
 import tastyquery.Contexts.BaseContext
+
+import compiletime.codeOf
 
 object Symbols {
 
@@ -29,7 +32,9 @@ object Symbols {
   val NoSymbol = new RegularSymbol(nme.EmptyTermName, null)
 
   abstract class Symbol private[Symbols] (val name: Name, rawowner: Symbol | Null) {
-    protected var myTree: Option[DefTree] = None
+    private var isFlagsInitialized = false
+    private var myFlags: FlagSet = Flags.EmptyFlagSet
+    private var myTree: Option[DefTree] = None
     // overridden in package symbol
     def withTree(t: DefTree): this.type = {
       myTree = Some(t)
@@ -46,7 +51,18 @@ object Symbols {
         myDeclaredType = tpe
         this
 
+    private[tastyquery] final def withFlags(flags: FlagSet): this.type =
+      if isFlagsInitialized then throw IllegalStateException(s"reassignment of flags to $this")
+      else
+        isFlagsInitialized = true
+        myFlags = flags
+        this
+
     private[tastyquery] def signature(using BaseContext): Option[Signature]
+
+    final def flags: FlagSet =
+      if isFlagsInitialized then myFlags
+      else throw IllegalStateException(s"flags of $this have not been initialized")
 
     def declaredType: Type =
       val local = myDeclaredType
@@ -64,7 +80,7 @@ object Symbols {
         assert(false, s"cannot access owner, ${this.name} is local or not declared within any scope")
     }
 
-    private[Symbol] def maybeOuter: Symbol = rawowner match {
+    private[Symbols] def maybeOuter: Symbol = rawowner match {
       case owner: Symbol => owner
       case null          => NoSymbol
     }
@@ -76,6 +92,7 @@ object Symbols {
             case Left(params)   => params.map(_.symbol)
             case Right(tparams) => tparams.map(_.symbol)
           }
+        // TODO: java and scala 2 methods do not have trees
         case _ => Nil
 
     private[tastyquery] final def enclosingDecls: Iterator[DeclaringSymbol] =
@@ -211,6 +228,14 @@ object Symbols {
 
   class ClassSymbol(override val name: Name, rawowner: Symbol | Null) extends DeclaringSymbol(name, rawowner) {
     private[tastyquery] var initialised: Boolean = false
+
+    /** Get the self type of this class, as if viewed from an external package */
+    private[tastyquery] final def accessibleThisType: Type = this match
+      case pkg: PackageClassSymbol => PackageRef(pkg)
+      case cls =>
+        maybeOuter match
+          case pre: ClassSymbol => TypeRef(pre.accessibleThisType, cls)
+          case _                => TypeRef(NoPrefix, cls)
 
     override def getDecl(name: Name)(using BaseContext): Option[Symbol] =
       getDeclBase(name).orElse {

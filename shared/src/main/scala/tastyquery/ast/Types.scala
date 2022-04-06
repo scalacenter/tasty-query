@@ -62,6 +62,21 @@ object Types {
 
   abstract class Type {
 
+    final def paramInfos: List[Type] = this match
+      case tpe: MethodType => tpe.paramTypes
+      case tpe             => Nil
+
+    final def tparamBounds: List[TypeBounds] = this match
+      case tpe: PolyType => tpe.paramTypeBounds
+      case tpe           => Nil
+
+    final def resultType: Type = this match
+      case tpe: MethodType => tpe.resType
+      case tpe: PolyType   => tpe.resType
+      case tpe: ExprType   => tpe.resType
+      case tpe: TypeLambda => tpe.resType
+      case tpe             => NoType
+
     final def termSymbol(using BaseContext): Symbol = this match
       case tpe: TermRef        => tpe.resolveToSymbol
       case tpe: PackageRef     => tpe.resolveToSymbol
@@ -118,6 +133,7 @@ object Types {
   def NullType: Type = scalaDot(tpnme.Null)
 
   def ArrayTypeUnapplied: TypeRef = scalaDot(tpnme.Array)
+  def ArrayTypeOf(tpe: Type): AppliedType = AppliedType(ArrayTypeUnapplied, List(tpe))
 
   def UnitType: Type = scalaDot(tpnme.Unit)
   def BooleanType: Type = scalaDot(tpnme.Boolean)
@@ -419,10 +435,9 @@ object Types {
     override def underlying(using BaseContext): Type = resType
   }
 
-  case class MethodType(paramNames: List[TermName], paramTypes: List[Type], resultType: Type) extends MethodicType
+  case class MethodType(paramNames: List[TermName], paramTypes: List[Type], resType: Type) extends MethodicType
 
-  case class PolyType(paramNames: List[TypeName], paramTypeBounds: List[TypeBounds], resultType: Type)
-      extends MethodicType
+  case class PolyType(paramNames: List[TypeName], paramTypeBounds: List[TypeBounds], resType: Type) extends MethodicType
 
   /** Encapsulates the binders associated with a TypeParamRef. */
   opaque type Binders = TypeLambda
@@ -435,7 +450,7 @@ object Types {
       evaluating = true
       rest(this: @unchecked /* safe as long as `rest` does not call `resultType` */ ).andThen { evaluating = false }
 
-    def resultType: Type =
+    def resType: Type =
       if evaluating then throw CyclicReference(s"type lambda [$params] =>> ???")
       else myResult
 
@@ -468,9 +483,9 @@ object Types {
     override def underlying(using BaseContext): Type = parent
   }
 
-  trait TypeBounds(low: Type, high: Type)
+  trait TypeBounds(val low: Type, val high: Type)
 
-  case class RealTypeBounds(low: Type, high: Type) extends TypeBounds(low, high)
+  case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high)
 
   case class TypeAlias(alias: Type) extends TypeProxy with TypeBounds(alias, alias) {
     override def underlying(using BaseContext): Type = alias

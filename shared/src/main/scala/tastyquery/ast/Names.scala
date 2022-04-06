@@ -44,6 +44,7 @@ object Names {
     val ScalaSig = termName("ScalaSig")
     val RuntimeVisibleAnnotations = termName("RuntimeVisibleAnnotations") // RetentionPolicy.RUNTIME
     val RuntimeInvisibleAnnotations = termName("RuntimeInvisibleAnnotations") // RetentionPolicy.CLASS
+    val Signature = termName("Signature")
   }
 
   object annot {

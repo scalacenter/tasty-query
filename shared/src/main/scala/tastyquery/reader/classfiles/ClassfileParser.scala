@@ -4,12 +4,14 @@ import tastyquery.util.Forked
 import tastyquery.ast.Names.attr
 import tastyquery.ast.Names.annot
 import tastyquery.ast.Names.SimpleName
-import tastyquery.ast.Symbols.RegularSymbolFactory
+import tastyquery.ast.Symbols.{Symbol, RegularSymbolFactory}
+import tastyquery.ast.Flags
 import tastyquery.Contexts.{ClassContext, clsCtx}
 import tastyquery.reader.pickles.{Unpickler, PickleReader}
 
 import Classpaths.ClassData
 import ClassfileReader.{DataStream, ReadException, Annotation, AnnotationValue, data}
+import tastyquery.reader.classfiles.ClassfileReader.SigOrDesc
 
 object ClassfileParser {
 
@@ -52,23 +54,34 @@ object ClassfileParser {
   def loadJavaClass(structure: Structure)(using ClassContext): Either[ReadException, Unit] = {
     import structure.{reader, given}
 
-    def loadFields(fields: Forked[DataStream]): Unit =
+    def loadFields(fields: Forked[DataStream]): IndexedSeq[(Symbol, SigOrDesc)] =
       fields.use {
-        reader.readFields { name =>
-          clsCtx.createSymbol(name, RegularSymbolFactory, addToDecls = true)
+        val buf = IndexedSeq.newBuilder[(Symbol, SigOrDesc)]
+        reader.readFields { (name, sigOrDesc) =>
+          val sym = clsCtx.createSymbol(name, RegularSymbolFactory, addToDecls = true).withFlags(Flags.EmptyFlagSet)
+          buf += sym -> sigOrDesc
         }
+        buf.result()
       }
 
-    def loadMethods(methods: Forked[DataStream]): Unit =
+    def loadMethods(methods: Forked[DataStream]): IndexedSeq[(Symbol, SigOrDesc)] =
       methods.use {
-        reader.readMethods { name =>
-          clsCtx.createSymbol(name, RegularSymbolFactory, addToDecls = true)
+        val buf = IndexedSeq.newBuilder[(Symbol, SigOrDesc)]
+        reader.readMethods { (name, sigOrDesc) =>
+          val sym = clsCtx.createSymbol(name, RegularSymbolFactory, addToDecls = true).withFlags(Flags.Method)
+          buf += sym -> sigOrDesc
         }
+        buf.result()
       }
 
     ClassfileReader.read {
-      loadFields(structure.fields)
-      loadMethods(structure.methods) // TODO: move static methods to companion object
+      // TODO: read symbols first, then add types (types can force)
+      // TODO: move static methods to companion object
+      val members = loadFields(structure.fields) ++ loadMethods(structure.methods)
+      for (sym, sigOrDesc) <- members do
+        sigOrDesc match
+          case SigOrDesc.Desc(desc) => sym.withDeclaredType(Descriptors.parseDescriptor(sym, desc))
+          case SigOrDesc.Sig(sig)   => sym.withDeclaredType(JavaSignatures.parseSignature(sym, sig))
       clsCtx.classRoot.initialised = true
       clsCtx.moduleClassRoot.initialised = true
     }

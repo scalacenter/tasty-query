@@ -1,6 +1,8 @@
 package tastyquery.reader.classfiles
 
-import tastyquery.ast.Names.{SimpleName, termName, annot}
+import tastyquery.ast.Names.{SimpleName, termName, annot, attr}
+import tastyquery.ast.Symbols.Symbol
+import tastyquery.ast.Flags
 import tastyquery.util.{Forked, loop, accumulate}
 import tastyquery.util.syntax.chaining.given
 import tastyquery.reader.classfiles.Classpaths.ClassData
@@ -8,6 +10,12 @@ import tastyquery.unsafe
 import ClassfileReader.*
 import ClassfileReader.Access.*
 import tastyquery.reader.pickles.ByteCodecs
+import tastyquery.ast.Types.Type
+import tastyquery.ast.Types
+import tastyquery.Contexts.{BaseContext, baseCtx}
+import scala.annotation.switch
+import tastyquery.ast.Types.MethodType
+import tastyquery.ast.Types.ExprType
 
 final class ClassfileReader private () {
 
@@ -154,72 +162,60 @@ final class ClassfileReader private () {
     IArray.from(interfaces)
   }
 
-  def skipFields()(using DataStream): Forked[DataStream] = {
-    val fieldReader = data.fork
-    val count = data.readU2()
-    loop(count) {
-      data.skip(6) // access flags, name index, descriptor index
-      loop(data.readU2()) {
-        data.skip(2) // name index
-        data.skip(data.readU4()) // attribute length and info
-      }
-    }
-    fieldReader
-  }
+  def skipMethods()(using DataStream): Forked[DataStream] = skipMembers()
+  def skipFields()(using DataStream): Forked[DataStream] = skipMembers()
 
-  def readFields(op: SimpleName => Unit)(using DataStream, ConstantPool): Unit = {
-    val count = data.readU2()
-    loop(count) {
-      val accessFlags = data.readU2()
-      val nameIdx = pool.idx(data.readU2())
-      val name = pool.utf8(nameIdx)
-      op(name)
-      val descriptorIdx = data.readU2()
-      val attributesCount = data.readU2()
-      loop(attributesCount) {
-        data.skip(2) // name index
-        data.skip(data.readU4()) // attribute length and info
-      }
-    }
-  }
+  def skipAttributes()(using DataStream): Forked[DataStream] =
+    data.fork andThen skipAttributesInternal()
 
-  def skipMethods()(using DataStream): Forked[DataStream] = {
-    val methodReader = data.fork
-    val count = data.readU2()
-    loop(count) {
-      data.skip(6) // access flags, name index, descriptor index
-      loop(data.readU2()) {
-        data.skip(2) // name index
-        data.skip(data.readU4()) // attribute length and info
-      }
-    }
-    methodReader
-  }
-
-  def readMethods(op: SimpleName => Unit)(using DataStream, ConstantPool): Unit = {
-    val count = data.readU2()
-    loop(count) {
-      val accessFlags = data.readU2()
-      val nameIdx = pool.idx(data.readU2())
-      val name = pool.utf8(nameIdx)
-      op(name)
-      val descriptorIdx = data.readU2()
-      val attributesCount = data.readU2()
-      loop(attributesCount) {
-        data.skip(2) // name index
-        data.skip(data.readU4()) // attribute length and info
-      }
-    }
-  }
-
-  def skipAttributes()(using DataStream): Forked[DataStream] = {
-    val attrReader = data.fork
+  private def skipAttributesInternal()(using DataStream): Unit = {
     val count = data.readU2()
     loop(count) {
       data.skip(2) // name index
       data.skip(data.readU4()) // attribute length and info
     }
-    attrReader
+  }
+
+  private def skipMembers()(using DataStream): Forked[DataStream] = {
+    val reader = data.fork
+    val count = data.readU2()
+    loop(count) {
+      data.skip(6) // access flags, name index, descriptor index
+      skipAttributesInternal()
+    }
+    reader
+  }
+
+  def readFields(op: (SimpleName, SigOrDesc) => Unit)(using DataStream, ConstantPool)(using BaseContext): Unit =
+    readMembers(op)
+
+  def readMethods(op: (SimpleName, SigOrDesc) => Unit)(using DataStream, ConstantPool)(using BaseContext): Unit =
+    readMembers(op)
+
+  private def readMembers(
+    op: (SimpleName, SigOrDesc) => Unit
+  )(using DataStream, ConstantPool)(using BaseContext): Unit = {
+    val count = data.readU2()
+    loop(count) {
+      val accessFlags = data.readU2()
+      val nameIdx = pool.idx(data.readU2())
+      val name = pool.utf8(nameIdx)
+      val descriptorIdx = pool.idx(data.readU2())
+      val desc = pool.utf8(descriptorIdx).name
+      var sigOrNull: String | Null = null
+      scanAttributes {
+        case attr.Signature => // optional, only if there are generic type arguments
+          data.fork.use {
+            val sigIdx = pool.idx(data.readU2())
+            sigOrNull = pool.utf8(sigIdx).name
+          }
+          false
+        case _ => false
+      }
+      val sig = sigOrNull
+      if sig == null then op(name, SigOrDesc.Desc(desc))
+      else op(name, SigOrDesc.Sig(sig))
+    }
   }
 
   def scanAttributes(onName: DataStream ?=> SimpleName => Boolean)(using DataStream, ConstantPool): Unit = {
@@ -227,8 +223,8 @@ final class ClassfileReader private () {
     loop(count) {
       val attrNameIdx = pool.idx(data.readU2())
       val attrName = pool.utf8(attrNameIdx)
-      if onName(attrName) then return ()
       val attrLen = data.readU4()
+      if onName(attrName) then return ()
       data.skip(attrLen)
     }
   }
@@ -309,7 +305,6 @@ final class ClassfileReader private () {
       Annotation(tpe, args)
     }
 
-    val attrLen = data.readU4()
     val numAnnots = data.readU2()
     loop(numAnnots) {
       val typeIdx = pool.idx(data.readU2())
@@ -358,6 +353,10 @@ object ClassfileReader {
   inline val JavaMajorVersion = 45
   inline val JavaMinorVersion = 4
   inline val JavaMagicNumber = 0xcafebabe
+
+  enum SigOrDesc:
+    case Sig(str: String)
+    case Desc(str: String)
 
   type ConstantPool = ClassfileReader#ConstantPool & Singleton
 
