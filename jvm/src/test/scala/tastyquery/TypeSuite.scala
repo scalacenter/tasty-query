@@ -6,6 +6,9 @@ import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.*
 import tastyquery.ast.Types.*
 
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
+
 class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = true, allowDeps = true) {
   import BaseUnpicklingSuite.Decls.*
 
@@ -20,6 +23,17 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
       case tpe: TypeBounds => NoType
 
   extension (tpe: Type)
+    def isAny(using BaseContext): Boolean = tpe.isRef(resolve(name"scala" / tname"Any"))
+
+    def mixins(cls: Type => Boolean, interfaces: Seq[Type => Boolean])(using BaseContext): Boolean =
+      def parts(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
+        case AndType(tp1, tp2) => parts(tp2, parts(tp1, acc))
+        case tpe: Type         => acc += tpe
+      val all = parts(tpe.widen, mutable.ListBuffer[Type]()).toList
+      cls(all.head)
+      && interfaces.sizeCompare(all.tail) == 0
+      && all.tail.corresponds(interfaces)((tpe, test) => test(tpe))
+
     def isApplied(cls: Type => Boolean, argRefs: Seq[(Type | TypeBounds) => Boolean])(using BaseContext): Boolean =
       tpe.widen match
         case AppliedType(tycon, args) if cls(tycon) =>
@@ -319,6 +333,58 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
       assert(arrIdentity.declaredType.resultType.isArrayOf(_.typeOrNone.isRef(JavaDefinedClass)))
     }
 
+  }
+
+  test("bag-of-generic-java-definitions[signatures]") {
+    val BagOfGenJavaDefinitions = name"javadefined" / tname"BagOfGenJavaDefinitions"
+
+    given BaseContext = getUnpicklingContext(BagOfGenJavaDefinitions)
+
+    val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
+    val GenericJavaClass = resolve(name"javadefined" / tname"GenericJavaClass")
+    val JavaInterface1 = resolve(name"javadefined" / tname"JavaInterface1")
+    val JavaInterface2 = resolve(name"javadefined" / tname"JavaInterface2")
+    val ExceptionClass = resolve(name"java" / name"lang" / tname"Exception")
+
+    def testDef(path: DeclarationPath)(op: Symbol => Unit): Unit =
+      op(resolve(path))
+
+    extension (tpe: Type)
+      def isGenJavaClassOf(arg: (Type | TypeBounds) => Boolean)(using BaseContext): Boolean =
+        tpe.isApplied(_.isRef(GenericJavaClass), List(arg))
+
+    testDef(BagOfGenJavaDefinitions / name"x") { x =>
+      assert(x.declaredType.isGenJavaClassOf(_.typeOrNone.isRef(JavaDefinedClass)))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"getX") { getX =>
+      assert(getX.declaredType.resultType.isGenJavaClassOf(_.typeOrNone.isRef(JavaDefinedClass)))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"getXArray") { getXArray =>
+      assert(
+        getXArray.declaredType.resultType
+          .isArrayOf(_.typeOrNone.isGenJavaClassOf(_.typeOrNone.isRef(JavaDefinedClass)))
+      )
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"printX") { printX =>
+      assert(printX.declaredType.tparamBounds.head.high.isRef(ExceptionClass))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"recTypeParams") { recTypeParams =>
+      val List(tparamRefA, tparamRefY) = recTypeParams.declaredType.tparamRefs: @unchecked
+      assert(tparamRefA.bounds.high.isGenJavaClassOf(_ == tparamRefY))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"refInterface") { refInterface =>
+      val List(tparamRefA) = refInterface.declaredType.tparamRefs: @unchecked
+      assert(
+        tparamRefA.bounds.high
+          .mixins(cls = _.isAny, interfaces = List(_.isRef(JavaInterface1), _.isRef(JavaInterface2))),
+        clues(tparamRefA.bounds)
+      )
+    }
   }
 
   test("select-method-from-java-class") {

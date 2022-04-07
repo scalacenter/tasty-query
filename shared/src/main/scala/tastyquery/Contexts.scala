@@ -138,6 +138,7 @@ object Contexts {
 
     private[Contexts] def initializeFundamentalClasses(): Unit = {
       val scalaPackage = createPackageSymbolIfNew(nme.scalaPackageName, defn.RootPackage)
+      val javaLangPackage = createPackageSymbolIfNew(nme.javalangPackageName, defn.RootPackage)
 
       // TODO Assign superclasses and create members
 
@@ -149,6 +150,25 @@ object Contexts {
 
       val nothingClass = createClassSymbol(typeName("Nothing"), scalaPackage)
       nothingClass.initialised = true
+
+      def fakeJavaLangClassIfNotFound(name: String): ClassSymbol =
+        // TODO: add java.lang package in tests
+        val tname = typeName(name)
+        javaLangPackage.getDeclInternal(tname) match
+          case Some(sym: ClassSymbol) =>
+            sym
+          case _ =>
+            val sym = createClassSymbol(tname, javaLangPackage)
+            sym.initialised = true
+            sym
+
+      fakeJavaLangClassIfNotFound("Object")
+      fakeJavaLangClassIfNotFound("Comparable")
+      fakeJavaLangClassIfNotFound("Serializable")
+      fakeJavaLangClassIfNotFound("String")
+      fakeJavaLangClassIfNotFound("Throwable")
+      fakeJavaLangClassIfNotFound("Error")
+      fakeJavaLangClassIfNotFound("Exception")
     }
   }
 
