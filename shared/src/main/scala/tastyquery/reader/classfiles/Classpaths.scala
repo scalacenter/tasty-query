@@ -121,8 +121,8 @@ object Classpaths {
           case ClassKind.Scala2(structure, runtimeAnnotStart) =>
             ClassfileParser.loadScala2Class(structure, runtimeAnnotStart).toTry.get
             Contexts.initialisedRoot(cls)
-          case ClassKind.Java(structure) =>
-            ClassfileParser.loadJavaClass(structure).toTry.get
+          case ClassKind.Java(structure, sig) =>
+            ClassfileParser.loadJavaClass(structure, sig).toTry.get
             Contexts.initialisedRoot(cls)
           case ClassKind.TASTy =>
             entry match

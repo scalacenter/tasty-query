@@ -12,12 +12,13 @@ import tastyquery.reader.pickles.{Unpickler, PickleReader}
 import Classpaths.ClassData
 import ClassfileReader.{DataStream, ReadException, Annotation, AnnotationValue, data}
 import tastyquery.reader.classfiles.ClassfileReader.SigOrDesc
+import tastyquery.ast.Types.ClassType
 
 object ClassfileParser {
 
   enum ClassKind:
     case Scala2(structure: Structure, runtimeAnnotStart: Forked[DataStream])
-    case Java(structure: Structure)
+    case Java(structure: Structure, signatureStr: Option[String])
     case TASTy
     case Artifact
 
@@ -51,7 +52,7 @@ object ClassfileParser {
 
   }
 
-  def loadJavaClass(structure: Structure)(using ClassContext): Either[ReadException, Unit] = {
+  def loadJavaClass(structure: Structure, sig: Option[String])(using ClassContext): Either[ReadException, Unit] = {
     import structure.{reader, given}
 
     def loadFields(fields: Forked[DataStream]): IndexedSeq[(Symbol, SigOrDesc)] =
@@ -77,6 +78,10 @@ object ClassfileParser {
     ClassfileReader.read {
       // TODO: read symbols first, then add types (types can force)
       // TODO: move static methods to companion object
+      for classSig <- sig do
+        val parents = JavaSignatures.parseSignature(clsCtx.classRoot, classSig) // TODO: use as parents of class
+        val classType = ClassType(clsCtx.classRoot, parents)
+        clsCtx.classRoot.withDeclaredType(classType)
       val members = loadFields(structure.fields) ++ loadMethods(structure.methods)
       for (sym, sigOrDesc) <- members do
         sigOrDesc match
@@ -92,6 +97,7 @@ object ClassfileParser {
 
     def process(attributesStream: Forked[DataStream]): ClassKind =
       var runtimeAnnotStart: Forked[DataStream] | Null = null
+      var sigOrNull: String | Null = null
       var isScala = false
       var isTASTY = false
       var isScalaRaw = false
@@ -109,6 +115,9 @@ object ClassfileParser {
           case attr.RuntimeVisibleAnnotations =>
             runtimeAnnotStart = data.fork
             isScala
+          case attr.Signature =>
+            if !(isScala || isScalaRaw || isTASTY) then sigOrNull = data.fork.use(reader.readSignature)
+            false
           case _ =>
             false
         }
@@ -120,7 +129,9 @@ object ClassfileParser {
         else throw ReadException(s"class file for ${classRoot.simpleName} is a scala 2 class, but has no annotations")
       else if isTASTY then ClassKind.TASTy
       else if isScalaRaw then ClassKind.Artifact
-      else ClassKind.Java(structure)
+      else
+        val sig = sigOrNull
+        ClassKind.Java(structure, if sig == null then None else Some(sig))
     end process
 
     process(structure.attributes)

@@ -568,5 +568,7 @@ object Types {
 
   case class AndType(first: Type, second: Type) extends GroundType with ValueType
 
+  case class ClassType(cls: ClassSymbol, rawParents: Type) extends GroundType
+
   case object NoType extends GroundType
 }

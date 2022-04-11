@@ -25,14 +25,12 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
   extension (tpe: Type)
     def isAny(using BaseContext): Boolean = tpe.isRef(resolve(name"scala" / tname"Any"))
 
-    def mixins(cls: Type => Boolean, interfaces: Seq[Type => Boolean])(using BaseContext): Boolean =
+    def isIntersectionOf(tpes: (Type => Boolean)*)(using BaseContext): Boolean =
       def parts(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
         case AndType(tp1, tp2) => parts(tp2, parts(tp1, acc))
         case tpe: Type         => acc += tpe
       val all = parts(tpe.widen, mutable.ListBuffer[Type]()).toList
-      cls(all.head)
-      && interfaces.sizeCompare(all.tail) == 0
-      && all.tail.corresponds(interfaces)((tpe, test) => test(tpe))
+      all.corresponds(tpes)((tpe, test) => test(tpe))
 
     def isApplied(cls: Type => Boolean, argRefs: Seq[(Type | TypeBounds) => Boolean])(using BaseContext): Boolean =
       tpe.widen match
@@ -380,11 +378,43 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     testDef(BagOfGenJavaDefinitions / name"refInterface") { refInterface =>
       val List(tparamRefA) = refInterface.declaredType.tparamRefs: @unchecked
       assert(
-        tparamRefA.bounds.high
-          .mixins(cls = _.isAny, interfaces = List(_.isRef(JavaInterface1), _.isRef(JavaInterface2))),
+        tparamRefA.bounds.high.isIntersectionOf(_.isAny, _.isRef(JavaInterface1), _.isRef(JavaInterface2)),
         clues(tparamRefA.bounds)
       )
     }
+  }
+
+  test("java-class-signatures-[RecClass]") {
+    val RecClass = name"javadefined" / tname"RecClass"
+    given BaseContext = getUnpicklingContext(RecClass)
+
+    val (RecClassTpe @ _: ClassType) = resolve(RecClass).declaredType: @unchecked
+
+    val ObjectClass = resolve(name"java" / name"lang" / tname"Object")
+
+    assert(RecClassTpe.rawParents.isRef(ObjectClass))
+  }
+
+  test("java-class-signatures-[SubRecClass]") {
+    val SubRecClass = name"javadefined" / tname"SubRecClass"
+    given BaseContext = getUnpicklingContext(SubRecClass)
+
+    val (SubRecClassTpe @ _: ClassType) = resolve(SubRecClass).declaredType: @unchecked
+
+    val RecClass = resolve(name"javadefined" / tname"RecClass")
+    val JavaInterface1 = resolve(name"javadefined" / tname"JavaInterface1")
+
+    val List(tparamT) = SubRecClassTpe.cls.typeParamSyms: @unchecked
+
+    assert(
+      SubRecClassTpe.rawParents.isIntersectionOf(
+        _.isApplied(
+          _.isRef(RecClass),
+          List(_.typeOrNone.isApplied(_.isRef(SubRecClassTpe.cls), List(_.typeOrNone.isRef(tparamT))))
+        ),
+        _.isRef(JavaInterface1)
+      )
+    )
   }
 
   test("select-method-from-java-class") {

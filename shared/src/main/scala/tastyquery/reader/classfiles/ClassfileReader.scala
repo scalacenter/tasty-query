@@ -206,8 +206,7 @@ final class ClassfileReader private () {
       scanAttributes {
         case attr.Signature => // optional, only if there are generic type arguments
           data.fork.use {
-            val sigIdx = pool.idx(data.readU2())
-            sigOrNull = pool.utf8(sigIdx).name
+            sigOrNull = readSignature
           }
           false
         case _ => false
@@ -217,6 +216,10 @@ final class ClassfileReader private () {
       else op(name, SigOrDesc.Sig(sig))
     }
   }
+
+  def readSignature(using DataStream, ConstantPool): String =
+    val sigIdx = pool.idx(data.readU2())
+    pool.utf8(sigIdx).name
 
   def scanAttributes(onName: DataStream ?=> SimpleName => Boolean)(using DataStream, ConstantPool): Unit = {
     val count = data.readU2()

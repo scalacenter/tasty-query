@@ -1,6 +1,6 @@
 package javadefined;
 
-public class GenericJavaClass<T> extends RecClass<GenericJavaClass<T>> implements JavaInterface2 {
+public class GenericJavaClass<T> {
   public T x; // ()TT; // Aka can refer to type parameter of the outer class
 
   public GenericJavaClass(T x) {
@@ -9,10 +9,6 @@ public class GenericJavaClass<T> extends RecClass<GenericJavaClass<T>> implement
 
   public T getX() {
     return x;
-  }
-
-  public int compareTo(GenericJavaClass<T> x) {
-    return 0;
   }
 
   public class MyInner<U> {

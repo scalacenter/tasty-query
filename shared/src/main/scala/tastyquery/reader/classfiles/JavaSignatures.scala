@@ -1,6 +1,6 @@
 package tastyquery.reader.classfiles
 
-import tastyquery.Contexts.BaseContext
+import tastyquery.Contexts.{ClassContext, clsCtx}
 import tastyquery.ast.Types
 import tastyquery.ast.Types.*
 import tastyquery.ast.Symbols.*
@@ -15,10 +15,10 @@ import ClassfileReader.ReadException
 
 object JavaSignatures:
 
-  private type JavaSignature = Null | Binders | mutable.ListBuffer[TypeName]
+  private type JavaSignature = Null | Binders | Map[TypeName, RegularSymbol] | mutable.ListBuffer[TypeName]
 
   @throws[ReadException]
-  def parseSignature(member: Symbol, signature: String)(using BaseContext): Type =
+  def parseSignature(member: Symbol, signature: String)(using ClassContext): Type =
     var offset = 0
     var end = signature.length
     val isClass = member.isClass
@@ -33,10 +33,14 @@ object JavaSignatures:
         if env == null then cookFailure(tname, "TODO: lookup external ref")
         else
           env match
+            case map: Map[t, s] =>
+              map.asInstanceOf[Map[TypeName, RegularSymbol]].get(tname) match
+                case Some(sym) => Some(TypeRef(NoPrefix, sym))
+                case None      => cookFailure(tname, "TODO: lookup external ref")
             case pt: Binders =>
               pt.lookupRef(tname) match
                 case ref @ Some(_) => ref
-                case None          => cookFailure(tname, "TODO: lookup external ref")
+                case _             => cookFailure(tname, "TODO: lookup external ref")
             case _ => someEmptyType // we are capturing type parameter names, we will throw away the result here.
 
       def withAddedParam(tname: TypeName): Boolean = env match
@@ -197,6 +201,11 @@ object JavaSignatures:
     def typeParamsRest(env: JavaSignature): List[TypeBounds] =
       readUntil('>', typeParameter(env))
 
+    def lookaheadTypeParamNames: List[TypeName] =
+      val tparamNameBuf = mutable.ListBuffer[TypeName]()
+      val _ = lookahead(typeParamsRest(tparamNameBuf)) // lookahead to capture type param names
+      tparamNameBuf.toList
+
     def arrayType(env: JavaSignature): Option[Type] =
       if consume('[') then
         val tpe = javaTypeSignature(env)
@@ -216,6 +225,9 @@ object JavaSignatures:
     def throwsSignatureRest(env: JavaSignature): Type =
       classTypeSignature(env).orElse(typeVariableSignature(env)).getOrElse(abort)
 
+    def classType(env: JavaSignature): Type =
+      classTypeSignature(env).getOrElse(abort)
+
     def javaTypeSignature(env: JavaSignature): Type =
       referenceTypeSignature(env).orElse(baseType).getOrElse(abort)
 
@@ -232,13 +244,26 @@ object JavaSignatures:
           MethodType((0 until params.size).map(i => termName(s"x$$$i")).toList, params, ret)
         else abort
       if consume('<') then
-        val tparamNames = mutable.ListBuffer[TypeName]()
-        val _ = lookahead(typeParamsRest(tparamNames)) // lookahead to capture type param names
-        PolyType.rec(tparamNames.toList)(
+        PolyType.rec(lookaheadTypeParamNames)(
           pt => typeParamsRest(pt), // now we know the type parameters, resolve them
           pt => methodRest(pt)
         )
       else methodRest(null)
+
+    def classSignature(cls: ClassSymbol): Type =
+      def classRest(env: JavaSignature): Type =
+        def interfaces(env: JavaSignature, acc: mutable.ListBuffer[Type]): Type =
+          if available >= 1 && peek == 'L' then interfaces(env, acc.addOne(classType(env)))
+          else acc.toList.reduce(AndType(_, _))
+        val superTpe = classType(env)
+        interfaces(env, mutable.ListBuffer(superTpe))
+      if consume('<') then
+        val tparamNames = lookaheadTypeParamNames
+        val tparams = tparamNames.map(tname => clsCtx.createSymbol(tname, RegularSymbolFactory, addToDecls = false))
+        val lookup = tparamNames.lazyZip(tparams).toMap
+        cls.withTypeParams(tparams, typeParamsRest(lookup))
+        classRest(lookup)
+      else classRest(null)
 
     def fieldSignature: Type =
       ExprType(referenceType(null))
@@ -259,6 +284,8 @@ object JavaSignatures:
         else s"Unexpected character '$peek' at $offset in descriptor (remaining: `${signature.slice(offset, end)}`)"
       throw ReadException(s"$msg of $member, original: `$signature` [is method? $isMethod]")
 
-    (if isMethod then methodSignature else ExprType(fieldSignature)) andThen { if available > 0 then unconsumed }
+    (if isMethod then methodSignature
+     else if isClass then classSignature(ClassSymbolFactory.castSymbol(member))
+     else fieldSignature) andThen { if available > 0 then unconsumed }
   end parseSignature
 end JavaSignatures

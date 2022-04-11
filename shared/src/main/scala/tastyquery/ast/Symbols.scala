@@ -229,6 +229,23 @@ object Symbols {
   class ClassSymbol(override val name: Name, rawowner: Symbol | Null) extends DeclaringSymbol(name, rawowner) {
     private[tastyquery] var initialised: Boolean = false
 
+    // TODO: how do we associate some Symbols with TypeBounds, and some with Type?
+    private var myTypeParams: List[(Symbol, TypeBounds)] | Null = null
+
+    private[tastyquery] final def withTypeParams(tparams: List[Symbol], bounds: List[TypeBounds]): this.type =
+      val local = myTypeParams
+      if local != null then throw new IllegalStateException(s"reassignment of type parameters to $this")
+      else
+        myTypeParams = tparams.zip(bounds)
+        this
+
+    private def typeParamsInternal: List[(Symbol, TypeBounds)] =
+      val local = myTypeParams
+      if local == null then throw new IllegalStateException(s"expected type params for $this")
+      else local
+
+    private[tastyquery] final def typeParamSyms: List[Symbol] = typeParamsInternal.map(_(0))
+
     /** Get the self type of this class, as if viewed from an external package */
     private[tastyquery] final def accessibleThisType: Type = this match
       case pkg: PackageClassSymbol => PackageRef(pkg)
