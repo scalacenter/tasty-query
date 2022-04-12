@@ -3,6 +3,8 @@ package javadefined;
 public class BagOfJavaDefinitions {
   public int x;
 
+  public BagOfJavaDefinitions recField;
+
   public BagOfJavaDefinitions(int x) {
     this.x = x;
   }

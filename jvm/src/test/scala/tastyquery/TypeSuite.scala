@@ -18,12 +18,21 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
   }
 
   extension (tpe: Type | TypeBounds)
+    def isWildcard(using BaseContext): Boolean =
+      isBounded(_.isNothing, _.isAny)
+
     def typeOrNone: Type = tpe match
       case tpe: Type       => tpe
       case tpe: TypeBounds => NoType
 
+    def isBounded(lo: Type => Boolean, hi: Type => Boolean)(using BaseContext): Boolean = tpe match
+      case tpe: TypeBounds => lo(tpe.low) && hi(tpe.high)
+      case _               => false
+
   extension (tpe: Type)
     def isAny(using BaseContext): Boolean = tpe.isRef(resolve(name"scala" / tname"Any"))
+
+    def isNothing(using BaseContext): Boolean = tpe.isRef(resolve(name"scala" / tname"Nothing"))
 
     def isIntersectionOf(tpes: (Type => Boolean)*)(using BaseContext): Boolean =
       def parts(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
@@ -312,6 +321,10 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
       assert(x.declaredType.isRef(IntClass))
     }
 
+    testDef(BagOfJavaDefinitions / name"recField") { recField =>
+      assert(recField.declaredType.isRef(resolve(BagOfJavaDefinitions)))
+    }
+
     testDef(BagOfJavaDefinitions / name"printX") { printX =>
       assert(printX.declaredType.resultType.isRef(UnitClass))
     }
@@ -381,6 +394,26 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
         tparamRefA.bounds.high.isIntersectionOf(_.isAny, _.isRef(JavaInterface1), _.isRef(JavaInterface2)),
         clues(tparamRefA.bounds)
       )
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"genraw") { genraw =>
+      assert(genraw.declaredType.isGenJavaClassOf(_.isWildcard))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"mixgenraw") { mixgenraw =>
+      assert(mixgenraw.declaredType.isGenJavaClassOf(_.typeOrNone.isGenJavaClassOf(_.isWildcard)))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"genwild") { genwild =>
+      assert(genwild.declaredType.isGenJavaClassOf(_.isWildcard))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"gencovarient") { gencovarient =>
+      assert(gencovarient.declaredType.isGenJavaClassOf(_.isBounded(_.isNothing, _.isRef(JavaDefinedClass))))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"gencontravarient") { gencontravarient =>
+      assert(gencontravarient.declaredType.isGenJavaClassOf(_.isBounded(_.isRef(JavaDefinedClass), _.isAny)))
     }
   }
 

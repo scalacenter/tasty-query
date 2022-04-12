@@ -6,7 +6,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Trees.{DefTree, Tree, DefDef}
 import tastyquery.ast.Flags, Flags.FlagSet
 import tastyquery.ast.Types.*
-import tastyquery.Contexts.BaseContext
+import tastyquery.Contexts.{BaseContext, baseCtx}
 
 import compiletime.codeOf
 
@@ -244,7 +244,15 @@ object Symbols {
       if local == null then throw new IllegalStateException(s"expected type params for $this")
       else local
 
-    private[tastyquery] final def typeParamSyms: List[Symbol] = typeParamsInternal.map(_(0))
+    private[tastyquery] final def ensureInitialised()(using BaseContext): Unit =
+      if !initialised then baseCtx.classloader.scanClass(this).ensuring(initialised)
+
+    private[tastyquery] final def initParents: Boolean =
+      myTypeParams != null
+
+    // private[tastyquery] final def hasTypeParams: List[Symbol] = typeParamsInternal.map(_(0))
+    private[tastyquery] final def typeParamSyms: List[Symbol] =
+      typeParamsInternal.map(_(0))
 
     /** Get the self type of this class, as if viewed from an external package */
     private[tastyquery] final def accessibleThisType: Type = this match
@@ -256,7 +264,7 @@ object Symbols {
 
     override def getDecl(name: Name)(using BaseContext): Option[Symbol] =
       getDeclBase(name).orElse {
-        summon[BaseContext].classloader.scanClass(this)
+        ensureInitialised()
         getDeclBase(name)
       }
   }

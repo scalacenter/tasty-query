@@ -75,13 +75,18 @@ object ClassfileParser {
         buf.result()
       }
 
-    ClassfileReader.read {
-      // TODO: read symbols first, then add types (types can force)
-      // TODO: move static methods to companion object
-      for classSig <- sig do
-        val parents = JavaSignatures.parseSignature(clsCtx.classRoot, classSig) // TODO: use as parents of class
+    def initParents(): Unit = sig match
+      case Some(classSig) =>
+        val parents = JavaSignatures.parseSignature(clsCtx.classRoot, classSig)
         val classType = ClassType(clsCtx.classRoot, parents)
         clsCtx.classRoot.withDeclaredType(classType)
+      case _ =>
+        // TODO: make parents from superclass and interfaces
+        clsCtx.classRoot.withTypeParams(Nil, Nil)
+
+    ClassfileReader.read {
+      // TODO: move static methods to companion object
+      initParents()
       val members = loadFields(structure.fields) ++ loadMethods(structure.methods)
       for (sym, sigOrDesc) <- members do
         sigOrDesc match

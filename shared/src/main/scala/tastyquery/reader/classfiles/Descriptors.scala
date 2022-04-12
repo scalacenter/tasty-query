@@ -57,8 +57,20 @@ object Descriptors:
         val chars = charsUntil(';') // consume until ';', skip ';'
         val cls = chars.replace('/', '.').nn
         baseCtx.getClassIfDefined(cls) match
-          case Right(ref) => Some(ref.accessibleThisType) // TODO: turn into applied type if raw type
-          case Left(err)  =>
+          case Right(ref) =>
+            if !ref.initParents then
+              // we have initialised our own parents,
+              // therefore it is an external class,
+              // force it so we can see its type params.
+              ref.ensureInitialised()
+            val tpe = ref.accessibleThisType
+            val tparams = ref.typeParamSyms
+            val res =
+              if tparams.nonEmpty then
+                AppliedType(tpe, tparams.map(Function.const(RealTypeBounds(NothingType, AnyType))))
+              else tpe
+            Some(res)
+          case Left(err) =>
             // TODO: inner classes
             throw err
       else None

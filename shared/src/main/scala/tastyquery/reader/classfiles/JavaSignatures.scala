@@ -30,17 +30,24 @@ object JavaSignatures:
     extension (env: JavaSignature)
 
       def tparamRef(tname: TypeName): Some[Type] =
-        if env == null then cookFailure(tname, "TODO: lookup external ref")
+        def lookupTParam(scope: Symbol): Some[Type] =
+          if scope.isPackage then cookFailure(tname, "no enclosing scope declares it")
+          else if scope.isClass then
+            ClassSymbolFactory.castSymbol(scope).typeParamSyms.find(_.name == tname) match
+              case Some(ref) => Some(TypeRef(NoPrefix, ref))
+              case _         => lookupTParam(scope.outer)
+          else cookFailure(tname, "unexpected non-class scope")
+        if env == null then lookupTParam(member.outer)
         else
           env match
             case map: Map[t, s] =>
               map.asInstanceOf[Map[TypeName, RegularSymbol]].get(tname) match
                 case Some(sym) => Some(TypeRef(NoPrefix, sym))
-                case None      => cookFailure(tname, "TODO: lookup external ref")
+                case None      => lookupTParam(member.outer)
             case pt: Binders =>
               pt.lookupRef(tname) match
                 case ref @ Some(_) => ref
-                case _             => cookFailure(tname, "TODO: lookup external ref")
+                case _             => lookupTParam(member.outer)
             case _ => someEmptyType // we are capturing type parameter names, we will throw away the result here.
 
       def withAddedParam(tname: TypeName): Boolean = env match
@@ -164,7 +171,16 @@ object JavaSignatures:
         val clsTpe = cls.accessibleThisType
         if consume('<') then // must have '<', '>', and class type
           AppliedType(clsTpe, typeArgumentsRest(env))
-        else clsTpe
+        else
+          if !cls.initParents then
+            // we have initialised our own parents,
+            // therefore it is an external class,
+            // force it so we can see its type params.
+            cls.ensureInitialised()
+          val tparams = cls.typeParamSyms
+          if tparams.nonEmpty then
+            AppliedType(clsTpe, tparams.map(Function.const(RealTypeBounds(NothingType, AnyType))))
+          else clsTpe
       end simpleClassTypeSignature
 
       if consume('L') then // must have 'L', identifier, and ';'.
@@ -263,14 +279,17 @@ object JavaSignatures:
         val lookup = tparamNames.lazyZip(tparams).toMap
         cls.withTypeParams(tparams, typeParamsRest(lookup))
         classRest(lookup)
-      else classRest(null)
+      else
+        cls.withTypeParams(Nil, Nil)
+        classRest(null)
 
     def fieldSignature: Type =
       ExprType(referenceType(null))
 
     def cookFailure(tname: TypeName, reason: String): Nothing =
+      val path = if !isClass then s"${member.outer.erasedName}#${member.name}" else member.erasedName
       throw ReadException(
-        s"could not resolve type parameter `$tname` in signature `$signature` of $member because $reason"
+        s"could not resolve type parameter `$tname` in signature `$signature` of $path because $reason"
       )
 
     def unconsumed: Nothing =

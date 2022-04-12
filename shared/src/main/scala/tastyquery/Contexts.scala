@@ -142,14 +142,18 @@ object Contexts {
 
       // TODO Assign superclasses and create members
 
+      def initialise(cls: ClassSymbol): Unit =
+        cls.withTypeParams(Nil, Nil)
+        cls.initialised = true
+
       val anyClass = createClassSymbol(typeName("Any"), scalaPackage)
-      anyClass.initialised = true
+      initialise(anyClass)
 
       val nullClass = createClassSymbol(typeName("Null"), scalaPackage)
-      nullClass.initialised = true
+      initialise(nullClass)
 
       val nothingClass = createClassSymbol(typeName("Nothing"), scalaPackage)
-      nothingClass.initialised = true
+      initialise(nothingClass)
 
       def fakeJavaLangClassIfNotFound(name: String): ClassSymbol =
         // TODO: add java.lang package in tests
@@ -159,7 +163,7 @@ object Contexts {
             sym
           case _ =>
             val sym = createClassSymbol(tname, javaLangPackage)
-            sym.initialised = true
+            initialise(sym)
             sym
 
       fakeJavaLangClassIfNotFound("Object")

@@ -39,9 +39,9 @@ public class BagOfGenJavaDefinitions {
   // 	return null;
   // }
 
-  // public GenericJavaClass genraw; // no signature attribute
-  // public GenericJavaClass<JavaDefined> list; // Ljavadefined/GenericJavaClass<Ljavadefined/JavaDefined;>;
-  // public GenericJavaClass<?> listwild; // Ljavadefined/GenericJavaClass<*>;
-  // public GenericJavaClass<? extends JavaDefined> listcovarient; // Ljavadefined/GenericJavaClass<+Ljavadefined/JavaDefined;>;
-  // public GenericJavaClass<? super JavaDefined> listcontravarient; // Ljavadefined/GenericJavaClass<-Ljavadefined/JavaDefined;>;
+  public GenericJavaClass genraw; // no signature attribute
+  public GenericJavaClass<GenericJavaClass> mixgenraw; // Ljavadefined/GenericJavaClass<Ljavadefined/GenericJavaClass;>;
+  public GenericJavaClass<?> genwild; // Ljavadefined/GenericJavaClass<*>;
+  public GenericJavaClass<? extends JavaDefined> gencovarient; // Ljavadefined/GenericJavaClass<+Ljavadefined/JavaDefined;>;
+  public GenericJavaClass<? super JavaDefined> gencontravarient; // Ljavadefined/GenericJavaClass<-Ljavadefined/JavaDefined;>;
 }
