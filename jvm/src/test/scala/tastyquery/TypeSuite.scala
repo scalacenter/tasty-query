@@ -417,6 +417,23 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     }
   }
 
+  test("java-class-parents") {
+    val SubJavaDefined = name"javadefined" / tname"SubJavaDefined"
+
+    given BaseContext = getUnpicklingContext(SubJavaDefined)
+
+    val (SubJavaDefinedTpe @ _: ClassType) = resolve(SubJavaDefined).declaredType: @unchecked
+
+    val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
+    val JavaInterface1Class = resolve(name"javadefined" / tname"JavaInterface1")
+    val JavaInterface2Class = resolve(name"javadefined" / tname"JavaInterface2")
+
+    assert(
+      SubJavaDefinedTpe.rawParents
+        .isIntersectionOf(_.isRef(JavaDefinedClass), _.isRef(JavaInterface1Class), _.isRef(JavaInterface2Class))
+    )
+  }
+
   test("java-class-signatures-[RecClass]") {
     val RecClass = name"javadefined" / tname"RecClass"
     given BaseContext = getUnpicklingContext(RecClass)

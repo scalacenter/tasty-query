@@ -172,14 +172,8 @@ object JavaSignatures:
         if consume('<') then // must have '<', '>', and class type
           AppliedType(clsTpe, typeArgumentsRest(env))
         else
-          if !cls.initParents then
-            // we have initialised our own parents,
-            // therefore it is an external class,
-            // force it so we can see its type params.
-            cls.ensureInitialised()
-          val tparams = cls.typeParamSyms
-          if tparams.nonEmpty then
-            AppliedType(clsTpe, tparams.map(Function.const(RealTypeBounds(NothingType, AnyType))))
+          val rawArgs = Descriptors.rawTypeArguments(cls)
+          if rawArgs.nonEmpty then AppliedType(clsTpe, rawArgs)
           else clsTpe
       end simpleClassTypeSignature
 

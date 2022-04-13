@@ -11,20 +11,24 @@ import tastyquery.reader.pickles.{Unpickler, PickleReader}
 
 import Classpaths.ClassData
 import ClassfileReader.{DataStream, ReadException, Annotation, AnnotationValue, data}
-import tastyquery.reader.classfiles.ClassfileReader.SigOrDesc
-import tastyquery.ast.Types.ClassType
+import tastyquery.reader.classfiles.ClassfileReader.{SigOrSupers, SigOrDesc}
+import tastyquery.ast.Types.{AndType, ClassType, ObjectType}
+import tastyquery.reader.classfiles.ClassfileReader.ConstantInfo
+
+import tastyquery.util.syntax.chaining.given
 
 object ClassfileParser {
 
   enum ClassKind:
     case Scala2(structure: Structure, runtimeAnnotStart: Forked[DataStream])
-    case Java(structure: Structure, signatureStr: Option[String])
+    case Java(structure: Structure, classSig: SigOrSupers)
     case TASTy
     case Artifact
 
   class Structure(
     val binaryName: SimpleName,
     val reader: ClassfileReader,
+    val supers: Forked[DataStream],
     val fields: Forked[DataStream],
     val methods: Forked[DataStream],
     val attributes: Forked[DataStream]
@@ -52,7 +56,7 @@ object ClassfileParser {
 
   }
 
-  def loadJavaClass(structure: Structure, sig: Option[String])(using ClassContext): Either[ReadException, Unit] = {
+  def loadJavaClass(structure: Structure, classSig: SigOrSupers)(using ClassContext): Either[ReadException, Unit] = {
     import structure.{reader, given}
 
     def loadFields(fields: Forked[DataStream]): IndexedSeq[(Symbol, SigOrDesc)] =
@@ -75,17 +79,26 @@ object ClassfileParser {
         buf.result()
       }
 
-    def initParents(): Unit = sig match
-      case Some(classSig) =>
-        val parents = JavaSignatures.parseSignature(clsCtx.classRoot, classSig)
-        val classType = ClassType(clsCtx.classRoot, parents)
-        clsCtx.classRoot.withDeclaredType(classType)
-      case _ =>
-        // TODO: make parents from superclass and interfaces
-        clsCtx.classRoot.withTypeParams(Nil, Nil)
+    def initParents(): Unit =
+      def binaryName(cls: ConstantInfo.Class[pool.type]) =
+        pool.utf8(cls.nameIdx).name
+      val parents = classSig match
+        case SigOrSupers.Sig(sig) =>
+          JavaSignatures.parseSignature(clsCtx.classRoot, sig)
+        case SigOrSupers.Supers =>
+          structure.supers.use {
+            val superClass = reader.readSuperClass().map(binaryName)
+            val interfaces = reader.readInterfaces().map(binaryName)
+            Descriptors.parseSupers(superClass, interfaces)
+          }
+      end parents
+      val classType = ClassType(clsCtx.classRoot, parents)
+      clsCtx.classRoot.withDeclaredType(classType)
+    end initParents
 
     ClassfileReader.read {
       // TODO: move static methods to companion object
+      clsCtx.classRoot.withFlags(Flags.EmptyFlagSet) // TODO: read flags
       initParents()
       val members = loadFields(structure.fields) ++ loadMethods(structure.methods)
       for (sym, sigOrDesc) <- members do
@@ -136,7 +149,8 @@ object ClassfileParser {
       else if isScalaRaw then ClassKind.Artifact
       else
         val sig = sigOrNull
-        ClassKind.Java(structure, if sig == null then None else Some(sig))
+        val classSig = if sig != null then SigOrSupers.Sig(sig) else SigOrSupers.Supers
+        ClassKind.Java(structure, classSig)
     end process
 
     process(structure.attributes)
@@ -145,11 +159,14 @@ object ClassfileParser {
   private def structure(reader: ClassfileReader)(using reader.ConstantPool)(using DataStream): Structure = {
     val access = reader.readAccessFlags()
     val thisClass = reader.readThisClass()
-    val superClass = reader.readSuperClass()
-    val interfaces = reader.readInterfaces()
+    val supers = data.fork andThen {
+      data.skip(2) // superclass
+      data.skip(2 * data.readU2()) // interfaces
+    }
     Structure(
       binaryName = reader.pool.utf8(thisClass.nameIdx),
-      reader,
+      reader = reader,
+      supers = supers,
       fields = reader.skipFields(),
       methods = reader.skipMethods(),
       attributes = reader.skipAttributes()

@@ -361,6 +361,10 @@ object ClassfileReader {
     case Sig(str: String)
     case Desc(str: String)
 
+  enum SigOrSupers:
+    case Sig(str: String)
+    case Supers
+
   type ConstantPool = ClassfileReader#ConstantPool & Singleton
 
   object Access {

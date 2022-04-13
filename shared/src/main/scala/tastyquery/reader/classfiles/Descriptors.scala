@@ -1,6 +1,6 @@
 package tastyquery.reader.classfiles
 
-import tastyquery.Contexts.{BaseContext, baseCtx}
+import tastyquery.Contexts.{BaseContext, ClassContext, baseCtx, clsCtx}
 import tastyquery.ast.Types
 import tastyquery.ast.Types.*
 import tastyquery.ast.Symbols.*
@@ -12,6 +12,31 @@ import tastyquery.util.syntax.chaining.given
 import scala.annotation.switch
 
 object Descriptors:
+
+  def parseSupers(superClass: Option[String], interfaces: IArray[String])(using ClassContext): Type =
+    clsCtx.classRoot.withTypeParams(Nil, Nil)
+    val superRef = superClass.map(classRef).getOrElse(ObjectType)
+    interfaces.foldLeft(superRef)((parents, interface) => AndType(parents, classRef(interface)))
+
+  private[tastyquery] def rawTypeArguments(cls: ClassSymbol)(using BaseContext): List[TypeBounds] =
+    if !cls.initParents then
+      // we have initialised our own parents,
+      // therefore it is an external class,
+      // force it so we can see its type params.
+      cls.ensureInitialised()
+    cls.typeParamSyms.map(Function.const(RealTypeBounds(NothingType, AnyType)))
+
+  private def classRef(binaryName: String)(using BaseContext): Type =
+    val className = binaryName.replace('/', '.').nn
+    baseCtx.getClassIfDefined(className) match
+      case Right(ref) =>
+        val tpe = ref.accessibleThisType
+        val rawArgs = rawTypeArguments(ref)
+        if rawArgs.nonEmpty then AppliedType(tpe, rawArgs)
+        else tpe
+      case Left(err) =>
+        // TODO: inner classes
+        throw err
 
   @throws[ReadException]
   def parseDescriptor(member: Symbol, desc: String)(using BaseContext): Type =
@@ -54,25 +79,8 @@ object Descriptors:
 
     def objectType: Option[Type] =
       if consume('L') then // has 'L', ';', and class name
-        val chars = charsUntil(';') // consume until ';', skip ';'
-        val cls = chars.replace('/', '.').nn
-        baseCtx.getClassIfDefined(cls) match
-          case Right(ref) =>
-            if !ref.initParents then
-              // we have initialised our own parents,
-              // therefore it is an external class,
-              // force it so we can see its type params.
-              ref.ensureInitialised()
-            val tpe = ref.accessibleThisType
-            val tparams = ref.typeParamSyms
-            val res =
-              if tparams.nonEmpty then
-                AppliedType(tpe, tparams.map(Function.const(RealTypeBounds(NothingType, AnyType))))
-              else tpe
-            Some(res)
-          case Left(err) =>
-            // TODO: inner classes
-            throw err
+        val binaryName = charsUntil(';') // consume until ';', skip ';'
+        Some(classRef(binaryName))
       else None
 
     def arrayType: Option[Type] =
