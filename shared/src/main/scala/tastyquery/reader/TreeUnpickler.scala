@@ -734,14 +734,14 @@ class TreeUnpickler(
     }
 
   def readCaseDef[T <: CaseDef | TypeCaseDef](factory: AbstractCaseDefFactory[T])(using FileContext): T = {
+    val spn = span
     assert(reader.readByte() == CASEDEF, posErrorMsg)
     val end = reader.readEnd()
     factory match {
       case CaseDefFactory =>
         val pattern = readTerm
         val body = readTerm
-        println(pattern)
-        CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body)(pattern.span.union(body.span))
+        CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body)(spn)
       case TypeCaseDefFactory =>
         TypeCaseDef(readTypeTree, readTypeTree)
     }

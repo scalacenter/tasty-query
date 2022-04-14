@@ -147,12 +147,12 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assertEquals(
       collectCode[CaseDef](tree, code),
       List(
-        "0 => 0",
-        "1 | -1 | 2 => x + 1",
-        "7 if x == 7 => x - 1",
-        "3 | 4 | 5 if x < 5 => 0",
-        "_ if (x % 2 == 0) => x / 2",
-        "_ => -x"
+        "case 0 => 0",
+        "case 1 | -1 | 2 => x + 1",
+        "case 7 if x == 7 => x - 1",
+        "case 3 | 4 | 5 if x < 5 => 0",
+        "case _ if (x % 2 == 0) => x / 2",
+        "case _ => -x"
       )
     )
   }
