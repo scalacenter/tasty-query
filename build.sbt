@@ -50,9 +50,13 @@ lazy val tastyQuery =
         val parts = (StdLibClasspath / managedClasspath).value.seq.map(_.data)
         parts.mkString(java.io.File.pathSeparator)
       }
+      val testResourcesCode = {
+        (testSources / sourceDirectory).value.getAbsolutePath
+      }
       Seq(
         s"-Dtest-resources=$testResources",
         s"-Dstd-library=$stdLibrary",
+        s"-Dtest-resources-code=$testResourcesCode"
       )
     })
     .jvmSettings(

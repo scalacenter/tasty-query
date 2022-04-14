@@ -17,9 +17,14 @@ object TastyUnpickler {
     def unpickle(reader: TastyReader, nameAtRef: NameTable): R
   }
 
-  class TreeSectionUnpickler extends SectionUnpickler[TreeUnpickler]("ASTs") {
+  class TreeSectionUnpickler(posUnpickler: Option[PositionUnpickler]) extends SectionUnpickler[TreeUnpickler]("ASTs") {
     def unpickle(reader: TastyReader, nameAtRef: NameTable): TreeUnpickler =
-      new TreeUnpickler(reader, nameAtRef)
+      new TreeUnpickler(reader, nameAtRef, posUnpickler)
+  }
+
+  class PositionSectionUnpickler extends SectionUnpickler[PositionUnpickler]("Positions") {
+    def unpickle(reader: TastyReader, nameAtRef: NameTable): PositionUnpickler =
+      new PositionUnpickler(reader, nameAtRef)
   }
 
   class NameTable extends (NameRef => TermName) {

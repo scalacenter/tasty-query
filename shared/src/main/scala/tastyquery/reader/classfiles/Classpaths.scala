@@ -137,7 +137,12 @@ object Classpaths {
       def enterTasty(tastyData: TastyData)(using FileContext): Boolean =
         // TODO: test reading tree from dependency not directly queried??
         val unpickler = TastyUnpickler(tastyData.bytes)
-        val trees = unpickler.unpickle(TastyUnpickler.TreeSectionUnpickler()).get.unpickle(using fileCtx)
+        val trees = unpickler
+          .unpickle(
+            TastyUnpickler.TreeSectionUnpickler(unpickler.unpickle(new TastyUnpickler.PositionSectionUnpickler))
+          )
+          .get
+          .unpickle(using fileCtx)
         if Contexts.initialisedRoot(cls) then
           topLevelTastys += cls -> trees
           true

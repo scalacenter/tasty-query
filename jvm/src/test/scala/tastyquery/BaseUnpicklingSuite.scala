@@ -44,7 +44,7 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean, al
         cause
       )
 
-  private def findTopLevelClass(path: TopLevelDeclPath)(extras: TopLevelDeclPath*): (BaseContext, ClassSymbol) = {
+  protected def findTopLevelClass(path: TopLevelDeclPath)(extras: TopLevelDeclPath*): (BaseContext, ClassSymbol) = {
     val topLevelClass = path.fullClassName
     val classpath =
       if allowDeps then testClasspath
