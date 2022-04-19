@@ -244,8 +244,17 @@ object Symbols {
       if local == null then throw new IllegalStateException(s"expected type params for $this")
       else local
 
+    /** Forces the class or package to be initialised, should never be called from within the initialisation
+      * of this class or package.
+      */
     private[tastyquery] final def ensureInitialised()(using BaseContext): Unit =
-      if !initialised then baseCtx.classloader.scanClass(this).ensuring(initialised)
+      def initialiseMembers(): Unit = this match
+        case pkg: PackageClassSymbol => baseCtx.classloader.scanPackage(pkg)
+        case cls                     => baseCtx.classloader.scanClass(cls)
+      if !initialised then
+        // TODO: maybe add flag and check against if we are currently initialising this symbol?
+        initialiseMembers()
+        assert(initialised)
 
     private[tastyquery] final def initParents: Boolean =
       myTypeParams != null
@@ -256,17 +265,15 @@ object Symbols {
 
     /** Get the self type of this class, as if viewed from an external package */
     private[tastyquery] final def accessibleThisType: Type = this match
-      case pkg: PackageClassSymbol => PackageRef(pkg)
+      case pkg: PackageClassSymbol => PackageRef(pkg) // TODO: maybe we need this-type of package for package-private
       case cls =>
         maybeOuter match
           case pre: ClassSymbol => TypeRef(pre.accessibleThisType, cls)
           case _                => TypeRef(NoPrefix, cls)
 
-    override def getDecl(name: Name)(using BaseContext): Option[Symbol] =
-      getDeclBase(name).orElse {
-        ensureInitialised()
-        getDeclBase(name)
-      }
+    override final def getDecl(name: Name)(using BaseContext): Option[Symbol] =
+      ensureInitialised()
+      getDeclBase(name)
   }
 
   // TODO: typename or term name?
@@ -292,12 +299,6 @@ object Symbols {
           findPackageSymbol(prefix).flatMap(_.findPackageSymbol(packageName))
       case _ => throw IllegalArgumentException(s"Unexpected package name: $name")
     }
-
-    override def getDecl(name: Name)(using BaseContext): Option[Symbol] =
-      getDeclBase(name).orElse {
-        summon[BaseContext].classloader.scanPackage(this)
-        getDeclBase(name)
-      }
 
     override def lookup(name: Name)(using BaseContext): Option[Symbol] =
       val sel = name match {

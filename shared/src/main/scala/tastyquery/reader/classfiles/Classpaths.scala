@@ -16,6 +16,8 @@ import tastyquery.Contexts.ClassContext
 import tastyquery.Contexts.FileContext
 import tastyquery.ast.Trees.Tree
 
+import tastyquery.util.syntax.chaining.given
+
 object Classpaths {
 
   class MissingTopLevelTasty(cls: ClassSymbol) extends Exception(s"Missing TASTy for $cls")
@@ -202,8 +204,8 @@ object Classpaths {
                 tastyMap.get(cls.simpleName).map(Entry.ClassAndTasty(cls, _)).getOrElse(Entry.ClassOnly(cls))
               lookup += (clsSym -> entry) // TODO: what if someone searches for the module class first?
 
-        case _ => // assume already loaded (possible that someone is only loading from tasty file with empty classpath)
-      }
+        case _ => // probably a synthetic package that only has other packages as members. (i.e. `package java`)
+      } andThen { pkg.initialised = true }
     }
 
     def initPackages()(using baseCtx: BaseContext): Unit =
