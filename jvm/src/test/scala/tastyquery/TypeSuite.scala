@@ -6,6 +6,9 @@ import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.*
 import tastyquery.ast.Types.*
 
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
+
 class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = true, allowDeps = true) {
   import BaseUnpicklingSuite.Decls.*
 
@@ -13,6 +16,39 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val expectedSymbol = resolve(path)
     assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
   }
+
+  extension (tpe: Type | TypeBounds)
+    def isWildcard(using BaseContext): Boolean =
+      isBounded(_.isNothing, _.isAny)
+
+    def typeOrNone: Type = tpe match
+      case tpe: Type       => tpe
+      case tpe: TypeBounds => NoType
+
+    def isBounded(lo: Type => Boolean, hi: Type => Boolean)(using BaseContext): Boolean = tpe match
+      case tpe: TypeBounds => lo(tpe.low) && hi(tpe.high)
+      case _               => false
+
+  extension (tpe: Type)
+    def isAny(using BaseContext): Boolean = tpe.isRef(resolve(name"scala" / tname"Any"))
+
+    def isNothing(using BaseContext): Boolean = tpe.isRef(resolve(name"scala" / tname"Nothing"))
+
+    def isIntersectionOf(tpes: (Type => Boolean)*)(using BaseContext): Boolean =
+      def parts(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
+        case AndType(tp1, tp2) => parts(tp2, parts(tp1, acc))
+        case tpe: Type         => acc += tpe
+      val all = parts(tpe.widen, mutable.ListBuffer[Type]()).toList
+      all.corresponds(tpes)((tpe, test) => test(tpe))
+
+    def isApplied(cls: Type => Boolean, argRefs: Seq[(Type | TypeBounds) => Boolean])(using BaseContext): Boolean =
+      tpe.widen match
+        case AppliedType(tycon, args) if cls(tycon) =>
+          args.corresponds(argRefs)((arg, argRef) => argRef(arg))
+        case _ => false
+
+    def isArrayOf(arg: (Type | TypeBounds) => Boolean)(using BaseContext): Boolean =
+      isApplied(_.isRef(resolve(name"scala" / tname"Array")), Seq(arg))
 
   test("apply-recursive") {
     val RecApply = name"simple_trees" / tname"RecApply"
@@ -269,6 +305,166 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     val (JavaDefinedRef @ _: Symbolic) = boxedSym.declaredType: @unchecked
 
     assertIsSymbolWithPath(JavaDefined)(JavaDefinedRef.resolveToSymbol)
+  }
+
+  test("bag-of-java-definitions") {
+    val BagOfJavaDefinitions = name"javadefined" / tname"BagOfJavaDefinitions"
+
+    given BaseContext = getUnpicklingContext(BagOfJavaDefinitions)
+    val IntClass = resolve(name"scala" / tname"Int")
+    val UnitClass = resolve(name"scala" / tname"Unit")
+
+    def testDef(path: DeclarationPath)(op: Symbol => Unit): Unit =
+      op(resolve(path))
+
+    testDef(BagOfJavaDefinitions / name"x") { x =>
+      assert(x.declaredType.isRef(IntClass))
+    }
+
+    testDef(BagOfJavaDefinitions / name"recField") { recField =>
+      assert(recField.declaredType.isRef(resolve(BagOfJavaDefinitions)))
+    }
+
+    testDef(BagOfJavaDefinitions / name"printX") { printX =>
+      assert(printX.declaredType.resultType.isRef(UnitClass))
+    }
+
+    testDef(BagOfJavaDefinitions / name"<init>") { ctor =>
+      assert(ctor.declaredType.paramInfos.head.isRef(IntClass))
+      assert(ctor.declaredType.resultType.isRef(UnitClass))
+    }
+
+    testDef(BagOfJavaDefinitions / name"wrapXArray") { wrapXArray =>
+      assert(wrapXArray.declaredType.resultType.isArrayOf(_.typeOrNone.isRef(IntClass)))
+    }
+
+    testDef(BagOfJavaDefinitions / name"arrIdentity") { arrIdentity =>
+      val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
+      assert(arrIdentity.declaredType.paramInfos.head.isArrayOf(_.typeOrNone.isRef(JavaDefinedClass)))
+      assert(arrIdentity.declaredType.resultType.isArrayOf(_.typeOrNone.isRef(JavaDefinedClass)))
+    }
+
+  }
+
+  test("bag-of-generic-java-definitions[signatures]") {
+    val BagOfGenJavaDefinitions = name"javadefined" / tname"BagOfGenJavaDefinitions"
+
+    given BaseContext = getUnpicklingContext(BagOfGenJavaDefinitions)
+
+    val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
+    val GenericJavaClass = resolve(name"javadefined" / tname"GenericJavaClass")
+    val JavaInterface1 = resolve(name"javadefined" / tname"JavaInterface1")
+    val JavaInterface2 = resolve(name"javadefined" / tname"JavaInterface2")
+    val ExceptionClass = resolve(name"java" / name"lang" / tname"Exception")
+
+    def testDef(path: DeclarationPath)(op: Symbol => Unit): Unit =
+      op(resolve(path))
+
+    extension (tpe: Type)
+      def isGenJavaClassOf(arg: (Type | TypeBounds) => Boolean)(using BaseContext): Boolean =
+        tpe.isApplied(_.isRef(GenericJavaClass), List(arg))
+
+    testDef(BagOfGenJavaDefinitions / name"x") { x =>
+      assert(x.declaredType.isGenJavaClassOf(_.typeOrNone.isRef(JavaDefinedClass)))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"getX") { getX =>
+      assert(getX.declaredType.resultType.isGenJavaClassOf(_.typeOrNone.isRef(JavaDefinedClass)))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"getXArray") { getXArray =>
+      assert(
+        getXArray.declaredType.resultType
+          .isArrayOf(_.typeOrNone.isGenJavaClassOf(_.typeOrNone.isRef(JavaDefinedClass)))
+      )
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"printX") { printX =>
+      assert(printX.declaredType.tparamBounds.head.high.isRef(ExceptionClass))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"recTypeParams") { recTypeParams =>
+      val List(tparamRefA, tparamRefY) = recTypeParams.declaredType.tparamRefs: @unchecked
+      assert(tparamRefA.bounds.high.isGenJavaClassOf(_ == tparamRefY))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"refInterface") { refInterface =>
+      val List(tparamRefA) = refInterface.declaredType.tparamRefs: @unchecked
+      assert(
+        tparamRefA.bounds.high.isIntersectionOf(_.isAny, _.isRef(JavaInterface1), _.isRef(JavaInterface2)),
+        clues(tparamRefA.bounds)
+      )
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"genraw") { genraw =>
+      assert(genraw.declaredType.isGenJavaClassOf(_.isWildcard))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"mixgenraw") { mixgenraw =>
+      assert(mixgenraw.declaredType.isGenJavaClassOf(_.typeOrNone.isGenJavaClassOf(_.isWildcard)))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"genwild") { genwild =>
+      assert(genwild.declaredType.isGenJavaClassOf(_.isWildcard))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"gencovarient") { gencovarient =>
+      assert(gencovarient.declaredType.isGenJavaClassOf(_.isBounded(_.isNothing, _.isRef(JavaDefinedClass))))
+    }
+
+    testDef(BagOfGenJavaDefinitions / name"gencontravarient") { gencontravarient =>
+      assert(gencontravarient.declaredType.isGenJavaClassOf(_.isBounded(_.isRef(JavaDefinedClass), _.isAny)))
+    }
+  }
+
+  test("java-class-parents") {
+    val SubJavaDefined = name"javadefined" / tname"SubJavaDefined"
+
+    given BaseContext = getUnpicklingContext(SubJavaDefined)
+
+    val (SubJavaDefinedTpe @ _: ClassType) = resolve(SubJavaDefined).declaredType: @unchecked
+
+    val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
+    val JavaInterface1Class = resolve(name"javadefined" / tname"JavaInterface1")
+    val JavaInterface2Class = resolve(name"javadefined" / tname"JavaInterface2")
+
+    assert(
+      SubJavaDefinedTpe.rawParents
+        .isIntersectionOf(_.isRef(JavaDefinedClass), _.isRef(JavaInterface1Class), _.isRef(JavaInterface2Class))
+    )
+  }
+
+  test("java-class-signatures-[RecClass]") {
+    val RecClass = name"javadefined" / tname"RecClass"
+    given BaseContext = getUnpicklingContext(RecClass)
+
+    val (RecClassTpe @ _: ClassType) = resolve(RecClass).declaredType: @unchecked
+
+    val ObjectClass = resolve(name"java" / name"lang" / tname"Object")
+
+    assert(RecClassTpe.rawParents.isRef(ObjectClass))
+  }
+
+  test("java-class-signatures-[SubRecClass]") {
+    val SubRecClass = name"javadefined" / tname"SubRecClass"
+    given BaseContext = getUnpicklingContext(SubRecClass)
+
+    val (SubRecClassTpe @ _: ClassType) = resolve(SubRecClass).declaredType: @unchecked
+
+    val RecClass = resolve(name"javadefined" / tname"RecClass")
+    val JavaInterface1 = resolve(name"javadefined" / tname"JavaInterface1")
+
+    val List(tparamT) = SubRecClassTpe.cls.typeParamSyms: @unchecked
+
+    assert(
+      SubRecClassTpe.rawParents.isIntersectionOf(
+        _.isApplied(
+          _.isRef(RecClass),
+          List(_.typeOrNone.isApplied(_.isRef(SubRecClassTpe.cls), List(_.typeOrNone.isRef(tparamT))))
+        ),
+        _.isRef(JavaInterface1)
+      )
+    )
   }
 
   test("select-method-from-java-class") {

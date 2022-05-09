@@ -62,6 +62,25 @@ object Types {
 
   abstract class Type {
 
+    final def paramInfos: List[Type] = this match
+      case tpe: MethodType => tpe.paramTypes
+      case tpe             => Nil
+
+    final def tparamBounds: List[TypeBounds] = this match
+      case tpe: PolyType => tpe.paramTypeBounds
+      case tpe           => Nil
+
+    final def tparamRefs: List[TypeParamRef] = this match
+      case tpe: PolyType => tpe.refs
+      case tpe           => Nil
+
+    final def resultType: Type = this match
+      case tpe: MethodType => tpe.resType
+      case tpe: PolyType   => tpe.resType
+      case tpe: ExprType   => tpe.resType
+      case tpe: TypeLambda => tpe.resType
+      case tpe             => NoType
+
     final def termSymbol(using BaseContext): Symbol = this match
       case tpe: TermRef        => tpe.resolveToSymbol
       case tpe: PackageRef     => tpe.resolveToSymbol
@@ -118,6 +137,7 @@ object Types {
   def NullType: Type = scalaDot(tpnme.Null)
 
   def ArrayTypeUnapplied: TypeRef = scalaDot(tpnme.Array)
+  def ArrayTypeOf(tpe: Type): AppliedType = AppliedType(ArrayTypeUnapplied, List(tpe))
 
   def UnitType: Type = scalaDot(tpnme.Unit)
   def BooleanType: Type = scalaDot(tpnme.Boolean)
@@ -419,23 +439,79 @@ object Types {
     override def underlying(using BaseContext): Type = resType
   }
 
-  case class MethodType(paramNames: List[TermName], paramTypes: List[Type], resultType: Type) extends MethodicType
+  case class MethodType(paramNames: List[TermName], paramTypes: List[Type], resType: Type) extends MethodicType
 
-  case class PolyType(paramNames: List[TypeName], paramTypeBounds: List[TypeBounds], resultType: Type)
-      extends MethodicType
+  final class PolyType private (val paramNames: List[TypeName])(
+    @constructorOnly boundsRest: Binders => List[TypeBounds],
+    @constructorOnly resultRest: Binders => Type
+  ) extends MethodicType
+      with Binders {
+    private var evaluating: Boolean = false
+    private val myBounds: List[TypeBounds] =
+      evaluating = true
+      boundsRest(this: @unchecked) // safe as long as `boundsRest` does not access bounds or result
+    private val myRes: Type =
+      resultRest(this: @unchecked) // safe as long as `resultRest` does not access bounds or result
+        .andThen {
+          evaluating = false
+        }
+
+    def paramTypeBounds: List[TypeBounds] =
+      if evaluating then throw CyclicReference(s"polymorphic method [$paramNames]=>???")
+      else myBounds
+
+    def resType: Type =
+      if evaluating then throw CyclicReference(s"polymorphic method [$paramNames]=>???")
+      else myRes
+
+    override def toString: String =
+      if evaluating then s"PolyType($paramNames)(<evaluating>...)"
+      else s"PolyType($paramNames)($myBounds, $myRes)"
+  }
+
+  object PolyType:
+    def apply(paramNames: List[TypeName], paramTypeBounds: List[TypeBounds], resultType: Type): PolyType =
+      new PolyType(paramNames)(_ => paramTypeBounds, _ => resultType)
+
+    def rec(
+      paramNames: List[TypeName]
+    )(boundsRest: Binders => List[TypeBounds], resultRest: Binders => Type): PolyType =
+      new PolyType(paramNames)(boundsRest, resultRest)
+
+    def unapply(tpe: PolyType): (List[TypeName], List[TypeBounds], Type) =
+      (tpe.paramNames, tpe.paramTypeBounds, tpe.resultType)
 
   /** Encapsulates the binders associated with a TypeParamRef. */
-  opaque type Binders = TypeLambda
+  sealed trait Binders:
+    def lookupRef(name: Name): Option[Type] = (name, this) match
+      case (tname: TypeName, hk: TypeLambda) =>
+        hk.params.indexWhere(_.name == tname) match
+          case -1  => None
+          case idx => Some(newRef(idx))
+
+      case (tname: TypeName, pt: PolyType) =>
+        pt.paramNames.indexWhere(_ == tname) match
+          case -1  => None
+          case idx => Some(newRef(idx))
+
+      case _ => None
+
+    def newRef(idx: Int): TypeParamRef = TypeParamRef(this, idx)
+
+    def refs: List[TypeParamRef] = this match
+      case hk: TypeLambda => hk.params.indices.map(newRef).toList
+      case pt: PolyType   => pt.paramNames.indices.map(newRef).toList
 
   case class TypeLambda(params: List[TypeParam])(@constructorOnly rest: Binders => Type)
       extends TypeProxy
-      with TermType {
+      with TermType
+      with Binders {
     private var evaluating: Boolean = false
     private val myResult: Type =
       evaluating = true
       rest(this: @unchecked /* safe as long as `rest` does not call `resultType` */ ).andThen { evaluating = false }
 
-    def resultType: Type =
+    def resType: Type =
       if evaluating then throw CyclicReference(s"type lambda [$params] =>> ???")
       else myResult
 
@@ -449,7 +525,13 @@ object Types {
   case class TypeParamRef(binders: Binders, num: Int) extends TypeProxy with ValueType {
     override def underlying(using BaseContext): Type = ???
 
-    def paramName = binders.params(num).name
+    def paramName: TypeName = binders match
+      case hk: TypeLambda => hk.params(num).name
+      case pt: PolyType   => pt.paramNames(num)
+
+    def bounds(using BaseContext): TypeBounds = binders match
+      case hk: TypeLambda => hk.params(num).computeDeclarationTypeBounds()
+      case pt: PolyType   => pt.paramTypeBounds(num)
 
     override def toString: String = paramName.toString
   }
@@ -468,9 +550,9 @@ object Types {
     override def underlying(using BaseContext): Type = parent
   }
 
-  trait TypeBounds(low: Type, high: Type)
+  trait TypeBounds(val low: Type, val high: Type)
 
-  case class RealTypeBounds(low: Type, high: Type) extends TypeBounds(low, high)
+  case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high)
 
   case class TypeAlias(alias: Type) extends TypeProxy with TypeBounds(alias, alias) {
     override def underlying(using BaseContext): Type = alias
@@ -485,6 +567,8 @@ object Types {
   case class OrType(first: Type, second: Type) extends GroundType with ValueType
 
   case class AndType(first: Type, second: Type) extends GroundType with ValueType
+
+  case class ClassType(cls: ClassSymbol, rawParents: Type) extends GroundType
 
   case object NoType extends GroundType
 }
