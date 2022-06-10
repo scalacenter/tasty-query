@@ -39,12 +39,6 @@ object ClasspathLoaders {
   def read(classpath: List[String], kinds: Set[FileKind]): Classpath = {
     def load(): IArray[PackageData] = {
 
-      val dirSep = {
-        import scala.language.unsafeNulls
-        val fs = FileSystems.getDefault
-        fs.getSeparator
-      }
-
       def classAndPackage(binaryName: SimpleName): (SimpleName, SimpleName) = {
         val name = binaryName.name
         val lastSep = name.lastIndexOf('.')
@@ -57,8 +51,14 @@ object ClasspathLoaders {
       }
 
       def binaryName(classFile: String): SimpleName = {
+        /* Replace *both* slashes and backslashes, because the Java file APIs
+         * are permissive in what they manipulate, so it's possible to get,
+         * especially on Windows.
+         */
         import scala.language.unsafeNulls
-        termName(classFile.replace(dirSep, "."))
+        val path1 = classFile.replace('/', '.')
+        val path2 = path1.replace('\\', '.')
+        termName(path2)
       }
 
       def streamPackages() =
