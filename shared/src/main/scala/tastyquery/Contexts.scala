@@ -188,14 +188,10 @@ object Contexts {
 
     def moduleRoot: RegularSymbol = Contexts.moduleRoot(classRoot)(using this)
 
-    def createSymbol[T <: Symbol](name: Name, factory: SymbolFactory[T], addToDecls: Boolean = false): T =
-      owner.getDeclInternal(name) match
-        case None =>
-          val sym = factory.createSymbol(name, owner)
-          if (addToDecls) owner.addDecl(sym)
-          sym
-        case some =>
-          throw ExistingDefinitionException(owner, name)
+    def createSymbol[T <: Symbol](name: Name, factory: SymbolFactory[T], addToDecls: Boolean): T =
+      val sym = factory.createSymbol(name, owner)
+      if (addToDecls) owner.addDecl(sym)
+      sym
 
   }
 
