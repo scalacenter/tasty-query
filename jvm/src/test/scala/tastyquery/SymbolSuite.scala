@@ -169,23 +169,23 @@ class SymbolSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = 
         case err: java.lang.AssertionError =>
           val msg = err.getMessage.nn
           assert(
-            msg.contains("unexpected package symbolic_>> in owners of top level class symbolic_$greater$greater.#::")
+            msg.contains("unexpected package symbolic_-- in owners of top level class symbolic_$minus$minus.#::")
           )
     }
 
     def runTest(using BaseContext): Unit =
-      val `symbolic_>>.#::` = name"symbolic_>>" / tname"#::"
-      val `symbolic_$greater$greater.#::` = name"symbolic_$$greater$$greater" / tname"#::"
+      val `symbolic_--.#::` = name"symbolic_--" / tname"#::"
+      val `symbolic_$minus$minus.#::` = name"symbolic_$$minus$$minus" / tname"#::"
 
       intercept[MissingTopLevelDecl] {
-        failingGetTopLevelClass(`symbolic_>>.#::`) // this will fail, we can't find a symbolic package
+        failingGetTopLevelClass(`symbolic_--.#::`) // this will fail, we can't find a symbolic package
       }
-      assertSymbolNotExistsOrNotLoadedYet(`symbolic_>>.#::`) // still does not exist
-      assertSymbolNotExistsOrNotLoadedYet(`symbolic_$greater$greater.#::`) // not existant yet
+      assertSymbolNotExistsOrNotLoadedYet(`symbolic_--.#::`) // still does not exist
+      assertSymbolNotExistsOrNotLoadedYet(`symbolic_$minus$minus.#::`) // not existant yet
 
       // we will read the TASTy file of this class, causing an assertion error when we read the symbolic
       // package in tasty - the owners of the classroot do not match
-      forceTopLevel(`symbolic_$greater$greater.#::`)
+      forceTopLevel(`symbolic_$minus$minus.#::`)
 
     runTest(using Contexts.init(testClasspath))
   }
