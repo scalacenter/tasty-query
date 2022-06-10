@@ -148,11 +148,8 @@ class PickleReader {
       case VALsym =>
         clsCtx.createSymbol(name.toTermName, RegularSymbolFactory, addToDecls = false)
       case MODULEsym =>
-        if isModuleRoot then {
-          clsCtx.moduleRoot
-        } else {
-          ???
-        }
+        if isModuleRoot then clsCtx.moduleRoot
+        else clsCtx.createSymbol(name.toTermName, RegularSymbolFactory, addToDecls = true)
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     })
