@@ -294,6 +294,22 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(assignCount == 1, clue(assignCount))
   }
 
+  test("basic-scala2-types") {
+    val ScalaRange = name"scala" / name"collection" / name"immutable" / tname"Range"
+
+    given BaseContext = getUnpicklingContext(ScalaRange)
+
+    val rangeSym = resolve(ScalaRange)
+    assert(rangeSym.isClass, rangeSym)
+
+    val BooleanClass = resolve(name"scala" / tname"Boolean")
+
+    val isEmptySym = rangeSym.lookup(name"isEmpty").get
+    assert(!isEmptySym.isClass)
+    // TODO Need to read types from Scala 2 pickles
+    //assert(isEmptySym.declaredType.isOfClass(BooleanClass), clue(isEmptySym.declaredType))
+  }
+
   test("basic-java-class-dependency") {
     val BoxedJava = name"javacompat" / tname"BoxedJava"
     val JavaDefined = name"javadefined" / tname"JavaDefined"
