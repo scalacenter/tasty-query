@@ -59,6 +59,7 @@ object Names {
     val EmptyTermName: SimpleName = EmptySimpleName
     val EmptyTypeName: TypeName = EmptyTermName.toTypeName
     val RootName: SimpleName = termName("<root>")
+    val RootPackageName: SimpleName = termName("_root_")
     val EmptyPackageName: SimpleName = termName("<empty>")
     val Constructor: SimpleName = termName("<init>")
     val Wildcard: SimpleName = termName("_")

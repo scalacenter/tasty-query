@@ -3,6 +3,7 @@ package tastyquery.reader.pickles
 import PickleReader.{PklStream, index, pkl}
 
 import tastyquery.Contexts.ClassContext
+import tastyquery.ast.Symbols.Symbol
 
 object Unpickler {
   def loadInfo(sigBytes: IArray[Byte])(using ClassContext): Either[PickleReader.BadSignature, Unit] = {
@@ -12,8 +13,8 @@ object Unpickler {
       index.loopWithIndices { (offset, i) =>
         if (reader.missingSymbolEntry(i)) {
           pkl.unsafeFork(offset) {
-            val sym = reader.readSymbol()
-            if sym.exists then reader.addEntry(i, sym)
+            val maybeExternalSym = reader.readMaybeExternalSymbol(i)
+            reader.addEntry(i, maybeExternalSym)
             //   sym.infoOrCompleter match {
             //     case info: ClassUnpickler => info.init()
             //     case _                    =>

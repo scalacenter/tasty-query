@@ -303,11 +303,47 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(rangeSym.isClass, rangeSym)
 
     val BooleanClass = resolve(name"scala" / tname"Boolean")
+    val IntClass = resolve(name"scala" / tname"Int")
+    val Function1Class = resolve(name"scala" / tname"Function1")
+    val IndexedSeqClass = resolve(name"scala" / name"collection" / name"immutable" / tname"IndexedSeq")
 
+    // val start: Int
+    val startSym = rangeSym.lookup(name"start").get
+    assert(startSym.declaredType.isOfClass(IntClass), clue(startSym.declaredType))
+    assert(startSym.declaredType.isInstanceOf[ExprType], clue(startSym.declaredType)) // should this be TypeRef?
+
+    // val isEmpty: Boolean
     val isEmptySym = rangeSym.lookup(name"isEmpty").get
-    assert(!isEmptySym.isClass)
-    // TODO Need to read types from Scala 2 pickles
-    //assert(isEmptySym.declaredType.isOfClass(BooleanClass), clue(isEmptySym.declaredType))
+    assert(isEmptySym.declaredType.isOfClass(BooleanClass), clue(isEmptySym.declaredType))
+    assert(isEmptySym.declaredType.isInstanceOf[ExprType], clue(isEmptySym.declaredType)) // should this be TypeRef?
+
+    // def isInclusive: Boolean
+    val isInclusiveSym = rangeSym.lookup(name"isInclusive").get
+    assert(isInclusiveSym.declaredType.isOfClass(BooleanClass), clue(isInclusiveSym.declaredType))
+    assert(isInclusiveSym.declaredType.isInstanceOf[ExprType], clue(isInclusiveSym.declaredType))
+
+    // def by(step: Int): Range
+    locally {
+      val bySym = rangeSym.lookup(name"by").get
+      val MethodType(paramNames, paramTypes, resTpe) = (bySym.declaredType: @unchecked)
+      assertEquals(List[TermName](name"step"), paramNames, clue(paramNames))
+      assert(paramTypes.sizeIs == 1)
+      assert(paramTypes.head.isOfClass(IntClass), clue(paramTypes.head))
+      assert(resTpe.isOfClass(rangeSym), clue(resTpe))
+    }
+
+    // def map[B](f: Int => B): IndexedSeq[B]
+    locally {
+      val mapSym = rangeSym.lookup(name"map").get
+      val PolyType(tparamNames, tparamBounds, MethodType(paramNames, paramTypes, resTpe)) =
+        (mapSym.declaredType: @unchecked)
+      assertEquals(List[TypeName](name"B".toTypeName), tparamNames, clue(tparamNames))
+      assert(tparamBounds.sizeIs == 1)
+      assertEquals(List[TermName](name"f"), paramNames, clue(paramNames))
+      assert(paramTypes.sizeIs == 1)
+      assert(paramTypes.head.isOfClass(Function1Class), clue(paramTypes.head))
+      assert(resTpe.isOfClass(IndexedSeqClass), clue(resTpe))
+    }
   }
 
   test("basic-java-class-dependency") {
@@ -519,11 +555,14 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     given BaseContext = getUnpicklingContext(BoxedCons)
 
+    val ConsClass = resolve(::)
+    val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
+
     val boxedSym = resolve(BoxedCons / name"boxed")
 
-    val (AppliedType(ConsRef @ _: Symbolic, _)) = boxedSym.declaredType: @unchecked
-
-    assertIsSymbolWithPath(::)(ConsRef.resolveToSymbol)
+    val AppliedType(tycon, List(targ: Type)) = boxedSym.declaredType: @unchecked
+    assert(tycon.isOfClass(ConsClass), clue(tycon))
+    assert(targ.isOfClass(JavaDefinedClass), clue(targ))
   }
 
   test("select-method-from-scala-2-stdlib-class") {
@@ -532,13 +571,22 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     given BaseContext = getUnpicklingContext(BoxedCons)
 
+    val AnyClass = resolve(name"scala" / tname"Any")
+    val BooleanClass = resolve(name"scala" / tname"Boolean")
+
     val fooSym = resolve(BoxedCons / name"foo")
 
     val Some(DefDef(_, _, _, Apply(canEqualSelection, _), _)) = fooSym.tree: @unchecked
 
-    val (canEqualRef @ _: Symbolic) = canEqualSelection.tpe: @unchecked
+    val underlyingType = canEqualSelection.tpe match
+      case termRef: TermRef => termRef.underlying
+      case tpe              => fail("expected TermRef", clues(tpe))
 
-    assertIsSymbolWithPath(canEqual)(canEqualRef.resolveToSymbol)
+    val MethodType(paramNames, paramTypes, resTpe) = underlyingType: @unchecked
+    assertEquals(List[TermName](name"that"), paramNames, clue(paramNames))
+    assert(paramTypes.sizeIs == 1, clue(paramTypes))
+    assert(paramTypes.head.isOfClass(AnyClass), clue(paramTypes.head))
+    assert(resTpe.isOfClass(BooleanClass), clue(resTpe))
   }
 
   test("select-field-from-tasty-in-other-package:dependency-from-class-file") {

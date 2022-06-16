@@ -12,9 +12,13 @@ import annotation.constructorOnly
 import tastyquery.util.syntax.chaining.given
 
 object Types {
-  type Designator = Symbol | Name | LookupIn
+  type Designator = Symbol | Name | LookupIn | Scala2ExternalSymRef
 
   case class LookupIn(pre: TypeRef, sel: SignedName)
+
+  case class Scala2ExternalSymRef(owner: Symbol, path: List[Name]) {
+    val name = path.last
+  }
 
   object ErasedTypeRef {
     // TODO: improve this to match dotty:
@@ -120,6 +124,9 @@ object Types {
         case _ =>
           this.isRef(sym)
       }
+
+    final def select(sym: Symbol)(using BaseContext): Type =
+      NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
   }
 
   private def scalaPackage: PackageRef = PackageRef(nme.scalaPackageName)
@@ -152,6 +159,8 @@ object Types {
   def StringType: Type = javalangDot(tpnme.String)
   def ObjectType: Type = javalangDot(tpnme.Object)
   def ClassTypeOf(cls: Type): Type = AppliedType(javalangDot(tpnme.Class), List(cls))
+
+  def UnconstrainedTypeBounds: TypeBounds = RealTypeBounds(NothingType, AnyType)
 
   // ----- Type categories ----------------------------------------------
 
@@ -234,9 +243,10 @@ object Types {
     }
 
     private def computeName: ThisName = (designator match {
-      case name: Name       => name
-      case sym: Symbol      => sym.name
-      case LookupIn(_, sel) => sel
+      case name: Name                       => name
+      case sym: Symbol                      => sym.name
+      case LookupIn(_, sel)                 => sel
+      case designator: Scala2ExternalSymRef => designator.name
     }).asInstanceOf[ThisName]
 
     def selectIn(name: SignedName, in: TypeRef): TermRef =
@@ -247,6 +257,14 @@ object Types {
       case sym: Symbol => sym
       case LookupIn(pre, name) =>
         val sym = TermRef(pre, name).resolveToSymbol
+        designator = sym
+        sym
+      case Scala2ExternalSymRef(owner, path) =>
+        val sym = path.foldLeft(owner) { (owner, name) =>
+          owner.lookup(name).getOrElse {
+            throw new SymbolLookupException(name, s"cannot find symbol $owner.$name")
+          }
+        }
         designator = sym
         sym
       case name: Name =>
@@ -291,6 +309,26 @@ object Types {
         designator = sym
         sym
     }
+  }
+
+  object NamedType {
+    private def isType(designator: Designator): Boolean = designator match
+      case designator: Symbol               => designator.isType
+      case designator: Name                 => designator.isTypeName
+      case designator: LookupIn             => false // always a SignedName, which is a TermName by construction
+      case designator: Scala2ExternalSymRef => designator.name.isTypeName
+
+    def apply(prefix: Type, designator: Designator)(using BaseContext): NamedType =
+      if (isType(designator)) TypeRef(prefix, designator)
+      else TermRef(prefix, designator)
+
+    def apply(prefix: Type, sym: Symbol)(using BaseContext): NamedType =
+      if (sym.isType) TypeRef(prefix, sym)
+      else TermRef(prefix, sym)
+
+    def apply(prefix: Type, name: Name)(using BaseContext): NamedType =
+      if (name.isTypeName) TypeRef(prefix, name)
+      else TermRef(prefix, name)
   }
 
   /** A reference to an implicit definition. This can be either a TermRef or a

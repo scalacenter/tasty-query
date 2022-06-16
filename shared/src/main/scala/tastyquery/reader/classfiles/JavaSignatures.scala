@@ -269,7 +269,7 @@ object JavaSignatures:
         interfaces(env, mutable.ListBuffer(superTpe))
       if consume('<') then
         val tparamNames = lookaheadTypeParamNames
-        val tparams = tparamNames.map(tname => clsCtx.createSymbol(tname, RegularSymbolFactory, addToDecls = false))
+        val tparams = tparamNames.map(tname => RegularSymbolFactory.createSymbol(tname, cls))
         val lookup = tparamNames.lazyZip(tparams).toMap
         cls.withTypeParams(tparams, typeParamsRest(lookup))
         classRest(lookup)

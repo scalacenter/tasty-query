@@ -63,7 +63,8 @@ object ClassfileParser {
       fields.use {
         val buf = IndexedSeq.newBuilder[(Symbol, SigOrDesc)]
         reader.readFields { (name, sigOrDesc) =>
-          val sym = clsCtx.createSymbol(name, RegularSymbolFactory, addToDecls = true).withFlags(Flags.EmptyFlagSet)
+          val sym = RegularSymbolFactory.createSymbol(name, clsCtx.classRoot).withFlags(Flags.EmptyFlagSet)
+          clsCtx.classRoot.addDecl(sym)
           buf += sym -> sigOrDesc
         }
         buf.result()
@@ -73,7 +74,8 @@ object ClassfileParser {
       methods.use {
         val buf = IndexedSeq.newBuilder[(Symbol, SigOrDesc)]
         reader.readMethods { (name, sigOrDesc) =>
-          val sym = clsCtx.createSymbol(name, RegularSymbolFactory, addToDecls = true).withFlags(Flags.Method)
+          val sym = RegularSymbolFactory.createSymbol(name, clsCtx.classRoot).withFlags(Flags.Method)
+          clsCtx.classRoot.addDecl(sym)
           buf += sym -> sigOrDesc
         }
         buf.result()
