@@ -197,11 +197,15 @@ object Symbols {
           case _ => None
     }
 
-    private[Symbols] final def getDeclBase(name: Name)(using BaseContext): Option[Symbol] = name match
-      case overloaded: SignedName =>
-        distinguishOverloaded(overloaded)
-      case name =>
-        getDeclInternal(name)
+    /** Forces the symbol to be initialized.
+      *
+      * This method should never be called from within the initialisation of
+      * this symbol.
+      *
+      * For symbols that are neither classes nor packages, this has no effect.
+      */
+    private[tastyquery] def ensureInitialised()(using BaseContext): Unit =
+      ()
 
     private[Symbols] final def hasOverloads(name: SignedName): Boolean =
       myDeclarations.get(name.underlying) match
@@ -213,8 +217,13 @@ object Symbols {
         case Some(decls) => decls.toList
         case _           => Nil
 
-    def getDecl(name: Name)(using BaseContext): Option[Symbol] =
-      getDeclBase(name)
+    final def getDecl(name: Name)(using BaseContext): Option[Symbol] =
+      ensureInitialised()
+      name match
+        case overloaded: SignedName =>
+          distinguishOverloaded(overloaded)
+        case name =>
+          getDeclInternal(name)
 
     private final def distinguishOverloaded(overloaded: SignedName)(using BaseContext): Option[Symbol] =
       myDeclarations.get(overloaded.underlying) match
@@ -227,7 +236,13 @@ object Symbols {
     final def resolveOverloaded(name: SignedName)(using BaseContext): Option[Symbol] =
       getDecl(name)
 
-    final def declarations: List[Symbol] = myDeclarations.values.toList.flatten
+    final def declarations(using BaseContext): List[Symbol] =
+      ensureInitialised()
+      myDeclarations.values.toList.flatten
+
+    override def declaredType(using BaseContext): Type =
+      ensureInitialised()
+      super.declaredType
 
     final override def toDebugString: String =
       s"${super.toString} with declarations [${myDeclarations.keys.map(_.toDebugString).mkString(", ")}]"
@@ -251,17 +266,21 @@ object Symbols {
       if local == null then throw new IllegalStateException(s"expected type params for $this")
       else local
 
-    /** Forces the class or package to be initialised, should never be called from within the initialisation
-      * of this class or package.
-      */
-    private[tastyquery] final def ensureInitialised()(using BaseContext): Unit =
+    private[tastyquery] override final def ensureInitialised()(using BaseContext): Unit =
       def initialiseMembers(): Unit = this match
         case pkg: PackageClassSymbol => baseCtx.classloader.scanPackage(pkg)
         case cls                     => baseCtx.classloader.scanClass(cls)
+
+      // FIXME Tolerate that module class roots do not get initialized. This should be handled better.
+      def isModuleClassRoot: Boolean =
+        name.toTermName match
+          case SuffixedName(NameTags.OBJECTCLASS, _) => owner.isPackage
+          case _                                     => false
+
       if !initialised then
         // TODO: maybe add flag and check against if we are currently initialising this symbol?
         initialiseMembers()
-        assert(initialised)
+        assert(initialised || isModuleClassRoot, s"could not initialize $this")
 
     private[tastyquery] final def initParents: Boolean =
       myTypeParams != null
@@ -277,14 +296,6 @@ object Symbols {
         maybeOuter match
           case pre: ClassSymbol => TypeRef(pre.accessibleThisType, cls)
           case _                => TypeRef(NoPrefix, cls)
-
-    override def declaredType(using BaseContext): Type =
-      ensureInitialised()
-      super.declaredType
-
-    override final def getDecl(name: Name)(using BaseContext): Option[Symbol] =
-      ensureInitialised()
-      getDeclBase(name)
   }
 
   // TODO: typename or term name?
