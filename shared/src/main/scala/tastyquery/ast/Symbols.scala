@@ -64,7 +64,7 @@ object Symbols {
       if isFlagsInitialized then myFlags
       else throw IllegalStateException(s"flags of $this have not been initialized")
 
-    def declaredType: Type =
+    def declaredType(using BaseContext): Type =
       val local = myDeclaredType
       if local != null then local
       else throw new IllegalStateException(s"$this was not assigned a declared type")
@@ -277,6 +277,10 @@ object Symbols {
         maybeOuter match
           case pre: ClassSymbol => TypeRef(pre.accessibleThisType, cls)
           case _                => TypeRef(NoPrefix, cls)
+
+    override def declaredType(using BaseContext): Type =
+      ensureInitialised()
+      super.declaredType
 
     override final def getDecl(name: Name)(using BaseContext): Option[Symbol] =
       ensureInitialised()
