@@ -1,5 +1,7 @@
 package tastyquery
 
+import munit.Location
+
 import tastyquery.Contexts
 import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.ast.Names.*
@@ -41,7 +43,19 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
         ) =>
   }
 
-  test("empty-class") {
+  def testUnpickle(name: String, path: TopLevelDeclPath)(
+    using Location
+  )(body: Contexts.BaseContext ?=> Tree => Unit): Unit =
+    test(name) {
+      val (base, classRoot) = findTopLevelClass(path)()
+      val tree = base.classloader.topLevelTasty(classRoot)(using base) match
+        case Some(trees) => trees.head
+        case _           => fail(s"Missing tasty for ${path.fullClassName}, $classRoot")
+      body(using base)(tree)
+    }
+  end testUnpickle
+
+  testUnpickle("empty-class", empty_class / tname"EmptyClass") { tree =>
     assert({
       {
         case PackageDef(
@@ -72,12 +86,10 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
               // (defined in different files)
             ) if isJavaLangObject.isDefinedAt(parent) && s.tree.isEmpty =>
       }: StructureCheck
-    }.isDefinedAt(clue(unpickle(empty_class / tname"EmptyClass"))))
+    }.isDefinedAt(clue(tree)))
   }
 
-  test("nested-packages") {
-    val tree = unpickle(`simple_trees.nested` / tname"InNestedPackage")
-
+  testUnpickle("nested-packages", `simple_trees.nested` / tname"InNestedPackage") { tree =>
     val nestedPackages: StructureCheck = {
       case PackageDef(
             Symbol(SimpleName("simple_trees")),
@@ -90,9 +102,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(nestedPackages)(clue(tree)))
   }
 
-  test("qualified-nested-package") {
-    val tree = unpickle(`simple_trees.nested` / tname"InQualifiedNestedPackage")
-
+  testUnpickle("qualified-nested-package", `simple_trees.nested` / tname"InQualifiedNestedPackage") { tree =>
     val packageCheck: StructureCheck = {
       case PackageDef(Symbol(QualifiedName(NameTags.QUALIFIED, SimpleName("simple_trees"), SimpleName("nested"))), _) =>
     }
@@ -100,14 +110,14 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(packageCheck)(clue(tree)))
   }
 
-  test("basic-import") {
+  testUnpickle("basic-import", imports / tname"Import") { tree =>
     val importMatch: StructureCheck = {
       case Import(_, List(ImportSelector(Ident(SimpleName("A")), EmptyTree, EmptyTypeTree))) =>
     }
-    assert(containsSubtree(clue(importMatch))(clue(unpickle(imports / tname"Import"))))
+    assert(containsSubtree(clue(importMatch))(clue(tree)))
   }
 
-  test("multiple-imports") {
+  testUnpickle("multiple-imports", imports / tname"MultipleImports") { tree =>
     val importMatch: StructureCheck = {
       case Import(
             ReferencedPackage(SimpleName("imported_files")),
@@ -117,20 +127,20 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             )
           ) =>
     }
-    assert(containsSubtree(importMatch)(clue(unpickle(imports / tname"MultipleImports"))))
+    assert(containsSubtree(importMatch)(clue(tree)))
   }
 
-  test("renamed-import") {
+  testUnpickle("renamed-import", imports / tname"RenamedImport") { tree =>
     val importMatch: StructureCheck = {
       case Import(
             ReferencedPackage(SimpleName("imported_files")),
             List(ImportSelector(Ident(SimpleName("A")), Ident(SimpleName("ClassA")), EmptyTypeTree))
           ) =>
     }
-    assert(containsSubtree(importMatch)(clue(unpickle(imports / tname"RenamedImport"))))
+    assert(containsSubtree(importMatch)(clue(tree)))
   }
 
-  test("given-import") {
+  testUnpickle("given-import", imports / tname"ImportGiven") { tree =>
     val importMatch: StructureCheck = {
       // A given import selector has an empty name
       case Import(
@@ -139,11 +149,10 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             List(ImportSelector(Ident(nme.EmptyTermName), EmptyTree, EmptyTypeTree))
           ) =>
     }
-    assert(containsSubtree(importMatch)(clue(unpickle(imports / tname"ImportGiven"))))
+    assert(containsSubtree(importMatch)(clue(tree)))
   }
 
-  test("given-bounded-import") {
-    val tree = unpickle(imports / tname"ImportGivenWithBound")
+  testUnpickle("given-bounded-import", imports / tname"ImportGivenWithBound") { tree =>
     val importMatch: StructureCheck = {
       // A given import selector has an empty name
       case Import(
@@ -155,8 +164,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(importMatch)(clue(tree)))
   }
 
-  test("export") {
-    val tree = unpickle(simple_trees / tname"Export")
+  testUnpickle("export", simple_trees / tname"Export") { tree =>
     val simpleExport: StructureCheck = {
       case Export(
             Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("first")),
@@ -185,7 +193,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(givenExport)(clue(tree)))
   }
 
-  test("identity-method") {
+  testUnpickle("identity-method", simple_trees / tname"IdentityMethod") { tree =>
     val identityMatch: StructureCheck = {
       case DefDef(
             SimpleName("id"),
@@ -196,11 +204,10 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             defSymbol
           ) if valSymbol.tree.exists(_.isInstanceOf[ValDef]) && defSymbol.tree.exists(_.isInstanceOf[DefDef]) =>
     }
-    assert(containsSubtree(identityMatch)(clue(unpickle(simple_trees / tname"IdentityMethod"))))
+    assert(containsSubtree(identityMatch)(clue(tree)))
   }
 
-  test("multiple-parameter-lists") {
-    val tree = unpickle(simple_trees / tname"MultipleParameterLists")
+  testUnpickle("multiple-parameter-lists", simple_trees / tname"MultipleParameterLists") { tree =>
     val methodMatch: StructureCheck = {
       case DefDef(
             SimpleName("threeParameterLists"),
@@ -217,8 +224,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(methodMatch)(clue(tree)))
   }
 
-  test("constants") {
-    val tree = unpickle(simple_trees / tname"Constants")
+  testUnpickle("constants", simple_trees / tname"Constants") { tree =>
     val unitConstMatch: StructureCheck = { case ValDef(SimpleName("unitVal"), _, Literal(Constant(())), _) =>
     }
     assert(containsSubtree(unitConstMatch)(clue(tree)))
@@ -268,7 +274,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(nullConstMatch)(clue(tree)))
   }
 
-  test("if") {
+  testUnpickle("if", simple_trees / tname"If") { tree =>
     val ifMatch: StructureCheck = {
       case If(
             Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("<"), _, _)), List(Literal(Constant(0)))),
@@ -276,11 +282,10 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             Ident(SimpleName("x"))
           ) =>
     }
-    val tree = unpickle(simple_trees / tname"If")
     assert(containsSubtree(ifMatch)(clue(tree)))
   }
 
-  test("block") {
+  testUnpickle("block", simple_trees / tname"Block") { tree =>
     val blockMatch: StructureCheck = {
       case Block(
             List(
@@ -290,20 +295,16 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
             Literal(Constant(()))
           ) =>
     }
-    val tree = unpickle(simple_trees / tname"Block")
     assert(containsSubtree(blockMatch)(clue(tree)))
   }
 
-  test("empty-infinite-while") {
+  testUnpickle("empty-infinite-while", simple_trees / tname"While") { tree =>
     val whileMatch: StructureCheck = { case While(Literal(Constant(true)), Block(Nil, Literal(Constant(())))) =>
     }
-    val tree = unpickle(simple_trees / tname"While")
     assert(containsSubtree(whileMatch)(clue(tree)))
   }
 
-  test("match") {
-    val tree = unpickle(simple_trees / tname"Match")
-
+  testUnpickle("match", simple_trees / tname"Match") { tree =>
     val matchStructure: StructureCheck = {
       case Match(Ident(_), cases) if cases.length == 6 =>
     }
@@ -360,9 +361,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(default)(clue(tree)))
   }
 
-  test("match-case-class") {
-    val tree = unpickle(simple_trees / tname"PatternMatchingOnCaseClass")
-
+  testUnpickle("match-case-class", simple_trees / tname"PatternMatchingOnCaseClass") { tree =>
     val guardWithAlternatives: StructureCheck = {
       case CaseDef(
             Typed(
@@ -380,8 +379,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(guardWithAlternatives)(clue(tree)))
   }
 
-  test("assign") {
-    val tree = unpickle(simple_trees / tname"Assign")
+  testUnpickle("assign", simple_trees / tname"Assign") { tree =>
     val assignBlockMatch: StructureCheck = {
       case Block(
             List(
@@ -394,8 +392,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(assignBlockMatch)(clue(tree)))
   }
 
-  test("throw") {
-    val tree = unpickle(simple_trees / tname"ThrowException")
+  testUnpickle("throw", simple_trees / tname"ThrowException") { tree =>
     val throwMatch: StructureCheck = {
       case Throw(
             Apply(
@@ -410,8 +407,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(throwMatch)(clue(tree)))
   }
 
-  test("try-catch") {
-    val tree = unpickle(simple_trees / tname"TryCatch")
+  testUnpickle("try-catch", simple_trees / tname"TryCatch") { tree =>
     val tryMatch: StructureCheck = {
       case Try(
             _,
@@ -422,8 +418,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(tryMatch)(clue(tree)))
   }
 
-  test("singletonType") {
-    val tree = unpickle(simple_trees / tname"SingletonType")
+  testUnpickle("singletonType", simple_trees / tname"SingletonType") { tree =>
     val defDefWithSingleton: StructureCheck = {
       case DefDef(
             SimpleName("singletonReturnType"),
@@ -436,8 +431,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(defDefWithSingleton)(clue(tree)))
   }
 
-  test("defaultSelfType") {
-    val tree = unpickle(simple_trees / tname"ClassWithSelf")
+  testUnpickle("defaultSelfType", simple_trees / tname"ClassWithSelf") { tree =>
     val selfDefMatch: StructureCheck = {
       case ValDef(
             SimpleName("self"),
@@ -449,17 +443,14 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(selfDefMatch)(clue(tree)))
   }
 
-  test("selfType") {
-    val tree = unpickle(simple_trees / tname"TraitWithSelf")
+  testUnpickle("selfType", simple_trees / tname"TraitWithSelf") { tree =>
     val selfDefMatch: StructureCheck = {
       case ValDef(SimpleName("self"), TypeIdent(TypeName(SimpleName("ClassWithSelf"))), EmptyTree, NoSymbol) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
   }
 
-  test("fields") {
-    val tree = unpickle(simple_trees / tname"Field")
-
+  testUnpickle("fields", simple_trees / tname"Field") { tree =>
     val classFieldMatch: StructureCheck = {
       case ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("Field"))), Literal(c), _) if c.tag == NullTag =>
     }
@@ -472,9 +463,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(intFieldMatch)(clue(tree)))
   }
 
-  test("object") {
-    val tree = unpickle(simple_trees / tname"ScalaObject")
-
+  testUnpickle("object", simple_trees / tname"ScalaObject") { tree =>
     val selfDefMatch: StructureCheck = {
       case ValDef(nme.Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject"))), EmptyTree, NoSymbol) =>
     }
@@ -487,18 +476,14 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(classConstMatch)(clue(tree)))
   }
 
-  test("typed") {
-    val tree = unpickle(simple_trees / tname"Typed")
-
+  testUnpickle("typed", simple_trees / tname"Typed") { tree =>
     val typedMatch: StructureCheck = {
       case Typed(Literal(c), TypeIdent(TypeName(SimpleName("Int")))) if c.tag == IntTag && c.value == 1 =>
     }
     assert(containsSubtree(typedMatch)(clue(tree)))
   }
 
-  test("repeated") {
-    val tree = unpickle(simple_trees / tname"Repeated")
-
+  testUnpickle("repeated", simple_trees / tname"Repeated") { tree =>
     val typedRepeated: StructureCheck = {
       case Typed(
             SeqLiteral(
@@ -516,9 +501,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(typedRepeated)(clue(tree)))
   }
 
-  test("applied-type-annot") {
-    val tree = unpickle(simple_trees / tname"AppliedTypeAnnotation")
-
+  testUnpickle("applied-type-annot", simple_trees / tname"AppliedTypeAnnotation") { tree =>
     val valDefMatch: StructureCheck = {
       case ValDef(
             SimpleName("x"),
@@ -530,9 +513,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(valDefMatch)(clue(tree)))
   }
 
-  test("construct-inner-class") {
-    val tree = unpickle(simple_trees / tname"InnerClass")
-
+  testUnpickle("construct-inner-class", simple_trees / tname"InnerClass") { tree =>
     val innerInstanceMatch: StructureCheck = {
       case ValDef(
             SimpleName("innerInstance"),
@@ -550,9 +531,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(innerInstanceMatch)(clue(tree)))
   }
 
-  test("type-application") {
-    val tree = unpickle(simple_trees / tname"TypeApply")
-
+  testUnpickle("type-application", simple_trees / tname"TypeApply") { tree =>
     val applyMatch: StructureCheck = {
       case Apply(
             // apply[Int]
@@ -566,18 +545,14 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(applyMatch)(clue(tree)))
   }
 
-  test("final") {
-    val tree = unpickle(simple_trees / tname"Final")
-
+  testUnpickle("final", simple_trees / tname"Final") { tree =>
     val constTypeMatch: StructureCheck = {
       case ValDef(SimpleName("Const"), TypeWrapper(ConstantType(Constant(1))), Literal(Constant(1)), _) =>
     }
     assert(containsSubtree(constTypeMatch)(clue(tree)))
   }
 
-  test("var") {
-    val tree = unpickle(simple_trees / tname"Var")
-
+  testUnpickle("var", simple_trees / tname"Var") { tree =>
     // var = val with a setter
     val valDefMatch: StructureCheck = {
       case ValDef(
@@ -606,8 +581,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(assignmentMatch)(clue(tree)))
   }
 
-  test("constructor-with-parameters") {
-    val tree = unpickle(simple_trees / tname"ConstructorWithParameters")
+  testUnpickle("constructor-with-parameters", simple_trees / tname"ConstructorWithParameters") { tree =>
     val classWithParams: StructureCheck = {
       case Template(
             DefDef(
@@ -643,9 +617,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(classWithParams)(clue(tree)))
   }
 
-  test("call-parent-constructor-with-defaults") {
-    val tree = unpickle(simple_trees / tname"ChildCallsParentWithDefaultParameter")
-
+  testUnpickle("call-parent-ctor-with-defaults", simple_trees / tname"ChildCallsParentWithDefaultParameter") { tree =>
     val blockParent: StructureCheck = {
       case ClassDef(
             TypeName(SimpleName("ChildCallsParentWithDefaultParameter")),
@@ -656,9 +628,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(blockParent)(clue(tree)))
   }
 
-  test("use-given") {
-    val tree = unpickle(simple_trees / tname"UsingGiven")
-
+  testUnpickle("use-given", simple_trees / tname"UsingGiven") { tree =>
     // given Int
     val givenDefinition: StructureCheck = {
       case ValDef(SimpleName("given_Int"), TypeIdent(TypeName(SimpleName("Int"))), _, _) =>
@@ -685,9 +655,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(explicitUsing)(clue(tree)))
   }
 
-  test("trait-with-parameter") {
-    val tree = unpickle(simple_trees / tname"TraitWithParameter")
-
+  testUnpickle("trait-with-parameter", simple_trees / tname"TraitWithParameter") { tree =>
     val traitMatch: StructureCheck = {
       case Template(
             DefDef(
@@ -705,9 +673,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
 
   }
 
-  test("extend-trait") {
-    val tree = unpickle(simple_trees / tname"ExtendsTrait")
-
+  testUnpickle("extend-trait", simple_trees / tname"ExtendsTrait") { tree =>
     val classMatch: StructureCheck = {
       case Template(
             _,
@@ -720,9 +686,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(classMatch)(clue(tree)))
   }
 
-  test("lambda") {
-    val tree = unpickle(simple_trees / tname"Function")
-
+  testUnpickle("lambda", simple_trees / tname"Function") { tree =>
     val functionLambdaMatch: StructureCheck = {
       case ValDef(
             SimpleName("functionLambda"),
@@ -761,9 +725,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(SAMLambdaMatch)(clue(tree)))
   }
 
-  test("eta-expansion") {
-    val tree = unpickle(simple_trees / tname"EtaExpansion")
-
+  testUnpickle("eta-expansion", simple_trees / tname"EtaExpansion") { tree =>
     /*
     takesFunction(intMethod)
     the compiler generates a function which simply calls intMethod;
@@ -798,9 +760,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(applicationMatch)(clue(tree)))
   }
 
-  test("partial-application") {
-    val tree = unpickle(simple_trees / tname"PartialApplication")
-
+  testUnpickle("partial-application", simple_trees / tname"PartialApplication") { tree =>
     // Partial application under the hood is defining a function which takes the remaining parameters
     // and calls the original function with fixed + remaining parameters
     val applicationMatch: StructureCheck = {
@@ -835,9 +795,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(applicationMatch)(clue(tree)))
   }
 
-  test("partial-function") {
-    val tree = unpickle(simple_trees / tname"WithPartialFunction")
-
+  testUnpickle("partial-function", simple_trees / tname"WithPartialFunction") { tree =>
     val partialFunction: StructureCheck = {
       case DefDef(
             SimpleName("$anonfun"),
@@ -862,9 +820,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(partialFunction)(clue(tree)))
   }
 
-  test("named-argument") {
-    val tree = unpickle(simple_trees / tname"NamedArgument")
-
+  testUnpickle("named-argument", simple_trees / tname"NamedArgument") { tree =>
     val withNamedArgumentApplication: StructureCheck = {
       case Apply(
             Select(
@@ -877,17 +833,13 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(withNamedArgumentApplication)(clue(tree)))
   }
 
-  test("return") {
-    val tree = unpickle(simple_trees / tname"Return")
-
+  testUnpickle("return", simple_trees / tname"Return") { tree =>
     val returnMatch: StructureCheck = { case Return(Literal(Constant(1)), Ident(SimpleName("withReturn"))) =>
     }
     assert(containsSubtree(returnMatch)(clue(tree)))
   }
 
-  test("super") {
-    val tree = unpickle(simple_trees / tname"Super")
-
+  testUnpickle("super", simple_trees / tname"Super") { tree =>
     val superMatch: StructureCheck = { case Super(This(None), None) =>
     }
     assert(containsSubtree(superMatch)(clue(tree)))
@@ -897,9 +849,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(mixinSuper)(clue(tree)))
   }
 
-  test("type-member") {
-    val tree = unpickle(simple_trees / tname"TypeMember")
-
+  testUnpickle("type-member", simple_trees / tname"TypeMember") { tree =>
     // simple type member
     val typeMember: StructureCheck = {
       case TypeMember(TypeName(SimpleName("TypeMember")), TypeIdent(TypeName(SimpleName("Int"))), symbol)
@@ -956,9 +906,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(opaqueWithBounds)(clue(tree)))
   }
 
-  test("generic-class") {
-    val tree = unpickle(simple_trees / tname"GenericClass")
-
+  testUnpickle("generic-class", simple_trees / tname"GenericClass") { tree =>
     /*
     The class and its constructor have the same type bounds for the type parameter,
     but the constructor's are attached to the type parameter declaration in the code,
@@ -1009,8 +957,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(genericClass)(clue(tree)))
   }
 
-  test("generic-method") {
-    val tree = unpickle(simple_trees / tname"GenericMethod")
+  testUnpickle("generic-method", simple_trees / tname"GenericMethod") { tree =>
     val genericMethod: StructureCheck = {
       case DefDef(
             SimpleName("usesTypeParam"),
@@ -1037,9 +984,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(genericMethod)(clue(tree)))
   }
 
-  test("generic-extension") {
-    val tree = unpickle(simple_trees / tname"GenericExtension$$package")
-
+  testUnpickle("generic-extension", simple_trees / tname"GenericExtension$$package") { tree =>
     val extensionCheck: StructureCheck = {
       case DefDef(
             SimpleName("genericExtension"),
@@ -1067,8 +1012,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(extensionCheck)(clue(tree)))
   }
 
-  test("class-type-bounds") {
-    val tree = unpickle(simple_trees / tname"TypeBoundsOnClass")
+  testUnpickle("class-type-bounds", simple_trees / tname"TypeBoundsOnClass") { tree =>
     val genericClass: StructureCheck = {
       case ClassDef(
             TypeName(SimpleName("TypeBoundsOnClass")),
@@ -1111,11 +1055,9 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(genericClass)(clue(tree)))
   }
 
-  test("shared-type-bounds") {
+  testUnpickle("shared-type-bounds", simple_trees / tname"GenericClassWithNestedGeneric") { tree =>
     // The type bounds of the class and its inner class are shared in the TASTy serializations.
     // This test checks that such shared type bounds are read correctly.
-    val tree = unpickle(simple_trees / tname"GenericClassWithNestedGeneric")
-
     val genericClass: StructureCheck = {
       case ClassDef(
             TypeName(SimpleName("GenericClassWithNestedGeneric")),
@@ -1199,9 +1141,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(nestedClass)(clue(tree)))
   }
 
-  test("inline-method") {
-    val tree = unpickle(simple_trees / tname"InlinedCall")
-
+  testUnpickle("inline-method", simple_trees / tname"InlinedCall") { tree =>
     val inlined: StructureCheck = {
       case Inlined(
             // 0 + HasInlinedMethod_this.externalVal
@@ -1225,9 +1165,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(inlined)(clue(tree)))
   }
 
-  test("select-tpt") {
-    val tree = unpickle(simple_trees / tname"SelectType")
-
+  testUnpickle("select-tpt", simple_trees / tname"SelectType") { tree =>
     val selectTpt: StructureCheck = {
       case ValDef(
             SimpleName("random"),
@@ -1256,9 +1194,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(selectTpt)(clue(tree)))
   }
 
-  test("by-name-parameter") {
-    val tree = unpickle(simple_trees / tname"ByNameParameter")
-
+  testUnpickle("by-name-parameter", simple_trees / tname"ByNameParameter") { tree =>
     val byName: StructureCheck = {
       case DefDef(
             SimpleName("withByName"),
@@ -1273,9 +1209,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(byName)(clue(tree)))
   }
 
-  test("by-name-type") {
-    val tree = unpickle(simple_trees / tname"ClassWithByNameParameter")
-
+  testUnpickle("by-name-type", simple_trees / tname"ClassWithByNameParameter") { tree =>
     val byName: StructureCheck = {
       case ValDef(
             SimpleName("byNameParam"),
@@ -1287,9 +1221,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(byName)(clue(tree)))
   }
 
-  test("union-type") {
-    val tree = unpickle(simple_trees / tname"UnionType")
-
+  testUnpickle("union-type", simple_trees / tname"UnionType") { tree =>
     val unionTypeMethod: StructureCheck = {
       case DefDef(
             SimpleName("argWithOrType"),
@@ -1322,9 +1254,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(unionTypeMethod)(clue(tree)))
   }
 
-  test("intersection-type") {
-    val tree = unpickle(simple_trees / tname"IntersectionType")
-
+  testUnpickle("intersection-type", simple_trees / tname"IntersectionType") { tree =>
     val intersectionTypeMethod: StructureCheck = {
       case DefDef(
             SimpleName("argWithAndType"),
@@ -1360,9 +1290,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(intersectionTypeMethod)(clue(tree)))
   }
 
-  test("type-lambda") {
-    val tree = unpickle(simple_trees / tname"TypeLambda")
-
+  testUnpickle("type-lambda", simple_trees / tname"TypeLambda") { tree =>
     val lambdaTpt: StructureCheck = {
       // TL: [X] =>> List[X]
       case TypeMember(
@@ -1387,9 +1315,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(lambdaTpt)(clue(tree)))
   }
 
-  test("type-lambda-type") {
-    val tree = unpickle(simple_trees / tname"HigherKinded")
-
+  testUnpickle("type-lambda-type", simple_trees / tname"HigherKinded") { tree =>
     val typeLambdaResultIsAny: TypeStructureCheck = {
       case TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))) =>
     }
@@ -1413,9 +1339,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
   object TyParamRef:
     def unapply(t: TypeParamRef): Some[Name] = Some(t.paramName)
 
-  test("type-lambda-type-result-depends-on-param") {
-    val tree = unpickle(simple_trees / tname"HigherKindedWithParam")
-
+  testUnpickle("type-lambda-type-result-depends-on-param", simple_trees / tname"HigherKindedWithParam") { tree =>
     // Type lambda result is List[X]
     val typeLambdaResultIsListOf: TypeStructureCheck = {
       case AppliedType(
@@ -1438,9 +1362,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(typeLambda)(clue(tree)))
   }
 
-  test("varags-annotated-type") {
-    val tree = unpickle(simple_trees / tname"VarargFunction")
-
+  testUnpickle("varags-annotated-type", simple_trees / tname"VarargFunction") { tree =>
     val varargMatch: StructureCheck = {
       case DefDef(
             SimpleName("takesVarargs"),
@@ -1477,9 +1399,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(varargMatch)(clue(tree)))
   }
 
-  test("refined-type-tree") {
-    val tree = unpickle(simple_trees / tname"RefinedTypeTree")
-
+  testUnpickle("refined-type-tree", simple_trees / tname"RefinedTypeTree") { tree =>
     val refinedTpt: StructureCheck = {
       case TypeMember(
             TypeName(SimpleName("Refined")),
@@ -1494,9 +1414,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(refinedTpt)(clue(tree)))
   }
 
-  test("refined-type") {
-    val tree = unpickle(simple_trees / tname"RefinedType")
-
+  testUnpickle("refined-type", simple_trees / tname"RefinedType") { tree =>
     val refinedType: StructureCheck = {
       case Typed(
             expr,
@@ -1516,9 +1434,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(refinedType)(clue(tree)))
   }
 
-  test("match-type") {
-    val tree = unpickle(simple_trees / tname"MatchType")
-
+  testUnpickle("match-type", simple_trees / tname"MatchType") { tree =>
     val matchTpt: StructureCheck = {
       case TypeMember(
             TypeName(SimpleName("MT")),
@@ -1646,9 +1562,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(matchWithBind)(clue(tree)))
   }
 
-  test("package-type-ref") {
-    val tree = unpickle(tname"toplevelEmptyPackage$$package".singleton)
-
+  testUnpickle("package-type-ref", tname"toplevelEmptyPackage$$package".singleton) { tree =>
     // Empty package (the path to the toplevel$package[ModuleClass]) is a THIS of a TYPEREFpkg as opposed to
     // non-empty package, which is simply TERMREFpkg. Therefore, reading the type of the package object reads TYPEREFpkg.
     val packageVal: StructureCheck = {
@@ -1662,9 +1576,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(packageVal)(clue(tree)))
   }
 
-  test("wildcard-type-application") {
-    val tree = unpickle(simple_trees / tname"WildcardTypeApplication")
-
+  testUnpickle("wildcard-type-application", simple_trees / tname"WildcardTypeApplication") { tree =>
     // class parameter as a val
     val appliedTypeToTypeBounds: StructureCheck = {
       case ValDef(
@@ -1716,9 +1628,7 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(wildcardParent)(clue(tree)))
   }
 
-  test("qual-this-type") {
-    val tree = unpickle(simple_trees / tname"QualThisType")
-
+  testUnpickle("qual-this-type", simple_trees / tname"QualThisType") { tree =>
     val newInner: StructureCheck = {
       case New(
             SelectTypeTree(
@@ -1732,15 +1642,11 @@ class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     assert(containsSubtree(newInner)(clue(tree)))
   }
 
-  test("shared-package-reference") {
-    val tree = unpickle(simple_trees / tname"SharedPackageReference$$package")
-
+  testUnpickle("shared-package-reference", simple_trees / tname"SharedPackageReference$$package") { tree =>
     // TODO: once references are created, check correctness
   }
 
-  test("typerefin") {
-    val tree = unpickle(simple_trees / tname"TypeRefIn")
-
+  testUnpickle("typerefin", simple_trees / tname"TypeRefIn") { tree =>
     val typerefCheck: StructureCheck = {
       case TypeApply(
             Select(qualifier, SignedName(SimpleName("withArray"), _, _)),
