@@ -5,8 +5,6 @@ import tastyquery.ast.Names.{nme, Name, SimpleName, TypeName}
 import tastyquery.ast.Symbols.{DeclaringSymbol, PackageClassSymbol, Symbol}
 import tastyquery.ast.Symbols.ClassSymbol
 
-import RestrictedUnpicklingSuite.MissingTopLevelDecl
-
 class SymbolSuite extends RestrictedUnpicklingSuite {
   import BaseUnpicklingSuite.Decls.*
   import BaseUnpicklingSuite.toDebugString
@@ -135,63 +133,5 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
       // local method `innerMethod` is not a declaration of `outerMethod`
       Set.empty
     )
-  }
-
-  test("sibling-top-level-class-loading") {
-    val Constants = simple_trees / tname"Constants"
-    val NestedMethod = simple_trees / tname"NestedMethod"
-    val outerMethod = NestedMethod / name"outerMethod"
-    val unitVal = Constants / name"unitVal"
-
-    given BaseContext = getUnpicklingContext(Constants, extraClasspath = NestedMethod)
-
-    // Force resolution of the Constants class symbol
-    resolve(Constants).asClass.declarations
-
-    assertSymbolExistsAndIsLoaded(Constants) // we should have loaded Constants, we requested it
-    assertSymbolExistsAndIsLoaded(unitVal) // outerMethod is a member of Constants, it should be seen.
-
-    assertSymbolExistsAndIsLoaded(NestedMethod) // sibling top-level class is also seen in same package
-    assertSymbolNotExistsOrNotLoadedYet(outerMethod) // members of sibling top-level class are not seen unless requested
-  }
-
-  test("demo-symbolic-package-leaks".ignore) {
-    // ignore because this passes only on clean builds
-
-    def failingGetTopLevelClass(path: TopLevelDeclPath)(using BaseContext): Nothing =
-      baseCtx.getClassIfDefined(path.fullClassName) match
-        case Right(classRoot) => fail(s"expected no class, but got $classRoot")
-        case Left(err)        => throw MissingTopLevelDecl(path, err)
-
-    def forceTopLevel(path: TopLevelDeclPath)(using BaseContext): Unit = {
-      val classRoot = baseCtx.getClassIfDefined(path.fullClassName) match
-        case Right(cls) => cls
-        case Left(err)  => throw MissingTopLevelDecl(path, err)
-      try
-        baseCtx.classloader.scanClass(classRoot)
-        fail(s"expected failure when scanning class ${path.fullClassName}, $classRoot")
-      catch
-        case err: java.lang.AssertionError =>
-          val msg = err.getMessage.nn
-          assert(
-            msg.contains("unexpected package symbolic_-- in owners of top level class symbolic_$minus$minus.#::")
-          )
-    }
-
-    def runTest(using BaseContext): Unit =
-      val `symbolic_--.#::` = name"symbolic_--" / tname"#::"
-      val `symbolic_$minus$minus.#::` = name"symbolic_$$minus$$minus" / tname"#::"
-
-      intercept[MissingTopLevelDecl] {
-        failingGetTopLevelClass(`symbolic_--.#::`) // this will fail, we can't find a symbolic package
-      }
-      assertSymbolNotExistsOrNotLoadedYet(`symbolic_--.#::`) // still does not exist
-      assertSymbolNotExistsOrNotLoadedYet(`symbolic_$minus$minus.#::`) // not existant yet
-
-      // we will read the TASTy file of this class, causing an assertion error when we read the symbolic
-      // package in tasty - the owners of the classroot do not match
-      forceTopLevel(`symbolic_$minus$minus.#::`)
-
-    runTest(using Contexts.init(testClasspath))
   }
 }

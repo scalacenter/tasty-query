@@ -27,39 +27,6 @@ abstract class BaseUnpicklingSuite extends munit.FunSuite {
   def resolve(path: DeclarationPath)(using BaseContext): Symbol =
     summon[BaseContext].findSymbolFromRoot(path.toNameList)
 
-  def assertSymbolExistsAndIsLoaded(path: DeclarationPath)(implicit ctx: BaseContext): Unit =
-    followPathImpl(defn.RootPackage, path).fold(fail(_), _ => ())
-
-  def assertSymbolNotExistsOrNotLoadedYet(path: DeclarationPath)(implicit ctx: BaseContext): Unit =
-    def unexpected(sym: Symbol) = fail(s"expected no symbol, but found ${sym.toDebugString}")
-    followPathImpl(defn.RootPackage, path).fold(_ => (), unexpected)
-
-  private def followPathImpl(root: DeclaringSymbol, path: DeclarationPath): Either[String, Symbol] = {
-    def follow(selected: Symbol)(remainder: DeclarationPath): Either[String, Symbol] = selected match {
-      case nextDecl: DeclaringSymbol =>
-        followPathImpl(nextDecl, remainder)
-      case someSym =>
-        val symDebug = clue(someSym).toDebugString
-        Left(s"Unexpected non-declaring symbol $symDebug with remaining path ${remainder.debug}")
-    }
-    for
-      selected <- select(root, path.root)
-      sym <- path.foldRemainder(Right(selected))(follow(selected))
-    yield sym
-  }
-
-  private def select(root: DeclaringSymbol, next: Name): Either[String, Symbol] = {
-    val sel = (root, next) match {
-      case (p: PackageClassSymbol, s: SimpleName) if p.name != nme.RootName =>
-        p.name.toTermName.select(s)
-      case _ => next
-    }
-    root.getDeclInternal(sel) match {
-      case Some(someSym) => Right(someSym)
-      case _ => Left(s"No declaration for ${next.toDebugString} [${sel.toDebugString}] in ${root.toDebugString}")
-    }
-  }
-
   extension (sc: StringContext)
     def name(args: Any*): SimpleName =
       SimpleName(sc.parts.mkString)
