@@ -30,14 +30,6 @@ abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean, al
     base
   }
 
-  def unpickle(path: TopLevelDeclPath): Tree = {
-    val (base, classRoot) = findTopLevelClass(path)()
-    val tree = base.classloader.topLevelTasty(classRoot)(using base) match
-      case Some(trees) => trees.head
-      case _           => fail(s"Missing tasty for ${path.fullClassName}, $classRoot")
-    tree
-  }
-
   class MissingTopLevelDecl(path: TopLevelDeclPath, cause: SymResolutionProblem)
       extends Exception(
         s"Missing top-level declaration ${path.fullClassName}, perhaps it is not on the classpath?",
