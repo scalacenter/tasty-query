@@ -1,11 +1,10 @@
 package tastyquery
 
 import tastyquery.Contexts.BaseContext
-import tastyquery.ast.Symbols.{ClassSymbol, Symbol}
-import tastyquery.ast.Trees.Tree
-import tastyquery.ast.Types.{Type, SymResolutionProblem}
+import tastyquery.ast.Symbols.ClassSymbol
+import tastyquery.ast.Types.SymResolutionProblem
 
-import BaseUnpicklingSuite.Decls.*
+import Paths.*
 
 abstract class RestrictedUnpicklingSuite extends BaseUnpicklingSuite {
   import RestrictedUnpicklingSuite.*

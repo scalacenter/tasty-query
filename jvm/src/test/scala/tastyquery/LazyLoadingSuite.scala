@@ -4,7 +4,7 @@ import tastyquery.Contexts.*
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 
-import BaseUnpicklingSuite.Decls.*
+import Paths.*
 import RestrictedUnpicklingSuite.MissingTopLevelDecl
 
 /** The lazy-loading suite explicitly tests that some operations do, and do

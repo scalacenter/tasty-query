@@ -1,20 +1,20 @@
 package tastyquery
 
+import dotty.tools.tasty.TastyFormat.NameTags
+
 import munit.Location
 
 import tastyquery.Contexts
 import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.{NoSymbol, Symbol}
+import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.*
 import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Types.*
-import tastyquery.reader.TastyUnpickler
-import dotty.tools.tasty.TastyFormat.NameTags
+
+import Paths.*
 
 class ReadTreeSuite extends RestrictedUnpicklingSuite {
-  import BaseUnpicklingSuite.Decls.*
-
   type StructureCheck = PartialFunction[Tree, Unit]
   type TypeStructureCheck = PartialFunction[Type, Unit]
 

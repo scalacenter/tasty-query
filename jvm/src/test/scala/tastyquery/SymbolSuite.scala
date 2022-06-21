@@ -1,14 +1,12 @@
 package tastyquery
 
-import tastyquery.Contexts.{BaseContext, baseCtx}
-import tastyquery.ast.Names.{nme, Name, SimpleName, TypeName}
-import tastyquery.ast.Symbols.{DeclaringSymbol, PackageClassSymbol, Symbol}
-import tastyquery.ast.Symbols.ClassSymbol
+import tastyquery.Contexts.BaseContext
+import tastyquery.ast.Names.*
+import tastyquery.ast.Symbols.*
+
+import Paths.*
 
 class SymbolSuite extends RestrictedUnpicklingSuite {
-  import BaseUnpicklingSuite.Decls.*
-  import BaseUnpicklingSuite.toDebugString
-
   val empty_class = name"empty_class".singleton
   val simple_trees = name"simple_trees".singleton
   val `simple_trees.nested` = simple_trees / name"nested"

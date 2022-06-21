@@ -1,17 +1,16 @@
 package tastyquery
 
+import scala.collection.mutable
+
 import tastyquery.Contexts.BaseContext
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.*
 import tastyquery.ast.Types.*
 
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import Paths.*
 
 class TypeSuite extends UnrestrictedUnpicklingSuite {
-  import BaseUnpicklingSuite.Decls.*
-
   def assertIsSymbolWithPath(path: DeclarationPath)(actualSymbol: Symbol)(using BaseContext): Unit = {
     val expectedSymbol = resolve(path)
     assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
