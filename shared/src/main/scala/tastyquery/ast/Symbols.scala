@@ -40,7 +40,7 @@ object Symbols {
       myTree = Some(t)
       this
     }
-    final def tree: Option[DefTree] = myTree
+    def tree(using BaseContext): Option[DefTree] = myTree
 
     private var myDeclaredType: Type | Null = null
 
@@ -87,7 +87,7 @@ object Symbols {
       case null          => NoSymbol
     }
 
-    final def paramSymss: List[List[Symbol]] =
+    final def paramSymss(using BaseContext): List[List[Symbol]] =
       tree match
         case Some(ddef: DefDef) =>
           ddef.paramLists.map {
@@ -206,6 +206,10 @@ object Symbols {
       */
     private[tastyquery] def ensureInitialised()(using BaseContext): Unit =
       ()
+
+    override def tree(using BaseContext): Option[DefTree] =
+      ensureInitialised()
+      super.tree
 
     private[Symbols] final def hasOverloads(name: SignedName): Boolean =
       myDeclarations.get(name.underlying) match

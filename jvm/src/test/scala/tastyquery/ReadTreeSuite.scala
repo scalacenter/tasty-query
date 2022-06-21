@@ -5,6 +5,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import munit.Location
 
 import tastyquery.Contexts
+import tastyquery.Contexts.BaseContext
 import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
@@ -43,7 +44,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
         ) =>
   }
 
-  def testUnpickle(name: String, path: TopLevelDeclPath)(
+  def testUnpickleTopLevel(name: String, path: TopLevelDeclPath)(
     using Location
   )(body: Contexts.BaseContext ?=> Tree => Unit): Unit =
     test(name) {
@@ -53,9 +54,22 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
         case _           => fail(s"Missing tasty for ${path.fullClassName}, $classRoot")
       body(using base)(tree)
     }
+  end testUnpickleTopLevel
+
+  def testUnpickle(name: String, path: TopLevelDeclPath)(
+    using Location
+  )(body: Contexts.BaseContext ?=> Tree => Unit): Unit =
+    test(name) {
+      given BaseContext = getUnpicklingContext(path)
+      val cls = resolve(path)
+      val tree = cls.tree.getOrElse {
+        fail(s"Missing tasty for ${path.fullClassName}, $cls")
+      }
+      tree.asInstanceOf[Tree]
+    }
   end testUnpickle
 
-  testUnpickle("empty-class", empty_class / tname"EmptyClass") { tree =>
+  testUnpickleTopLevel("empty-class", empty_class / tname"EmptyClass") { tree =>
     assert({
       {
         case PackageDef(
@@ -89,7 +103,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     }.isDefinedAt(clue(tree)))
   }
 
-  testUnpickle("nested-packages", `simple_trees.nested` / tname"InNestedPackage") { tree =>
+  testUnpickleTopLevel("nested-packages", `simple_trees.nested` / tname"InNestedPackage") { tree =>
     val nestedPackages: StructureCheck = {
       case PackageDef(
             Symbol(SimpleName("simple_trees")),
@@ -102,7 +116,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(nestedPackages)(clue(tree)))
   }
 
-  testUnpickle("qualified-nested-package", `simple_trees.nested` / tname"InQualifiedNestedPackage") { tree =>
+  testUnpickleTopLevel("qualified-nested-package", `simple_trees.nested` / tname"InQualifiedNestedPackage") { tree =>
     val packageCheck: StructureCheck = {
       case PackageDef(Symbol(QualifiedName(NameTags.QUALIFIED, SimpleName("simple_trees"), SimpleName("nested"))), _) =>
     }
@@ -110,14 +124,14 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(packageCheck)(clue(tree)))
   }
 
-  testUnpickle("basic-import", imports / tname"Import") { tree =>
+  testUnpickleTopLevel("basic-import", imports / tname"Import") { tree =>
     val importMatch: StructureCheck = {
       case Import(_, List(ImportSelector(Ident(SimpleName("A")), EmptyTree, EmptyTypeTree))) =>
     }
     assert(containsSubtree(clue(importMatch))(clue(tree)))
   }
 
-  testUnpickle("multiple-imports", imports / tname"MultipleImports") { tree =>
+  testUnpickleTopLevel("multiple-imports", imports / tname"MultipleImports") { tree =>
     val importMatch: StructureCheck = {
       case Import(
             ReferencedPackage(SimpleName("imported_files")),
@@ -130,7 +144,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(importMatch)(clue(tree)))
   }
 
-  testUnpickle("renamed-import", imports / tname"RenamedImport") { tree =>
+  testUnpickleTopLevel("renamed-import", imports / tname"RenamedImport") { tree =>
     val importMatch: StructureCheck = {
       case Import(
             ReferencedPackage(SimpleName("imported_files")),
@@ -140,7 +154,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(importMatch)(clue(tree)))
   }
 
-  testUnpickle("given-import", imports / tname"ImportGiven") { tree =>
+  testUnpickleTopLevel("given-import", imports / tname"ImportGiven") { tree =>
     val importMatch: StructureCheck = {
       // A given import selector has an empty name
       case Import(
@@ -152,7 +166,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(importMatch)(clue(tree)))
   }
 
-  testUnpickle("given-bounded-import", imports / tname"ImportGivenWithBound") { tree =>
+  testUnpickleTopLevel("given-bounded-import", imports / tname"ImportGivenWithBound") { tree =>
     val importMatch: StructureCheck = {
       // A given import selector has an empty name
       case Import(
@@ -463,7 +477,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(intFieldMatch)(clue(tree)))
   }
 
-  testUnpickle("object", simple_trees / tname"ScalaObject") { tree =>
+  testUnpickleTopLevel("object", simple_trees / tname"ScalaObject") { tree =>
+    // FIXME This test should not need `testUnpickleTopLevel`
+
     val selfDefMatch: StructureCheck = {
       case ValDef(nme.Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject"))), EmptyTree, NoSymbol) =>
     }
@@ -984,7 +1000,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(genericMethod)(clue(tree)))
   }
 
-  testUnpickle("generic-extension", simple_trees / tname"GenericExtension$$package") { tree =>
+  testUnpickleTopLevel("generic-extension", simple_trees / tname"GenericExtension$$package") { tree =>
+    // FIXME This test should not need `testUnpickleTopLevel`
+
     val extensionCheck: StructureCheck = {
       case DefDef(
             SimpleName("genericExtension"),
@@ -1562,7 +1580,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(matchWithBind)(clue(tree)))
   }
 
-  testUnpickle("package-type-ref", tname"toplevelEmptyPackage$$package".singleton) { tree =>
+  testUnpickleTopLevel("package-type-ref", tname"toplevelEmptyPackage$$package".singleton) { tree =>
+    // TODO Can this test be made to pass with `testUnpickle`?
+
     // Empty package (the path to the toplevel$package[ModuleClass]) is a THIS of a TYPEREFpkg as opposed to
     // non-empty package, which is simply TERMREFpkg. Therefore, reading the type of the package object reads TYPEREFpkg.
     val packageVal: StructureCheck = {
@@ -1642,7 +1662,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(newInner)(clue(tree)))
   }
 
-  testUnpickle("shared-package-reference", simple_trees / tname"SharedPackageReference$$package") { tree =>
+  testUnpickleTopLevel("shared-package-reference", simple_trees / tname"SharedPackageReference$$package") { tree =>
+    // TODO Can this test be made to pass with `testUnpickle`?
     // TODO: once references are created, check correctness
   }
 
