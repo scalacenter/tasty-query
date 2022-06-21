@@ -12,7 +12,7 @@ import tastyquery.ast.Types.*
 import tastyquery.reader.TastyUnpickler
 import dotty.tools.tasty.TastyFormat.NameTags
 
-class ReadTreeSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false, allowDeps = false) {
+class ReadTreeSuite extends RestrictedUnpicklingSuite {
   import BaseUnpicklingSuite.Decls.*
 
   type StructureCheck = PartialFunction[Tree, Unit]

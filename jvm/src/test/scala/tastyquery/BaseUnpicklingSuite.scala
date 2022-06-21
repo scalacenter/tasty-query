@@ -19,35 +19,10 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import scala.annotation.targetName
 import tastyquery.ast.Symbols.ClassSymbol
 
-abstract class BaseUnpicklingSuite(withClasses: Boolean, withStdLib: Boolean, allowDeps: Boolean)
-    extends munit.FunSuite { outer =>
+abstract class BaseUnpicklingSuite extends munit.FunSuite {
   given TestPlatform = tastyquery.testutil.jdk.JavaTestPlatform // TODO: make abstract so we can test scala.js
 
-  lazy val testClasspath = testPlatform.loadClasspath(includeClasses = withClasses, includeStdLib = withStdLib)
-
-  def getUnpicklingContext(path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*): BaseContext = {
-    val (base, _) = findTopLevelClass(path)(extraClasspath*)
-    base
-  }
-
-  class MissingTopLevelDecl(path: TopLevelDeclPath, cause: SymResolutionProblem)
-      extends Exception(
-        s"Missing top-level declaration ${path.fullClassName}, perhaps it is not on the classpath?",
-        cause
-      )
-
-  protected def findTopLevelClass(path: TopLevelDeclPath)(extras: TopLevelDeclPath*): (BaseContext, ClassSymbol) = {
-    val topLevelClass = path.fullClassName
-    val classpath =
-      if allowDeps then testClasspath
-      else testClasspath.withFilter(topLevelClass :: extras.map(_.fullClassName).toList)
-    val base: BaseContext = Contexts.init(classpath)
-    val classRoot = base.getClassIfDefined(topLevelClass) match
-      case Right(cls) => cls
-      case Left(err)  => throw MissingTopLevelDecl(path, err)
-    if !base.classloader.scanClass(classRoot)(using base) then fail(s"could not initialise $topLevelClass, $classRoot")
-    (base, classRoot)
-  }
+  lazy val testClasspath = testPlatform.loadClasspath()
 
   def resolve(path: DeclarationPath)(using BaseContext): Symbol =
     summon[BaseContext].findSymbolFromRoot(path.toNameList)

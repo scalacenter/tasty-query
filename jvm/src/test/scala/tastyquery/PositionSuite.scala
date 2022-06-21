@@ -13,7 +13,7 @@ import scala.reflect.TypeTest
 import scala.util.control.Exception.Catch
 import tastyquery.ast.Types.RefinedType
 
-class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false, allowDeps = false) {
+class PositionSuite extends RestrictedUnpicklingSuite {
   import BaseUnpicklingSuite.Decls.*
 
   val ResourceCodeProperty = "test-resources-code"
