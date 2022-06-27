@@ -665,7 +665,7 @@ class TreeUnpickler(
     case SHAREDterm =>
       val spn = span
       reader.readByte()
-      forkAt(reader.readAddr()).readTerm
+      forkAt(reader.readAddr()).readTerm.withSpan(spn)
 
     // paths
     case THIS =>
@@ -703,7 +703,7 @@ class TreeUnpickler(
     case SHAREDtype =>
       val spn = span
       reader.readByte()
-      forkAt(reader.readAddr()).readTerm
+      forkAt(reader.readAddr()).readTerm.withSpan(spn)
     case tag if isConstantTag(tag) =>
       val spn = span
       Literal(readConstant)(spn)
@@ -964,8 +964,9 @@ class TreeUnpickler(
       reader.readByte()
       ByNameTypeTree(readTypeTree)(spn)
     case SHAREDterm =>
+      val spn = span
       reader.readByte()
-      forkAt(reader.readAddr()).readTypeTree
+      forkAt(reader.readAddr()).readTypeTree.withSpan(spn)
     case tag if isTypeTreeTag(tag) =>
       throw TreeUnpicklerException(s"Unexpected type tree tag ${astTagToString(tag)} $posErrorMsg")
     case _ => TypeWrapper(readType)(span)
