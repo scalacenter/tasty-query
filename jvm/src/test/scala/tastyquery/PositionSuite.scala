@@ -39,50 +39,30 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     (tree, code)
   }
 
-  private def treeToCode(tree: Tree, code: String): String =
-    if tree.span.exists then code.slice(tree.span.start, tree.span.end) else ""
+  private def treeToCode(tree: Tree, code: String): (Int, String) =
+    if tree.span.exists then (tree.span.start, code.slice(tree.span.start, tree.span.end)) else (-1, "")
 
-  private def treeToCode(tree: TypeTree, code: String): String =
-    if tree.span.exists then code.slice(tree.span.start, tree.span.end) else ""
-
-  private def printTreeWithCode(tree: Tree, code: String): Unit =
-    tree.walkTree { t =>
-      println(t)
-      println("-" * 40)
-      if (t.span.exists) {
-        println(treeToCode(t, code))
-      } else {
-        println(t.span)
-      }
-      println("=" * 40)
-    }
-
-  private def printTreeWithCodeT(tree: Tree, code: String): Unit =
-    tree.walkTypeTrees { t =>
-      println(t)
-      println("-" * 40)
-      if (t.span.exists) {
-        println(treeToCode(t, code))
-      } else {
-        println(t.span)
-      }
-      println("=" * 40)
-    }
+  private def treeToCode(tree: TypeTree, code: String): (Int, String) =
+    if tree.span.exists then (tree.span.start, code.slice(tree.span.start, tree.span.end)) else (-1, "")
 
   private def collectCode[T <: Tree](tree: Tree, code: String)(using tt: TypeTest[Tree, T]): List[String] =
     tree
-      .walkTree[List[String]]({
+      .walkTree[List[(Int, String)]]({
         case tt(t: T) => List(treeToCode(t, code))
         case _        => Nil
       })(_ ::: _, Nil)
+      .distinct
+      .map(_._2)
       .filter(_ != "")
 
   private def collectCodeT[T <: TypeTree](tree: Tree, code: String)(using tt: TypeTest[TypeTree, T]): List[String] =
     tree
-      .walkTypeTrees[List[String]]({
+      .walkTypeTrees[List[(Int, String)]]({
         case tt(t: T) => List(treeToCode(t, code))
         case _        => Nil
       })(_ ::: _, Nil)
+      .distinct
+      .map(_._2)
       .filter(_ != "")
 
   /** Basics */
@@ -391,4 +371,10 @@ class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib 
     val (tree, code) = unpickleWithCode(simple_trees / tname"InlinedCall")
     assertEquals(collectCode[Inlined](tree, code), List("new withInlineMethod.Inner().inlined(0)", "arg"))
   }
+
+  test("shared-type") {
+    val (tree, code) = unpickleWithCode(simple_trees / tname"SharedType")
+    assertEquals(collectCode[Ident](tree, code), List("println", "println"))
+  }
+
 }
