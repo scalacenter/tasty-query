@@ -69,6 +69,8 @@ object Symbols {
       if local != null then local
       else throw new IllegalStateException(s"$this was not assigned a declared type")
 
+    final def owner: Symbol = outer
+
     final def outer: Symbol = rawowner match {
       case owner: Symbol => owner
       case null          => assert(false, s"cannot access outer, ${this.name} was not declared within any scope")
@@ -122,8 +124,13 @@ object Symbols {
 
     final def exists: Boolean = this ne NoSymbol
 
+    final def isType: Boolean = name.isTypeName
+    final def isTerm: Boolean = name.isTermName
+
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
     final def isPackage: Boolean = this.isInstanceOf[PackageClassSymbol]
+
+    final def asClass: ClassSymbol = this.asInstanceOf[ClassSymbol]
 
     private[tastyquery] final def memberIsOverloaded(name: SignedName): Boolean = this match
       case scope: DeclaringSymbol => scope.hasOverloads(name)

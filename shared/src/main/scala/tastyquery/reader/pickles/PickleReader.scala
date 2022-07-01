@@ -1,7 +1,11 @@
 package tastyquery.reader.pickles
 
+import scala.annotation.switch
+
+import tastyquery.ast.Constants.*
 import tastyquery.ast.Names.{TermName, termName, TypeName, typeName, nme}
 import tastyquery.ast.Symbols.{Symbol, NoSymbol}
+import tastyquery.ast.Types.*
 import tastyquery.Contexts.{ClassContext, clsCtx}
 
 import PickleReader.*
@@ -13,6 +17,9 @@ import tastyquery.ast.Symbols.ClassSymbol
 
 import tastyquery.util.syntax.chaining.given
 import tastyquery.ast.Symbols.DeclaringSymbol
+import tastyquery.ast.Symbols.PackageClassSymbol
+import tastyquery.ast.Trees.TypeApply
+import tastyquery.Contexts.BaseContext
 
 class PickleReader {
   opaque type Entries = Array[AnyRef | Null]
@@ -73,33 +80,72 @@ class PickleReader {
     }
   }
 
-  def readSymbol()(using ClassContext, PklStream, Entries, Index): Symbol = readDisambiguatedSymbol(alwaysTrue)()
+  def readLocalSymbolRef()(using ClassContext, PklStream, Entries, Index): Symbol =
+    readMaybeExternalSymbolRef() match
+      case sym: Symbol => sym
+      case external =>
+        errorBadSignature(s"expected local symbol reference but found $external")
 
-  def readSymbolRef()(using ClassContext, PklStream, Entries, Index): Symbol =
-    // Note: in dotty this call to `at` is inlined manually.
-    at(pkl.readNat())(readSymbol())
+  def readLocalSymbolAt(i: Int)(using ClassContext, PklStream, Entries, Index): Symbol =
+    readMaybeExternalSymbolAt(i) match
+      case sym: Symbol => sym
+      case external =>
+        errorBadSignature(s"expected local symbol reference but found $external")
 
-  private def readDisambiguatedSymbol(p: Symbol => Boolean)()(using ClassContext, PklStream, Entries, Index): Symbol = {
+  def readMaybeExternalSymbolRef()(using ClassContext, PklStream, Entries, Index): MaybeExternalSymbol =
+    readMaybeExternalSymbolAt(pkl.readNat())
+
+  def readMaybeExternalSymbolAt(i: Int)(using ClassContext, PklStream, Entries, Index): MaybeExternalSymbol =
+    // Similar to at(), but sometimes readMaybeExternalSymbol stores the result itself in entries
+    val tOpt = entries(i).asInstanceOf[MaybeExternalSymbol | Null]
+    if tOpt == null then {
+      val res = pkl.unsafeFork(index(i)) {
+        readMaybeExternalSymbol(i)
+      }
+      val existingEntry = entries(i)
+      if existingEntry == null then entries(i) = res
+      else assert(res eq existingEntry, s"$res <-> $existingEntry}")
+      res
+    } else tOpt
+
+  def readMaybeExternalSymbol(
+    storeInEntriesAt: Int
+  )(using ClassContext, PklStream, Entries, Index): MaybeExternalSymbol = {
     // val start = indexCoord(readIndex) // no need yet to record the position of symbols
     val tag = pkl.readByte()
     val end = pkl.readEnd()
     def atEnd(using PklStream) = pkl.atOffset(end)
 
-    def readExtSymbol(): Symbol =
-      ???
+    def storeResultInEntries(result: MaybeExternalSymbol): Unit =
+      assert(entries(storeInEntriesAt) == null, entries(storeInEntriesAt))
+      entries(storeInEntriesAt) = result
+
+    def readExtSymbol(): MaybeExternalSymbol =
+      val name = readNameRef() // TODO .decode
+      val owner = if (atEnd) clsCtx.defn.RootPackage else readMaybeExternalSymbolRef()
+      name match
+        case nme.RootName | nme.RootPackageName =>
+          clsCtx.defn.RootPackage
+        case _ =>
+          owner match
+            case owner: PackageClassSymbol =>
+              owner.lookup(name).getOrElse {
+                //errorBadSignature(s"cannot find symbol $owner.$name")
+                ExternalSymbolRef(owner, name)
+              }
+            case _ =>
+              ExternalSymbolRef(owner, name)
 
     tag match {
       case NONEsym                 => return NoSymbol
-      case EXTref | EXTMODCLASSref =>
-        // TODO return readExtSymbol()
-        return NoSymbol
-      case _ =>
+      case EXTref | EXTMODCLASSref => return readExtSymbol()
+      case _                       =>
     }
 
     // symbols that were pickled with Pickler.writeSymInfo
     val nameref = pkl.readNat()
     val name = at(nameref)(readName())
-    val owner = readSymbolRef()
+    val owner = readLocalSymbolRef()
 
     val flagsRaw = pkl.readLongNat() // TODO: Decode into flags
 
@@ -107,7 +153,7 @@ class PickleReader {
       val ref = pkl.readNat()
       if (!isSymbolRef(ref)) (NoSymbol, ref)
       else {
-        val pw = at(ref)(readSymbol())
+        val pw = readLocalSymbolAt(ref)
         (pw, pkl.readNat())
       }
     }
@@ -132,27 +178,31 @@ class PickleReader {
       sym
     }
 
+    def readSymType(): Type =
+      try at(infoRef)(readType())
+      catch
+        case t: Throwable =>
+          throw new IllegalStateException(s"error while unpickling the type of $owner.$name", t)
+
     finishSym(tag match {
       case TYPEsym | ALIASsym =>
         var name1 = name.toTypeName
         // var flags1 = flags
         // if (flags.is(TypeParam)) flags1 |= owner.typeParamCreationFlags
         // newSymbol(owner, name1, flags1, localMemberUnpickler, privateWithin, coord = start)
-
-        // TODO: clsCtx at owner
-        clsCtx.createSymbol(name1, RegularSymbolFactory, addToDecls = false)
+        RegularSymbolFactory.createSymbol(name1, owner)
       case CLASSsym =>
         if isClassRoot then clsCtx.classRoot useWith { _.initialised = true }
         else if isModuleClassRoot then clsCtx.moduleClassRoot useWith { _.initialised = true }
-        else clsCtx.createSymbol(name.toTypeName, ClassSymbolFactory, addToDecls = false)
+        else ClassSymbolFactory.createSymbol(name.toTypeName, owner) // TODO Read inner members
       case VALsym =>
-        clsCtx.createSymbol(name.toTermName, RegularSymbolFactory, addToDecls = false)
+        val sym = RegularSymbolFactory.createSymbol(name.toTermName, owner)
+        storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles
+        val tpe = readSymType()
+        sym.withDeclaredType(tpe)
       case MODULEsym =>
-        if isModuleRoot then {
-          clsCtx.moduleRoot
-        } else {
-          ???
-        }
+        if isModuleRoot then clsCtx.moduleRoot
+        else RegularSymbolFactory.createSymbol(name.toTermName, owner) // TODO Assign type to companion module class
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     })
@@ -186,6 +236,214 @@ class PickleReader {
     val tag = pkl.bytes(index(i))
     (firstSymTag <= tag && tag <= lastExtSymTag)
   }
+
+  /** Read type ref, mapping a TypeRef to a package to the package's ThisType
+    *  Package references should be TermRefs or ThisTypes but it was observed that
+    *  nsc sometimes pickles them as TypeRefs instead.
+    */
+  private def readPrefix()(using ClassContext, PklStream, Entries, Index): Type = readTypeRef() match {
+    //case pre: TypeRef if pre.symbol.is(Package) => pre.symbol.thisType
+    case pre => pre
+  }
+
+  private def readTypeRef()(using ClassContext, PklStream, Entries, Index): Type =
+    readTypeOrTypeBoundsRef().asInstanceOf[Type]
+
+  /** Read a type
+    *
+    *  @param forceProperType is used to ease the transition to NullaryMethodTypes (commentmarker: NMT_TRANSITION)
+    *        the flag say that a type of kind * is expected, so that PolyType(tps, restpe) can be disambiguated to PolyType(tps, NullaryMethodType(restpe))
+    *        (if restpe is not a ClassInfoType, a MethodType or a NullaryMethodType, which leaves TypeRef/SingletonType -- the latter would make the polytype a type constructor)
+    */
+  private def readType()(using ClassContext, PklStream, Entries, Index): Type =
+    readTypeOrTypeBounds().asInstanceOf[Type]
+
+  private def readTypeOrTypeBoundsRef()(using ClassContext, PklStream, Entries, Index): Type | TypeBounds =
+    at(pkl.readNat())(readType())
+
+  /** Read a type
+    *
+    *  @param forceProperType is used to ease the transition to NullaryMethodTypes (commentmarker: NMT_TRANSITION)
+    *        the flag say that a type of kind * is expected, so that PolyType(tps, restpe) can be disambiguated to PolyType(tps, NullaryMethodType(restpe))
+    *        (if restpe is not a ClassInfoType, a MethodType or a NullaryMethodType, which leaves TypeRef/SingletonType -- the latter would make the polytype a type constructor)
+    */
+  private def readTypeOrTypeBounds()(using ClassContext, PklStream, Entries, Index): Type | TypeBounds = {
+    def select(pre: Type, sym: Symbol): Type =
+      // structural members need to be selected by name, their symbols are only
+      // valid in the synthetic refinement class that defines them.
+      /*TODO if !pre.isInstanceOf[ThisType] && isRefinementClass(sym.owner) then pre.select(sym.name)
+      else*/ pre.select(sym)
+
+    val tag = pkl.readByte()
+    val end = pkl.readEnd()
+    (tag: @switch) match {
+      case NOtpe =>
+        NoType
+      case NOPREFIXtpe =>
+        NoPrefix
+      case THIStpe =>
+        readMaybeExternalSymbolRef() match
+          case sym: Symbol =>
+            sym.asClass.accessibleThisType
+          case external: ExternalSymbolRef =>
+            ThisType(external.toTypeRef(NoPrefix))
+      case SINGLEtpe =>
+        val pre = readPrefix()
+        val designator = readMaybeExternalSymbolRef()
+        designator match
+          case sym: Symbol                 => NamedType(pre, sym)
+          case external: ExternalSymbolRef => external.toNamedType(pre)
+      /*case SUPERtpe =>
+        val thistpe = readTypeRef()
+        val supertpe = readTypeRef()
+        SuperType(thistpe, supertpe)*/
+      case CONSTANTtpe =>
+        readConstantRef() match
+          case c: Constant => ConstantType(c)
+          case tp: TermRef => tp
+      case TYPEREFtpe =>
+        var pre = readPrefix()
+        val designator = readMaybeExternalSymbolRef()
+        /*pre match {
+          case thispre: ThisType =>
+            // The problem is that class references super.C get pickled as
+            // this.C. Dereferencing the member might then get an overriding class
+            // instance. The problem arises for instance for LinkedHashMap#MapValues
+            // and also for the inner Transform class in all views. We fix it by
+            // replacing the this with the appropriate super.
+            if (sym.owner != thispre.cls) {
+              val overriding = thispre.cls.info.decls.lookup(sym.name)
+              if (overriding.exists && overriding != sym) {
+                val base = pre.baseType(sym.owner)
+                assert(base.exists)
+                pre = SuperType(thispre, base)
+              }
+            }
+          case NoPrefix if sym.is(TypeParam) =>
+            pre = sym.owner.thisType
+          case _ =>
+        }*/
+        //val tycon = select(pre, sym)
+        val tycon = designator match
+          case sym: Symbol                 => select(pre, sym)
+          case external: ExternalSymbolRef => external.toTypeRef(pre)
+        val args = pkl.until(end, () => readTypeOrTypeBoundsRef())
+        /*if (sym == defn.ByNameParamClass2x) ExprType(args.head)
+        else if (ctx.settings.scalajs.value && args.length == 2 &&
+            sym.owner == JSDefinitions.jsdefn.ScalaJSJSPackageClass && sym == JSDefinitions.jsdefn.PseudoUnionClass) {
+          // Treat Scala.js pseudo-unions as real unions, this requires a
+          // special-case in erasure, see TypeErasure#eraseInfo.
+          OrType(args(0), args(1))
+        }
+        else if (args.nonEmpty) tycon.safeAppliedTo(EtaExpandIfHK(sym.typeParams, args.map(translateTempPoly)))
+        else if (sym.typeParams.nonEmpty) tycon.EtaExpand(sym.typeParams)
+        else tycon*/
+        if args.isEmpty then tycon
+        else AppliedType(tycon, args)
+      case TYPEBOUNDStpe =>
+        val lo = readTypeRef()
+        val hi = readTypeRef()
+        // TODO? createNullableTypeBounds(lo, hi)
+        RealTypeBounds(lo, hi)
+      case REFINEDtpe =>
+        /*val clazz = readSymbolRef().asClass
+        val decls = symScope(clazz)
+        symScopes(clazz) = EmptyScope // prevent further additions
+        val parents = pkl.until(end, () => readTypeRef())
+        val parent = parents.reduceLeft(AndType(_, _))
+        if (decls.isEmpty) parent
+        else {
+          def subst(info: Type, rt: RecType) = info.substThis(clazz.asClass, rt.recThis)
+          def addRefinement(tp: Type, sym: Symbol) = RefinedType(tp, sym.name, sym.info)
+          val refined = decls.toList.foldLeft(parent)(addRefinement)
+          RecType.closeOver(rt => refined.substThis(clazz, rt.recThis))
+        }*/
+        AnyType
+      /*case CLASSINFOtpe =>
+        val clazz = readLocalSymbolRef()
+        TempClassInfoType(pkl.until(end, () => readTypeRef()), symScope(clazz), clazz)*/
+      case METHODtpe | IMPLICITMETHODtpe =>
+        val restpe = readTypeRef()
+        val params = pkl.until(end, () => readLocalSymbolRef())
+        val result = MethodType(params.map(_.name.toTermName), params.map(_.declaredType), restpe)
+        /*val maker = MethodType.companion(
+          isImplicit = tag == IMPLICITMETHODtpe || params.nonEmpty && params.head.is(Implicit))
+        val result = maker.fromSymbols(params, restpe)
+        result.resType match
+          case restpe1: MethodType if restpe1 ne restpe =>
+            val prevResParams = paramsOfMethodType.remove(restpe)
+            if prevResParams != null then
+              paramsOfMethodType.put(restpe1, prevResParams)
+          case _ =>
+        if params.nonEmpty then paramsOfMethodType.put(result, params)*/
+        result
+      case POLYtpe =>
+        val restpe = readTypeRef()
+        val typeParams = pkl.until(end, () => readLocalSymbolRef())
+        if typeParams.nonEmpty then
+          //TempPolyType(typeParams.asInstanceOf[List[TypeSymbol]], restpe.widenExpr)
+          PolyType(typeParams.map(_.name.toTypeName), typeParams.map(_ => UnconstrainedTypeBounds), restpe)
+        else ExprType(restpe)
+      case EXISTENTIALtpe =>
+        /*val restpe = readTypeRef()
+        val boundSyms = pkl.until(end, () => readLocalSymbolRef())
+        elimExistentials(boundSyms, restpe)*/
+        AnyType
+      case ANNOTATEDtpe =>
+        // TODO AnnotatedType.make(readTypeRef(), pkl.until(end, () => readAnnotationRef()))
+        val underlying = readTypeRef()
+        // ignore until `end` (annotations)
+        underlying
+      case _ =>
+        noSuchTypeTag(tag, end)
+    }
+  }
+
+  private def readTypeParams()(using ClassContext, PklStream, Entries, Index): List[Symbol] = {
+    val tag = pkl.readByte()
+    val end = pkl.readEnd()
+    if (tag == POLYtpe) {
+      val unusedRestperef = pkl.readNat()
+      pkl.until(end, () => readLocalSymbolRef())
+    } else Nil
+  }
+
+  private def noSuchTypeTag(tag: Int, end: Int): Nothing =
+    errorBadSignature("bad type tag: " + tag)
+
+  private def readConstantRef()(using ClassContext, PklStream, Entries, Index): Constant | TermRef =
+    at(pkl.readNat())(readConstant())
+
+  /** Read a constant */
+  private def readConstant()(using ClassContext, PklStream, Entries, Index): Constant | TermRef = {
+    import java.lang.Float.intBitsToFloat
+    import java.lang.Double.longBitsToDouble
+
+    val tag = pkl.readByte().toInt
+    val len = pkl.readNat()
+    (tag: @switch) match {
+      case LITERALunit    => Constant(())
+      case LITERALboolean => Constant(pkl.readLong(len) != 0L)
+      case LITERALbyte    => Constant(pkl.readLong(len).toByte)
+      case LITERALshort   => Constant(pkl.readLong(len).toShort)
+      case LITERALchar    => Constant(pkl.readLong(len).toChar)
+      case LITERALint     => Constant(pkl.readLong(len).toInt)
+      case LITERALlong    => Constant(pkl.readLong(len))
+      case LITERALfloat   => Constant(intBitsToFloat(pkl.readLong(len).toInt))
+      case LITERALdouble  => Constant(longBitsToDouble(pkl.readLong(len)))
+      case LITERALstring  => Constant(readNameRef().toString)
+      case LITERALnull    => Constant(null)
+      case LITERALclass   => Constant(readTypeRef())
+      case LITERALenum =>
+        readMaybeExternalSymbolRef() match
+          case sym: Symbol                 => TermRef(NoPrefix, sym)
+          case external: ExternalSymbolRef => external.toTermRef(NoPrefix)
+      case _ => noSuchConstantTag(tag, len)
+    }
+  }
+
+  private def noSuchConstantTag(tag: Int, len: Int): Nothing =
+    errorBadSignature("bad constant tag: " + tag)
 }
 
 object PickleReader {
@@ -206,7 +464,9 @@ object PickleReader {
   final class PklStream private (in: PickleBuffer) {
     export in.readByte
     export in.readNat
+    export in.readLong
     export in.readLongNat
+    export in.until
     export in.createIndex as readIndex
     export in.readIndex as currentOffset
     export in.bytes
@@ -229,5 +489,26 @@ object PickleReader {
     }
 
   }
+
+  final class ExternalSymbolRef(owner: MaybeExternalSymbol, name: Name) {
+    def toTypeRef(pre: Type)(using BaseContext): TypeRef =
+      toNamedType(pre).asInstanceOf[TypeRef]
+
+    def toTermRef(pre: Type)(using BaseContext): TermRef =
+      toNamedType(pre).asInstanceOf[TermRef]
+
+    def toNamedType(pre: Type)(using BaseContext): NamedType =
+      NamedType(pre, toScala2ExternalSymRef)
+
+    private def toScala2ExternalSymRef: Scala2ExternalSymRef =
+      owner match
+        case owner: Symbol =>
+          Scala2ExternalSymRef(owner, name :: Nil)
+        case owner: ExternalSymbolRef =>
+          val Scala2ExternalSymRef(ownerOwner, ownerPath) = owner.toScala2ExternalSymRef
+          Scala2ExternalSymRef(ownerOwner, ownerPath :+ name)
+  }
+
+  type MaybeExternalSymbol = Symbol | ExternalSymbolRef
 
 }
