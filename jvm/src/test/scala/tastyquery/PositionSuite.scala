@@ -1,21 +1,16 @@
 package tastyquery
 
-import tastyquery.Contexts
-import tastyquery.Contexts.FileContext
-import tastyquery.ast.Trees.*
-import tastyquery.ast.TypeTrees.*
-import tastyquery.ast.Spans.{Span, NoSpan}
-import tastyquery.reader.TastyUnpickler
-import tastyquery.reader.PositionUnpickler
-
 import scala.io.Source
 import scala.reflect.TypeTest
-import scala.util.control.Exception.Catch
-import tastyquery.ast.Types.RefinedType
 
-class PositionSuite extends BaseUnpicklingSuite(withClasses = false, withStdLib = false, allowDeps = false) {
-  import BaseUnpicklingSuite.Decls.*
+import tastyquery.ast.Trees.*
+import tastyquery.ast.TypeTrees.*
+import tastyquery.ast.Types.*
+import tastyquery.ast.Spans.*
 
+import Paths.*
+
+class PositionSuite extends RestrictedUnpicklingSuite {
   val ResourceCodeProperty = "test-resources-code"
 
   val empty_class = name"empty_class".singleton

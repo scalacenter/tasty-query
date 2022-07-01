@@ -1,17 +1,16 @@
 package tastyquery
 
+import scala.collection.mutable
+
 import tastyquery.Contexts.BaseContext
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.*
 import tastyquery.ast.Types.*
 
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import Paths.*
 
-class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = true, allowDeps = true) {
-  import BaseUnpicklingSuite.Decls.*
-
+class TypeSuite extends UnrestrictedUnpicklingSuite {
   def assertIsSymbolWithPath(path: DeclarationPath)(actualSymbol: Symbol)(using BaseContext): Unit = {
     val expectedSymbol = resolve(path)
     assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
@@ -50,10 +49,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     def isArrayOf(arg: (Type | TypeBounds) => Boolean)(using BaseContext): Boolean =
       isApplied(_.isRef(resolve(name"scala" / tname"Array")), Seq(arg))
 
-  test("apply-recursive") {
+  testWithContext("apply-recursive") {
     val RecApply = name"simple_trees" / tname"RecApply"
-
-    given BaseContext = getUnpicklingContext(RecApply)
 
     val gcdSym = resolve(RecApply / name"gcd")
     val NumClass = resolve(RecApply / tname"Num")
@@ -77,15 +74,13 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
   }
 
-  test("java.lang-is-not-loaded".fail) {
-    getUnpicklingContext(name"java" / name"lang" / tname"String")
+  testWithContext("java.lang-is-not-loaded".fail) {
+    resolve(name"java" / name"lang" / tname"String").declaredType
   }
 
   def applyOverloadedTest(name: String)(callMethod: String, paramCls: DeclarationPath)(using munit.Location): Unit =
-    test(name) {
+    testWithContext(name) {
       val OverloadedApply = name"simple_trees" / tname"OverloadedApply"
-
-      given BaseContext = getUnpicklingContext(OverloadedApply)
 
       val callSym = resolve(OverloadedApply / termName(callMethod))
       val Acls = resolve(paramCls)
@@ -118,10 +113,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
   // applyOverloadedTest("apply-overloaded-arrayObj")("callD", name"scala" / tname"Array") // TODO: re-enable when we add types to scala 2 symbols
   applyOverloadedTest("apply-overloaded-byName")("callE", name"simple_trees" / tname"OverloadedApply" / tname"Num")
 
-  test("typeapply-recursive") {
+  testWithContext("typeapply-recursive") {
     val RecApply = name"simple_trees" / tname"RecApply"
-
-    given BaseContext = getUnpicklingContext(RecApply)
 
     val evalSym = resolve(RecApply / name"eval")
     val ExprClass = resolve(RecApply / tname"Expr")
@@ -149,10 +142,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
   }
 
-  test("basic-local-val") {
+  testWithContext("basic-local-val") {
     val AssignPath = name"simple_trees" / tname"Assign"
-
-    given BaseContext = getUnpicklingContext(AssignPath)
 
     val fSym = resolve(AssignPath / name"f")
     val fTree = fSym.tree.get.asInstanceOf[DefDef]
@@ -192,10 +183,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(yCount == 1, clue(yCount))
   }
 
-  test("term-ref") {
+  testWithContext("term-ref") {
     val RepeatedPath = name"simple_trees" / tname"Repeated"
-
-    given BaseContext = getUnpicklingContext(RepeatedPath)
 
     val fSym = resolve(RepeatedPath / name"f")
     val fTree = fSym.tree.get.asInstanceOf[DefDef]
@@ -217,10 +206,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(bitSetIdentCount == 1, clue(bitSetIdentCount))
   }
 
-  test("free-ident") {
+  testWithContext("free-ident") {
     val MatchPath = name"simple_trees" / tname"Match"
-
-    given BaseContext = getUnpicklingContext(MatchPath)
 
     val fSym = resolve(MatchPath / name"f")
     val fTree = fSym.tree.get.asInstanceOf[DefDef]
@@ -246,10 +233,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(freeIdentCount == 2, clue(freeIdentCount))
   }
 
-  test("return") {
+  testWithContext("return") {
     val ReturnPath = name"simple_trees" / tname"Return"
-
-    given BaseContext = getUnpicklingContext(ReturnPath)
 
     val withReturnSym = resolve(ReturnPath / name"withReturn")
     val withReturnTree = withReturnSym.tree.get.asInstanceOf[DefDef]
@@ -270,10 +255,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(returnCount == 1, clue(returnCount))
   }
 
-  test("assign") {
+  testWithContext("assign") {
     val AssignPath = name"simple_trees" / tname"Assign"
-
-    given BaseContext = getUnpicklingContext(AssignPath)
 
     val fSym = resolve(AssignPath / name"f")
     val fTree = fSym.tree.get.asInstanceOf[DefDef]
@@ -294,10 +277,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(assignCount == 1, clue(assignCount))
   }
 
-  test("basic-scala2-types") {
+  testWithContext("basic-scala2-types") {
     val ScalaRange = name"scala" / name"collection" / name"immutable" / tname"Range"
-
-    given BaseContext = getUnpicklingContext(ScalaRange)
 
     val rangeSym = resolve(ScalaRange)
     assert(rangeSym.isClass, rangeSym)
@@ -346,11 +327,9 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     }
   }
 
-  test("basic-java-class-dependency") {
+  testWithContext("basic-java-class-dependency") {
     val BoxedJava = name"javacompat" / tname"BoxedJava"
     val JavaDefined = name"javadefined" / tname"JavaDefined"
-
-    given BaseContext = getUnpicklingContext(BoxedJava)
 
     val boxedSym = resolve(BoxedJava / name"boxed")
 
@@ -359,10 +338,9 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assertIsSymbolWithPath(JavaDefined)(JavaDefinedRef.resolveToSymbol)
   }
 
-  test("bag-of-java-definitions") {
+  testWithContext("bag-of-java-definitions") {
     val BagOfJavaDefinitions = name"javadefined" / tname"BagOfJavaDefinitions"
 
-    given BaseContext = getUnpicklingContext(BagOfJavaDefinitions)
     val IntClass = resolve(name"scala" / tname"Int")
     val UnitClass = resolve(name"scala" / tname"Unit")
 
@@ -398,11 +376,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
   }
 
-  test("bag-of-generic-java-definitions[signatures]") {
+  testWithContext("bag-of-generic-java-definitions[signatures]") {
     val BagOfGenJavaDefinitions = name"javadefined" / tname"BagOfGenJavaDefinitions"
-
-    given BaseContext = getUnpicklingContext(BagOfGenJavaDefinitions)
-
     val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
     val GenericJavaClass = resolve(name"javadefined" / tname"GenericJavaClass")
     val JavaInterface1 = resolve(name"javadefined" / tname"JavaInterface1")
@@ -469,10 +444,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     }
   }
 
-  test("java-class-parents") {
+  testWithContext("java-class-parents") {
     val SubJavaDefined = name"javadefined" / tname"SubJavaDefined"
-
-    given BaseContext = getUnpicklingContext(SubJavaDefined)
 
     val (SubJavaDefinedTpe @ _: ClassType) = resolve(SubJavaDefined).declaredType: @unchecked
 
@@ -486,9 +459,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     )
   }
 
-  test("java-class-signatures-[RecClass]") {
+  testWithContext("java-class-signatures-[RecClass]") {
     val RecClass = name"javadefined" / tname"RecClass"
-    given BaseContext = getUnpicklingContext(RecClass)
 
     val (RecClassTpe @ _: ClassType) = resolve(RecClass).declaredType: @unchecked
 
@@ -497,9 +469,8 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(RecClassTpe.rawParents.isRef(ObjectClass))
   }
 
-  test("java-class-signatures-[SubRecClass]") {
+  testWithContext("java-class-signatures-[SubRecClass]") {
     val SubRecClass = name"javadefined" / tname"SubRecClass"
-    given BaseContext = getUnpicklingContext(SubRecClass)
 
     val (SubRecClassTpe @ _: ClassType) = resolve(SubRecClass).declaredType: @unchecked
 
@@ -519,11 +490,9 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     )
   }
 
-  test("select-method-from-java-class") {
+  testWithContext("select-method-from-java-class") {
     val BoxedJava = name"javacompat" / tname"BoxedJava"
     val getX = name"javadefined" / tname"JavaDefined" / name"getX"
-
-    given BaseContext = getUnpicklingContext(BoxedJava)
 
     val xMethodSym = resolve(BoxedJava / name"xMethod")
 
@@ -534,11 +503,9 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assertIsSymbolWithPath(getX)(getXRef.resolveToSymbol)
   }
 
-  test("select-field-from-java-class") {
+  testWithContext("select-field-from-java-class") {
     val BoxedJava = name"javacompat" / tname"BoxedJava"
     val x = name"javadefined" / tname"JavaDefined" / name"x"
-
-    given BaseContext = getUnpicklingContext(BoxedJava)
 
     val xFieldSym = resolve(BoxedJava / name"xField")
 
@@ -549,11 +516,9 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assertIsSymbolWithPath(x)(xRef.resolveToSymbol)
   }
 
-  test("basic-scala-2-stdlib-class-dependency") {
+  testWithContext("basic-scala-2-stdlib-class-dependency") {
     val BoxedCons = name"scala2compat" / tname"BoxedCons"
     val :: = name"scala" / name"collection" / name"immutable" / tname"::"
-
-    given BaseContext = getUnpicklingContext(BoxedCons)
 
     val ConsClass = resolve(::)
     val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
@@ -565,11 +530,9 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(targ.isOfClass(JavaDefinedClass), clue(targ))
   }
 
-  test("select-method-from-scala-2-stdlib-class") {
+  testWithContext("select-method-from-scala-2-stdlib-class") {
     val BoxedCons = name"scala2compat" / tname"BoxedCons"
     val canEqual = name"scala" / name"collection" / tname"Seq" / name"canEqual"
-
-    given BaseContext = getUnpicklingContext(BoxedCons)
 
     val AnyClass = resolve(name"scala" / tname"Any")
     val BooleanClass = resolve(name"scala" / tname"Boolean")
@@ -589,11 +552,9 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assert(resTpe.isOfClass(BooleanClass), clue(resTpe))
   }
 
-  test("select-field-from-tasty-in-other-package:dependency-from-class-file") {
+  testWithContext("select-field-from-tasty-in-other-package:dependency-from-class-file") {
     val BoxedConstants = name"crosspackagetasty" / tname"BoxedConstants"
     val unitVal = name"simple_trees" / tname"Constants" / name"unitVal"
-
-    given BaseContext = getUnpicklingContext(BoxedConstants)
 
     val boxedUnitValSym = resolve(BoxedConstants / name"boxedUnitVal")
 
@@ -604,7 +565,7 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
     assertIsSymbolWithPath(unitVal)(unitValRef.resolveToSymbol)
   }
 
-  test("select-method-from-java-class-same-package-as-tasty") {
+  testWithContext("select-method-from-java-class-same-package-as-tasty") {
     // This tests reading top level classes in the same package, defined by
     // both Java and Tasty. If we strictly require that all symbols are defined
     // exactly once, then we must be careful to not redefine `ScalaBox`/`JavaBox`
@@ -612,8 +573,6 @@ class TypeSuite extends BaseUnpicklingSuite(withClasses = true, withStdLib = tru
 
     val ScalaBox = name"mixjavascala" / tname"ScalaBox"
     val getX = name"mixjavascala" / tname"JavaBox" / name"getX"
-
-    given BaseContext = getUnpicklingContext(ScalaBox)
 
     val xMethodSym = resolve(ScalaBox / name"xMethod")
 

@@ -18,11 +18,9 @@ object JavaTestPlatform extends TestPlatform {
     Properties.propOrEmpty(StdLibProperty).split(File.pathSeparator).toList
   }
 
-  def loadClasspath(includeClasses: Boolean, includeStdLib: Boolean): Classpath = {
-    val parts0 = resourcesDir :: Nil
-    val kinds0 = Set(ClasspathLoaders.FileKind.Tasty)
-    val kinds = if includeClasses then kinds0 + ClasspathLoaders.FileKind.Class else kinds0
-    val parts = if includeStdLib then parts0 ::: stdLibPaths else parts0
+  def loadClasspath(): Classpath = {
+    val kinds = Set(ClasspathLoaders.FileKind.Tasty, ClasspathLoaders.FileKind.Class)
+    val parts = resourcesDir :: stdLibPaths
     ClasspathLoaders.read(parts, kinds)
   }
 }
