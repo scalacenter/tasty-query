@@ -12,7 +12,7 @@ import ClassfileReader.Access.*
 import tastyquery.reader.pickles.ByteCodecs
 import tastyquery.ast.Types.Type
 import tastyquery.ast.Types
-import tastyquery.Contexts.{BaseContext, baseCtx}
+import tastyquery.Contexts.Context
 import scala.annotation.switch
 import tastyquery.ast.Types.MethodType
 import tastyquery.ast.Types.ExprType
@@ -186,15 +186,13 @@ final class ClassfileReader private () {
     reader
   }
 
-  def readFields(op: (SimpleName, SigOrDesc) => Unit)(using DataStream, ConstantPool)(using BaseContext): Unit =
+  def readFields(op: (SimpleName, SigOrDesc) => Unit)(using DataStream, ConstantPool)(using Context): Unit =
     readMembers(op)
 
-  def readMethods(op: (SimpleName, SigOrDesc) => Unit)(using DataStream, ConstantPool)(using BaseContext): Unit =
+  def readMethods(op: (SimpleName, SigOrDesc) => Unit)(using DataStream, ConstantPool)(using Context): Unit =
     readMembers(op)
 
-  private def readMembers(
-    op: (SimpleName, SigOrDesc) => Unit
-  )(using DataStream, ConstantPool)(using BaseContext): Unit = {
+  private def readMembers(op: (SimpleName, SigOrDesc) => Unit)(using DataStream, ConstantPool)(using Context): Unit = {
     val count = data.readU2()
     loop(count) {
       val accessFlags = data.readU2()

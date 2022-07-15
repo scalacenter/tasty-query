@@ -1,6 +1,6 @@
 package tastyquery.reader.classfiles
 
-import tastyquery.Contexts.{BaseContext, ClassContext, baseCtx, clsCtx}
+import tastyquery.Contexts.{Context, ClassContext, ctx, clsCtx}
 import tastyquery.ast.Types
 import tastyquery.ast.Types.*
 import tastyquery.ast.Symbols.*
@@ -18,7 +18,7 @@ object Descriptors:
     val superRef = superClass.map(classRef).getOrElse(ObjectType)
     interfaces.foldLeft(superRef)((parents, interface) => AndType(parents, classRef(interface)))
 
-  private[tastyquery] def rawTypeArguments(cls: ClassSymbol)(using BaseContext): List[TypeBounds] =
+  private[tastyquery] def rawTypeArguments(cls: ClassSymbol)(using Context): List[TypeBounds] =
     if !cls.initParents then
       // we have initialised our own parents,
       // therefore it is an external class,
@@ -26,9 +26,9 @@ object Descriptors:
       cls.ensureInitialised()
     cls.typeParamSyms.map(Function.const(RealTypeBounds(NothingType, AnyType)))
 
-  private def classRef(binaryName: String)(using BaseContext): Type =
+  private def classRef(binaryName: String)(using Context): Type =
     val className = binaryName.replace('/', '.').nn
-    baseCtx.getClassIfDefined(className) match
+    ctx.getClassIfDefined(className) match
       case Right(ref) =>
         val tpe = ref.accessibleThisType
         val rawArgs = rawTypeArguments(ref)
@@ -39,7 +39,7 @@ object Descriptors:
         throw err
 
   @throws[ReadException]
-  def parseDescriptor(member: Symbol, desc: String)(using BaseContext): Type =
+  def parseDescriptor(member: Symbol, desc: String)(using Context): Type =
     // TODO: once we support inner classes, decide if we merge with parseSignature
     var offset = 0
     var end = desc.length

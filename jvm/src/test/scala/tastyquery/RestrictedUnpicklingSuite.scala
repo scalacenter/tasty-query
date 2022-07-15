@@ -1,6 +1,6 @@
 package tastyquery
 
-import tastyquery.Contexts.BaseContext
+import tastyquery.Contexts.Context
 import tastyquery.ast.Symbols.ClassSymbol
 import tastyquery.ast.Types.SymResolutionProblem
 
@@ -9,10 +9,10 @@ import Paths.*
 abstract class RestrictedUnpicklingSuite extends BaseUnpicklingSuite {
   import RestrictedUnpicklingSuite.*
 
-  def getUnpicklingContext(path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*): BaseContext =
+  def getUnpicklingContext(path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*): Context =
     initRestrictedContext(path, extraClasspath)
 
-  protected def findTopLevelClass(path: TopLevelDeclPath)(extras: TopLevelDeclPath*): (BaseContext, ClassSymbol) = {
+  protected def findTopLevelClass(path: TopLevelDeclPath)(extras: TopLevelDeclPath*): (Context, ClassSymbol) = {
     val base = initRestrictedContext(path, extras)
     val topLevelClass = path.fullClassName
     val classRoot = base.getClassIfDefined(topLevelClass) match
@@ -22,7 +22,7 @@ abstract class RestrictedUnpicklingSuite extends BaseUnpicklingSuite {
     (base, classRoot)
   }
 
-  private def initRestrictedContext(path: TopLevelDeclPath, extras: Seq[TopLevelDeclPath]): BaseContext =
+  private def initRestrictedContext(path: TopLevelDeclPath, extras: Seq[TopLevelDeclPath]): Context =
     val classpath = testClasspath.withFilter((path :: extras.toList).map(_.fullClassName))
     Contexts.init(classpath)
 }

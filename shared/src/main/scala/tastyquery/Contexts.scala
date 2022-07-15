@@ -19,35 +19,35 @@ object Contexts {
 
   /** The current context */
   inline def fileCtx(using ctx: FileContext): FileContext = ctx
-  transparent inline def baseCtx(using baseCtx: BaseContext): BaseContext = baseCtx
+  transparent inline def ctx(using ctx: Context): Context = ctx
   transparent inline def clsCtx(using clsCtx: ClassContext): ClassContext = clsCtx
-  transparent inline def defn(using baseCtx: BaseContext): baseCtx.defn.type = baseCtx.defn
+  transparent inline def defn(using ctx: Context): ctx.defn.type = ctx.defn
 
-  def init(classpath: Classpath): BaseContext =
-    val baseCtx = classpath.loader { classloader =>
-      val baseCtx = BaseContext(Definitions(), classloader)
-      baseCtx.classloader.initPackages()(using baseCtx)
-      baseCtx
+  def init(classpath: Classpath): Context =
+    val ctx = classpath.loader { classloader =>
+      val ctx = Context(Definitions(), classloader)
+      ctx.classloader.initPackages()(using ctx)
+      ctx
     }
-    baseCtx.initializeFundamentalClasses()
-    baseCtx
+    ctx.initializeFundamentalClasses()
+    ctx
 
-  private[Contexts] def moduleClassRoot(classRoot: ClassSymbol)(using BaseContext): ClassSymbol = {
+  private[Contexts] def moduleClassRoot(classRoot: ClassSymbol)(using Context): ClassSymbol = {
     val pkg = classRoot.enclosingDecl
     ClassSymbolFactory.castSymbol(pkg.getDecl(classRoot.name.toTypeName.toObjectName).get)
   }
 
-  private[Contexts] def moduleRoot(classRoot: ClassSymbol)(using BaseContext): RegularSymbol = {
+  private[Contexts] def moduleRoot(classRoot: ClassSymbol)(using Context): RegularSymbol = {
     val pkg = classRoot.enclosingDecl
     RegularSymbolFactory.castSymbol(pkg.getDecl(classRoot.name.toTermName).get)
   }
 
-  private[tastyquery] def initialisedRoot(classRoot: ClassSymbol)(using BaseContext): Boolean =
+  private[tastyquery] def initialisedRoot(classRoot: ClassSymbol)(using Context): Boolean =
     classRoot.initialised || moduleClassRoot(classRoot).initialised
 
-  /** BaseContext is used throughout unpickling an entire project. */
-  class BaseContext private[Contexts] (val defn: Definitions, val classloader: Classpaths.Loader) {
-    private given BaseContext = this
+  /** Context is used throughout unpickling an entire project. */
+  class Context private[Contexts] (val defn: Definitions, val classloader: Classpaths.Loader) {
+    private given Context = this
 
     def withFile(root: ClassSymbol, filename: String)(using Classpaths.permissions.LoadRoot): FileContext =
       new FileContext(defn, root, filename, classloader)
@@ -180,7 +180,7 @@ object Contexts {
     override val defn: Definitions,
     override val classloader: Classpaths.Loader,
     val owner: ClassSymbol
-  ) extends BaseContext(defn, classloader) {
+  ) extends Context(defn, classloader) {
 
     def classRoot: ClassSymbol = owner
 
@@ -215,7 +215,7 @@ object Contexts {
   }
 
   /** FileContext is used when unpickling a given .tasty file.
-    * It extends the BaseContext with the information,local to the file, and keeps track of the current owner.
+    * It extends the Context with the information,local to the file, and keeps track of the current owner.
     */
   class FileContext private[Contexts] (
     override val defn: Definitions,
@@ -223,7 +223,7 @@ object Contexts {
     val owner: Symbol,
     private val fileLocalInfo: FileLocalInfo,
     override val classloader: Classpaths.Loader
-  ) extends BaseContext(defn, classloader) { base =>
+  ) extends Context(defn, classloader) { base =>
 
     private[Contexts] def this(
       defn: Definitions,

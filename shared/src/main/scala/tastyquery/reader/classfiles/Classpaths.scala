@@ -3,7 +3,7 @@ package tastyquery.reader.classfiles
 import tastyquery.ast.Names.SimpleName
 import scala.reflect.NameTransformer
 import tastyquery.Contexts
-import tastyquery.Contexts.{BaseContext, baseCtx, fileCtx, defn}
+import tastyquery.Contexts.{Context, ctx, fileCtx, defn}
 import scala.collection.mutable
 import tastyquery.ast.Names.{TermName, nme, termName, str}
 import tastyquery.ast.Symbols.PackageClassSymbol
@@ -33,21 +33,21 @@ object Classpaths {
 
   object permissions {
 
-    /** sentinel value, it proves that `baseCtx.withRoot` can only be called from `scanClass` */
+    /** sentinel value, it proves that `ctx.withRoot` can only be called from `scanClass` */
     opaque type LoadRoot = Unit
     private[Classpaths] inline def withLoadRootPrivelege[T](inline op: LoadRoot ?=> T): T = op(using ())
   }
 
-  def enterRoot(root: SimpleName, owner: DeclaringSymbol)(using BaseContext): ClassSymbol = {
+  def enterRoot(root: SimpleName, owner: DeclaringSymbol)(using Context): ClassSymbol = {
     val clsName = root.toTypeName
     val objclassName = clsName.toObjectName
     val objName = root
 
     locally {
-      baseCtx.createSymbol(objName, owner)
-      baseCtx.createClassSymbol(objclassName, owner)
+      ctx.createSymbol(objName, owner)
+      ctx.createClassSymbol(objclassName, owner)
     }
-    baseCtx.createClassSymbol(clsName, owner)
+    ctx.createClassSymbol(clsName, owner)
   }
 
   sealed abstract class Classpath protected (val packages: IArray[PackageData]) {
@@ -110,14 +110,14 @@ object Classpaths {
 
       qualified(IArray.unsafeFromArray(dotSeparated.split('.')))
 
-    private[tastyquery] def topLevelTasty(cls: ClassSymbol)(using BaseContext): Option[List[Tree]] =
+    private[tastyquery] def topLevelTasty(cls: ClassSymbol)(using Context): Option[List[Tree]] =
       if !cls.outer.isPackage then None
       else if !Contexts.initialisedRoot(cls) then None
       else if cls.name.toTypeName.wrapsObjectName then None
       else topLevelTastys.get(cls)
 
     /** @return true if loaded the classes inner definitions */
-    private[tastyquery] def scanClass(cls: ClassSymbol)(using baseCtx: BaseContext): Boolean =
+    private[tastyquery] def scanClass(cls: ClassSymbol)(using ctx: Context): Boolean =
       def inspectClass(classData: ClassData, entry: Entry)(using ClassContext, permissions.LoadRoot): Boolean =
         ClassfileParser.readKind(classData).toTry.get match
           case ClassKind.Scala2(structure, runtimeAnnotStart) =>
@@ -130,7 +130,7 @@ object Classpaths {
             entry match
               case Entry.ClassAndTasty(_, tasty) =>
                 // TODO: verify UUID of tasty matches classfile, then parse symbols
-                enterTasty(tasty)(using baseCtx.withFile(cls, tasty.debugPath))
+                enterTasty(tasty)(using ctx.withFile(cls, tasty.debugPath))
               case _ => throw MissingTopLevelTasty(cls)
           case _ =>
             false // no initialisation step to take
@@ -159,20 +159,20 @@ object Classpaths {
             entry match
               case entry: Entry.ClassOnly =>
                 // Tested in `TypeSuite` - aka Java and Scala 2 dependencies
-                inspectClass(entry.classData, entry)(using baseCtx.withRoot(cls))
+                inspectClass(entry.classData, entry)(using ctx.withRoot(cls))
               case entry: Entry.ClassAndTasty =>
                 // Tested in `TypeSuite` - read Tasty file that may reference Java and Scala 2 dependencies
                 // maybe we do not need to parse the class, however the classfile could be missing the TASTY attribute.
-                inspectClass(entry.classData, entry)(using baseCtx.withRoot(cls))
+                inspectClass(entry.classData, entry)(using ctx.withRoot(cls))
               case entry: Entry.TastyOnly =>
                 // Tested in `SymbolSuite`, `ReadTreeSuite`, these do not need to see class files.
-                enterTasty(entry.tastyData)(using baseCtx.withFile(cls, entry.tastyData.debugPath))
+                enterTasty(entry.tastyData)(using ctx.withFile(cls, entry.tastyData.debugPath))
           }
 
         case _ => false
     end scanClass
 
-    def scanPackage(pkg: PackageClassSymbol)(using BaseContext): Unit = {
+    def scanPackage(pkg: PackageClassSymbol)(using Context): Unit = {
       require(searched)
       packages.get(pkg) match {
         case Some(data) =>
@@ -208,7 +208,7 @@ object Classpaths {
       } andThen { pkg.initialised = true }
     }
 
-    def initPackages()(using baseCtx: BaseContext): Unit =
+    def initPackages()(using ctx: Context): Unit =
       if !searched then {
         searched = true
 
@@ -219,10 +219,10 @@ object Classpaths {
 
           var debugPackageCount = 0
 
-          def createSubpackages(packageName: TermName)(using BaseContext): PackageClassSymbol = {
+          def createSubpackages(packageName: TermName)(using Context): PackageClassSymbol = {
             var currentOwner = defn.RootPackage
             for subpackageName <- packageName.subnames do
-              currentOwner = baseCtx.createPackageSymbolIfNew(subpackageName, currentOwner)
+              currentOwner = ctx.createPackageSymbolIfNew(subpackageName, currentOwner)
               debugPackageCount += 1
 
             currentOwner

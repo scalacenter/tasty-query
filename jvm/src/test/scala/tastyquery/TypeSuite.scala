@@ -2,7 +2,7 @@ package tastyquery
 
 import scala.collection.mutable
 
-import tastyquery.Contexts.BaseContext
+import tastyquery.Contexts.Context
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.*
@@ -11,42 +11,42 @@ import tastyquery.ast.Types.*
 import Paths.*
 
 class TypeSuite extends UnrestrictedUnpicklingSuite {
-  def assertIsSymbolWithPath(path: DeclarationPath)(actualSymbol: Symbol)(using BaseContext): Unit = {
+  def assertIsSymbolWithPath(path: DeclarationPath)(actualSymbol: Symbol)(using Context): Unit = {
     val expectedSymbol = resolve(path)
     assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
   }
 
   extension (tpe: Type | TypeBounds)
-    def isWildcard(using BaseContext): Boolean =
+    def isWildcard(using Context): Boolean =
       isBounded(_.isNothing, _.isAny)
 
     def typeOrNone: Type = tpe match
       case tpe: Type       => tpe
       case tpe: TypeBounds => NoType
 
-    def isBounded(lo: Type => Boolean, hi: Type => Boolean)(using BaseContext): Boolean = tpe match
+    def isBounded(lo: Type => Boolean, hi: Type => Boolean)(using Context): Boolean = tpe match
       case tpe: TypeBounds => lo(tpe.low) && hi(tpe.high)
       case _               => false
 
   extension (tpe: Type)
-    def isAny(using BaseContext): Boolean = tpe.isRef(resolve(name"scala" / tname"Any"))
+    def isAny(using Context): Boolean = tpe.isRef(resolve(name"scala" / tname"Any"))
 
-    def isNothing(using BaseContext): Boolean = tpe.isRef(resolve(name"scala" / tname"Nothing"))
+    def isNothing(using Context): Boolean = tpe.isRef(resolve(name"scala" / tname"Nothing"))
 
-    def isIntersectionOf(tpes: (Type => Boolean)*)(using BaseContext): Boolean =
+    def isIntersectionOf(tpes: (Type => Boolean)*)(using Context): Boolean =
       def parts(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
         case AndType(tp1, tp2) => parts(tp2, parts(tp1, acc))
         case tpe: Type         => acc += tpe
       val all = parts(tpe.widen, mutable.ListBuffer[Type]()).toList
       all.corresponds(tpes)((tpe, test) => test(tpe))
 
-    def isApplied(cls: Type => Boolean, argRefs: Seq[(Type | TypeBounds) => Boolean])(using BaseContext): Boolean =
+    def isApplied(cls: Type => Boolean, argRefs: Seq[(Type | TypeBounds) => Boolean])(using Context): Boolean =
       tpe.widen match
         case AppliedType(tycon, args) if cls(tycon) =>
           args.corresponds(argRefs)((arg, argRef) => argRef(arg))
         case _ => false
 
-    def isArrayOf(arg: (Type | TypeBounds) => Boolean)(using BaseContext): Boolean =
+    def isArrayOf(arg: (Type | TypeBounds) => Boolean)(using Context): Boolean =
       isApplied(_.isRef(resolve(name"scala" / tname"Array")), Seq(arg))
 
   testWithContext("apply-recursive") {
@@ -388,7 +388,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       op(resolve(path))
 
     extension (tpe: Type)
-      def isGenJavaClassOf(arg: (Type | TypeBounds) => Boolean)(using BaseContext): Boolean =
+      def isGenJavaClassOf(arg: (Type | TypeBounds) => Boolean)(using Context): Boolean =
         tpe.isApplied(_.isRef(GenericJavaClass), List(arg))
 
     testDef(BagOfGenJavaDefinitions / name"x") { x =>

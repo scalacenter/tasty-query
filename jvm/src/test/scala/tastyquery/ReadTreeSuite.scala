@@ -5,7 +5,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import munit.Location
 
 import tastyquery.Contexts
-import tastyquery.Contexts.BaseContext
+import tastyquery.Contexts.Context
 import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
@@ -46,7 +46,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
   def testUnpickleTopLevel(name: String, path: TopLevelDeclPath)(
     using Location
-  )(body: Contexts.BaseContext ?=> Tree => Unit): Unit =
+  )(body: Contexts.Context ?=> Tree => Unit): Unit =
     test(name) {
       val (base, classRoot) = findTopLevelClass(path)()
       val tree = base.classloader.topLevelTasty(classRoot)(using base) match
@@ -58,9 +58,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
   def testUnpickle(name: String, path: TopLevelDeclPath)(
     using Location
-  )(body: Contexts.BaseContext ?=> Tree => Unit): Unit =
+  )(body: Contexts.Context ?=> Tree => Unit): Unit =
     test(name) {
-      given BaseContext = getUnpicklingContext(path)
+      given Context = getUnpicklingContext(path)
       val cls = resolve(path)
       val tree = cls.tree.getOrElse {
         fail(s"Missing tasty for ${path.fullClassName}, $cls")

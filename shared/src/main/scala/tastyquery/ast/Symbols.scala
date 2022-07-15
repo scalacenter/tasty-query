@@ -6,7 +6,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Trees.{DefTree, Tree, DefDef}
 import tastyquery.ast.Flags, Flags.FlagSet
 import tastyquery.ast.Types.*
-import tastyquery.Contexts.{BaseContext, baseCtx}
+import tastyquery.Contexts.{Context, ctx}
 
 import compiletime.codeOf
 
@@ -40,7 +40,7 @@ object Symbols {
       myTree = Some(t)
       this
     }
-    def tree(using BaseContext): Option[DefTree] = myTree
+    def tree(using Context): Option[DefTree] = myTree
 
     private var myDeclaredType: Type | Null = null
 
@@ -58,13 +58,13 @@ object Symbols {
         myFlags = flags
         this
 
-    private[tastyquery] def signature(using BaseContext): Option[Signature]
+    private[tastyquery] def signature(using Context): Option[Signature]
 
     final def flags: FlagSet =
       if isFlagsInitialized then myFlags
       else throw IllegalStateException(s"flags of $this have not been initialized")
 
-    def declaredType(using BaseContext): Type =
+    def declaredType(using Context): Type =
       val local = myDeclaredType
       if local != null then local
       else throw new IllegalStateException(s"$this was not assigned a declared type")
@@ -87,7 +87,7 @@ object Symbols {
       case null          => NoSymbol
     }
 
-    final def paramSymss(using BaseContext): List[List[Symbol]] =
+    final def paramSymss(using Context): List[List[Symbol]] =
       tree match
         case Some(ddef: DefDef) =>
           ddef.paramLists.map {
@@ -140,7 +140,7 @@ object Symbols {
       case scope: DeclaringSymbol => scope.allOverloads(name)
       case _                      => Nil
 
-    def lookup(name: Name)(using BaseContext): Option[Symbol] = this match
+    def lookup(name: Name)(using Context): Option[Symbol] = this match
       case scope: DeclaringSymbol => scope.getDecl(name)
       case _                      => None
 
@@ -161,7 +161,7 @@ object Symbols {
   final class RegularSymbol(override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner) {
     private var mySignature: Option[Signature] | Null = null
 
-    private[tastyquery] override final def signature(using BaseContext): Option[Signature] =
+    private[tastyquery] override final def signature(using Context): Option[Signature] =
       val local = mySignature
       if local != null then local
       else
@@ -174,7 +174,7 @@ object Symbols {
 
   abstract class DeclaringSymbol(override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner) {
 
-    private[tastyquery] override final def signature(using BaseContext): Option[Signature] = None
+    private[tastyquery] override final def signature(using Context): Option[Signature] = None
 
     /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
@@ -204,10 +204,10 @@ object Symbols {
       *
       * For symbols that are neither classes nor packages, this has no effect.
       */
-    private[tastyquery] def ensureInitialised()(using BaseContext): Unit =
+    private[tastyquery] def ensureInitialised()(using Context): Unit =
       ()
 
-    override def tree(using BaseContext): Option[DefTree] =
+    override def tree(using Context): Option[DefTree] =
       ensureInitialised()
       super.tree
 
@@ -221,7 +221,7 @@ object Symbols {
         case Some(decls) => decls.toList
         case _           => Nil
 
-    final def getDecl(name: Name)(using BaseContext): Option[Symbol] =
+    final def getDecl(name: Name)(using Context): Option[Symbol] =
       ensureInitialised()
       name match
         case overloaded: SignedName =>
@@ -229,7 +229,7 @@ object Symbols {
         case name =>
           getDeclInternal(name)
 
-    private final def distinguishOverloaded(overloaded: SignedName)(using BaseContext): Option[Symbol] =
+    private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[Symbol] =
       myDeclarations.get(overloaded.underlying) match
         case Some(overloads) =>
           if overloads.sizeIs == 1 then Some(overloads.head) // TODO: verify signature matches?
@@ -237,14 +237,14 @@ object Symbols {
           else None // TODO: this should be an error
         case None => None
 
-    final def resolveOverloaded(name: SignedName)(using BaseContext): Option[Symbol] =
+    final def resolveOverloaded(name: SignedName)(using Context): Option[Symbol] =
       getDecl(name)
 
-    final def declarations(using BaseContext): List[Symbol] =
+    final def declarations(using Context): List[Symbol] =
       ensureInitialised()
       myDeclarations.values.toList.flatten
 
-    override def declaredType(using BaseContext): Type =
+    override def declaredType(using Context): Type =
       ensureInitialised()
       super.declaredType
 
@@ -270,10 +270,10 @@ object Symbols {
       if local == null then throw new IllegalStateException(s"expected type params for $this")
       else local
 
-    private[tastyquery] override final def ensureInitialised()(using BaseContext): Unit =
+    private[tastyquery] override final def ensureInitialised()(using Context): Unit =
       def initialiseMembers(): Unit = this match
-        case pkg: PackageClassSymbol => baseCtx.classloader.scanPackage(pkg)
-        case cls                     => baseCtx.classloader.scanClass(cls)
+        case pkg: PackageClassSymbol => ctx.classloader.scanPackage(pkg)
+        case cls                     => ctx.classloader.scanClass(cls)
 
       // FIXME Tolerate that module class roots do not get initialized. This should be handled better.
       def isModuleClassRoot: Boolean =
@@ -326,7 +326,7 @@ object Symbols {
       case _ => throw IllegalArgumentException(s"Unexpected package name: $name")
     }
 
-    override def lookup(name: Name)(using BaseContext): Option[Symbol] =
+    override def lookup(name: Name)(using Context): Option[Symbol] =
       val sel = name match {
         case name: SimpleName if this.name != nme.RootName => this.name.toTermName.select(name)
         case _                                             => name

@@ -49,15 +49,15 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
     }
   }
 
-  def assertSymbolExistsAndIsLoaded(path: DeclarationPath)(implicit ctx: BaseContext): Unit =
+  def assertSymbolExistsAndIsLoaded(path: DeclarationPath)(implicit ctx: Context): Unit =
     DangerousOps.followPathImpl(defn.RootPackage, path).fold(fail(_), _ => ())
 
-  def assertSymbolNotExistsOrNotLoadedYet(path: DeclarationPath)(implicit ctx: BaseContext): Unit =
+  def assertSymbolNotExistsOrNotLoadedYet(path: DeclarationPath)(implicit ctx: Context): Unit =
     def unexpected(sym: Symbol) = fail(s"expected no symbol, but found ${sym.toDebugString}")
     DangerousOps.followPathImpl(defn.RootPackage, path).fold(_ => (), unexpected)
 
   /** Explicitly initializes any symbol. */
-  def explicitlyInitialize(sym: Symbol)(using BaseContext): Unit =
+  def explicitlyInitialize(sym: Symbol)(using Context): Unit =
     sym match
       case sym: DeclaringSymbol => sym.declarations // trigger the initialization
       case _                    => () // already initialized, by construction
@@ -68,7 +68,7 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
     val outerMethod = NestedMethod / name"outerMethod"
     val unitVal = Constants / name"unitVal"
 
-    given BaseContext = getUnpicklingContext(Constants, extraClasspath = NestedMethod)
+    given Context = getUnpicklingContext(Constants, extraClasspath = NestedMethod)
 
     explicitlyInitialize(resolve(Constants))
 
@@ -82,17 +82,17 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
   test("demo-symbolic-package-leaks".ignore) {
     // ignore because this passes only on clean builds
 
-    def failingGetTopLevelClass(path: TopLevelDeclPath)(using BaseContext): Nothing =
-      baseCtx.getClassIfDefined(path.fullClassName) match
+    def failingGetTopLevelClass(path: TopLevelDeclPath)(using Context): Nothing =
+      ctx.getClassIfDefined(path.fullClassName) match
         case Right(classRoot) => fail(s"expected no class, but got $classRoot")
         case Left(err)        => throw MissingTopLevelDecl(path, err)
 
-    def forceTopLevel(path: TopLevelDeclPath)(using BaseContext): Unit = {
-      val classRoot = baseCtx.getClassIfDefined(path.fullClassName) match
+    def forceTopLevel(path: TopLevelDeclPath)(using Context): Unit = {
+      val classRoot = ctx.getClassIfDefined(path.fullClassName) match
         case Right(cls) => cls
         case Left(err)  => throw MissingTopLevelDecl(path, err)
       try
-        baseCtx.classloader.scanClass(classRoot)
+        ctx.classloader.scanClass(classRoot)
         fail(s"expected failure when scanning class ${path.fullClassName}, $classRoot")
       catch
         case err: java.lang.AssertionError =>
@@ -102,7 +102,7 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
           )
     }
 
-    def runTest(using BaseContext): Unit =
+    def runTest(using Context): Unit =
       val `symbolic_--.#::` = name"symbolic_--" / tname"#::"
       val `symbolic_$minus$minus.#::` = name"symbolic_$$minus$$minus" / tname"#::"
 

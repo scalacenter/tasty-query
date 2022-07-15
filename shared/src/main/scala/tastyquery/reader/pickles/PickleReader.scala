@@ -19,7 +19,7 @@ import tastyquery.util.syntax.chaining.given
 import tastyquery.ast.Symbols.DeclaringSymbol
 import tastyquery.ast.Symbols.PackageClassSymbol
 import tastyquery.ast.Trees.TypeApply
-import tastyquery.Contexts.BaseContext
+import tastyquery.Contexts.Context
 
 class PickleReader {
   opaque type Entries = Array[AnyRef | Null]
@@ -491,13 +491,13 @@ object PickleReader {
   }
 
   final class ExternalSymbolRef(owner: MaybeExternalSymbol, name: Name) {
-    def toTypeRef(pre: Type)(using BaseContext): TypeRef =
+    def toTypeRef(pre: Type)(using Context): TypeRef =
       toNamedType(pre).asInstanceOf[TypeRef]
 
-    def toTermRef(pre: Type)(using BaseContext): TermRef =
+    def toTermRef(pre: Type)(using Context): TermRef =
       toNamedType(pre).asInstanceOf[TermRef]
 
-    def toNamedType(pre: Type)(using BaseContext): NamedType =
+    def toNamedType(pre: Type)(using Context): NamedType =
       NamedType(pre, toScala2ExternalSymRef)
 
     private def toScala2ExternalSymRef: Scala2ExternalSymRef =

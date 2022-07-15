@@ -1,18 +1,18 @@
 package tastyquery.api
 
 import tastyquery.Contexts
-import tastyquery.Contexts.{BaseContext, baseCtx}
+import tastyquery.Contexts.{Context, ctx}
 import tastyquery.reader.{TastyUnpickler, TreeUnpickler}
 
 class ProjectReader {
 
-  def read(classes: String*)(using BaseContext): TastyQuery = {
+  def read(classes: String*)(using Context): TastyQuery = {
     val trees = classes.flatMap { className =>
       val trees =
         for
-          cls <- baseCtx.getClassIfDefined(className).toOption
-          if baseCtx.classloader.scanClass(cls)
-          tasty <- baseCtx.classloader.topLevelTasty(cls)
+          cls <- ctx.getClassIfDefined(className).toOption
+          if ctx.classloader.scanClass(cls)
+          tasty <- ctx.classloader.topLevelTasty(cls)
         yield tasty
 
       trees.getOrElse {
@@ -20,7 +20,7 @@ class ProjectReader {
         Nil
       }
     }
-    new TastyQuery(baseCtx, TastyTrees(trees.toList))
+    new TastyQuery(ctx, TastyTrees(trees.toList))
   }
 
 }
