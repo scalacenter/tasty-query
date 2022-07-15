@@ -1,7 +1,7 @@
 package tastyquery.ast
 
 import dotty.tools.tasty.TastyFormat.NameTags
-import tastyquery.Contexts.{BaseContext, baseCtx, defn}
+import tastyquery.Contexts.{Context, defn}
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Names.{Name, QualifiedName, SimpleName, TermName, TypeName}
 import tastyquery.ast.Symbols.*
@@ -25,7 +25,7 @@ object Types {
     // - types must be erased before converting to TypeName
     // - use correct type erasure algorithm from Scala 3, with specialisations
     //   for Java types and Scala 2 types (i.e. varargs, value-classes)
-    def erase(tpe: Type)(using BaseContext): TypeName =
+    def erase(tpe: Type)(using Context): TypeName =
 
       val scalaArray = ArrayTypeUnapplied.resolveToSymbol
 
@@ -85,19 +85,19 @@ object Types {
       case tpe: TypeLambda => tpe.resType
       case tpe             => NoType
 
-    final def termSymbol(using BaseContext): Symbol = this match
+    final def termSymbol(using Context): Symbol = this match
       case tpe: TermRef        => tpe.resolveToSymbol
       case tpe: PackageRef     => tpe.resolveToSymbol
       case tpe: PackageTypeRef => tpe.resolveToSymbol
       case _                   => NoSymbol
 
-    final def widenOverloads(using BaseContext): Type =
+    final def widenOverloads(using Context): Type =
       this.widen match
         case tp: TermRef => tp.underlying.widenOverloads
         case tp          => tp
 
     /** remove singleton types, ExprTypes and AnnotatedTypes */
-    final def widen(using BaseContext): Type = this match
+    final def widen(using Context): Type = this match
       case _: TypeRef | _: MethodType | _: PolyType => this // fast path for most frequent cases
       case tp: TermRef => // fast path for next most frequent case
         if tp.isOverloaded then tp else tp.underlying.widen
@@ -107,7 +107,7 @@ object Types {
       case tp: RefinedType   => tp.parent.widen
       case tp                => tp
 
-    final def isRef(sym: Symbol)(using BaseContext): Boolean =
+    final def isRef(sym: Symbol)(using Context): Boolean =
       this match {
         case tpe: NamedType   => tpe.resolveToSymbol == sym
         case tpe: AppliedType => tpe.underlying.isRef(sym)
@@ -115,7 +115,7 @@ object Types {
         case _                => false // todo: add ProxyType (need to fill in implementations of underlying)
       }
 
-    final def isOfClass(sym: Symbol)(using BaseContext): Boolean =
+    final def isOfClass(sym: Symbol)(using Context): Boolean =
       this match {
         case tpe: TermRef =>
           tpe.underlying.isOfClass(sym)
@@ -125,7 +125,7 @@ object Types {
           this.isRef(sym)
       }
 
-    final def select(sym: Symbol)(using BaseContext): Type =
+    final def select(sym: Symbol)(using Context): Type =
       NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
   }
 
@@ -172,7 +172,7 @@ object Types {
   abstract class TypeProxy extends Type {
 
     /** The type to which this proxy forwards operations. */
-    def underlying(using BaseContext): Type
+    def underlying(using Context): Type
   }
 
   /** Non-proxy types */
@@ -197,7 +197,7 @@ object Types {
     * single non-null value (they might contain null in addition).
     */
   trait SingletonType extends TypeProxy with ValueType {
-    def isOverloaded(using BaseContext): Boolean = false
+    def isOverloaded(using Context): Boolean = false
   }
 
   trait PathType extends TypeProxy with ValueType {
@@ -207,7 +207,7 @@ object Types {
   }
 
   trait Symbolic {
-    def resolveToSymbol(using BaseContext): Symbol
+    def resolveToSymbol(using Context): Symbol
   }
 
   // ----- Type Proxies -------------------------------------------------
@@ -253,7 +253,7 @@ object Types {
       TermRef(this, LookupIn(in, name))
 
     // overridden in package references
-    override def resolveToSymbol(using BaseContext): Symbol = designator match {
+    override def resolveToSymbol(using Context): Symbol = designator match {
       case sym: Symbol => sym
       case LookupIn(pre, name) =>
         val sym = TermRef(pre, name).resolveToSymbol
@@ -318,15 +318,15 @@ object Types {
       case designator: LookupIn             => false // always a SignedName, which is a TermName by construction
       case designator: Scala2ExternalSymRef => designator.name.isTypeName
 
-    def apply(prefix: Type, designator: Designator)(using BaseContext): NamedType =
+    def apply(prefix: Type, designator: Designator)(using Context): NamedType =
       if (isType(designator)) TypeRef(prefix, designator)
       else TermRef(prefix, designator)
 
-    def apply(prefix: Type, sym: Symbol)(using BaseContext): NamedType =
+    def apply(prefix: Type, sym: Symbol)(using Context): NamedType =
       if (sym.isType) TypeRef(prefix, sym)
       else TermRef(prefix, sym)
 
-    def apply(prefix: Type, name: Name)(using BaseContext): NamedType =
+    def apply(prefix: Type, name: Name)(using Context): NamedType =
       if (name.isTypeName) TypeRef(prefix, name)
       else TermRef(prefix, name)
   }
@@ -374,7 +374,7 @@ object Types {
 
     override protected def designator_=(d: Designator): Unit = myDesignator = d
 
-    override def underlying(using ctx: BaseContext): Type = {
+    override def underlying(using ctx: Context): Type = {
       val termSymbol = resolveToSymbol
       try {
         termSymbol.declaredType
@@ -385,7 +385,7 @@ object Types {
       }
     }
 
-    override def isOverloaded(using BaseContext): Boolean =
+    override def isOverloaded(using Context): Boolean =
       myDesignator match
         case LookupIn(pre, ref) =>
           pre.resolveToSymbol.memberIsOverloaded(ref)
@@ -411,12 +411,12 @@ object Types {
       s"Can't assign designator of a package"
     )
 
-    override def underlying(using BaseContext): Type = ???
+    override def underlying(using Context): Type = ???
 
     // TODO: root package?
     override val prefix: Type = NoType
 
-    override def resolveToSymbol(using BaseContext): PackageClassSymbol = {
+    override def resolveToSymbol(using Context): PackageClassSymbol = {
       val local = packageSymbol
       if (local == null) {
         def searchPkg = defn.RootPackage.findPackageSymbol(packageName)
@@ -442,7 +442,7 @@ object Types {
 
     override protected def designator_=(d: Designator): Unit = myDesignator = d
 
-    override def underlying(using BaseContext): Type = ???
+    override def underlying(using Context): Type = ???
   }
 
   case object NoPrefix extends Type
@@ -450,18 +450,18 @@ object Types {
   class PackageTypeRef(packageName: TermName) extends TypeRef(NoPrefix, packageName.toTypeName) {
     private val packageRef = PackageRef(packageName)
 
-    override def resolveToSymbol(using BaseContext): Symbol = packageRef.resolveToSymbol
+    override def resolveToSymbol(using Context): Symbol = packageRef.resolveToSymbol
   }
 
   case class ThisType(tref: TypeRef) extends PathType with SingletonType with Symbolic {
-    override def underlying(using BaseContext): Type = ???
+    override def underlying(using Context): Type = ???
 
-    override def resolveToSymbol(using BaseContext): Symbol = tref.resolveToSymbol
+    override def resolveToSymbol(using Context): Symbol = tref.resolveToSymbol
   }
 
   /** A constant type with single `value`. */
   case class ConstantType(value: Constant) extends TypeProxy with SingletonType {
-    override def underlying(using BaseContext): Type =
+    override def underlying(using Context): Type =
       value.wideType
   }
 
@@ -469,12 +469,12 @@ object Types {
     * Typebounds for wildcard application: C[_], C[?]
     */
   case class AppliedType(tycon: Type, args: List[Type | TypeBounds]) extends TypeProxy with ValueType {
-    override def underlying(using BaseContext): Type = tycon
+    override def underlying(using Context): Type = tycon
   }
 
   /** A by-name parameter type of the form `=> T`, or the type of a method with no parameter list. */
   case class ExprType(resType: Type) extends TypeProxy with MethodicType {
-    override def underlying(using BaseContext): Type = resType
+    override def underlying(using Context): Type = resType
   }
 
   case class MethodType(paramNames: List[TermName], paramTypes: List[Type], resType: Type) extends MethodicType
@@ -553,7 +553,7 @@ object Types {
       if evaluating then throw CyclicReference(s"type lambda [$params] =>> ???")
       else myResult
 
-    override def underlying(using BaseContext): Type = ???
+    override def underlying(using Context): Type = ???
 
     override def toString: String =
       if evaluating then s"TypeLambda($params)(<evaluating>)"
@@ -561,13 +561,13 @@ object Types {
   }
 
   case class TypeParamRef(binders: Binders, num: Int) extends TypeProxy with ValueType {
-    override def underlying(using BaseContext): Type = ???
+    override def underlying(using Context): Type = ???
 
     def paramName: TypeName = binders match
       case hk: TypeLambda => hk.params(num).name
       case pt: PolyType   => pt.paramNames(num)
 
-    def bounds(using BaseContext): TypeBounds = binders match
+    def bounds(using Context): TypeBounds = binders match
       case hk: TypeLambda => hk.params(num).computeDeclarationTypeBounds()
       case pt: PolyType   => pt.paramTypeBounds(num)
 
@@ -576,7 +576,7 @@ object Types {
 
   /** typ @ annot */
   case class AnnotatedType(typ: Type, annotation: Tree) extends TypeProxy with ValueType {
-    override def underlying(using BaseContext): Type = typ
+    override def underlying(using Context): Type = typ
   }
 
   /** A refined type parent { refinement }
@@ -585,7 +585,7 @@ object Types {
     *  @param refinedInfo The info of the refinement declaration
     */
   case class RefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds) extends TypeProxy with ValueType {
-    override def underlying(using BaseContext): Type = parent
+    override def underlying(using Context): Type = parent
   }
 
   trait TypeBounds(val low: Type, val high: Type)
@@ -593,7 +593,7 @@ object Types {
   case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high)
 
   case class TypeAlias(alias: Type) extends TypeProxy with TypeBounds(alias, alias) {
-    override def underlying(using BaseContext): Type = alias
+    override def underlying(using Context): Type = alias
   }
 
   case class BoundedType(bounds: TypeBounds, alias: Type) extends Type

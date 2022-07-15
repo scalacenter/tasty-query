@@ -1,6 +1,6 @@
 package tastyquery.api
 
-import tastyquery.Contexts.BaseContext
+import tastyquery.Contexts.Context
 import tastyquery.ast.Symbols.{Symbol, DeclaringSymbol}
 import tastyquery.ast.Trees.{Tree, DefTree}
 
@@ -17,5 +17,5 @@ class TastyTrees(trees: List[Tree]):
         case _ =>
       }
 
-class TastyQuery private[api] (ctx: BaseContext, trees: TastyTrees):
+class TastyQuery private[api] (ctx: Context, trees: TastyTrees):
   export trees.debugDefinitions

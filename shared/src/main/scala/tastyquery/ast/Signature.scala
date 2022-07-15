@@ -2,7 +2,7 @@ package tastyquery.ast
 
 import tastyquery.ast.Names.TypeName
 import tastyquery.ast.Types.{PolyType, MethodType, ExprType, MethodicType, ErasedTypeRef, Type}
-import tastyquery.Contexts.BaseContext
+import tastyquery.Contexts.Context
 
 abstract class ParamSig
 
@@ -22,7 +22,7 @@ case class Signature(paramsSig: List[ParamSig], resSig: TypeName) derives CanEqu
   }.mkString("(", ",", ")") + ":" + resSig.toString
 
 object Signature {
-  def fromMethodOrPoly(info: MethodType | PolyType)(using BaseContext): Signature =
+  def fromMethodOrPoly(info: MethodType | PolyType)(using Context): Signature =
     def rec(info: Type, acc: List[ParamSig]): Signature =
       info match {
         case MethodType(_, infos, res) =>

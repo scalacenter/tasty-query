@@ -450,7 +450,7 @@ class TreeUnpickler(
     }
   }
 
-  private def makeDefDefType(paramLists: List[ParamsClause], resultTpt: TypeTree)(using BaseContext): Type =
+  private def makeDefDefType(paramLists: List[ParamsClause], resultTpt: TypeTree)(using Context): Type =
     def rec(paramLists: List[ParamsClause]): Type =
       paramLists match
         case Left(params) :: rest =>

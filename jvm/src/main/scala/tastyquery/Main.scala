@@ -8,7 +8,7 @@ import tastyquery.jdk.ClasspathLoaders
 
 import java.net.URL
 import java.net.URLClassLoader
-import tastyquery.Contexts.BaseContext
+import tastyquery.Contexts.Context
 
 object Main {
   def main(args: Array[String]): Unit =
@@ -17,7 +17,7 @@ object Main {
         val reader = new ProjectReader
         val cpElems = ClasspathLoaders.splitClasspath(cp)
         val classpath = ClasspathLoaders.read(cpElems, Set(ClasspathLoaders.FileKind.Tasty))
-        given BaseContext = Contexts.init(classpath)
+        given Context = Contexts.init(classpath)
         reader.read(classes*).debugDefinitions
       case _ =>
         println("""Usage:
