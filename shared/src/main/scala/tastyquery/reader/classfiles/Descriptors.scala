@@ -18,13 +18,13 @@ object Descriptors:
     val superRef = superClass.map(classRef).getOrElse(ObjectType)
     interfaces.foldLeft(superRef)((parents, interface) => AndType(parents, classRef(interface)))
 
-  private[tastyquery] def rawTypeArguments(cls: ClassSymbol)(using Context): List[TypeBounds] =
+  private[tastyquery] def rawTypeArguments(cls: ClassSymbol)(using Context): List[WildcardTypeBounds] =
     if !cls.initParents then
       // we have initialised our own parents,
       // therefore it is an external class,
       // force it so we can see its type params.
       cls.ensureInitialised()
-    cls.typeParamSyms.map(Function.const(RealTypeBounds(NothingType, AnyType)))
+    cls.typeParamSyms.map(Function.const(WildcardTypeBounds(RealTypeBounds(NothingType, AnyType))))
 
   private def classRef(binaryName: String)(using Context): Type =
     val className = binaryName.replace('/', '.').nn

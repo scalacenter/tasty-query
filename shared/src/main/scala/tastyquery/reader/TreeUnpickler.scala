@@ -804,7 +804,10 @@ class TreeUnpickler(
       val end = reader.readEnd()
       val tycon = readType
       // TODO: type operations can be much more complicated
-      AppliedType(tycon, reader.until(end)(if (tagFollowShared == TYPEBOUNDS) readTypeBounds else readType))
+      AppliedType(
+        tycon,
+        reader.until(end)(if (tagFollowShared == TYPEBOUNDS) WildcardTypeBounds(readTypeBounds) else readType)
+      )
     case THIS =>
       reader.readByte()
       ThisType(readType.asInstanceOf[TypeRef])
@@ -896,8 +899,8 @@ class TreeUnpickler(
       AppliedTypeTree(
         tycon,
         reader.until(end)(
-          if (tagFollowShared == TYPEBOUNDS) readTypeBounds
-          else if (tagFollowShared == TYPEBOUNDStpt) readTypeBoundsTree
+          if (tagFollowShared == TYPEBOUNDS) TypeWrapper(WildcardTypeBounds(readTypeBounds))(spn)
+          else if (tagFollowShared == TYPEBOUNDStpt) WildcardTypeBoundsTree(readTypeBoundsTree)(spn)
           else readTypeTree
         )
       )(spn)

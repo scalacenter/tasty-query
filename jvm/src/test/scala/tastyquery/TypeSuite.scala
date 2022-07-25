@@ -16,22 +16,17 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
   }
 
-  extension (tpe: Type | TypeBounds)
-    def isWildcard(using Context): Boolean =
-      isBounded(_.isNothing, _.isAny)
-
-    def typeOrNone: Type = tpe match
-      case tpe: Type       => tpe
-      case tpe: TypeBounds => NoType
-
-    def isBounded(lo: Type => Boolean, hi: Type => Boolean)(using Context): Boolean = tpe match
-      case tpe: TypeBounds => lo(tpe.low) && hi(tpe.high)
-      case _               => false
-
   extension (tpe: Type)
     def isAny(using Context): Boolean = tpe.isRef(resolve(name"scala" / tname"Any"))
 
     def isNothing(using Context): Boolean = tpe.isRef(resolve(name"scala" / tname"Nothing"))
+
+    def isWildcard(using Context): Boolean =
+      isBounded(_.isNothing, _.isAny)
+
+    def isBounded(lo: Type => Boolean, hi: Type => Boolean)(using Context): Boolean = tpe match
+      case WildcardTypeBounds(bounds) => lo(bounds.low) && hi(bounds.high)
+      case _                          => false
 
     def isIntersectionOf(tpes: (Type => Boolean)*)(using Context): Boolean =
       def parts(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
@@ -40,13 +35,13 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val all = parts(tpe.widen, mutable.ListBuffer[Type]()).toList
       all.corresponds(tpes)((tpe, test) => test(tpe))
 
-    def isApplied(cls: Type => Boolean, argRefs: Seq[(Type | TypeBounds) => Boolean])(using Context): Boolean =
+    def isApplied(cls: Type => Boolean, argRefs: Seq[Type => Boolean])(using Context): Boolean =
       tpe.widen match
         case AppliedType(tycon, args) if cls(tycon) =>
           args.corresponds(argRefs)((arg, argRef) => argRef(arg))
         case _ => false
 
-    def isArrayOf(arg: (Type | TypeBounds) => Boolean)(using Context): Boolean =
+    def isArrayOf(arg: Type => Boolean)(using Context): Boolean =
       isApplied(_.isRef(resolve(name"scala" / tname"Array")), Seq(arg))
 
   testWithContext("apply-recursive") {
@@ -365,13 +360,13 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
 
     testDef(BagOfJavaDefinitions / name"wrapXArray") { wrapXArray =>
-      assert(wrapXArray.declaredType.resultType.isArrayOf(_.typeOrNone.isRef(IntClass)))
+      assert(wrapXArray.declaredType.resultType.isArrayOf(_.isRef(IntClass)))
     }
 
     testDef(BagOfJavaDefinitions / name"arrIdentity") { arrIdentity =>
       val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
-      assert(arrIdentity.declaredType.paramInfos.head.isArrayOf(_.typeOrNone.isRef(JavaDefinedClass)))
-      assert(arrIdentity.declaredType.resultType.isArrayOf(_.typeOrNone.isRef(JavaDefinedClass)))
+      assert(arrIdentity.declaredType.paramInfos.head.isArrayOf(_.isRef(JavaDefinedClass)))
+      assert(arrIdentity.declaredType.resultType.isArrayOf(_.isRef(JavaDefinedClass)))
     }
 
   }
@@ -388,21 +383,21 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       op(resolve(path))
 
     extension (tpe: Type)
-      def isGenJavaClassOf(arg: (Type | TypeBounds) => Boolean)(using Context): Boolean =
+      def isGenJavaClassOf(arg: Type => Boolean)(using Context): Boolean =
         tpe.isApplied(_.isRef(GenericJavaClass), List(arg))
 
     testDef(BagOfGenJavaDefinitions / name"x") { x =>
-      assert(x.declaredType.isGenJavaClassOf(_.typeOrNone.isRef(JavaDefinedClass)))
+      assert(x.declaredType.isGenJavaClassOf(_.isRef(JavaDefinedClass)))
     }
 
     testDef(BagOfGenJavaDefinitions / name"getX") { getX =>
-      assert(getX.declaredType.resultType.isGenJavaClassOf(_.typeOrNone.isRef(JavaDefinedClass)))
+      assert(getX.declaredType.resultType.isGenJavaClassOf(_.isRef(JavaDefinedClass)))
     }
 
     testDef(BagOfGenJavaDefinitions / name"getXArray") { getXArray =>
       assert(
         getXArray.declaredType.resultType
-          .isArrayOf(_.typeOrNone.isGenJavaClassOf(_.typeOrNone.isRef(JavaDefinedClass)))
+          .isArrayOf(_.isGenJavaClassOf(_.isRef(JavaDefinedClass)))
       )
     }
 
@@ -428,7 +423,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
 
     testDef(BagOfGenJavaDefinitions / name"mixgenraw") { mixgenraw =>
-      assert(mixgenraw.declaredType.isGenJavaClassOf(_.typeOrNone.isGenJavaClassOf(_.isWildcard)))
+      assert(mixgenraw.declaredType.isGenJavaClassOf(_.isGenJavaClassOf(_.isWildcard)))
     }
 
     testDef(BagOfGenJavaDefinitions / name"genwild") { genwild =>
@@ -481,10 +476,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     assert(
       SubRecClassTpe.rawParents.isIntersectionOf(
-        _.isApplied(
-          _.isRef(RecClass),
-          List(_.typeOrNone.isApplied(_.isRef(SubRecClassTpe.cls), List(_.typeOrNone.isRef(tparamT))))
-        ),
+        _.isApplied(_.isRef(RecClass), List(_.isApplied(_.isRef(SubRecClassTpe.cls), List(_.isRef(tparamT))))),
         _.isRef(JavaInterface1)
       )
     )

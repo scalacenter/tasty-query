@@ -70,17 +70,9 @@ object TypeTrees {
   /** tpt[args]
     * TypeBounds[Tree] for wildcard application: tpt[_], tpt[?]
     */
-  case class AppliedTypeTree(tycon: TypeTree, args: List[TypeTree | TypeBoundsTree | TypeBounds])(span: Span)
-      extends TypeTree(span) {
+  case class AppliedTypeTree(tycon: TypeTree, args: List[TypeTree])(span: Span) extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
-      AppliedType(
-        tycon.toType,
-        args.map {
-          case arg: TypeTree       => arg.toType
-          case arg: TypeBoundsTree => arg.toTypeBounds
-          case arg: TypeBounds     => arg
-        }
-      )
+      AppliedType(tycon.toType, args.map(_.toType))
 
     override final def withSpan(span: Span): AppliedTypeTree = AppliedTypeTree(tycon, args)(span)
   }
@@ -156,6 +148,14 @@ object TypeTrees {
       NamedTypeBounds(name, bounds)
 
     override final def withSpan(span: Span): NamedTypeBoundsTree = NamedTypeBoundsTree(name, bounds)(span)
+  }
+
+  case class WildcardTypeBoundsTree(bounds: TypeBoundsTree)(span: Span) extends TypeTree(span) {
+    override protected def calculateType(using Context): Type =
+      WildcardTypeBounds(bounds.toTypeBounds)
+
+    override final def withSpan(span: Span): WildcardTypeBoundsTree =
+      WildcardTypeBoundsTree(bounds)(span)
   }
 
   case class TypeLambdaTree(tparams: List[TypeParam], body: TypeTree)(span: Span) extends TypeTree(span) {

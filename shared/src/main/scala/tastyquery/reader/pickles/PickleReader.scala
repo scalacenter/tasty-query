@@ -247,18 +247,6 @@ class PickleReader {
   }
 
   private def readTypeRef()(using ClassContext, PklStream, Entries, Index): Type =
-    readTypeOrTypeBoundsRef().asInstanceOf[Type]
-
-  /** Read a type
-    *
-    *  @param forceProperType is used to ease the transition to NullaryMethodTypes (commentmarker: NMT_TRANSITION)
-    *        the flag say that a type of kind * is expected, so that PolyType(tps, restpe) can be disambiguated to PolyType(tps, NullaryMethodType(restpe))
-    *        (if restpe is not a ClassInfoType, a MethodType or a NullaryMethodType, which leaves TypeRef/SingletonType -- the latter would make the polytype a type constructor)
-    */
-  private def readType()(using ClassContext, PklStream, Entries, Index): Type =
-    readTypeOrTypeBounds().asInstanceOf[Type]
-
-  private def readTypeOrTypeBoundsRef()(using ClassContext, PklStream, Entries, Index): Type | TypeBounds =
     at(pkl.readNat())(readType())
 
   /** Read a type
@@ -267,7 +255,7 @@ class PickleReader {
     *        the flag say that a type of kind * is expected, so that PolyType(tps, restpe) can be disambiguated to PolyType(tps, NullaryMethodType(restpe))
     *        (if restpe is not a ClassInfoType, a MethodType or a NullaryMethodType, which leaves TypeRef/SingletonType -- the latter would make the polytype a type constructor)
     */
-  private def readTypeOrTypeBounds()(using ClassContext, PklStream, Entries, Index): Type | TypeBounds = {
+  private def readType()(using ClassContext, PklStream, Entries, Index): Type = {
     def select(pre: Type, sym: Symbol): Type =
       // structural members need to be selected by name, their symbols are only
       // valid in the synthetic refinement class that defines them.
@@ -327,7 +315,7 @@ class PickleReader {
         val tycon = designator match
           case sym: Symbol                 => select(pre, sym)
           case external: ExternalSymbolRef => external.toTypeRef(pre)
-        val args = pkl.until(end, () => readTypeOrTypeBoundsRef())
+        val args = pkl.until(end, () => readTypeRef())
         /*if (sym == defn.ByNameParamClass2x) ExprType(args.head)
         else if (ctx.settings.scalajs.value && args.length == 2 &&
             sym.owner == JSDefinitions.jsdefn.ScalaJSJSPackageClass && sym == JSDefinitions.jsdefn.PseudoUnionClass) {
@@ -344,7 +332,7 @@ class PickleReader {
         val lo = readTypeRef()
         val hi = readTypeRef()
         // TODO? createNullableTypeBounds(lo, hi)
-        RealTypeBounds(lo, hi)
+        WildcardTypeBounds(RealTypeBounds(lo, hi))
       case REFINEDtpe =>
         /*val clazz = readSymbolRef().asClass
         val decls = symScope(clazz)
