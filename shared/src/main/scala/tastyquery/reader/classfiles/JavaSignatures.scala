@@ -185,16 +185,20 @@ object JavaSignatures:
       else None
     end classTypeSignature
 
-    def typeArgument(env: JavaSignature): Type | TypeBounds =
+    def typeArgument(env: JavaSignature): Type =
       if available >= 1 then
         (peek: @switch) match
-          case '*' => commitSimple(1, RealTypeBounds(NothingType, AnyType))
-          case '+' => commit(1) { val upper = referenceType(env); RealTypeBounds(NothingType, upper) }
-          case '-' => commit(1) { val lower = referenceType(env); RealTypeBounds(lower, AnyType) }
-          case _   => referenceType(env)
+          case '*' =>
+            commitSimple(1, WildcardTypeBounds(RealTypeBounds(NothingType, AnyType)))
+          case '+' =>
+            commit(1) { val upper = referenceType(env); WildcardTypeBounds(RealTypeBounds(NothingType, upper)) }
+          case '-' =>
+            commit(1) { val lower = referenceType(env); WildcardTypeBounds(RealTypeBounds(lower, AnyType)) }
+          case _ =>
+            referenceType(env)
       else abort
 
-    def typeArgumentsRest(env: JavaSignature): List[Type | TypeBounds] =
+    def typeArgumentsRest(env: JavaSignature): List[Type] =
       readUntil('>', typeArgument(env))
 
     def typeParameter(env: JavaSignature): TypeBounds =

@@ -468,7 +468,7 @@ object Types {
   /** A type application `C[T_1, ..., T_n]`
     * Typebounds for wildcard application: C[_], C[?]
     */
-  case class AppliedType(tycon: Type, args: List[Type | TypeBounds]) extends TypeProxy with ValueType {
+  case class AppliedType(tycon: Type, args: List[Type]) extends TypeProxy with ValueType {
     override def underlying(using Context): Type = tycon
   }
 
@@ -599,6 +599,10 @@ object Types {
   case class BoundedType(bounds: TypeBounds, alias: Type) extends Type
 
   case class NamedTypeBounds(name: TypeName, bounds: TypeBounds) extends Type
+
+  case class WildcardTypeBounds(bounds: TypeBounds) extends TypeProxy {
+    override def underlying(using Context): Type = bounds.high
+  }
 
   // ----- Ground Types -------------------------------------------------
 

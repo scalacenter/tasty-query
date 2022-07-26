@@ -1604,9 +1604,11 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeWrapper(
               AppliedType(
                 TypeRef(PackageRef(_), TypeName(SimpleName("List"))),
-                RealTypeBounds(
-                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
-                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
+                WildcardTypeBounds(
+                  RealTypeBounds(
+                    TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
+                    TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
+                  )
                 ) :: Nil
               )
             ),
@@ -1622,9 +1624,11 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             SimpleName("anyList"),
             AppliedTypeTree(
               TypeIdent(TypeName(SimpleName("List"))),
-              TypeBoundsTree(
-                TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+              WildcardTypeBoundsTree(
+                TypeBoundsTree(
+                  TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
+                  TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                )
               ) :: Nil
             ),
             EmptyTree,
@@ -1638,9 +1642,13 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case New(
             AppliedTypeTree(
               TypeIdent(TypeName(SimpleName("GenericWithTypeBound"))),
-              RealTypeBounds(
-                TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
-                TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("AnyKind")))
+              TypeWrapper(
+                WildcardTypeBounds(
+                  RealTypeBounds(
+                    TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
+                    TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("AnyKind")))
+                  )
+                )
               ) :: Nil
             )
           ) =>
