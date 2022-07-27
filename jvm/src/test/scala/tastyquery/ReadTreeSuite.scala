@@ -65,7 +65,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       val tree = cls.tree.getOrElse {
         fail(s"Missing tasty for ${path.fullClassName}, $cls")
       }
-      tree.asInstanceOf[Tree]
+      body(tree.asInstanceOf[Tree])
     }
   end testUnpickle
 
