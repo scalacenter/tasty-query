@@ -33,7 +33,7 @@ object JavaSignatures:
         def lookupTParam(scope: Symbol): Some[Type] =
           if scope.isPackage then cookFailure(tname, "no enclosing scope declares it")
           else if scope.isClass then
-            ClassSymbolFactory.castSymbol(scope).typeParamSyms.find(_.name == tname) match
+            ClassSymbolFactory.castSymbol(scope).typeParamSymsNoInitialize.find(_.name == tname) match
               case Some(ref) => Some(TypeRef(NoPrefix, ref))
               case _         => lookupTParam(scope.outer)
           else cookFailure(tname, "unexpected non-class scope")
@@ -44,7 +44,7 @@ object JavaSignatures:
               map.asInstanceOf[Map[TypeName, RegularSymbol]].get(tname) match
                 case Some(sym) => Some(TypeRef(NoPrefix, sym))
                 case None      => lookupTParam(member.outer)
-            case pt: Binders =>
+            case pt: TypeLambdaType =>
               pt.lookupRef(tname) match
                 case ref @ Some(_) => ref
                 case _             => lookupTParam(member.outer)

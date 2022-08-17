@@ -270,16 +270,28 @@ object Trees {
   /** qualifier.termName */
   case class Select(qualifier: Tree, name: TermName)(span: Span) extends Tree(span) {
     override protected def calculateType(using Context): Type =
-      qualifier.tpe.asInstanceOf[PathType].select(name) // TODO: what about holes, poly functions etc?
+      NamedType(qualifier.tpe, name)
 
     override def withSpan(span: Span): Select = Select(qualifier, name)(span)
   }
+
+  /** The type of the selection `qual1.name`. */
+  private def selectionType(qual1: Tree, name: Name)(using Context): Type =
+    val qualType = qual1.tpe.widenIfUnstable
+
+    // TODO Handle array.{apply,update,length}
+
+    val pre = qualType // maybeSkolemizePrefix(qualType, name)
+    val member = qualType.findMember(name, pre)
+
+    qualType.select(name, member)
+  end selectionType
 
   class SelectIn(qualifier: Tree, name: SignedName, selectOwner: TypeRef)(span: Span)
       extends Select(qualifier, name)(span) {
 
     override protected def calculateType(using Context): Type =
-      selectOwner.selectIn(name, selectOwner) // TODO: refine at the prefix of the qualifier
+      TermRef(qualifier.tpe, LookupIn(selectOwner, name))
 
     override final def withSpan(span: Span): SelectIn = SelectIn(qualifier, name, selectOwner)(span)
 

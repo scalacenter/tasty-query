@@ -160,7 +160,7 @@ object TypeTrees {
 
   case class TypeLambdaTree(tparams: List[TypeParam], body: TypeTree)(span: Span) extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
-      TypeLambda(tparams)(_ => body.toType)
+      TypeLambda.fromParams(tparams)(_ => body.toType)
 
     override final def withSpan(span: Span): TypeLambdaTree = TypeLambdaTree(tparams, body)(span)
   }

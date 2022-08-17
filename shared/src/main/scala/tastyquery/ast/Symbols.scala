@@ -1,11 +1,14 @@
 package tastyquery.ast
 
 import scala.collection.mutable
-import tastyquery.ast.Names.{Name, TermName, SignedName, SimpleName, QualifiedName, TypeName, SuffixedName, nme}
+
 import dotty.tools.tasty.TastyFormat.NameTags
+
+import tastyquery.ast.Names.*
 import tastyquery.ast.Trees.{DefTree, Tree, DefDef}
-import tastyquery.ast.Flags, Flags.FlagSet
+import tastyquery.ast.Flags.*
 import tastyquery.ast.Types.*
+import tastyquery.ast.Variances.*
 import tastyquery.Contexts.{Context, ctx}
 
 import compiletime.codeOf
@@ -31,7 +34,8 @@ object Symbols {
 
   val NoSymbol = new RegularSymbol(nme.EmptyTermName, null)
 
-  abstract class Symbol private[Symbols] (val name: Name, rawowner: Symbol | Null) {
+  abstract class Symbol private[Symbols] (val name: Name, rawowner: Symbol | Null) extends ParamInfo {
+
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
     private var myTree: Option[DefTree] = None
@@ -46,7 +50,8 @@ object Symbols {
 
     private[tastyquery] final def withDeclaredType(tpe: Type): this.type =
       val local = myDeclaredType
-      if local != null then throw new IllegalStateException(s"reassignment of declared type to $this")
+      if local != null /*&& !local.isInstanceOf[ClassType]*/ then // TODO Figure out why ClassType's are reassigned
+        throw new IllegalStateException(s"reassignment of declared type to $this")
       else
         myDeclaredType = tpe
         this
@@ -63,6 +68,18 @@ object Symbols {
     final def flags: FlagSet =
       if isFlagsInitialized then myFlags
       else throw IllegalStateException(s"flags of $this have not been initialized")
+
+    final def is(flag: Flag): Boolean =
+      flags.is(flag)
+
+    final def isAllOf(testFlags: FlagSet): Boolean =
+      flags.isAllOf(testFlags)
+
+    final def isAnyOf(testFlags: FlagSet): Boolean =
+      flags.isAnyOf(testFlags)
+
+    def paramVariance(using Context): Variance =
+      Variance.fromFlags(flags)
 
     def declaredType(using Context): Type =
       val local = myDeclaredType
@@ -86,6 +103,9 @@ object Symbols {
       case owner: Symbol => owner
       case null          => NoSymbol
     }
+
+    /** The type parameters of a class symbol, Nil for all other symbols. */
+    def typeParams(using Context): List[Symbol] = Nil
 
     final def paramSymss(using Context): List[List[Symbol]] =
       tree match
@@ -265,10 +285,16 @@ object Symbols {
         myTypeParams = tparams.zip(bounds)
         this
 
-    private def typeParamsInternal: List[(Symbol, TypeBounds)] =
+    private def typeParamsInternal(using Context): List[(Symbol, TypeBounds)] =
+      ensureInitialised()
       val local = myTypeParams
       if local == null then throw new IllegalStateException(s"expected type params for $this")
       else local
+
+    private[tastyquery] final def typeParamSymsNoInitialize(using Context): List[Symbol] =
+      val local = myTypeParams
+      if local == null then throw new IllegalStateException(s"expected type params for $this")
+      else local.map(_(0))
 
     private[tastyquery] override final def ensureInitialised()(using Context): Unit =
       def initialiseMembers(): Unit = this match
@@ -289,9 +315,23 @@ object Symbols {
     private[tastyquery] final def initParents: Boolean =
       myTypeParams != null
 
+    final def derivesFrom(base: Symbol)(using Context): Boolean =
+      base.isClass &&
+        ((this eq base)
+        //|| (baseClassSet contains base)
+        )
+
+    /** Compute tp.baseType(this) */
+    final def baseTypeOf(tp: Type)(using Context): Type =
+      // TODO
+      tp.widen
+
     // private[tastyquery] final def hasTypeParams: List[Symbol] = typeParamsInternal.map(_(0))
-    private[tastyquery] final def typeParamSyms: List[Symbol] =
+    private[tastyquery] final def typeParamSyms(using Context): List[Symbol] =
       typeParamsInternal.map(_(0))
+
+    override def typeParams(using Context): List[Symbol] =
+      typeParamSyms
 
     /** Get the self type of this class, as if viewed from an external package */
     private[tastyquery] final def accessibleThisType: Type = this match

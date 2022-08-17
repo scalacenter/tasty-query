@@ -192,9 +192,13 @@ class PickleReader {
         // newSymbol(owner, name1, flags1, localMemberUnpickler, privateWithin, coord = start)
         RegularSymbolFactory.createSymbol(name1, owner)
       case CLASSsym =>
-        if isClassRoot then clsCtx.classRoot useWith { _.initialised = true }
-        else if isModuleClassRoot then clsCtx.moduleClassRoot useWith { _.initialised = true }
-        else ClassSymbolFactory.createSymbol(name.toTypeName, owner) // TODO Read inner members
+        val cls =
+          if isClassRoot then clsCtx.classRoot
+          else if isModuleClassRoot then clsCtx.moduleClassRoot
+          else ClassSymbolFactory.createSymbol(name.toTypeName, owner) // TODO Read inner members
+        //cls.withDeclaredType(ClassType(cls, ObjectType))
+        cls.initialised = true
+        cls
       case VALsym =>
         val sym = RegularSymbolFactory.createSymbol(name.toTermName, owner)
         storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles

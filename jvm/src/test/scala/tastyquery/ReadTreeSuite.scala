@@ -7,6 +7,8 @@ import munit.Location
 import tastyquery.Contexts
 import tastyquery.Contexts.Context
 import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
+import tastyquery.ast.Flags
+import tastyquery.ast.Flags.{TypeParam as _, *}
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.*
@@ -947,7 +949,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                       )
                     )
                   ),
-                  Left(Nil)
+                  Left(
+                    List(ValDef(SimpleName("value"), TypeIdent(TypeName(SimpleName("T"))), EmptyTree, valueParamSymbol))
+                  )
                 ),
                 _,
                 _,
@@ -967,6 +971,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             classSymbol
           )
           if classSymbol.tree.exists(_.isInstanceOf[ClassDef])
+            && firstTypeParamSymbol.is(Flags.TypeParam)
+            && !firstTypeParamSymbol.isAllOf(ClassTypeParam)
+            && secondTypeParamSymbol.isAllOf(ClassTypeParam)
             && firstTypeParamSymbol.tree.exists(_.isInstanceOf[TypeParam])
             && secondTypeParamSymbol.tree.exists(_.isInstanceOf[TypeParam]) =>
     }
@@ -1342,12 +1349,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val typeLambda: StructureCheck = {
       case TypeParam(
             TypeName(SimpleName("A")),
-            RealTypeBounds(
-              nothing,
-              tl @ TypeLambda(
-                TypeParam(TypeName(UniqueName("_$", nme.EmptyTermName, 1)), RealTypeBounds(nothing2, any), _) :: Nil
-              )
-            ),
+            RealTypeBounds(nothing, tl @ TypeLambda(TypeName(UniqueName("_$", nme.EmptyTermName, 1)) :: Nil)),
             _
           ) if typeLambdaResultIsAny.isDefinedAt(tl.resultType) =>
     }
@@ -1370,10 +1372,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val typeLambda: StructureCheck = {
       case TypeParam(
             TypeName(SimpleName("A")),
-            RealTypeBounds(
-              nothing,
-              tl @ TypeLambda(TypeParam(TypeName(SimpleName("X")), RealTypeBounds(nothing2, any), _) :: Nil)
-            ),
+            RealTypeBounds(nothing, tl @ TypeLambda(TypeName(SimpleName("X")) :: Nil)),
             _
           ) if typeLambdaResultIsListOf.isDefinedAt(tl.resultType) =>
     }

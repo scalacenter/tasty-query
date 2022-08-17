@@ -25,9 +25,9 @@ object Signature {
   def fromMethodOrPoly(info: MethodType | PolyType)(using Context): Signature =
     def rec(info: Type, acc: List[ParamSig]): Signature =
       info match {
-        case MethodType(_, infos, res) =>
-          val erased = infos.map((ErasedTypeRef.erase) andThen (TermSig(_)))
-          rec(res, acc ::: erased)
+        case info: MethodType =>
+          val erased = info.paramTypes.map((ErasedTypeRef.erase) andThen (TermSig(_)))
+          rec(info.resultType, acc ::: erased)
         case PolyType(_, tbounds, res) =>
           rec(res, acc ::: TypeLenSig(tbounds.length) :: Nil)
         case tpe =>
