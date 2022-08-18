@@ -338,7 +338,7 @@ object Trees {
     private def resolvePolyType(funTpe: Type, args: List[Type])(using Context): Type =
       funTpe.widenOverloads match
         case funTpe: PolyType =>
-          funTpe.resultType // TODO: substitute type parameters into result
+          funTpe.instantiate(args)
         case tpe =>
           throw NonMethodReference(s"type application of args ${args.mkString} to $tpe")
 

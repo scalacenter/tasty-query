@@ -463,9 +463,7 @@ class TreeUnpickler(
           val paramTypes = params.map(_.tpt.toType)
           MethodType(paramNames, paramTypes, rec(rest))
         case Right(tparams) :: rest =>
-          val paramNames = tparams.map(_.name)
-          val paramTypeBounds = tparams.map(_.computeDeclarationTypeBounds())
-          PolyType(paramNames, paramTypeBounds, rec(rest))
+          PolyType.fromParams(tparams, rec(rest))
         case Nil =>
           resultTpt.toType
 

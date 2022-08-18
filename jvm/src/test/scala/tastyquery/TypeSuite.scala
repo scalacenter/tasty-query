@@ -113,6 +113,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val evalSym = resolve(RecApply / name"eval")
     val ExprClass = resolve(RecApply / tname"Expr")
+    val NumClass = resolve(RecApply / tname"Num")
+    val BoolClass = resolve(RecApply / tname"Bool")
 
     val evalParamss = evalSym.paramSymss
 
@@ -124,12 +126,20 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     evalTree.walkTree { tree =>
       tree match
-        case recCall @ Apply(TypeApply(evalRef @ Select(_, SignedName(SimpleName("eval"), _, _)), _), _) =>
+        case recCall @ Apply(TypeApply(evalRef @ Select(_, SignedName(SimpleName("eval"), _, _)), List(targ)), _) =>
           recCallCount += 1
 
           assert(evalRef.tpe.isRef(evalSym), clue(evalRef))
 
-          assert(recCall.tpe.isRef(Tsym), clue(recCall))
+          /* Because of GADT reasoning, the first two recursive call implicitly
+           * have a [Num] type parameter, while the latter two have [Bool].
+           */
+          val expectedTargClass =
+            if recCallCount <= 2 then NumClass
+            else BoolClass
+
+          assert(clue(targ).toType.isRef(expectedTargClass))
+          assert(recCall.tpe.isRef(expectedTargClass), clue(recCall))
         case _ => ()
     }
 
@@ -622,6 +632,28 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"method")
     }
     fun.tpe.widen match {
+      case mt @ MethodType(List(paramName)) =>
+        assertEquals(paramName, name"x")
+        assert(clue(mt.paramTypes.head).isOfClass(IntClass))
+        assert(clue(mt.resType).isOfClass(IntClass))
+    }
+    assert(clue(body.tpe).isOfClass(IntClass))
+  }
+
+  testWithContext("select-and-apply-poly-method") {
+    val GenMethod = resolve(name"simple_trees" / tname"GenericMethod").asClass
+    val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
+    val IntClass = resolve(name"scala" / tname"Int")
+
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.lookup(name"testGenericMethod").get.tree: @unchecked
+
+    val Apply(tapp @ TypeApply(fun @ Select(qual, methodName), List(targ)), List(arg)) = body: @unchecked
+
+    assert(clue(qual.tpe).isOfClass(GenMethod))
+    methodName match {
+      case SignedName(_, _, simpleName) => assertEquals(simpleName, name"identity")
+    }
+    tapp.tpe.widen match {
       case mt @ MethodType(List(paramName)) =>
         assertEquals(paramName, name"x")
         assert(clue(mt.paramTypes.head).isOfClass(IntClass))

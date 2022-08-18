@@ -877,10 +877,6 @@ object Types {
         case -1    => None
         case index => Some(paramRefs(index))
 
-    /** Like `resultType` but substitute parameter references with the given arguments */
-    final def instantiate(argTypes: => List[Type])(using Context): Type =
-      resultType.substParams(this, argTypes)
-
     def companion: LambdaTypeCompanion[ThisName, PInfo, This]
 
     final def derivedLambdaType(
@@ -922,6 +918,18 @@ object Types {
     type ParamRefType = TypeParamRef
 
     protected def newParamRef(n: Int): ParamRefType = TypeParamRef(this, n)
+
+    /** The type `[tparams := paramRefs] tp`, where `tparams` can be
+      * either a list of type parameter symbols or a list of lambda parameters
+      */
+    private[tastyquery] def integrate(params: List[Symbol], tp: Type)(using Context): Type =
+      Substituters.subst(tp, params, paramRefs)
+
+    /** The type `[tparams := paramRefs] tp`, where `tparams` can be
+      * either a list of type parameter symbols or a list of lambda parameters
+      */
+    private[tastyquery] def integrate(params: List[Symbol], bounds: TypeBounds)(using Context): TypeBounds =
+      Substituters.subst(bounds, params, paramRefs)
   end TypeLambdaType
 
   case class MethodType(paramNames: List[TermName])(
@@ -931,12 +939,19 @@ object Types {
       with TermLambdaType:
     type This = MethodType
 
+    private var evaluating: Boolean = true
     val paramTypes: List[Type] = paramTypesExp(this: @unchecked)
     val resType: Type = resultTypeExp(this: @unchecked)
+    evaluating = false
 
     def paramInfos: List[PInfo] = paramTypes
 
     def companion: LambdaTypeCompanion[TermName, Type, MethodType] = MethodType
+
+    override def toString: String =
+      if evaluating then s"MethodType($paramNames)(<evaluating>...)"
+      else s"MethodType($paramNames)($paramTypes, $resType)"
+  end MethodType
 
   object MethodType extends LambdaTypeCompanion[TermName, Type, MethodType]:
     def apply(paramNames: List[TermName])(paramInfosExp: MethodType => List[Type], resultTypeExp: MethodType => Type)(
@@ -945,30 +960,32 @@ object Types {
       new MethodType(paramNames)(paramInfosExp, resultTypeExp)
 
   final class PolyType private (val paramNames: List[TypeName])(
-    @constructorOnly boundsRest: PolyType => List[TypeBounds],
-    @constructorOnly resultRest: PolyType => Type
+    boundsRest: PolyType => List[TypeBounds],
+    resultRest: PolyType => Type
   ) extends MethodicType
       with Binders
       with TypeLambdaType {
     type This = PolyType
 
     private var evaluating: Boolean = false
-    private val myBounds: List[TypeBounds] =
-      evaluating = true
-      boundsRest(this: @unchecked) // safe as long as `boundsRest` does not access bounds or result
-    private val myRes: Type =
-      resultRest(this: @unchecked) // safe as long as `resultRest` does not access bounds or result
-        .andThen {
-          evaluating = false
-        }
+    private var myBounds: List[TypeBounds] | Null = null
+    private var myRes: Type | Null = null
+
+    private def initialize(): Unit =
+      if evaluating then throw CyclicReference(s"polymorphic method [$paramNames]=>???")
+      else
+        evaluating = true
+        myBounds = boundsRest(this)
+        myRes = resultRest(this)
+        evaluating = false
 
     def paramTypeBounds: List[TypeBounds] =
-      if evaluating then throw CyclicReference(s"polymorphic method [$paramNames]=>???")
-      else myBounds
+      if myBounds == null then initialize()
+      myBounds.nn
 
     def resType: Type =
-      if evaluating then throw CyclicReference(s"polymorphic method [$paramNames]=>???")
-      else myRes
+      if myRes == null then initialize()
+      myRes.nn
 
     def paramInfos: List[PInfo] = paramTypeBounds
 
@@ -992,10 +1009,24 @@ object Types {
     def rec(
       paramNames: List[TypeName]
     )(boundsRest: Binders => List[TypeBounds], resultRest: Binders => Type): PolyType =
-      new PolyType(paramNames)(boundsRest, resultRest)
+      val tpe = new PolyType(paramNames)(boundsRest, resultRest)
+      tpe.resType // initialize now
+      tpe
 
     def unapply(tpe: PolyType): (List[TypeName], List[TypeBounds], Type) =
       (tpe.paramNames, tpe.paramTypeBounds, tpe.resultType)
+
+    def fromParams(params: List[TypeParam], resultType: Type)(using Context): Type =
+      if params.isEmpty then resultType
+      else
+        val paramNames = params.map(_.name)
+        val paramTypeBounds = params.map(_.computeDeclarationTypeBounds())
+        val paramSyms = params.map(_.symbol)
+        apply(paramNames)(
+          polyType => paramTypeBounds.map(polyType.integrate(paramSyms, _)),
+          polyType => polyType.integrate(paramSyms, resultType)
+        )
+  end PolyType
 
   /** Encapsulates the binders associated with a TypeParamRef. */
   sealed trait Binders

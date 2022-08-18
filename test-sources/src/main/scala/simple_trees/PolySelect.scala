@@ -6,3 +6,5 @@ class PolySelect:
   def testGetter(x: GenericClass[Int]): Int = x.getter
 
   def testMethod(x: GenericClass[Int]): Int = x.method(5)
+
+  def testGenericMethod(x: GenericMethod): Int = x.identity(5)
