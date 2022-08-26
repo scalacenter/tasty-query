@@ -201,24 +201,22 @@ object Symbols {
       mutable.HashMap[Name, mutable.HashSet[Symbol]]()
 
     private[tastyquery] final def addDecl(decl: Symbol): Unit =
-      myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet) += decl
+      val key = decl.name match
+        case QualifiedName(_, _, last) => last // drop package prefixes
+        case name                      => name
+      myDeclarations.getOrElseUpdate(key, new mutable.HashSet) += decl
 
     /** direct lookup without requiring `Context`, can not resolve overloads */
     private[tastyquery] final def getDeclInternal(name: Name): Option[Symbol] = name match
       case overloaded: SignedName => None // need context to resolve overloads
       case name =>
-        def doLookup(sel: Name): Option[Symbol] = myDeclarations.get(sel) match
+        myDeclarations.get(name) match
           case Some(decls) =>
             if decls.sizeIs == 1 then Some(decls.head)
             else if decls.sizeIs > 1 then
-              throw SymbolLookupException(sel, s"unexpected overloads: ${decls.mkString(", ")}")
+              throw SymbolLookupException(name, s"unexpected overloads: ${decls.mkString(", ")}")
             else None // TODO: this should be an error
           case _ => None
-        def lookupIfPackage: Option[Symbol] = name match
-          case name: SimpleName if isPackage && this.name != nme.RootName =>
-            doLookup(this.name.toTermName.select(name))
-          case _ => None
-        doLookup(name).orElse(lookupIfPackage)
 
     /** Forces the symbol to be initialized.
       *
@@ -360,17 +358,17 @@ object Symbols {
     this.withDeclaredType(PackageRef(this))
 
     def findPackageSymbol(packageName: TermName): Option[PackageClassSymbol] = packageName match {
-      case _: SimpleName => getPackageDecl(packageName)
+      case packageName: SimpleName => getPackageDecl(packageName)
       case QualifiedName(NameTags.QUALIFIED, prefix, suffix) =>
         if (prefix == name)
-          getPackageDecl(packageName)
+          getPackageDecl(suffix)
         else
           // recurse
           findPackageSymbol(prefix).flatMap(_.findPackageSymbol(packageName))
       case _ => throw IllegalArgumentException(s"Unexpected package name: $name")
     }
 
-    private def getPackageDecl(packageName: TermName): Option[PackageClassSymbol] =
+    private def getPackageDecl(packageName: SimpleName): Option[PackageClassSymbol] =
       /* All subpackages are created eagerly when initializing contexts,
        * so we can use getDeclInternal here.
        */

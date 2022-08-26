@@ -21,7 +21,7 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
     * They can only do that because they access `private[tastyquery]` methods,
     * in particular `Symbol.getDeclInternal`.
     */
-  object DangerousOps {
+  object DangerousOps:
     def followPathImpl(root: DeclaringSymbol, path: DeclarationPath): Either[String, Symbol] = {
       def follow(selected: Symbol)(remainder: DeclarationPath): Either[String, Symbol] = selected match {
         case nextDecl: DeclaringSymbol =>
@@ -36,18 +36,10 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
       yield sym
     }
 
-    private def select(root: DeclaringSymbol, next: Name): Either[String, Symbol] = {
-      val sel = (root, next) match {
-        case (p: PackageClassSymbol, s: SimpleName) if p.name != nme.RootName =>
-          p.name.toTermName.select(s)
-        case _ => next
-      }
-      root.getDeclInternal(sel) match {
+    private def select(root: DeclaringSymbol, next: Name): Either[String, Symbol] =
+      root.getDeclInternal(next) match
         case Some(someSym) => Right(someSym)
-        case _ => Left(s"No declaration for ${next.toDebugString} [${sel.toDebugString}] in ${root.toDebugString}")
-      }
-    }
-  }
+        case _             => Left(s"No declaration for ${next.toDebugString} in ${root.toDebugString}")
 
   def assertSymbolExistsAndIsLoaded(path: DeclarationPath)(implicit ctx: Context): Unit =
     DangerousOps.followPathImpl(defn.RootPackage, path).fold(fail(_), _ => ())
