@@ -2,6 +2,7 @@ package tastyquery.reader
 
 import tastyquery.Contexts.*
 import tastyquery.ast.Constants.Constant
+import tastyquery.ast.Flags
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.{ClassSymbol, ClassSymbolFactory, NoSymbol, RegularSymbol, RegularSymbolFactory, Symbol}
 import tastyquery.ast.Trees.*
@@ -319,6 +320,7 @@ class TreeUnpickler(
       val spn = span
       val start = reader.currentAddr
       val paramSymbol = fileCtx.getSymbol(start, RegularSymbolFactory)
+      paramSymbol.withFlags(if paramSymbol.owner.isClass then Flags.ClassTypeParam else Flags.TypeParam)
       reader.readByte()
       val end = reader.readEnd()
       val name = readName.toTypeName
@@ -326,7 +328,7 @@ class TreeUnpickler(
       skipModifiers(end)
       TypeParam(name, bounds, paramSymbol)(spn).definesTreeOf(paramSymbol)
     }
-    var acc = new ListBuffer[TypeParam]()
+    val acc = new ListBuffer[TypeParam]()
     while (reader.nextByte == TYPEPARAM) {
       acc += readTypeParam
     }
@@ -360,7 +362,9 @@ class TreeUnpickler(
     val spn = span
     reader.readByte()
     val end = reader.readEnd()
+    val cls = fileCtx.owner.asClass
     val tparams = readTypeParams
+    cls.withTypeParams(tparams.map(_.symbol), tparams.map(_.computeDeclarationTypeBounds()))
     val params = readParams
     val parents: List[Apply | Block | TypeTree] =
       reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF) {
@@ -372,6 +376,7 @@ class TreeUnpickler(
           case _     => readTypeTree
         }
       }
+    cls.withDeclaredType(ClassType(cls, ObjectType))
     val self = readSelf
     // The first entry is the constructor
     val cstr = readStat.asInstanceOf[DefDef]
@@ -458,9 +463,7 @@ class TreeUnpickler(
           val paramTypes = params.map(_.tpt.toType)
           MethodType(paramNames, paramTypes, rec(rest))
         case Right(tparams) :: rest =>
-          val paramNames = tparams.map(_.name)
-          val paramTypeBounds = tparams.map(_.computeDeclarationTypeBounds())
-          PolyType(paramNames, paramTypeBounds, rec(rest))
+          PolyType.fromParams(tparams, rec(rest))
         case Nil =>
           resultTpt.toType
 
@@ -852,13 +855,15 @@ class TreeUnpickler(
         // cannot have symbols inside types
         TypeParam(name, bounds, NoSymbol)(spn)
       })
-      TypeLambda(params)((b: Binders) => resultUnpickler.readType(using fileCtx.withEnclosingBinders(lambdaAddr, b)))
+      TypeLambda.fromParams(params)((b: Binders) =>
+        resultUnpickler.readType(using fileCtx.withEnclosingBinders(lambdaAddr, b))
+      )
     case PARAMtype =>
       reader.readByte()
       reader.readEnd()
       val lambdaAddr = reader.readAddr()
       val num = reader.readNat()
-      TypeParamRef(fileCtx.getEnclosingBinders(lambdaAddr), num)
+      fileCtx.getEnclosingBinders(lambdaAddr).asInstanceOf[TypeBinders].paramRefs(num)
     case REFINEDtype =>
       reader.readByte()
       reader.readEnd()

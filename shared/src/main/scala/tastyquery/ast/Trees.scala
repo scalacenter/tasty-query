@@ -270,7 +270,7 @@ object Trees {
   /** qualifier.termName */
   case class Select(qualifier: Tree, name: TermName)(span: Span) extends Tree(span) {
     override protected def calculateType(using Context): Type =
-      qualifier.tpe.asInstanceOf[PathType].select(name) // TODO: what about holes, poly functions etc?
+      NamedType(qualifier.tpe, name)
 
     override def withSpan(span: Span): Select = Select(qualifier, name)(span)
   }
@@ -279,7 +279,7 @@ object Trees {
       extends Select(qualifier, name)(span) {
 
     override protected def calculateType(using Context): Type =
-      selectOwner.selectIn(name, selectOwner) // TODO: refine at the prefix of the qualifier
+      TermRef(qualifier.tpe, LookupIn(selectOwner, name))
 
     override final def withSpan(span: Span): SelectIn = SelectIn(qualifier, name, selectOwner)(span)
 
@@ -326,7 +326,7 @@ object Trees {
     private def resolvePolyType(funTpe: Type, args: List[Type])(using Context): Type =
       funTpe.widenOverloads match
         case funTpe: PolyType =>
-          funTpe.resultType // TODO: substitute type parameters into result
+          funTpe.instantiate(args)
         case tpe =>
           throw NonMethodReference(s"type application of args ${args.mkString} to $tpe")
 

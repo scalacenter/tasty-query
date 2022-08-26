@@ -97,9 +97,7 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
       catch
         case err: java.lang.AssertionError =>
           val msg = err.getMessage.nn
-          assert(
-            msg.contains("unexpected package symbolic_-- in owners of top level class symbolic_$minus$minus.#::")
-          )
+          assert(msg.contains("unexpected package symbolic_-- in owners of top level class symbolic_$minus$minus.#::"))
     }
 
     def runTest(using Context): Unit =

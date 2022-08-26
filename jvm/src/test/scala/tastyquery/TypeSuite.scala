@@ -113,6 +113,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val evalSym = resolve(RecApply / name"eval")
     val ExprClass = resolve(RecApply / tname"Expr")
+    val NumClass = resolve(RecApply / tname"Num")
+    val BoolClass = resolve(RecApply / tname"Bool")
 
     val evalParamss = evalSym.paramSymss
 
@@ -124,12 +126,20 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     evalTree.walkTree { tree =>
       tree match
-        case recCall @ Apply(TypeApply(evalRef @ Select(_, SignedName(SimpleName("eval"), _, _)), _), _) =>
+        case recCall @ Apply(TypeApply(evalRef @ Select(_, SignedName(SimpleName("eval"), _, _)), List(targ)), _) =>
           recCallCount += 1
 
           assert(evalRef.tpe.isRef(evalSym), clue(evalRef))
 
-          assert(recCall.tpe.isRef(Tsym), clue(recCall))
+          /* Because of GADT reasoning, the first two recursive call implicitly
+           * have a [Num] type parameter, while the latter two have [Bool].
+           */
+          val expectedTargClass =
+            if recCallCount <= 2 then NumClass
+            else BoolClass
+
+          assert(clue(targ).toType.isRef(expectedTargClass))
+          assert(recCall.tpe.isRef(expectedTargClass), clue(recCall))
         case _ => ()
     }
 
@@ -149,9 +159,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(xParamDef.symbol.declaredType.isRef(IntClass))
 
     fSym.declaredType match
-      case MethodType(_, List(paramTpe), resultTpe) =>
-        assert(paramTpe.isRef(IntClass))
-        assert(resultTpe.isRef(IntClass))
+      case mt: MethodType =>
+        assert(mt.paramTypes.sizeIs == 1 && mt.paramTypes.head.isRef(IntClass))
+        assert(mt.resultType.isRef(IntClass))
       case _ =>
         fail(s"$fSym does not have a MethodType", clues(fSym.declaredType))
 
@@ -301,24 +311,24 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     // def by(step: Int): Range
     locally {
       val bySym = rangeSym.lookup(name"by").get
-      val MethodType(paramNames, paramTypes, resTpe) = (bySym.declaredType: @unchecked)
-      assertEquals(List[TermName](name"step"), paramNames, clue(paramNames))
-      assert(paramTypes.sizeIs == 1)
-      assert(paramTypes.head.isOfClass(IntClass), clue(paramTypes.head))
-      assert(resTpe.isOfClass(rangeSym), clue(resTpe))
+      val mt = bySym.declaredType.asInstanceOf[MethodType]
+      assertEquals(List[TermName](name"step"), mt.paramNames, clue(mt.paramNames))
+      assert(mt.paramTypes.sizeIs == 1)
+      assert(mt.paramTypes.head.isOfClass(IntClass), clue(mt.paramTypes.head))
+      assert(mt.resultType.isOfClass(rangeSym), clue(mt.resultType))
     }
 
     // def map[B](f: Int => B): IndexedSeq[B]
     locally {
       val mapSym = rangeSym.lookup(name"map").get
-      val PolyType(tparamNames, tparamBounds, MethodType(paramNames, paramTypes, resTpe)) =
-        (mapSym.declaredType: @unchecked)
-      assertEquals(List[TypeName](name"B".toTypeName), tparamNames, clue(tparamNames))
-      assert(tparamBounds.sizeIs == 1)
-      assertEquals(List[TermName](name"f"), paramNames, clue(paramNames))
-      assert(paramTypes.sizeIs == 1)
-      assert(paramTypes.head.isOfClass(Function1Class), clue(paramTypes.head))
-      assert(resTpe.isOfClass(IndexedSeqClass), clue(resTpe))
+      val pt = mapSym.declaredType.asInstanceOf[PolyType]
+      val mt = pt.resultType.asInstanceOf[MethodType]
+      assertEquals(List[TypeName](name"B".toTypeName), pt.paramNames, clue(pt.paramNames))
+      assert(pt.paramTypeBounds.sizeIs == 1)
+      assertEquals(List[TermName](name"f"), mt.paramNames, clue(mt.paramNames))
+      assert(mt.paramTypes.sizeIs == 1)
+      assert(mt.paramTypes.head.isOfClass(Function1Class), clue(mt.paramTypes.head))
+      assert(mt.resultType.isOfClass(IndexedSeqClass), clue(mt.resultType))
     }
   }
 
@@ -351,22 +361,26 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
 
     testDef(BagOfJavaDefinitions / name"printX") { printX =>
-      assert(printX.declaredType.resultType.isRef(UnitClass))
+      val tpe = printX.declaredType.asInstanceOf[MethodType]
+      assert(tpe.resultType.isRef(UnitClass))
     }
 
     testDef(BagOfJavaDefinitions / name"<init>") { ctor =>
-      assert(ctor.declaredType.paramInfos.head.isRef(IntClass))
-      assert(ctor.declaredType.resultType.isRef(UnitClass))
+      val tpe = ctor.declaredType.asInstanceOf[MethodType]
+      assert(tpe.paramTypes.head.isRef(IntClass))
+      assert(tpe.resultType.isRef(UnitClass))
     }
 
     testDef(BagOfJavaDefinitions / name"wrapXArray") { wrapXArray =>
-      assert(wrapXArray.declaredType.resultType.isArrayOf(_.isRef(IntClass)))
+      val tpe = wrapXArray.declaredType.asInstanceOf[MethodType]
+      assert(tpe.resultType.isArrayOf(_.isRef(IntClass)))
     }
 
     testDef(BagOfJavaDefinitions / name"arrIdentity") { arrIdentity =>
+      val tpe = arrIdentity.declaredType.asInstanceOf[MethodType]
       val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
-      assert(arrIdentity.declaredType.paramInfos.head.isArrayOf(_.isRef(JavaDefinedClass)))
-      assert(arrIdentity.declaredType.resultType.isArrayOf(_.isRef(JavaDefinedClass)))
+      assert(tpe.paramInfos.head.isArrayOf(_.isRef(JavaDefinedClass)))
+      assert(tpe.resultType.isArrayOf(_.isRef(JavaDefinedClass)))
     }
 
   }
@@ -391,27 +405,29 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
 
     testDef(BagOfGenJavaDefinitions / name"getX") { getX =>
-      assert(getX.declaredType.resultType.isGenJavaClassOf(_.isRef(JavaDefinedClass)))
+      val tpe = getX.declaredType.asInstanceOf[MethodType]
+      assert(tpe.resultType.isGenJavaClassOf(_.isRef(JavaDefinedClass)))
     }
 
     testDef(BagOfGenJavaDefinitions / name"getXArray") { getXArray =>
-      assert(
-        getXArray.declaredType.resultType
-          .isArrayOf(_.isGenJavaClassOf(_.isRef(JavaDefinedClass)))
-      )
+      val tpe = getXArray.declaredType.asInstanceOf[MethodType]
+      assert(tpe.resultType.isArrayOf(_.isGenJavaClassOf(_.isRef(JavaDefinedClass))))
     }
 
     testDef(BagOfGenJavaDefinitions / name"printX") { printX =>
-      assert(printX.declaredType.tparamBounds.head.high.isRef(ExceptionClass))
+      val tpe = printX.declaredType.asInstanceOf[PolyType]
+      assert(tpe.paramTypeBounds.head.high.isRef(ExceptionClass))
     }
 
     testDef(BagOfGenJavaDefinitions / name"recTypeParams") { recTypeParams =>
-      val List(tparamRefA, tparamRefY) = recTypeParams.declaredType.tparamRefs: @unchecked
+      val tpe = recTypeParams.declaredType.asInstanceOf[TypeLambdaType]
+      val List(tparamRefA, tparamRefY) = tpe.paramRefs: @unchecked
       assert(tparamRefA.bounds.high.isGenJavaClassOf(_ == tparamRefY))
     }
 
     testDef(BagOfGenJavaDefinitions / name"refInterface") { refInterface =>
-      val List(tparamRefA) = refInterface.declaredType.tparamRefs: @unchecked
+      val tpe = refInterface.declaredType.asInstanceOf[TypeLambdaType]
+      val List(tparamRefA) = tpe.paramRefs: @unchecked
       assert(
         tparamRefA.bounds.high.isIntersectionOf(_.isAny, _.isRef(JavaInterface1), _.isRef(JavaInterface2)),
         clues(tparamRefA.bounds)
@@ -537,11 +553,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case termRef: TermRef => termRef.underlying
       case tpe              => fail("expected TermRef", clues(tpe))
 
-    val MethodType(paramNames, paramTypes, resTpe) = underlyingType: @unchecked
-    assertEquals(List[TermName](name"that"), paramNames, clue(paramNames))
-    assert(paramTypes.sizeIs == 1, clue(paramTypes))
-    assert(paramTypes.head.isOfClass(AnyClass), clue(paramTypes.head))
-    assert(resTpe.isOfClass(BooleanClass), clue(resTpe))
+    val mt = underlyingType.asInstanceOf[MethodType]
+    assertEquals(List[TermName](name"that"), mt.paramNames, clue(mt.paramNames))
+    assert(mt.paramTypes.sizeIs == 1, clue(mt.paramTypes))
+    assert(mt.paramTypes.head.isOfClass(AnyClass), clue(mt.paramTypes.head))
+    assert(mt.resultType.isOfClass(BooleanClass), clue(mt.resultType))
   }
 
   testWithContext("select-field-from-tasty-in-other-package:dependency-from-class-file") {
@@ -573,6 +589,78 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val (getXRef @ _: Symbolic) = getXSelection.tpe: @unchecked
 
     assertIsSymbolWithPath(getX)(getXRef.resolveToSymbol)
+  }
+
+  testWithContext("select-field-from-generic-class") {
+    val GenClass = resolve(name"simple_trees" / tname"GenericClass").asClass
+    val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
+    val IntClass = resolve(name"scala" / tname"Int")
+
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.lookup(name"testField").get.tree: @unchecked
+
+    val Select(qual, fieldName) = body: @unchecked
+
+    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(IntClass))))
+    assertEquals(fieldName, name"field")
+    assert(clue(body.tpe).isOfClass(IntClass))
+  }
+
+  testWithContext("select-getter-from-generic-class") {
+    val GenClass = resolve(name"simple_trees" / tname"GenericClass").asClass
+    val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
+    val IntClass = resolve(name"scala" / tname"Int")
+
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.lookup(name"testGetter").get.tree: @unchecked
+
+    val Select(qual, getterName) = body: @unchecked
+
+    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(IntClass))))
+    assertEquals(getterName, name"getter")
+    assert(clue(body.tpe).isOfClass(IntClass))
+  }
+
+  testWithContext("select-and-apply-method-from-generic-class") {
+    val GenClass = resolve(name"simple_trees" / tname"GenericClass").asClass
+    val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
+    val IntClass = resolve(name"scala" / tname"Int")
+
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.lookup(name"testMethod").get.tree: @unchecked
+
+    val Apply(fun @ Select(qual, methodName), List(arg)) = body: @unchecked
+
+    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(IntClass))))
+    methodName match {
+      case SignedName(_, _, simpleName) => assertEquals(simpleName, name"method")
+    }
+    fun.tpe.widen match {
+      case mt @ MethodType(List(paramName)) =>
+        assertEquals(paramName, name"x")
+        assert(clue(mt.paramTypes.head).isOfClass(IntClass))
+        assert(clue(mt.resType).isOfClass(IntClass))
+    }
+    assert(clue(body.tpe).isOfClass(IntClass))
+  }
+
+  testWithContext("select-and-apply-poly-method") {
+    val GenMethod = resolve(name"simple_trees" / tname"GenericMethod").asClass
+    val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
+    val IntClass = resolve(name"scala" / tname"Int")
+
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.lookup(name"testGenericMethod").get.tree: @unchecked
+
+    val Apply(tapp @ TypeApply(fun @ Select(qual, methodName), List(targ)), List(arg)) = body: @unchecked
+
+    assert(clue(qual.tpe).isOfClass(GenMethod))
+    methodName match {
+      case SignedName(_, _, simpleName) => assertEquals(simpleName, name"identity")
+    }
+    tapp.tpe.widen match {
+      case mt @ MethodType(List(paramName)) =>
+        assertEquals(paramName, name"x")
+        assert(clue(mt.paramTypes.head).isOfClass(IntClass))
+        assert(clue(mt.resType).isOfClass(IntClass))
+    }
+    assert(clue(body.tpe).isOfClass(IntClass))
   }
 
 }
