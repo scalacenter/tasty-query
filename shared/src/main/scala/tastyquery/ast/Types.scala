@@ -68,25 +68,15 @@ object Types {
 
   abstract class Type {
 
-    /*final def paramInfos: List[Type] = this match
-      case tpe: MethodType => tpe.paramTypes
-      case tpe             => Nil
-
-    final def tparamBounds: List[TypeBounds] = this match
-      case tpe: PolyType => tpe.paramTypeBounds
-      case tpe           => Nil*/
-
-    final def tparamRefs: List[TypeParamRef] = this match
-      case tpe: TypeLambdaType => tpe.paramRefs
-      case tpe                 => Nil
-
     /** The type parameters of this type are:
-      * For a ClassInfo type, the type parameters of its class.
+      * For a ClassType type, the type parameters of its class.
       * For a typeref referring to a class, the type parameters of the class.
       * For a refinement type, the type parameters of its parent, dropping
       * any type parameter that is-rebound by the refinement.
+      *
+      * For any *-kinded type, returns `Nil`.
       */
-    final def typeParams(using Context): List[ParamInfo.TypeParamInfo] =
+    private[Types] final def typeParams(using Context): List[ParamInfo.TypeParamInfo] =
       this match
         case self: TypeRef =>
           val tsym = self.symbol
@@ -177,6 +167,7 @@ object Types {
       case tp                => tp
 
     final def widenIfUnstable(using Context): Type = this match
+      // TODO Handle unstable term refs like method calls or values
       case tp: TermRef => tp
       case tp          => tp.widen
 
@@ -313,9 +304,6 @@ object Types {
 
     final def select(sym: Symbol)(using Context): Type =
       NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
-
-    final def select(name: Name, sym: Symbol)(using Context): Type =
-      select(sym) // TODO Should we preserve the `name` here somehow?
   }
 
   private def scalaPackage: PackageRef = PackageRef(nme.scalaPackageName)
@@ -366,7 +354,7 @@ object Types {
     /** The closest supertype of this type.
       *
       * This is the same as `underlying`, except that
-      *   - instead of a TyperBounds type it returns its upper bound, and
+      *   - instead of a TypeBounds type it returns its upper bound, and
       *   - for applied types it returns the upper bound of the constructor re-applied to the arguments.
       */
     def superType(using Context): Type = underlying match {
@@ -388,10 +376,7 @@ object Types {
     */
   trait TermType extends Type
 
-  trait MethodicType extends TermType {
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
-      throw new AssertionError(s"Cannot find member in $this")
-  }
+  trait MethodicType extends TermType
 
   /** A marker trait for types that can be types of values or prototypes of value types */
   trait ValueTypeOrProto extends TermType
@@ -477,22 +462,16 @@ object Types {
         designator = sym
         sym
       case name: Name =>
+        @tailrec
         def findPrefixSym(prefix: Type): Symbol = prefix match {
           case NoPrefix =>
             throw new SymbolLookupException(name, "reference by name to a local symbol")
           case t: TermRef =>
-            val underlyingType = t.underlying
-            /*if (underlyingType == NoType)
-              throw new ReferenceResolutionError(t, s"the term does not have a type")
-            if (!underlyingType.isInstanceOf[Symbolic])
-              throw new ReferenceResolutionError(
-                t,
-                s"only references to terms, whose type is a combination of typeref, termref and thistype, are supported. Got type $underlyingType"
-              )
-            underlyingType.asInstanceOf[Symbolic].resolveToSymbol*/
-            findPrefixSym(underlyingType)
-          case other: Symbolic       => other.resolveToSymbol
-          case AppliedType(tycon, _) => findPrefixSym(tycon)
+            findPrefixSym(t.underlying)
+          case other: Symbolic =>
+            other.resolveToSymbol
+          case AppliedType(tycon, _) =>
+            findPrefixSym(tycon)
           case prefix =>
             throw new SymbolLookupException(name, s"unexpected prefix type $prefix")
         }
@@ -821,27 +800,14 @@ object Types {
       else AppliedType(tycon, args)
 
     def map(op: Type => Type)(using Context): AppliedType =
-      derivedAppliedType(op(tycon), mapConserve(args)(op))
+      derivedAppliedType(op(tycon), args.mapConserve(op))
   }
-
-  private def mapConserve[T <: AnyRef](xs: List[T])(op: T => T): List[T] =
-    xs match
-      case head :: tail =>
-        val newHead = op(head)
-        val newTail = mapConserve(tail)(op)
-        if (newHead eq head) && (newTail eq tail) then xs
-        else newHead :: newTail
-      case Nil =>
-        Nil
 
   /** A by-name parameter type of the form `=> T`, or the type of a method with no parameter list. */
   case class ExprType(resType: Type) extends TypeProxy with MethodicType {
     def resultType: Type = resType
 
     override def underlying(using Context): Type = resType
-
-    override def findMember(name: Name, pre: Type)(using Context): Symbol =
-      super[TypeProxy].findMember(name, pre)
 
     def derivedExprType(resType: Type)(using Context): ExprType =
       if (resType eq this.resType) this else ExprType(resType)
@@ -861,16 +827,8 @@ object Types {
 
     def resultType: Type = resType
 
-    private var myParamRefs: List[ParamRefType] | Null = null
-
-    def paramRefs: List[ParamRefType] = {
-      val myParamRefs = this.myParamRefs
-      if myParamRefs != null then myParamRefs
-      else
-        val paramRefs = (0 until paramNames.size).toList.map(newParamRef(_))
-        this.myParamRefs = paramRefs
-        paramRefs
-    }
+    val paramRefs: List[ParamRefType] =
+      List.tabulate(paramNames.size)(newParamRef(_): @unchecked)
 
     def lookupRef(name: ThisName): Option[ParamRefType] =
       paramNames.indexOf(name) match
@@ -890,7 +848,7 @@ object Types {
 
     def newLikeThis(paramNames: List[ThisName], paramInfos: List[PInfo], resType: Type)(using Context): This =
       companion(paramNames)(
-        x => mapConserve(paramInfos)(Substituters.subst(_, this, x).asInstanceOf[PInfo]),
+        x => paramInfos.mapConserve(Substituters.subst(_, this, x).asInstanceOf[PInfo]),
         x => resType.subst(this, x)
       )
   }
@@ -948,6 +906,9 @@ object Types {
 
     def companion: LambdaTypeCompanion[TermName, Type, MethodType] = MethodType
 
+    def findMember(name: Name, pre: Type)(using Context): Symbol =
+      throw new AssertionError(s"Cannot find member in $this")
+
     override def toString: String =
       if evaluating then s"MethodType($paramNames)(<evaluating>...)"
       else s"MethodType($paramNames)($paramTypes, $resType)"
@@ -991,6 +952,9 @@ object Types {
 
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, PolyType] =
       PolyType
+
+    def findMember(name: Name, pre: Type)(using Context): Symbol =
+      throw new AssertionError(s"Cannot find member in $this")
 
     def instantiate(args: List[Type])(using Context): Type =
       Substituters.substParams(resType, this, args)
@@ -1208,8 +1172,8 @@ object Types {
 
   object AndType {
     def make(first: Type, second: Type)(using Context): Type =
-      if (first eq second) || (second eq AnyType) then first
-      else if first eq AnyType then second
+      // TODO Avoid &'ing with Any
+      if first eq second then first
       else AndType(first, second)
   }
 

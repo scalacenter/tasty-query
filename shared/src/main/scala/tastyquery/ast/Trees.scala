@@ -275,18 +275,6 @@ object Trees {
     override def withSpan(span: Span): Select = Select(qualifier, name)(span)
   }
 
-  /** The type of the selection `qual1.name`. */
-  private def selectionType(qual1: Tree, name: Name)(using Context): Type =
-    val qualType = qual1.tpe.widenIfUnstable
-
-    // TODO Handle array.{apply,update,length}
-
-    val pre = qualType // maybeSkolemizePrefix(qualType, name)
-    val member = qualType.findMember(name, pre)
-
-    qualType.select(name, member)
-  end selectionType
-
   class SelectIn(qualifier: Tree, name: SignedName, selectOwner: TypeRef)(span: Span)
       extends Select(qualifier, name)(span) {
 

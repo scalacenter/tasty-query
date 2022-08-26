@@ -50,8 +50,7 @@ object Symbols {
 
     private[tastyquery] final def withDeclaredType(tpe: Type): this.type =
       val local = myDeclaredType
-      if local != null /*&& !local.isInstanceOf[ClassType]*/ then // TODO Figure out why ClassType's are reassigned
-        throw new IllegalStateException(s"reassignment of declared type to $this")
+      if local != null then throw new IllegalStateException(s"reassignment of declared type to $this")
       else
         myDeclaredType = tpe
         this
@@ -287,14 +286,15 @@ object Symbols {
 
     private def typeParamsInternal(using Context): List[(Symbol, TypeBounds)] =
       ensureInitialised()
+      typeParamsInternalNoInitialize
+
+    private def typeParamsInternalNoInitialize(using Context): List[(Symbol, TypeBounds)] =
       val local = myTypeParams
       if local == null then throw new IllegalStateException(s"expected type params for $this")
       else local
 
     private[tastyquery] final def typeParamSymsNoInitialize(using Context): List[Symbol] =
-      val local = myTypeParams
-      if local == null then throw new IllegalStateException(s"expected type params for $this")
-      else local.map(_(0))
+      typeParamsInternalNoInitialize.map(_(0))
 
     private[tastyquery] override final def ensureInitialised()(using Context): Unit =
       def initialiseMembers(): Unit = this match

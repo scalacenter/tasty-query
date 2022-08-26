@@ -31,9 +31,9 @@ object Substituters:
     def apply(tp: Type): Type =
       tp match
         case tp: BoundType =>
-          if (tp.binders eq from) tp.copyBoundType(to.asInstanceOf[tp.BindersType]) else tp
+          if tp.binders eq from then tp.copyBoundType(to.asInstanceOf[tp.BindersType]) else tp
         case tp: NamedType =>
-          if (tp.prefix `eq` NoPrefix) tp
+          if tp.prefix eq NoPrefix then tp
           else tp.derivedSelect(apply(tp.prefix))
         case _: ThisType =>
           tp
@@ -48,9 +48,9 @@ object Substituters:
     def apply(tp: Type): Type =
       tp match
         case tp: ParamRef =>
-          if (tp.binders == from) to(tp.paramNum) else tp
+          if tp.binders eq from then to(tp.paramNum) else tp
         case tp: NamedType =>
-          if (tp.prefix `eq` NoPrefix) tp
+          if tp.prefix eq NoPrefix then tp
           else tp.derivedSelect(apply(tp.prefix))
         case _: ThisType =>
           tp

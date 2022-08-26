@@ -420,12 +420,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
 
     testDef(BagOfGenJavaDefinitions / name"recTypeParams") { recTypeParams =>
-      val List(tparamRefA, tparamRefY) = recTypeParams.declaredType.tparamRefs: @unchecked
+      val tpe = recTypeParams.declaredType.asInstanceOf[TypeLambdaType]
+      val List(tparamRefA, tparamRefY) = tpe.paramRefs: @unchecked
       assert(tparamRefA.bounds.high.isGenJavaClassOf(_ == tparamRefY))
     }
 
     testDef(BagOfGenJavaDefinitions / name"refInterface") { refInterface =>
-      val List(tparamRefA) = refInterface.declaredType.tparamRefs: @unchecked
+      val tpe = refInterface.declaredType.asInstanceOf[TypeLambdaType]
+      val List(tparamRefA) = tpe.paramRefs: @unchecked
       assert(
         tparamRefA.bounds.high.isIntersectionOf(_.isAny, _.isRef(JavaInterface1), _.isRef(JavaInterface2)),
         clues(tparamRefA.bounds)
@@ -614,7 +616,6 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(IntClass))))
     assertEquals(getterName, name"getter")
-    body.tpe
     assert(clue(body.tpe).isOfClass(IntClass))
   }
 
