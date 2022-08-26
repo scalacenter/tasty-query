@@ -14,7 +14,7 @@ abstract class RestrictedUnpicklingSuite extends BaseUnpicklingSuite {
 
   protected def findTopLevelClass(path: TopLevelDeclPath)(extras: TopLevelDeclPath*): (Context, ClassSymbol) = {
     val base = initRestrictedContext(path, extras)
-    val topLevelClass = path.fullClassName
+    val topLevelClass = path.rootClassName
     val classRoot = base.getClassIfDefined(topLevelClass) match
       case Right(cls) => cls
       case Left(err)  => throw MissingTopLevelDecl(path, err)
@@ -23,14 +23,14 @@ abstract class RestrictedUnpicklingSuite extends BaseUnpicklingSuite {
   }
 
   private def initRestrictedContext(path: TopLevelDeclPath, extras: Seq[TopLevelDeclPath]): Context =
-    val classpath = testClasspath.withFilter((path :: extras.toList).map(_.fullClassName))
+    val classpath = testClasspath.withFilter((path :: extras.toList).map(_.rootClassName))
     Contexts.init(classpath)
 }
 
 object RestrictedUnpicklingSuite {
   class MissingTopLevelDecl(path: TopLevelDeclPath, cause: SymResolutionProblem)
       extends Exception(
-        s"Missing top-level declaration ${path.fullClassName}, perhaps it is not on the classpath?",
+        s"Missing top-level declaration ${path.rootClassName}, perhaps it is not on the classpath?",
         cause
       )
 }

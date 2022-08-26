@@ -32,18 +32,8 @@ object Contexts {
     ctx.initializeFundamentalClasses()
     ctx
 
-  private[Contexts] def moduleClassRoot(classRoot: ClassSymbol)(using Context): ClassSymbol = {
-    val pkg = classRoot.enclosingDecl
-    ClassSymbolFactory.castSymbol(pkg.getDecl(classRoot.name.toTypeName.toObjectName).get)
-  }
-
-  private[Contexts] def moduleRoot(classRoot: ClassSymbol)(using Context): RegularSymbol = {
-    val pkg = classRoot.enclosingDecl
-    RegularSymbolFactory.castSymbol(pkg.getDecl(classRoot.name.toTermName).get)
-  }
-
-  private[tastyquery] def initialisedRoot(classRoot: ClassSymbol)(using Context): Boolean =
-    classRoot.initialised || moduleClassRoot(classRoot).initialised
+  private[tastyquery] def initialisedRoot(classOrModuleRoot: ClassSymbol)(using Context): Boolean =
+    classOrModuleRoot.initialised || classOrModuleRoot.companionClass.map(_.initialised).getOrElse(false)
 
   /** Context is used throughout unpickling an entire project. */
   class Context private[Contexts] (val defn: Definitions, val classloader: Classpaths.Loader) {
@@ -55,19 +45,19 @@ object Contexts {
     def withRoot(root: ClassSymbol)(using Classpaths.permissions.LoadRoot): ClassContext =
       new ClassContext(defn, classloader, root)
 
-    def getClassIfDefined(fullClassName: String): Either[SymResolutionProblem, ClassSymbol] =
-      def packageAndClass(fullClassName: String): TypeRef = {
-        val lastSep = fullClassName.lastIndexOf('.')
-        if (lastSep == -1) TypeRef(PackageRef(nme.EmptyPackageName), typeName(fullClassName))
+    def getClassIfDefined(binaryName: String): Either[SymResolutionProblem, ClassSymbol] =
+      def packageAndClass(binaryName: String): TypeRef = {
+        val lastSep = binaryName.lastIndexOf('.')
+        if (lastSep == -1) TypeRef(PackageRef(nme.EmptyPackageName), typeName(binaryName))
         else {
           import scala.language.unsafeNulls
-          val packageName = fullClassName.substring(0, lastSep)
-          val className = typeName(fullClassName.substring(lastSep + 1))
+          val packageName = binaryName.substring(0, lastSep)
+          val className = typeName(binaryName.substring(lastSep + 1))
           TypeRef(PackageRef(classloader.toPackageName(packageName)), className)
         }
       }
       val symEither =
-        try Right(packageAndClass(fullClassName).resolveToSymbol(using this))
+        try Right(packageAndClass(binaryName).resolveToSymbol(using this))
         catch
           case e: SymResolutionProblem =>
             Left(e)
@@ -92,11 +82,10 @@ object Contexts {
               throw IllegalArgumentException(s"cannot find member ${name.toDebugString} in $symbol")
             }
             rec(next, pathRest)
-
       rec(defn.RootPackage, path)
     end findSymbolFromRoot
 
-    def createClassSymbol(name: Name, owner: DeclaringSymbol): ClassSymbol =
+    def createClassSymbol(name: TypeName, owner: DeclaringSymbol): ClassSymbol =
       owner.getDeclInternal(name) match
         case None =>
           val cls = ClassSymbolFactory.createSymbol(name, owner)
@@ -190,9 +179,9 @@ object Contexts {
 
     def classRoot: ClassSymbol = owner
 
-    def moduleClassRoot: ClassSymbol = Contexts.moduleClassRoot(classRoot)(using this)
+    def moduleClassRoot: ClassSymbol = classRoot.companionClass(using this).get
 
-    def moduleRoot: RegularSymbol = Contexts.moduleRoot(classRoot)(using this)
+    def moduleRoot: RegularSymbol = classRoot.companionObject(using this).get
 
     /*def createSymbol[T <: Symbol](name: Name, factory: SymbolFactory[T], addToDecls: Boolean): T =
       val sym = factory.createSymbol(name, owner)
@@ -266,7 +255,7 @@ object Contexts {
       * @note A method is added to the declarations of its class, but a nested method should not added
       *    to declarations of the outer method.
       */
-    def createSymbol[T <: Symbol](addr: Addr, name: Name, factory: SymbolFactory[T], addToDecls: Boolean): T =
+    def createSymbol[T <: Symbol](addr: Addr, name: Name, factory: ClosedSymbolFactory[T], addToDecls: Boolean): T =
 
       extension (s: ClassSymbol)
         def isModuleClassRoot: Boolean = s.name.toTermName match
@@ -289,8 +278,8 @@ object Contexts {
                 case (ClassSymbolFactory, sym: ClassSymbol) if sym.isModuleClassRoot => sym
                 case (RegularSymbolFactory, sym: RegularSymbol) if sym.isModuleRoot  => sym
                 case _ => throw ExistingDefinitionException(owner, name, explanation = s"existing symbol: $sym")
-            case _ => factory.createSymbol(name, owner)
-        else factory.createSymbol(name, owner)
+            case _ => factory.createSymbol(name, owner)(using this)
+        else factory.createSymbol(name, owner)(using this)
 
       if !hasSymbolAt(addr) then registerSym(addr, mkSymbol(name, owner), addToDecls)
       else throw ExistingDefinitionException(owner, name)

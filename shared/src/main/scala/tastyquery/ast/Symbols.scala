@@ -9,7 +9,10 @@ import tastyquery.ast.Trees.{DefTree, Tree, DefDef}
 import tastyquery.ast.Flags.*
 import tastyquery.ast.Types.*
 import tastyquery.ast.Variances.*
+import tastyquery.Contexts
 import tastyquery.Contexts.{Context, ctx}
+
+import tastyquery.util.syntax.chaining.given
 
 import compiletime.codeOf
 
@@ -34,19 +37,55 @@ object Symbols {
 
   val NoSymbol = new RegularSymbol(nme.EmptyTermName, null)
 
-  abstract class Symbol private[Symbols] (val name: Name, rawowner: Symbol | Null) extends ParamInfo {
-
+  sealed abstract class Symbol private[Symbols] (val name: Name, rawowner: Symbol | Null) extends ParamInfo {
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
     private var myTree: Option[DefTree] = None
-    // overridden in package symbol
-    def withTree(t: DefTree): this.type = {
+
+    /** Forces the symbol to be initialized.
+      *
+      * This method should never be called from within the initialisation of
+      * this symbol.
+      *
+      * For symbols that are not root symbols, this has no effect.
+      */
+    private[tastyquery] def ensureInitialised()(using Context): Unit
+
+    def withTree(t: DefTree): this.type =
+      require(!isPackage, s"Multiple trees correspond to one package, a single tree cannot be assigned")
       myTree = Some(t)
       this
-    }
-    def tree(using Context): Option[DefTree] = myTree
+
+    final def tree(using Context): Option[DefTree] =
+      ensureInitialised()
+      myTree
+
+    /** Get the companion class for a definition, if it exists:
+      * - for `class C` => `object class C[$]`
+      * - for `object class C[$]` => `class C`
+      * - for `object val C` => `class C`
+      */
+    final def companionClass(using Context): Option[ClassSymbol] = maybeOuter match
+      case scope: DeclaringSymbol =>
+        this match
+          case _: PackageClassSymbol => None
+          case cls: ClassSymbol =>
+            scope.getDecl(cls.name.toTypeName.companionName).collect { case sym: ClassSymbol =>
+              sym
+            }
+          case obj: RegularSymbol if obj.isTerm =>
+            scope.getDecl(obj.name.toTypeName).collect { case sym: ClassSymbol =>
+              sym
+            }
+          case _ => None
+      case _ => None // not possible yet for local symbols
 
     private var myDeclaredType: Type | Null = null
+
+    /** Hook called by a SymbolFactory for debugging purposes
+      *  Example usage: throw an exception when some specific symbol is created.
+      */
+    private[Symbols] def postCreate(using Context): Unit = ()
 
     private[tastyquery] final def withDeclaredType(tpe: Type): this.type =
       val local = myDeclaredType
@@ -163,7 +202,7 @@ object Symbols {
       val kind = this match
         case _: PackageClassSymbol => "package "
         case _: ClassSymbol        => if name.toTypeName.wrapsObjectName then "object class " else "class "
-        case _                     => if exists && outer.isPackage then "object " else ""
+        case _                     => if exists && outer.isPackage then "object " else "" // TODO: base this on flags
       s"symbol[$kind$name]"
     }
     def toDebugString = toString
@@ -173,8 +212,14 @@ object Symbols {
     def unapply(s: Symbol): Option[Name] = Some(s.name)
   }
 
-  final class RegularSymbol(override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner) {
+  final class RegularSymbol private[Symbols] (override val name: Name, rawowner: Symbol | Null)
+      extends Symbol(name, rawowner) {
     private var mySignature: Option[Signature] | Null = null
+
+    private[tastyquery] override final def ensureInitialised()(using Context): Unit =
+      if owner.isPackage then // Top-level module value
+        companionClass.foreach(_.ensureInitialised()) // init the root class
+      else () // member symbol, should be initialised by owner
 
     private[tastyquery] override final def signature(using Context): Option[Signature] =
       val local = mySignature
@@ -187,7 +232,8 @@ object Symbols {
         sig
   }
 
-  abstract class DeclaringSymbol(override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner) {
+  sealed abstract class DeclaringSymbol private[Symbols] (override val name: Name, rawowner: Symbol | Null)
+      extends Symbol(name, rawowner) {
 
     private[tastyquery] override final def signature(using Context): Option[Signature] = None
 
@@ -195,6 +241,20 @@ object Symbols {
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
     private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
       mutable.HashMap[Name, mutable.HashSet[Symbol]]()
+
+    /** Get the companion object of class definition, if it exists:
+      * - for `class C` => `object val C`
+      * - for `object class C[$]` => `object val C`
+      */
+    final def companionObject(using Context): Option[RegularSymbol] = maybeOuter match
+      case scope: DeclaringSymbol =>
+        this match
+          case _: PackageClassSymbol => None
+          case cls: ClassSymbol =>
+            scope.getDecl(cls.name.toTypeName.sourceObjectName).collect { case sym: RegularSymbol =>
+              sym
+            }
+      case _ => None // not possible yet for local symbols
 
     private[tastyquery] final def addDecl(decl: Symbol): Unit =
       val key = decl.name match
@@ -213,20 +273,6 @@ object Symbols {
               throw SymbolLookupException(name, s"unexpected overloads: ${decls.mkString(", ")}")
             else None // TODO: this should be an error
           case _ => None
-
-    /** Forces the symbol to be initialized.
-      *
-      * This method should never be called from within the initialisation of
-      * this symbol.
-      *
-      * For symbols that are neither classes nor packages, this has no effect.
-      */
-    private[tastyquery] def ensureInitialised()(using Context): Unit =
-      ()
-
-    override def tree(using Context): Option[DefTree] =
-      ensureInitialised()
-      super.tree
 
     private[Symbols] final def hasOverloads(name: SignedName): Boolean =
       myDeclarations.get(name.underlying) match
@@ -269,7 +315,8 @@ object Symbols {
       s"${super.toString} with declarations [${myDeclarations.keys.map(_.toDebugString).mkString(", ")}]"
   }
 
-  class ClassSymbol(override val name: Name, rawowner: Symbol | Null) extends DeclaringSymbol(name, rawowner) {
+  class ClassSymbol private[Symbols] (override val name: Name, rawowner: Symbol | Null)
+      extends DeclaringSymbol(name, rawowner) {
     private[tastyquery] var initialised: Boolean = false
 
     // TODO: how do we associate some Symbols with TypeBounds, and some with Type?
@@ -296,19 +343,21 @@ object Symbols {
 
     private[tastyquery] override final def ensureInitialised()(using Context): Unit =
       def initialiseMembers(): Unit = this match
-        case pkg: PackageClassSymbol => ctx.classloader.scanPackage(pkg)
-        case cls                     => ctx.classloader.scanClass(cls)
-
-      // FIXME Tolerate that module class roots do not get initialized. This should be handled better.
-      def isModuleClassRoot: Boolean =
-        name.toTermName match
-          case SuffixedName(NameTags.OBJECTCLASS, _) => owner.isPackage
-          case _                                     => false
+        case pkg: PackageClassSymbol =>
+          ctx.classloader.scanPackage(pkg)
+          assert(initialised, s"could not initialize package $fullName")
+        case cls =>
+          def initRoot(root: ClassSymbol): Unit =
+            ctx.classloader.scanClass(root)
+            assert(Contexts.initialisedRoot(root), s"could not initialize root class $fullName")
+          require(owner.isPackage, s"inner class was not initialised by owner") // root classes only
+          val maybeRoot =
+            if cls.name.toTypeName.wrapsObjectName then cls.companionClass.foreach(initRoot)
+            else initRoot(cls)
 
       if !initialised then
         // TODO: maybe add flag and check against if we are currently initialising this symbol?
         initialiseMembers()
-        assert(initialised || isModuleClassRoot, s"could not initialize $this")
 
     private[tastyquery] final def initParents: Boolean =
       myTypeParams != null
@@ -341,7 +390,7 @@ object Symbols {
   }
 
   // TODO: typename or term name?
-  class PackageClassSymbol(override val name: Name, rawowner: PackageClassSymbol | Null)
+  class PackageClassSymbol private[Symbols] (override val name: Name, rawowner: PackageClassSymbol | Null)
       extends ClassSymbol(name, rawowner) {
     if (rawowner != null) {
       // A package symbol is always a declaration in its owner package
@@ -369,32 +418,46 @@ object Symbols {
        * so we can use getDeclInternal here.
        */
       getDeclInternal(packageName).map(_.asInstanceOf[PackageClassSymbol])
-
-    override def withTree(t: DefTree): PackageClassSymbol.this.type = throw new UnsupportedOperationException(
-      s"Multiple trees correspond to one package, a single tree cannot be assigned"
-    )
   }
 
-  abstract class SymbolFactory[T <: Symbol] {
-    def createSymbol(name: Name, owner: Symbol): T
+  sealed abstract class SymbolFactory[T <: Symbol] {
+    type OwnerSym <: Symbol
+
+    final def createSymbol(name: Name, owner: OwnerSym)(using Context): T =
+      factory(name, owner).useWith(_.postCreate)
+
+    private[Symbols] def factory(name: Name, owner: OwnerSym): T
+
     def castSymbol(symbol: Symbol): T
   }
 
-  object RegularSymbolFactory extends SymbolFactory[RegularSymbol] {
-    override def createSymbol(name: Name, owner: Symbol): RegularSymbol = new RegularSymbol(name, owner)
+  /** A factory for symbols without open scopes, i.e. not a package */
+  sealed abstract class ClosedSymbolFactory[T <: Symbol] extends SymbolFactory[T]:
+    final type OwnerSym = Symbol
+
+  object RegularSymbolFactory extends ClosedSymbolFactory[RegularSymbol] {
+    override private[Symbols] def factory(name: Name, owner: OwnerSym): RegularSymbol =
+      RegularSymbol(name, owner)
 
     override def castSymbol(symbol: Symbol): RegularSymbol = symbol.asInstanceOf[RegularSymbol]
   }
 
-  object ClassSymbolFactory extends SymbolFactory[ClassSymbol] {
-    override def createSymbol(name: Name, owner: Symbol): ClassSymbol = new ClassSymbol(name, owner)
+  object ClassSymbolFactory extends ClosedSymbolFactory[ClassSymbol] {
+    override private[Symbols] def factory(name: Name, owner: OwnerSym): ClassSymbol =
+      ClassSymbol(name, owner)
 
     override def castSymbol(symbol: Symbol): ClassSymbol = symbol.asInstanceOf[ClassSymbol]
   }
 
   object PackageClassSymbolFactory extends SymbolFactory[PackageClassSymbol] {
-    override def createSymbol(name: Name, owner: Symbol): PackageClassSymbol =
-      new PackageClassSymbol(name, owner.asInstanceOf[PackageClassSymbol])
+    type OwnerSym = PackageClassSymbol // can only be created when the owner is a PackageClassSymbol
+    override private[Symbols] def factory(name: Name, owner: OwnerSym): PackageClassSymbol =
+      PackageClassSymbol(name, owner)
+
+    def createRoots: (PackageClassSymbol, PackageClassSymbol) =
+      val root = PackageClassSymbol(nme.RootName, null)
+      val empty = PackageClassSymbol(nme.EmptyPackageName, root)
+      (root, empty)
 
     override def castSymbol(symbol: Symbol): PackageClassSymbol = symbol.asInstanceOf[PackageClassSymbol]
   }

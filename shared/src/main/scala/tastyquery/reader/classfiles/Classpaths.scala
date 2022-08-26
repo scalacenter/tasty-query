@@ -40,7 +40,7 @@ object Classpaths {
 
   def enterRoot(root: SimpleName, owner: DeclaringSymbol)(using Context): ClassSymbol = {
     val clsName = root.toTypeName
-    val objclassName = clsName.toObjectName
+    val objclassName = clsName.companionName
     val objName = root
 
     locally {
@@ -54,24 +54,24 @@ object Classpaths {
 
     def loader[T](op: Loader => T): T = op(Loader(this))
 
-    def withFilter(classes: List[String]): Classpath =
-      def packageAndClass(fullClassName: String): (SimpleName, SimpleName) = {
-        val lastSep = fullClassName.lastIndexOf('.')
-        if lastSep == -1 then (nme.EmptyPackageName, termName(fullClassName))
+    def withFilter(binaryNames: List[String]): Classpath =
+      def packageAndClass(binaryName: String): (SimpleName, SimpleName) = {
+        val lastSep = binaryName.lastIndexOf('.')
+        if lastSep == -1 then (nme.EmptyPackageName, termName(binaryName))
         else {
           import scala.language.unsafeNulls
-          val packageName = termName(fullClassName.substring(0, lastSep))
-          val className = termName(fullClassName.substring(lastSep + 1))
+          val packageName = termName(binaryName.substring(0, lastSep))
+          val className = termName(binaryName.substring(lastSep + 1))
           (packageName, className)
         }
       }
-      val formatted = classes.map(packageAndClass)
+      val formatted = binaryNames.map(packageAndClass)
       val grouped = formatted.groupMap((pkg, _) => pkg)((_, cls) => cls)
       val filtered = packages.collect {
         case pkg if grouped.contains(pkg.name) =>
-          val tastys1 = pkg.tastys.filter(t => grouped(pkg.name).contains(t.simpleName))
-          val classes1 = pkg.classes.filter(c => grouped(pkg.name).contains(c.simpleName))
-          PackageData(pkg.name, classes1, tastys1)
+          val tastys = pkg.tastys.filter(t => grouped(pkg.name).contains(t.simpleName))
+          val classes = pkg.classes.filter(c => grouped(pkg.name).contains(c.simpleName))
+          PackageData(pkg.name, classes, tastys)
       }
       new Classpath(filtered) {}
     end withFilter
@@ -118,25 +118,28 @@ object Classpaths {
 
     /** @return true if loaded the classes inner definitions */
     private[tastyquery] def scanClass(cls: ClassSymbol)(using ctx: Context): Boolean =
-      def inspectClass(classData: ClassData, entry: Entry)(using ClassContext, permissions.LoadRoot): Boolean =
+      def inspectClass(root: ClassSymbol, classData: ClassData, entry: Entry)(
+        using ClassContext,
+        permissions.LoadRoot
+      ): Boolean =
         ClassfileParser.readKind(classData).toTry.get match
           case ClassKind.Scala2(structure, runtimeAnnotStart) =>
             ClassfileParser.loadScala2Class(structure, runtimeAnnotStart).toTry.get
-            Contexts.initialisedRoot(cls)
+            Contexts.initialisedRoot(root)
           case ClassKind.Java(structure, sig) =>
             ClassfileParser.loadJavaClass(structure, sig).toTry.get
-            Contexts.initialisedRoot(cls)
+            Contexts.initialisedRoot(root)
           case ClassKind.TASTy =>
             entry match
               case Entry.ClassAndTasty(_, tasty) =>
                 // TODO: verify UUID of tasty matches classfile, then parse symbols
-                enterTasty(tasty)(using ctx.withFile(cls, tasty.debugPath))
-              case _ => throw MissingTopLevelTasty(cls)
+                enterTasty(root, tasty)(using ctx.withFile(root, tasty.debugPath))
+              case _ => throw MissingTopLevelTasty(root)
           case _ =>
             false // no initialisation step to take
       end inspectClass
 
-      def enterTasty(tastyData: TastyData)(using FileContext): Boolean =
+      def enterTasty(root: ClassSymbol, tastyData: TastyData)(using FileContext): Boolean =
         // TODO: test reading tree from dependency not directly queried??
         val unpickler = TastyUnpickler(tastyData.bytes)
         val trees = unpickler
@@ -145,31 +148,31 @@ object Classpaths {
           )
           .get
           .unpickle(using fileCtx)
-        if Contexts.initialisedRoot(cls) then
-          topLevelTastys += cls -> trees
+        if Contexts.initialisedRoot(root) then
+          topLevelTastys += root -> trees
           true
         else false
 
+      def completeRoots(root: ClassSymbol, entry: Entry): Boolean = permissions.withLoadRootPrivelege {
+        require(!root.initialised)
+        lookup -= root
+        entry match
+          case entry: Entry.ClassOnly =>
+            // Tested in `TypeSuite` - aka Java and Scala 2 dependencies
+            inspectClass(root, entry.classData, entry)(using ctx.withRoot(root))
+          case entry: Entry.ClassAndTasty =>
+            // Tested in `TypeSuite` - read Tasty file that may reference Java and Scala 2 dependencies
+            // maybe we do not need to parse the class, however the classfile could be missing the TASTY attribute.
+            inspectClass(root, entry.classData, entry)(using ctx.withRoot(root))
+          case entry: Entry.TastyOnly =>
+            // Tested in `SymbolSuite`, `ReadTreeSuite`, these do not need to see class files.
+            enterTasty(root, entry.tastyData)(using ctx.withFile(root, entry.tastyData.debugPath))
+      }
+
       // TODO: test against standalone objects, modules, etc.
       lookup.get(cls) match
-        case Some(entry) =>
-          permissions.withLoadRootPrivelege {
-            require(!cls.initialised)
-            lookup -= cls
-            entry match
-              case entry: Entry.ClassOnly =>
-                // Tested in `TypeSuite` - aka Java and Scala 2 dependencies
-                inspectClass(entry.classData, entry)(using ctx.withRoot(cls))
-              case entry: Entry.ClassAndTasty =>
-                // Tested in `TypeSuite` - read Tasty file that may reference Java and Scala 2 dependencies
-                // maybe we do not need to parse the class, however the classfile could be missing the TASTY attribute.
-                inspectClass(entry.classData, entry)(using ctx.withRoot(cls))
-              case entry: Entry.TastyOnly =>
-                // Tested in `SymbolSuite`, `ReadTreeSuite`, these do not need to see class files.
-                enterTasty(entry.tastyData)(using ctx.withFile(cls, entry.tastyData.debugPath))
-          }
-
-        case _ => false
+        case Some(entry) => completeRoots(cls, entry)
+        case _           => false
     end scanClass
 
     def scanPackage(pkg: PackageClassSymbol)(using Context): Unit = {
