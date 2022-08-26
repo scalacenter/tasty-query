@@ -44,7 +44,7 @@ object JavaSignatures:
               map.asInstanceOf[Map[TypeName, RegularSymbol]].get(tname) match
                 case Some(sym) => Some(TypeRef(NoPrefix, sym))
                 case None      => lookupTParam(member.outer)
-            case pt: TypeLambdaType =>
+            case pt: TypeBinders =>
               pt.lookupRef(tname) match
                 case ref @ Some(_) => ref
                 case _             => lookupTParam(member.outer)

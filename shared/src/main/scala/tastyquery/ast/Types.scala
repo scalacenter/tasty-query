@@ -869,7 +869,7 @@ object Types {
     protected def newParamRef(n: Int): ParamRefType = TermParamRef(this, n)
   end TermLambdaType
 
-  trait TypeLambdaType extends LambdaType:
+  trait TypeLambdaType extends LambdaType with TypeBinders:
     type ThisName = TypeName
     type PInfo = TypeBounds
     type This <: TypeLambdaType
@@ -992,10 +992,14 @@ object Types {
         )
   end PolyType
 
-  /** Encapsulates the binders associated with a TypeParamRef. */
+  /** Encapsulates the binders associated with a ParamRef. */
   sealed trait Binders
 
-  sealed trait BoundType:
+  sealed trait TypeBinders extends Binders:
+    def paramRefs: List[TypeParamRef]
+    def lookupRef(name: TypeName): Option[Type]
+
+  sealed trait BoundType extends Type:
     type BindersType <: Binders
     def binders: BindersType
     def copyBoundType(newBinders: BindersType): Type

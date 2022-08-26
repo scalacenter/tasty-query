@@ -863,8 +863,7 @@ class TreeUnpickler(
       reader.readEnd()
       val lambdaAddr = reader.readAddr()
       val num = reader.readNat()
-      //TypeParamRef(fileCtx.getEnclosingBinders(lambdaAddr), num)
-      fileCtx.getEnclosingBinders(lambdaAddr).asInstanceOf[TypeLambdaType].paramRefs(num)
+      fileCtx.getEnclosingBinders(lambdaAddr).asInstanceOf[TypeBinders].paramRefs(num)
     case REFINEDtype =>
       reader.readByte()
       reader.readEnd()
