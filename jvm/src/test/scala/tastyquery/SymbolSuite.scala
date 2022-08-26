@@ -132,4 +132,23 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
       Set.empty
     )
   }
+
+  test("nested-package-lookup") {
+    import tastyquery.ast.Types.*
+
+    val InNestedPackage = `simple_trees.nested` / tname"InNestedPackage"
+    given Context = getUnpicklingContext(InNestedPackage)
+
+    assert(resolve(InNestedPackage).fullName.toString == "simple_trees.nested.InNestedPackage")
+
+    val (simpleTreesPkg @ _: PackageClassSymbol) = resolve(simple_trees): @unchecked
+
+    assert(simpleTreesPkg.fullName.toString == "simple_trees")
+
+    val (simpleTreesNestedPkg @ _: PackageClassSymbol) = simpleTreesPkg.getDecl(name"nested").get: @unchecked
+
+    assert(simpleTreesNestedPkg.fullName.toString == "simple_trees.nested")
+
+    assert(TermRef(PackageRef(simpleTreesPkg), name"nested").symbol == simpleTreesNestedPkg)
+  }
 }

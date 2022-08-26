@@ -129,7 +129,7 @@ class PickleReader {
         case _ =>
           owner match
             case owner: PackageClassSymbol =>
-              owner.lookup(name).getOrElse {
+              owner.getDecl(name).getOrElse {
                 //errorBadSignature(s"cannot find symbol $owner.$name")
                 ExternalSymbolRef(owner, name)
               }
@@ -304,7 +304,7 @@ class PickleReader {
             // and also for the inner Transform class in all views. We fix it by
             // replacing the this with the appropriate super.
             if (sym.owner != thispre.cls) {
-              val overriding = thispre.cls.info.decls.lookup(sym.name)
+              val overriding = thispre.cls.info.decls.asClass.getDecl(sym.name)
               if (overriding.exists && overriding != sym) {
                 val base = pre.baseType(sym.owner)
                 assert(base.exists)

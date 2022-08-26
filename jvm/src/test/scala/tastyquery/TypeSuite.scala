@@ -285,8 +285,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   testWithContext("basic-scala2-types") {
     val ScalaRange = name"scala" / name"collection" / name"immutable" / tname"Range"
 
-    val rangeSym = resolve(ScalaRange)
-    assert(rangeSym.isClass, rangeSym)
+    val RangeClass = resolve(ScalaRange).asClass
 
     val BooleanClass = resolve(name"scala" / tname"Boolean")
     val IntClass = resolve(name"scala" / tname"Int")
@@ -294,33 +293,33 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val IndexedSeqClass = resolve(name"scala" / name"collection" / name"immutable" / tname"IndexedSeq")
 
     // val start: Int
-    val startSym = rangeSym.lookup(name"start").get
+    val startSym = RangeClass.getDecl(name"start").get
     assert(startSym.declaredType.isOfClass(IntClass), clue(startSym.declaredType))
     assert(startSym.declaredType.isInstanceOf[ExprType], clue(startSym.declaredType)) // should this be TypeRef?
 
     // val isEmpty: Boolean
-    val isEmptySym = rangeSym.lookup(name"isEmpty").get
+    val isEmptySym = RangeClass.getDecl(name"isEmpty").get
     assert(isEmptySym.declaredType.isOfClass(BooleanClass), clue(isEmptySym.declaredType))
     assert(isEmptySym.declaredType.isInstanceOf[ExprType], clue(isEmptySym.declaredType)) // should this be TypeRef?
 
     // def isInclusive: Boolean
-    val isInclusiveSym = rangeSym.lookup(name"isInclusive").get
+    val isInclusiveSym = RangeClass.getDecl(name"isInclusive").get
     assert(isInclusiveSym.declaredType.isOfClass(BooleanClass), clue(isInclusiveSym.declaredType))
     assert(isInclusiveSym.declaredType.isInstanceOf[ExprType], clue(isInclusiveSym.declaredType))
 
     // def by(step: Int): Range
     locally {
-      val bySym = rangeSym.lookup(name"by").get
+      val bySym = RangeClass.getDecl(name"by").get
       val mt = bySym.declaredType.asInstanceOf[MethodType]
       assertEquals(List[TermName](name"step"), mt.paramNames, clue(mt.paramNames))
       assert(mt.paramTypes.sizeIs == 1)
       assert(mt.paramTypes.head.isOfClass(IntClass), clue(mt.paramTypes.head))
-      assert(mt.resultType.isOfClass(rangeSym), clue(mt.resultType))
+      assert(mt.resultType.isOfClass(RangeClass), clue(mt.resultType))
     }
 
     // def map[B](f: Int => B): IndexedSeq[B]
     locally {
-      val mapSym = rangeSym.lookup(name"map").get
+      val mapSym = RangeClass.getDecl(name"map").get
       val pt = mapSym.declaredType.asInstanceOf[PolyType]
       val mt = pt.resultType.asInstanceOf[MethodType]
       assertEquals(List[TypeName](name"B".toTypeName), pt.paramNames, clue(pt.paramNames))
@@ -596,7 +595,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
     val IntClass = resolve(name"scala" / tname"Int")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.lookup(name"testField").get.tree: @unchecked
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.getDecl(name"testField").get.tree: @unchecked
 
     val Select(qual, fieldName) = body: @unchecked
 
@@ -610,7 +609,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
     val IntClass = resolve(name"scala" / tname"Int")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.lookup(name"testGetter").get.tree: @unchecked
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.getDecl(name"testGetter").get.tree: @unchecked
 
     val Select(qual, getterName) = body: @unchecked
 
@@ -624,7 +623,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
     val IntClass = resolve(name"scala" / tname"Int")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.lookup(name"testMethod").get.tree: @unchecked
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.getDecl(name"testMethod").get.tree: @unchecked
 
     val Apply(fun @ Select(qual, methodName), List(arg)) = body: @unchecked
 
@@ -646,7 +645,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
     val IntClass = resolve(name"scala" / tname"Int")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.lookup(name"testGenericMethod").get.tree: @unchecked
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.getDecl(name"testGenericMethod").get.tree: @unchecked
 
     val Apply(tapp @ TypeApply(fun @ Select(qual, methodName), List(targ)), List(arg)) = body: @unchecked
 

@@ -455,7 +455,7 @@ object Types {
         sym
       case Scala2ExternalSymRef(owner, path) =>
         val sym = path.foldLeft(owner) { (owner, name) =>
-          owner.lookup(name).getOrElse {
+          owner.asClass.getDecl(name).getOrElse {
             throw new SymbolLookupException(name, s"cannot find symbol $owner.$name")
           }
         }
@@ -725,7 +725,7 @@ object Types {
       val sym = resolveToSymbol
       sym match
         case sym: ClassSymbol =>
-          sym.lookup(name).getOrElse {
+          sym.getDecl(name).getOrElse {
             throw new AssertionError(s"Cannot find member named '$name' in $pre")
           }
         case _ =>
@@ -1183,7 +1183,7 @@ object Types {
 
   case class ClassType(cls: ClassSymbol, rawParents: Type) extends GroundType {
     def findMember(name: Name, pre: Type)(using Context): Symbol =
-      cls.lookup(name).getOrElse {
+      cls.getDecl(name).getOrElse {
         throw new SymbolLookupException(name, s"in $cls")
       }
 
