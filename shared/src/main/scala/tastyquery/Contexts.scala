@@ -77,15 +77,21 @@ object Contexts {
 
     def findSymbolFromRoot(path: List[Name]): Symbol =
       @tailrec
-      def rec(owner: Symbol, path: List[Name]): Symbol =
+      def rec(symbol: Symbol, path: List[Name]): Symbol =
         path match
           case Nil =>
-            owner
+            symbol
           case name :: pathRest =>
-            val sym = owner.lookup(name).getOrElse {
-              throw new IllegalArgumentException(s"cannot find member ${name.toDebugString} in $owner")
+            val owner = symbol match
+              case owner: DeclaringSymbol => owner
+              case _ =>
+                throw IllegalArgumentException(
+                  s"$symbol does not declare a scope, cannot find member ${name.toDebugString}"
+                )
+            val next = owner.getDecl(name).getOrElse {
+              throw IllegalArgumentException(s"cannot find member ${name.toDebugString} in $symbol")
             }
-            rec(sym, pathRest)
+            rec(next, pathRest)
 
       rec(defn.RootPackage, path)
     end findSymbolFromRoot

@@ -159,10 +159,6 @@ object Symbols {
       case scope: DeclaringSymbol => scope.allOverloads(name)
       case _                      => Nil
 
-    final def lookup(name: Name)(using Context): Option[Symbol] = this match
-      case scope: DeclaringSymbol => scope.getDecl(name)
-      case _                      => None
-
     override def toString: String = {
       val kind = this match
         case _: PackageClassSymbol => "package "

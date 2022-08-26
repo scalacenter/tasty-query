@@ -141,14 +141,14 @@ object JavaSignatures:
         def packageSpecifiers(acc: PackageClassSymbol): ClassSymbol =
           val next = identifier
           if consume('/') then // must have '/', identifier, and terminal char.
-            acc.lookup(next) match
+            acc.getDecl(next) match
               case Some(pkg: PackageClassSymbol) =>
                 packageSpecifiers(pkg)
               case res =>
                 sys.error(s"found $res in operation $acc lookup $next")
                 abort
           else
-            acc.lookup(next.toTypeName) match // TODO: encoded names?
+            acc.getDecl(next.toTypeName) match // TODO: encoded names?
               case Some(cls: ClassSymbol) =>
                 cls
               case res =>
@@ -162,7 +162,7 @@ object JavaSignatures:
           packageSpecifiers(init.resolveToSymbol)
         else
           val emptyPkg = PackageRef(nme.EmptyPackageName).resolveToSymbol
-          emptyPkg.lookup(firstIdent.toTypeName) match
+          emptyPkg.getDecl(firstIdent.toTypeName) match
             case Some(cls: ClassSymbol) => cls // TODO: encoded names?
             case _                      => abort
       end findRawTopLevelClass
