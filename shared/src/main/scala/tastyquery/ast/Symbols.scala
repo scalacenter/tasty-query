@@ -159,7 +159,7 @@ object Symbols {
       case scope: DeclaringSymbol => scope.allOverloads(name)
       case _                      => Nil
 
-    def lookup(name: Name)(using Context): Option[Symbol] = this match
+    final def lookup(name: Name)(using Context): Option[Symbol] = this match
       case scope: DeclaringSymbol => scope.getDecl(name)
       case _                      => None
 
@@ -203,18 +203,22 @@ object Symbols {
     private[tastyquery] final def addDecl(decl: Symbol): Unit =
       myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet) += decl
 
-    private[tastyquery] final def getDeclInternal(name: Name): Option[Symbol] = name match {
-      case overloaded: SignedName =>
-        None // need context to resolve overloads
+    /** direct lookup without requiring `Context`, can not resolve overloads */
+    private[tastyquery] final def getDeclInternal(name: Name): Option[Symbol] = name match
+      case overloaded: SignedName => None // need context to resolve overloads
       case name =>
-        myDeclarations.get(name) match
+        def doLookup(sel: Name): Option[Symbol] = myDeclarations.get(sel) match
           case Some(decls) =>
             if decls.sizeIs == 1 then Some(decls.head)
             else if decls.sizeIs > 1 then
-              throw SymbolLookupException(name, s"unexpected overloads: ${decls.mkString(", ")}")
+              throw SymbolLookupException(sel, s"unexpected overloads: ${decls.mkString(", ")}")
             else None // TODO: this should be an error
           case _ => None
-    }
+        def lookupIfPackage: Option[Symbol] = name match
+          case name: SimpleName if isPackage && this.name != nme.RootName =>
+            doLookup(this.name.toTermName.select(name))
+          case _ => None
+        doLookup(name).orElse(lookupIfPackage)
 
     /** Forces the symbol to be initialized.
       *
@@ -365,13 +369,6 @@ object Symbols {
           findPackageSymbol(prefix).flatMap(_.findPackageSymbol(packageName))
       case _ => throw IllegalArgumentException(s"Unexpected package name: $name")
     }
-
-    override def lookup(name: Name)(using Context): Option[Symbol] =
-      val sel = name match {
-        case name: SimpleName if this.name != nme.RootName => this.name.toTermName.select(name)
-        case _                                             => name
-      }
-      getDecl(sel)
 
     private def getPackageDecl(packageName: TermName): Option[PackageClassSymbol] =
       /* All subpackages are created eagerly when initializing contexts,
