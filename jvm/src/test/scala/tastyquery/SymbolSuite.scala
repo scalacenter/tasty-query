@@ -5,10 +5,11 @@ import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 
 import Paths.*
+import tastyquery.ast.Trees.{ClassDef, ValDef}
 
 class SymbolSuite extends RestrictedUnpicklingSuite {
-  val empty_class = name"empty_class".singleton
-  val simple_trees = name"simple_trees".singleton
+  val empty_class = RootPkg / name"empty_class"
+  val simple_trees = RootPkg / name"simple_trees"
   val `simple_trees.nested` = simple_trees / name"nested"
 
   def getDeclsByPrefix(prefix: DeclarationPath)(using Context): Seq[Symbol] = {
@@ -40,6 +41,30 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
       expected.forall(decls.contains(_)),
       s"Declaration not found: ${expected.filter(!decls.contains(_)).map(_.name).toDebugString}"
     )
+  }
+
+  test("top-level-package-object[class]-empty-package") {
+    val toplevelEmptyPackage_package = EmptyPkg / objclass"toplevelEmptyPackage$$package"
+    given Context = getUnpicklingContext(toplevelEmptyPackage_package)
+
+    val toplevelEmptyPackage_packageClass = resolve(toplevelEmptyPackage_package)
+
+    val (tree @ _: ClassDef) = toplevelEmptyPackage_packageClass.tree.get: @unchecked
+
+    assert(tree.name == objclass"toplevelEmptyPackage$$package")
+    assert(tree.symbol == toplevelEmptyPackage_packageClass)
+  }
+
+  test("top-level-package-object[value]-empty-package") {
+    val toplevelEmptyPackage_package = (EmptyPkg / name"toplevelEmptyPackage$$package").obj
+    given Context = getUnpicklingContext(toplevelEmptyPackage_package)
+
+    val toplevelEmptyPackage_packageValue = resolve(toplevelEmptyPackage_package)
+
+    val (tree @ _: ValDef) = toplevelEmptyPackage_packageValue.tree.get: @unchecked
+
+    assert(tree.name == name"toplevelEmptyPackage$$package")
+    assert(tree.symbol == toplevelEmptyPackage_packageValue)
   }
 
   test("basic-symbol-structure") {
@@ -74,10 +99,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   test("empty-package-contains-no-packages") {
     given Context = getUnpicklingContext(simple_trees / tname"SharedPackageReference$$package")
     // simple_trees is not a subpackage of empty package
-    assertForallWithPrefix(
-      nme.EmptyPackageName.singleton,
-      s => s.name == nme.EmptyPackageName || !s.isInstanceOf[PackageClassSymbol]
-    )
+    assertForallWithPrefix(EmptyPkg, s => s.name == nme.EmptyPackageName || !s.isInstanceOf[PackageClassSymbol])
   }
 
   test("class-parameter-is-a-decl") {

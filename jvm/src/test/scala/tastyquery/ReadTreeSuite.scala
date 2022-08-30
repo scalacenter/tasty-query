@@ -21,9 +21,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   type StructureCheck = PartialFunction[Tree, Unit]
   type TypeStructureCheck = PartialFunction[Type, Unit]
 
-  val empty_class = name"empty_class".singleton
-  val simple_trees = name"simple_trees".singleton
-  val imports = name"imports".singleton
+  val empty_class = RootPkg / name"empty_class"
+  val simple_trees = RootPkg / name"simple_trees"
+  val imports = RootPkg / name"imports"
   val `simple_trees.nested` = simple_trees / name"nested"
 
   def containsSubtree(p: StructureCheck)(t: Tree): Boolean =
@@ -53,7 +53,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       val (base, classRoot) = findTopLevelClass(path)()
       val tree = base.classloader.topLevelTasty(classRoot)(using base) match
         case Some(trees) => trees.head
-        case _           => fail(s"Missing tasty for ${path.fullClassName}, $classRoot")
+        case _           => fail(s"Missing tasty for ${path.rootClassName}, $classRoot")
       body(using base)(tree)
     }
   end testUnpickleTopLevel
@@ -65,7 +65,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       given Context = getUnpicklingContext(path)
       val cls = resolve(path)
       val tree = cls.tree.getOrElse {
-        fail(s"Missing tasty for ${path.fullClassName}, $cls")
+        fail(s"Missing tasty for ${path.rootClassName}, $cls")
       }
       body(tree.asInstanceOf[Tree])
     }
@@ -479,9 +479,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(intFieldMatch)(clue(tree)))
   }
 
-  testUnpickleTopLevel("object", simple_trees / tname"ScalaObject") { tree =>
-    // FIXME This test should not need `testUnpickleTopLevel`
-
+  testUnpickle("object", simple_trees / objclass"ScalaObject") { tree =>
     val selfDefMatch: StructureCheck = {
       case ValDef(nme.Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject"))), EmptyTree, NoSymbol) =>
     }
@@ -1007,9 +1005,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(genericMethod)(clue(tree)))
   }
 
-  testUnpickleTopLevel("generic-extension", simple_trees / tname"GenericExtension$$package") { tree =>
-    // FIXME This test should not need `testUnpickleTopLevel`
-
+  testUnpickle("generic-extension", simple_trees / objclass"GenericExtension$$package") { tree =>
     val extensionCheck: StructureCheck = {
       case DefDef(
             SimpleName("genericExtension"),
@@ -1579,9 +1575,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(matchWithBind)(clue(tree)))
   }
 
-  testUnpickleTopLevel("package-type-ref", tname"toplevelEmptyPackage$$package".singleton) { tree =>
-    // TODO Can this test be made to pass with `testUnpickle`?
-
+  testUnpickle("package-type-ref", (EmptyPkg / name"toplevelEmptyPackage$$package").obj) { tree =>
     // Empty package (the path to the toplevel$package[ModuleClass]) is a THIS of a TYPEREFpkg as opposed to
     // non-empty package, which is simply TERMREFpkg. Therefore, reading the type of the package object reads TYPEREFpkg.
     val packageVal: StructureCheck = {
@@ -1669,8 +1663,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(newInner)(clue(tree)))
   }
 
-  testUnpickleTopLevel("shared-package-reference", simple_trees / tname"SharedPackageReference$$package") { tree =>
-    // TODO Can this test be made to pass with `testUnpickle`?
+  testUnpickle("shared-package-reference", simple_trees / objclass"SharedPackageReference$$package") { tree =>
     // TODO: once references are created, check correctness
   }
 

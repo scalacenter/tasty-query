@@ -14,7 +14,7 @@ import RestrictedUnpicklingSuite.MissingTopLevelDecl
   * through access to `private[tastyquery]` methods.
   */
 class LazyLoadingSuite extends RestrictedUnpicklingSuite {
-  val simple_trees = name"simple_trees".singleton
+  val simple_trees = RootPkg / name"simple_trees"
 
   /** Dangerous operations that break auto-loading semantics of the API.
     *
@@ -75,17 +75,17 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
     // ignore because this passes only on clean builds
 
     def failingGetTopLevelClass(path: TopLevelDeclPath)(using Context): Nothing =
-      ctx.getClassIfDefined(path.fullClassName) match
+      ctx.getClassIfDefined(path.rootClassName) match
         case Right(classRoot) => fail(s"expected no class, but got $classRoot")
         case Left(err)        => throw MissingTopLevelDecl(path, err)
 
     def forceTopLevel(path: TopLevelDeclPath)(using Context): Unit = {
-      val classRoot = ctx.getClassIfDefined(path.fullClassName) match
+      val classRoot = ctx.getClassIfDefined(path.rootClassName) match
         case Right(cls) => cls
         case Left(err)  => throw MissingTopLevelDecl(path, err)
       try
         ctx.classloader.scanClass(classRoot)
-        fail(s"expected failure when scanning class ${path.fullClassName}, $classRoot")
+        fail(s"expected failure when scanning class ${path.rootClassName}, $classRoot")
       catch
         case err: java.lang.AssertionError =>
           val msg = err.getMessage.nn

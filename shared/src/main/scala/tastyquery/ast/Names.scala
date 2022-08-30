@@ -294,8 +294,12 @@ object Names {
       case SuffixedName(NameTags.OBJECTCLASS, _) => true
       case _                                     => false
 
-    def toObjectName: TypeName =
-      if wrapsObjectName then this
-      else toTermName.withObjectSuffix.toTypeName
+    def companionName: TypeName = toTermName match
+      case SuffixedName(NameTags.OBJECTCLASS, clsName) => clsName.toTypeName
+      case name                                        => name.withObjectSuffix.toTypeName
+
+    def sourceObjectName: TermName = toTermName match
+      case SuffixedName(NameTags.OBJECTCLASS, objName) => objName
+      case name                                        => name
   }
 }

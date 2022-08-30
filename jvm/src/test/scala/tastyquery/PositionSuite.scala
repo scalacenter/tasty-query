@@ -13,9 +13,9 @@ import Paths.*
 class PositionSuite extends RestrictedUnpicklingSuite {
   val ResourceCodeProperty = "test-resources-code"
 
-  val empty_class = name"empty_class".singleton
-  val simple_trees = name"simple_trees".singleton
-  val imports = name"imports".singleton
+  val empty_class = RootPkg / name"empty_class"
+  val simple_trees = RootPkg / name"simple_trees"
+  val imports = RootPkg / name"imports"
 
   private def getCodePath(name: String): String =
     var Array(dir, filename) = name.split('.')
@@ -28,8 +28,8 @@ class PositionSuite extends RestrictedUnpicklingSuite {
     val (base, classRoot) = findTopLevelClass(path)()
     val tree = base.classloader.topLevelTasty(classRoot)(using base) match
       case Some(trees) => trees.head
-      case _           => fail(s"Missing tasty for ${path.fullClassName}, $classRoot")
-    val codePath = getCodePath(path.fullClassName)
+      case _           => fail(s"Missing tasty for ${path.rootClassName}, $classRoot")
+    val codePath = getCodePath(path.rootClassName)
     val code = Source.fromFile(codePath).mkString
     (tree, code)
   }
