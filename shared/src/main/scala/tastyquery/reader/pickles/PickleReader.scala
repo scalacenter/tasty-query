@@ -21,6 +21,7 @@ import tastyquery.ast.Symbols.DeclaringSymbol
 import tastyquery.ast.Symbols.PackageClassSymbol
 import tastyquery.ast.Trees.TypeApply
 import tastyquery.Contexts.Context
+import tastyquery.ast.Names.SimpleName
 
 class PickleReader {
   opaque type Entries = Array[AnyRef | Null]
@@ -128,14 +129,18 @@ class PickleReader {
         case nme.RootName | nme.RootPackageName =>
           clsCtx.defn.RootPackage
         case _ =>
+          def defaultRef = ExternalSymbolRef(owner, name)
           owner match
             case owner: PackageClassSymbol =>
-              owner.getDecl(name).getOrElse {
-                //errorBadSignature(s"cannot find symbol $owner.$name")
-                ExternalSymbolRef(owner, name)
-              }
+              name match
+                case packageName: SimpleName =>
+                  owner.getPackageDecl(packageName).getOrElse {
+                    //errorBadSignature(s"cannot find symbol $owner.$name")
+                    defaultRef
+                  }
+                case _ => defaultRef
             case _ =>
-              ExternalSymbolRef(owner, name)
+              defaultRef
 
     tag match {
       case NONEsym                 => return NoSymbol
@@ -145,7 +150,8 @@ class PickleReader {
 
     // symbols that were pickled with Pickler.writeSymInfo
     val nameref = pkl.readNat()
-    val name = at(nameref)(readName())
+    val name0 = at(nameref)(readName())
+    val name = name0.decode
     val owner = readLocalSymbolRef()
 
     val flags = readFlags(name.isTypeName)
@@ -160,11 +166,15 @@ class PickleReader {
     }
 
     def nameMatches(rootName: Name) = name == rootName
-    def isClassRoot = nameMatches(clsCtx.classRoot.name) //&& (owner == classRoot.owner) && !flags.is(ModuleClass)
-    def isModuleClassRoot = nameMatches(
-      clsCtx.moduleClassRoot.name
+    def isClassRoot = owner == clsCtx.root.pkg && nameMatches(
+      clsCtx.root.rootName.toTypeName
+    ) //&& (owner == classRoot.owner) && !flags.is(ModuleClass)
+    def isModuleClassRoot = owner == clsCtx.root.pkg && nameMatches(
+      clsCtx.root.rootName.withObjectSuffix.toTypeName
     ) //&& (owner == moduleClassRoot.owner) && flags.is(Module)
-    def isModuleRoot = nameMatches(clsCtx.moduleRoot.name) //&& (owner == moduleClassRoot.owner) && flags.is(Module)
+    def isModuleRoot = owner == clsCtx.root.pkg && nameMatches(
+      clsCtx.root.rootName
+    ) //&& (owner == moduleClassRoot.owner) && flags.is(Module)
 
     def finishSym(sym: Symbol): Symbol = {
       // TODO: enter in scope

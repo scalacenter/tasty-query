@@ -1,14 +1,11 @@
 package tastyquery.reader.classfiles
 
 import tastyquery.ast.Names.SimpleName
-import scala.reflect.NameTransformer
 import tastyquery.Contexts
 import tastyquery.Contexts.{Context, ctx, fileCtx, defn}
 import scala.collection.mutable
-import tastyquery.ast.Names.{TermName, nme, termName, str}
-import tastyquery.ast.Symbols.PackageClassSymbol
-import tastyquery.ast.Symbols.ClassSymbol
-import tastyquery.ast.Symbols.DeclaringSymbol
+import tastyquery.ast.Names.{Name, TermName, TypeName, nme, termName, str}
+import tastyquery.ast.Symbols.{Symbol, PackageClassSymbol, ClassSymbol, DeclaringSymbol}
 import tastyquery.reader.TastyUnpickler
 
 import ClassfileParser.ClassKind
@@ -18,9 +15,11 @@ import tastyquery.ast.Trees.Tree
 
 import tastyquery.util.syntax.chaining.given
 
+import compiletime.asMatchable
+
 object Classpaths {
 
-  class MissingTopLevelTasty(cls: ClassSymbol) extends Exception(s"Missing TASTy for $cls")
+  class MissingTopLevelTasty(root: Loader.Root) extends Exception(s"Missing TASTy for ${root.fullName}")
 
   /** Contains class data and tasty data. `name` is a Scala identifier */
   case class PackageData(name: SimpleName, classes: IArray[ClassData], tastys: IArray[TastyData])
@@ -36,18 +35,6 @@ object Classpaths {
     /** sentinel value, it proves that `ctx.withRoot` can only be called from `scanClass` */
     opaque type LoadRoot = Unit
     private[Classpaths] inline def withLoadRootPrivelege[T](inline op: LoadRoot ?=> T): T = op(using ())
-  }
-
-  def enterRoot(root: SimpleName, owner: DeclaringSymbol)(using Context): ClassSymbol = {
-    val clsName = root.toTypeName
-    val objclassName = clsName.companionName
-    val objName = root
-
-    locally {
-      ctx.createSymbol(objName, owner)
-      ctx.createClassSymbol(objclassName, owner)
-    }
-    ctx.createClassSymbol(clsName, owner)
   }
 
   sealed abstract class Classpath protected (val packages: IArray[PackageData]) {
@@ -85,6 +72,14 @@ object Classpaths {
       else new Classpath(packages) {}
   }
 
+  object Loader:
+    private[tastyquery] case class Root private[Classpaths] (pkg: PackageClassSymbol, rootName: SimpleName):
+      def packages: IterableOnce[PackageClassSymbol] =
+        (pkg #:: LazyList.from(pkg.enclosingDecls)).asInstanceOf[IterableOnce[PackageClassSymbol]]
+
+      def fullName: TermName =
+        pkg.fullName.toTermName.select(rootName)
+
   class Loader(val classpath: Classpath) { loader =>
 
     private enum Entry:
@@ -94,8 +89,8 @@ object Classpaths {
 
     private var searched = false
     private var packages: Map[PackageClassSymbol, PackageData] = compiletime.uninitialized
-    private var lookup: Map[ClassSymbol, Entry] = Map.empty
-    private var topLevelTastys: Map[ClassSymbol, List[Tree]] = Map.empty
+    private var roots: Map[PackageClassSymbol, Map[SimpleName, Entry]] = Map.empty
+    private var topLevelTastys: Map[Loader.Root, List[Tree]] = Map.empty
 
     // TODO: do not use fully qualified name for storing packages in decls
     private val packageNameCache = mutable.HashMap.empty[TermName, TermName]
@@ -110,15 +105,19 @@ object Classpaths {
 
       qualified(IArray.unsafeFromArray(dotSeparated.split('.')))
 
-    private[tastyquery] def topLevelTasty(cls: ClassSymbol)(using Context): Option[List[Tree]] =
-      if !cls.outer.isPackage then None
-      else if !Contexts.initialisedRoot(cls) then None
-      else if cls.name.toTypeName.wrapsObjectName then None
-      else topLevelTastys.get(cls)
+    /** If this is a root symbol, lookup possible top level tasty trees associated with it. */
+    private[tastyquery] def topLevelTasty(rootSymbol: Symbol)(using Context): Option[List[Tree]] =
+      rootSymbol.outer match
+        case pkg: PackageClassSymbol =>
+          val rootName = rootSymbol.name.toTermName.stripObjectSuffix.asSimpleName
+          val root = Loader.Root(pkg, rootName)
+          topLevelTastys.get(root)
+        case _ => None
 
-    /** @return true if loaded the classes inner definitions */
-    private[tastyquery] def scanClass(cls: ClassSymbol)(using ctx: Context): Boolean =
-      def inspectClass(root: ClassSymbol, classData: ClassData, entry: Entry)(
+    /** Lookup definitions in the entry, returns true if some roots were entered matching the `rootName`. */
+    private def completeRoots(root: Loader.Root, entry: Entry)(using Context): Boolean =
+
+      def inspectClass(root: Loader.Root, classData: ClassData, entry: Entry)(
         using ClassContext,
         permissions.LoadRoot
       ): Boolean =
@@ -139,7 +138,7 @@ object Classpaths {
             false // no initialisation step to take
       end inspectClass
 
-      def enterTasty(root: ClassSymbol, tastyData: TastyData)(using FileContext): Boolean =
+      def enterTasty(root: Loader.Root, tastyData: TastyData)(using FileContext, permissions.LoadRoot): Boolean =
         // TODO: test reading tree from dependency not directly queried??
         val unpickler = TastyUnpickler(tastyData.bytes)
         val trees = unpickler
@@ -152,10 +151,9 @@ object Classpaths {
           topLevelTastys += root -> trees
           true
         else false
+      end enterTasty
 
-      def completeRoots(root: ClassSymbol, entry: Entry): Boolean = permissions.withLoadRootPrivelege {
-        require(!root.initialised)
-        lookup -= root
+      permissions.withLoadRootPrivelege {
         entry match
           case entry: Entry.ClassOnly =>
             // Tested in `TypeSuite` - aka Java and Scala 2 dependencies
@@ -168,12 +166,43 @@ object Classpaths {
             // Tested in `SymbolSuite`, `ReadTreeSuite`, these do not need to see class files.
             enterTasty(root, entry.tastyData)(using ctx.withFile(root, entry.tastyData.debugPath))
       }
+    end completeRoots
 
-      // TODO: test against standalone objects, modules, etc.
-      lookup.get(cls) match
-        case Some(entry) => completeRoots(cls, entry)
-        case _           => false
-    end scanClass
+    private[tastyquery] def forceRoots(pkg: PackageClassSymbol)(using Context): Unit =
+      roots = roots.updatedWith(pkg) {
+        case Some(entries) =>
+          for (rootName, entry) <- IArray.from(entries).sortBy(_(0)) do completeRoots(Loader.Root(pkg, rootName), entry)
+          None
+        case _ => None
+      }
+
+    /** @return true if loaded the classes inner definitions */
+    private[tastyquery] def enterRoots(pkg: PackageClassSymbol, name: Name)(using Context): Option[Symbol] =
+      roots.get(pkg) match
+        case Some(entries) =>
+          val rootName = name.toTermName.stripObjectSuffix.asSimpleName
+          entries.get(rootName) match
+            case Some(entry) =>
+              roots = roots.updated(pkg, entries - rootName)
+              if completeRoots(Loader.Root(pkg, rootName), entry) then
+                pkg.getDeclInternal(name) // should have entered some roots, now lookup the requested root
+              else None
+            case _ => None
+        case _ => None
+    end enterRoots
+
+    /** Does not force any classes, returns a root either if root symbols are already loaded, or if there are
+      * unloaded roots matching the name.
+      */
+    private[tastyquery] def findRoot(pkg: PackageClassSymbol, name: SimpleName)(using Context): Option[Loader.Root] =
+      val root = Loader.Root(pkg, name)
+      if Contexts.initialisedRoot(root) then Some(root)
+      else // not yet forced
+        roots.get(pkg) match
+          case Some(entries) =>
+            if entries.contains(root.rootName) then Some(root)
+            else None
+          case _ => None
 
     def scanPackage(pkg: PackageClassSymbol)(using Context): Unit = {
       require(searched)
@@ -195,17 +224,19 @@ object Classpaths {
 
           packages -= pkg
 
+          var localRoots = Map.newBuilder[SimpleName, Entry]
+
           if data.classes.isEmpty then
-            for tasty <- data.tastys if !isNestedOrModuleClassName(tasty.simpleName) do
-              val clsSym = Classpaths.enterRoot(tasty.simpleName, pkg)
-              lookup += (clsSym -> Entry.TastyOnly(tasty))
+            for tData <- data.tastys if !isNestedOrModuleClassName(tData.simpleName) do
+              localRoots += (tData.simpleName -> Entry.TastyOnly(tData))
           else
             val tastyMap = data.tastys.map(t => t.simpleName -> t).toMap
-            for cls <- data.classes if !isNestedOrModuleClassName(cls.simpleName) do
-              val clsSym = Classpaths.enterRoot(cls.simpleName, pkg)
+            for cData <- data.classes if !isNestedOrModuleClassName(cData.simpleName) do
               val entry =
-                tastyMap.get(cls.simpleName).map(Entry.ClassAndTasty(cls, _)).getOrElse(Entry.ClassOnly(cls))
-              lookup += (clsSym -> entry) // TODO: what if someone searches for the module class first?
+                tastyMap.get(cData.simpleName).map(Entry.ClassAndTasty(cData, _)).getOrElse(Entry.ClassOnly(cData))
+              localRoots += (cData.simpleName -> entry)
+
+          roots += pkg -> localRoots.result()
 
         case _ => // probably a synthetic package that only has other packages as members. (i.e. `package java`)
       } andThen { pkg.initialised = true }

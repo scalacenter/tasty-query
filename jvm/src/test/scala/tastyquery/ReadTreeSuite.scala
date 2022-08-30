@@ -50,10 +50,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     using Location
   )(body: Contexts.Context ?=> Tree => Unit): Unit =
     test(name) {
-      val (base, classRoot) = findTopLevelClass(path)()
-      val tree = base.classloader.topLevelTasty(classRoot)(using base) match
-        case Some(trees) => trees.head
-        case _           => fail(s"Missing tasty for ${path.rootClassName}, $classRoot")
+      val (base, tree) = findTopLevelTasty(path)()
       body(using base)(tree)
     }
   end testUnpickleTopLevel
@@ -479,7 +476,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(intFieldMatch)(clue(tree)))
   }
 
-  testUnpickle("object", simple_trees / objclass"ScalaObject") { tree =>
+  testUnpickle("object", simple_trees / tname"ScalaObject" / obj) { tree =>
     val selfDefMatch: StructureCheck = {
       case ValDef(nme.Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject"))), EmptyTree, NoSymbol) =>
     }
@@ -1009,7 +1006,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(genericMethod)(clue(tree)))
   }
 
-  testUnpickle("generic-extension", simple_trees / objclass"GenericExtension$$package") { tree =>
+  testUnpickle("generic-extension", simple_trees / tname"GenericExtension$$package" / obj) { tree =>
     val extensionCheck: StructureCheck = {
       case DefDef(
             SimpleName("genericExtension"),
@@ -1579,7 +1576,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(matchWithBind)(clue(tree)))
   }
 
-  testUnpickle("package-type-ref", (EmptyPkg / name"toplevelEmptyPackage$$package").obj) { tree =>
+  testUnpickle("package-type-ref", EmptyPkg / name"toplevelEmptyPackage$$package" / obj) { tree =>
     // Empty package (the path to the toplevel$package[ModuleClass]) is a THIS of a TYPEREFpkg as opposed to
     // non-empty package, which is simply TERMREFpkg. Therefore, reading the type of the package object reads TYPEREFpkg.
     val packageVal: StructureCheck = {
@@ -1667,7 +1664,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(newInner)(clue(tree)))
   }
 
-  testUnpickle("shared-package-reference", simple_trees / objclass"SharedPackageReference$$package") { tree =>
+  testUnpickle("shared-package-reference", simple_trees / tname"SharedPackageReference$$package" / obj) { tree =>
     // TODO: once references are created, check correctness
   }
 

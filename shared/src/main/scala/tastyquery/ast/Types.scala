@@ -604,22 +604,6 @@ object Types {
   class CyclicReference(val kind: String) extends Exception(s"cyclic evaluation of $kind")
   class NonMethodReference(val kind: String) extends Exception(s"reference to non method type in $kind")
 
-  class ReferenceResolutionError(val ref: TermRef, explanation: String, cause: Throwable | Null)
-      extends SymResolutionProblem(
-        ReferenceResolutionError.addExplanation(s"Could not compute type of the term, referenced by $ref", explanation),
-        cause
-      ):
-    def this(ref: TermRef, explanation: String) = this(ref, explanation, null)
-    def this(ref: TermRef) = this(ref, "")
-  end ReferenceResolutionError
-
-  object ReferenceResolutionError {
-    def unapply(e: ReferenceResolutionError): Option[TermRef] = Some(e.ref)
-
-    def addExplanation(msg: String, explanation: String): String =
-      if (explanation.isEmpty) msg else s"$msg: $explanation"
-  }
-
   /** The singleton type for path prefix#myDesignator. */
   case class TermRef(override val prefix: Type, var myDesignator: Designator)
       extends NamedType
@@ -646,13 +630,7 @@ object Types {
 
     private def computeUnderlying(using ctx: Context): Type = {
       val termSymbol = resolveToSymbol
-      //try {
       termSymbol.declaredType.asSeenFrom(prefix, termSymbol.owner)
-      /*} catch {
-        case e =>
-          val msg = e.getMessage
-          throw new ReferenceResolutionError(this, if msg == null then "" else msg, e)
-      }*/
     }
 
     override def isOverloaded(using Context): Boolean =

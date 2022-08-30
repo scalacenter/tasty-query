@@ -137,7 +137,7 @@ object JavaSignatures:
         def followPackages(acc: PackageClassSymbol): TypeRef =
           val next = identifier
           if consume('/') then // must have '/', identifier, and terminal char.
-            acc.findPackageSymbol(next) match
+            acc.getPackageDecl(next) match
               case Some(pkg) =>
                 followPackages(pkg)
               case res =>
