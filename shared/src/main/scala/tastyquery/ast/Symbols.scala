@@ -66,7 +66,7 @@ object Symbols {
       * - for `object val C` => `class C`
       */
     final def companionClass(using Context): Option[ClassSymbol] = maybeOuter match
-      case scope: DeclaringSymbol =>
+      case scope: PackageClassSymbol =>
         this match
           case _: PackageClassSymbol => None
           case cls: ClassSymbol =>
@@ -242,20 +242,6 @@ object Symbols {
     private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
       mutable.HashMap[Name, mutable.HashSet[Symbol]]()
 
-    /** Get the companion object of class definition, if it exists:
-      * - for `class C` => `object val C`
-      * - for `object class C[$]` => `object val C`
-      */
-    final def companionObject(using Context): Option[RegularSymbol] = maybeOuter match
-      case scope: DeclaringSymbol =>
-        this match
-          case _: PackageClassSymbol => None
-          case cls: ClassSymbol =>
-            scope.getDecl(cls.name.toTypeName.sourceObjectName).collect { case sym: RegularSymbol =>
-              sym
-            }
-      case _ => None // not possible yet for local symbols
-
     private[tastyquery] final def addDecl(decl: Symbol): Unit =
       val key = decl.name match
         case QualifiedName(_, _, last) => last // drop package prefixes
@@ -322,6 +308,20 @@ object Symbols {
     // TODO: how do we associate some Symbols with TypeBounds, and some with Type?
     private var myTypeParams: List[(Symbol, TypeBounds)] | Null = null
 
+    /** Get the companion object of class definition, if it exists:
+      * - for `class C` => `object val C`
+      * - for `object class C[$]` => `object val C`
+      */
+    final def companionObject(using Context): Option[RegularSymbol] = maybeOuter match
+      case scope: PackageClassSymbol =>
+        this match
+          case _: PackageClassSymbol => None
+          case cls: ClassSymbol =>
+            scope.getDecl(cls.name.toTypeName.sourceObjectName).collect { case sym: RegularSymbol =>
+              sym
+            }
+      case _ => None // not possible yet for local symbols
+
     private[tastyquery] final def withTypeParams(tparams: List[Symbol], bounds: List[TypeBounds]): this.type =
       val local = myTypeParams
       if local != null then throw new IllegalStateException(s"reassignment of type parameters to $this")
@@ -351,9 +351,8 @@ object Symbols {
             ctx.classloader.scanClass(root)
             assert(Contexts.initialisedRoot(root), s"could not initialize root class $fullName")
           require(owner.isPackage, s"inner class was not initialised by owner") // root classes only
-          val maybeRoot =
-            if cls.name.toTypeName.wrapsObjectName then cls.companionClass.foreach(initRoot)
-            else initRoot(cls)
+          if cls.name.toTypeName.wrapsObjectName then cls.companionClass.foreach(initRoot)
+          else initRoot(cls)
 
       if !initialised then
         // TODO: maybe add flag and check against if we are currently initialising this symbol?
@@ -426,7 +425,7 @@ object Symbols {
     final def createSymbol(name: Name, owner: OwnerSym)(using Context): T =
       factory(name, owner).useWith(_.postCreate)
 
-    private[Symbols] def factory(name: Name, owner: OwnerSym): T
+    protected def factory(name: Name, owner: OwnerSym): T
 
     def castSymbol(symbol: Symbol): T
   }
@@ -436,14 +435,14 @@ object Symbols {
     final type OwnerSym = Symbol
 
   object RegularSymbolFactory extends ClosedSymbolFactory[RegularSymbol] {
-    override private[Symbols] def factory(name: Name, owner: OwnerSym): RegularSymbol =
+    override protected def factory(name: Name, owner: OwnerSym): RegularSymbol =
       RegularSymbol(name, owner)
 
     override def castSymbol(symbol: Symbol): RegularSymbol = symbol.asInstanceOf[RegularSymbol]
   }
 
   object ClassSymbolFactory extends ClosedSymbolFactory[ClassSymbol] {
-    override private[Symbols] def factory(name: Name, owner: OwnerSym): ClassSymbol =
+    override protected def factory(name: Name, owner: OwnerSym): ClassSymbol =
       ClassSymbol(name, owner)
 
     override def castSymbol(symbol: Symbol): ClassSymbol = symbol.asInstanceOf[ClassSymbol]
@@ -451,7 +450,7 @@ object Symbols {
 
   object PackageClassSymbolFactory extends SymbolFactory[PackageClassSymbol] {
     type OwnerSym = PackageClassSymbol // can only be created when the owner is a PackageClassSymbol
-    override private[Symbols] def factory(name: Name, owner: OwnerSym): PackageClassSymbol =
+    override protected def factory(name: Name, owner: OwnerSym): PackageClassSymbol =
       PackageClassSymbol(name, owner)
 
     def createRoots: (PackageClassSymbol, PackageClassSymbol) =
