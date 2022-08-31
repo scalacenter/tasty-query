@@ -8,7 +8,7 @@ import tastyquery.Contexts
 import tastyquery.Contexts.Context
 import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.ast.Flags
-import tastyquery.ast.Flags.{TypeParam as _, *}
+import tastyquery.ast.Flags.*
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.*
@@ -969,7 +969,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             classSymbol
           )
           if classSymbol.tree.exists(_.isInstanceOf[ClassDef])
-            && firstTypeParamSymbol.is(Flags.TypeParam)
+            && firstTypeParamSymbol.is(Flags.TypeParameter)
             && !firstTypeParamSymbol.isAllOf(ClassTypeParam)
             && secondTypeParamSymbol.isAllOf(ClassTypeParam)
             && firstTypeParamSymbol.tree.exists(_.isInstanceOf[TypeParam])
