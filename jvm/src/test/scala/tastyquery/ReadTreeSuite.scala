@@ -8,7 +8,7 @@ import tastyquery.Contexts
 import tastyquery.Contexts.Context
 import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.ast.Flags
-import tastyquery.ast.Flags.{TypeParam as _, *}
+import tastyquery.ast.Flags.*
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.*
@@ -576,7 +576,10 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int")))),
             Literal(Constant(1)),
             symbol
-          ) if symbol.tree.exists(_.isInstanceOf[ValDef]) =>
+          ) if symbol.tree.exists(_.isInstanceOf[ValDef])
+              && symbol.flags.is(Mutable)
+              && !symbol.flags.is(Method)
+              && !symbol.flags.is(Accessor) =>
     }
     val setterMatch: StructureCheck = {
       case DefDef(
@@ -584,8 +587,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             Left((ValDef(SimpleName("x$1"), _, _, _): Matchable) :: Nil) :: Nil,
             TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Unit")))),
             Literal(Constant(())),
-            _
-          ) =>
+            symbol
+          ) if symbol.flags.isAllOf(Accessor | Method | Mutable) =>
     }
     assert(containsSubtree(valDefMatch)(clue(tree)))
     assert(containsSubtree(setterMatch)(clue(tree)))
@@ -969,7 +972,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             classSymbol
           )
           if classSymbol.tree.exists(_.isInstanceOf[ClassDef])
-            && firstTypeParamSymbol.is(Flags.TypeParam)
+            && firstTypeParamSymbol.is(Flags.TypeParameter)
             && !firstTypeParamSymbol.isAllOf(ClassTypeParam)
             && secondTypeParamSymbol.isAllOf(ClassTypeParam)
             && firstTypeParamSymbol.tree.exists(_.isInstanceOf[TypeParam])

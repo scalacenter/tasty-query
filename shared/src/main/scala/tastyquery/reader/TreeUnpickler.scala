@@ -8,6 +8,7 @@ import tastyquery.ast.Symbols.{ClassSymbol, ClassSymbolFactory, NoSymbol, Regula
 import tastyquery.ast.Trees.*
 import tastyquery.ast.TypeTrees.*
 import tastyquery.ast.Types.*
+import tastyquery.ast.Flags.*
 import tastyquery.ast.Spans.{Span, NoSpan}
 import tastyquery.reader.TastyUnpickler.NameTable
 
@@ -79,10 +80,19 @@ class TreeUnpickler(
         if tag == TEMPLATE then newOwner.asInstanceOf[ClassSymbol].initialised = true
       case DEFDEF | VALDEF | PARAM | TYPEPARAM =>
         val end = reader.readEnd()
-        val name = if (tag == TYPEPARAM) readName.toTypeName else readName
+        val name = if tag == TYPEPARAM then readName.toTypeName else readName
         val addToDecls = tag != TYPEPARAM && fileCtx.owner.isClass
         val newSymbol =
           fileCtx.createSymbol(start, name, RegularSymbolFactory, addToDecls)
+        val modsReader = fork
+        modsReader.skipParams()
+        modsReader.skipTree() // tpt
+        val rhsIsEmpty = modsReader.nothingButMods(end)
+        if !rhsIsEmpty then modsReader.skipTree()
+        val (flags, privateWithin) = modsReader.readModifiers(end)
+        val normalizedFlags = normalizeFlags(tag, flags, name, rhsIsEmpty)
+        newSymbol.withFlags(normalizedFlags)
+        privateWithin.foreach(newSymbol.withPrivateWithin)
         reader.until(end)(createSymbols()(using fileCtx.withOwner(newSymbol)))
       case BIND =>
         val end = reader.readEnd()
@@ -116,6 +126,21 @@ class TreeUnpickler(
     }
   }
 
+  private def normalizeFlags(tag: Int, givenFlags: FlagSet, name: Name, rhsIsEmpty: Boolean)(
+    using FileContext
+  ): FlagSet =
+    var flags = givenFlags
+    if tag == DEFDEF then flags |= Method
+    if givenFlags.is(Module) then flags |= (if tag == VALDEF then ModuleValCreationFlags else ModuleClassCreationFlags)
+    if flags.is(Enum) && !flags.is(Method) && name.isTermName then flags |= StableRealizable
+    if ctx.owner.isClass then
+      if tag == PARAM then
+        flags |= ParamAccessor
+        if !rhsIsEmpty then // param alias
+          flags |= Method
+    if tag == TYPEPARAM then flags |= TypeParameter
+    flags
+
   private def posErrorMsg(using FileContext): String = s"at address ${reader.currentAddr} in file ${fileCtx.getFile}"
   private def posErrorMsg(atAddr: Addr)(using FileContext): String = s"at address $atAddr in file ${fileCtx.getFile}"
 
@@ -147,6 +172,15 @@ class TreeUnpickler(
 
   def skipTree(): Unit = skipTree(reader.readByte())
 
+  private def skipParams(): Unit =
+    while
+      val tag = reader.nextByte
+      tag == PARAM || tag == TYPEPARAM || tag == EMPTYCLAUSE || tag == SPLITCLAUSE
+    do skipTree()
+
+  private def nothingButMods(end: Addr): Boolean =
+    reader.currentAddr == end || isModifierTag(reader.nextByte)
+
   def isSharedTag(tag: Int): Boolean = tag == SHAREDtype || tag == SHAREDterm
 
   /** The tag at the end of SHAREDtype/term chain */
@@ -162,6 +196,74 @@ class TreeUnpickler(
       tag
     }
   }
+
+  /** Read modifiers into a set of flags and a privateWithin boundary symbol. */
+  def readModifiers(end: Addr)(using FileContext): (FlagSet, Option[Symbol]) =
+    var flags: FlagSet = EmptyFlagSet
+    var privateWithin: Option[Symbol] = None
+    def addFlag(flag: FlagSet): Unit =
+      flags |= flag
+      reader.readByte()
+    def ignoreFlag(): Unit = reader.readByte()
+    while reader.currentAddr.index != end.index do
+      reader.nextByte match
+        case PRIVATE   => addFlag(Private)
+        case PROTECTED => addFlag(Protected)
+        case ABSTRACT =>
+          reader.readByte()
+          reader.nextByte match {
+            case OVERRIDE => addFlag(AbsOverride)
+            case _        => flags |= Abstract
+          }
+        case FINAL         => addFlag(Final)
+        case SEALED        => addFlag(Sealed)
+        case CASE          => addFlag(Case)
+        case IMPLICIT      => addFlag(Implicit)
+        case ERASED        => addFlag(Erased)
+        case LAZY          => addFlag(Lazy)
+        case OVERRIDE      => addFlag(Override)
+        case INLINE        => addFlag(Inline)
+        case INLINEPROXY   => addFlag(InlineProxy)
+        case MACRO         => addFlag(Macro)
+        case OPAQUE        => addFlag(Opaque)
+        case STATIC        => addFlag(Static)
+        case OBJECT        => addFlag(Module)
+        case TRAIT         => addFlag(Trait)
+        case ENUM          => addFlag(Enum)
+        case LOCAL         => addFlag(Local)
+        case SYNTHETIC     => addFlag(Synthetic)
+        case ARTIFACT      => addFlag(Artifact)
+        case MUTABLE       => addFlag(Mutable)
+        case FIELDaccessor => addFlag(Accessor)
+        case CASEaccessor  => addFlag(CaseAccessor)
+        case COVARIANT     => addFlag(Covariant)
+        case CONTRAVARIANT => addFlag(Contravariant)
+        case HASDEFAULT    => ignoreFlag()
+        case STABLE        => addFlag(StableRealizable)
+        case EXTENSION     => addFlag(Extension)
+        case GIVEN         => addFlag(Given)
+        case PARAMsetter   => addFlag(ParamAccessor)
+        case PARAMalias    => addFlag(SuperParamAlias)
+        case EXPORTED      => addFlag(Exported)
+        case OPEN          => addFlag(Open)
+        case INVISIBLE     => ignoreFlag()
+        case TRANSPARENT   => addFlag(Transparent)
+        case INFIX         => addFlag(Infix)
+        case PRIVATEqualified =>
+          ignoreFlag()
+          privateWithin = Some(readWithin)
+        case PROTECTEDqualified =>
+          addFlag(Protected)
+          privateWithin = Some(readWithin)
+        case ANNOTATION =>
+          ignoreFlag()
+        case tag =>
+          assert(false, s"illegal modifier tag $tag at ${reader.currentAddr}, end = $end")
+    end while
+    (flags, privateWithin)
+  end readModifiers
+
+  private def readWithin(using FileContext): Symbol = readType.typeSymbol
 
   /** Performs the read action as if SHARED tags were transparent:
     *  - follows the SHARED tags to the term or type that is shared
@@ -320,7 +422,8 @@ class TreeUnpickler(
       val spn = span
       val start = reader.currentAddr
       val paramSymbol = fileCtx.getSymbol(start, RegularSymbolFactory)
-      paramSymbol.withFlags(if paramSymbol.owner.isClass then Flags.ClassTypeParam else Flags.TypeParam)
+      val expectedFlags = if paramSymbol.owner.isClass then ClassTypeParam else TypeParameter
+      assert(paramSymbol.flags.isAllOf(expectedFlags))
       reader.readByte()
       val end = reader.readEnd()
       val name = readName.toTypeName

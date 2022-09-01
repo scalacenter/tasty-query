@@ -41,6 +41,7 @@ object Symbols {
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
     private var myTree: Option[DefTree] = None
+    private var myPrivateWithin: Option[Symbol] = None
 
     /** Forces the symbol to be initialized.
       *
@@ -99,6 +100,12 @@ object Symbols {
       else
         isFlagsInitialized = true
         myFlags = flags
+        this
+
+    private[tastyquery] final def withPrivateWithin(privateWithin: Symbol): this.type =
+      if myPrivateWithin.isDefined then throw new IllegalStateException(s"reassignment of privateWithin to $this")
+      else
+        myPrivateWithin = Some(privateWithin)
         this
 
     private[tastyquery] def signature(using Context): Option[Signature]
