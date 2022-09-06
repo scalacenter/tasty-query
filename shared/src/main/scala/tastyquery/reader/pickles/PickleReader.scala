@@ -278,7 +278,9 @@ class PickleReader {
           case sym: Symbol =>
             sym.asClass.accessibleThisType
           case external: ExternalSymbolRef =>
-            ThisType(external.toTypeRef(NoPrefix))
+            external.toNamedType(NoPrefix) match
+              case termRef: TermRef => termRef // necessary for package refs?
+              case typeRef: TypeRef => ThisType(typeRef)
       case SINGLEtpe =>
         val pre = readPrefix()
         val designator = readMaybeExternalSymbolRef()

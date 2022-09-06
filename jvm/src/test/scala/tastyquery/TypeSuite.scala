@@ -662,4 +662,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(body.tpe).isOfClass(IntClass))
   }
 
+  testWithContext("console-outvar") {
+    val Console = resolve(name"scala" / tname"Console").asClass
+
+    println(Console.name.toDebugString)
+    println(Console.getDecl(name"outVar"))
+    println(Console.getDecl(name"outVar").get.declaredType)
+  }
+
 }
