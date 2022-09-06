@@ -662,4 +662,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(body.tpe).isOfClass(IntClass))
   }
 
+  testWithContext("console-outvar-issue-78") {
+    val Console = resolve(name"scala" / tname"Console").asClass
+    val DynamicVariable = resolve(name"scala" / name"util" / tname"DynamicVariable").asClass
+
+    val outVar = Console.getDecl(name"outVar").get
+    assert(clue(outVar.declaredType).isApplied(_.isRef(DynamicVariable), List(_ => true)))
+  }
+
 }
