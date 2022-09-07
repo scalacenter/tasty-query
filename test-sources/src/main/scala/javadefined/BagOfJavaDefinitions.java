@@ -20,4 +20,8 @@ public class BagOfJavaDefinitions {
   public javadefined.JavaDefined[] arrIdentity(javadefined.JavaDefined[] arr) {
     return arr;
   }
+
+  public java.lang.ProcessBuilder processBuilder() {
+    return new ProcessBuilder("echo");
+  }
 }

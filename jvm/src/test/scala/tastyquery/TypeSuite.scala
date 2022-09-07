@@ -382,6 +382,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(tpe.resultType.isArrayOf(_.isRef(JavaDefinedClass)))
     }
 
+    testDef(BagOfJavaDefinitions / name"processBuilder") { processBuilder =>
+      val tpe = processBuilder.declaredType.asInstanceOf[MethodType]
+      assert(tpe.resultType.isInstanceOf[TypeRef]) // do not call isRef, as we do not have the java lib
+    }
+
   }
 
   testWithContext("bag-of-generic-java-definitions[signatures]") {
@@ -434,11 +439,16 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
 
     testDef(BagOfGenJavaDefinitions / name"genraw") { genraw =>
-      assert(genraw.declaredType.isGenJavaClassOf(_.isWildcard))
+      /* Raw types are not really supported (see #80). They are read and
+       * stored as if they were *monomorphic* class references, i.e., TypeRef's
+       * without any AppliedType.
+       */
+      assert(genraw.declaredType.isRef(GenericJavaClass))
     }
 
     testDef(BagOfGenJavaDefinitions / name"mixgenraw") { mixgenraw =>
-      assert(mixgenraw.declaredType.isGenJavaClassOf(_.isGenJavaClassOf(_.isWildcard)))
+      // Same comment about raw types.
+      assert(mixgenraw.declaredType.isGenJavaClassOf(_.isRef(GenericJavaClass)))
     }
 
     testDef(BagOfGenJavaDefinitions / name"genwild") { genwild =>
