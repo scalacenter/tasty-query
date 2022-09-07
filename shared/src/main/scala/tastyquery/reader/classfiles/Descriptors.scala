@@ -6,7 +6,7 @@ import tastyquery.ast.Types.*
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Flags
 import tastyquery.reader.classfiles.ClassfileReader.ReadException
-import tastyquery.ast.Names.termName
+import tastyquery.ast.Names.{nme, termName, typeName}
 import tastyquery.util.syntax.chaining.given
 
 import scala.annotation.switch
@@ -18,25 +18,27 @@ object Descriptors:
     val superRef = superClass.map(classRef).getOrElse(ObjectType)
     interfaces.foldLeft(superRef)((parents, interface) => AndType(parents, classRef(interface)))
 
-  private[tastyquery] def rawTypeArguments(cls: ClassSymbol)(using Context): List[WildcardTypeBounds] =
-    if !cls.initParents then
-      // we have initialised our own parents,
-      // therefore it is an external class,
-      // force it so we can see its type params.
-      cls.ensureInitialised()
-    cls.typeParamSymsNoInitialize.map(Function.const(WildcardTypeBounds(RealTypeBounds(NothingType, AnyType))))
+  private def classRef(binaryName: String)(using Context): TypeRef =
+    def followPackages(acc: PackageClassSymbol, parts: List[String]): TypeRef =
+      (parts: @unchecked) match
+        case className :: Nil =>
+          TypeRef(PackageRef(acc), typeName(className))
+        case nextPackageName :: rest =>
+          acc.findPackageSymbol(termName(nextPackageName)) match
+            case Some(pkg) =>
+              followPackages(pkg, rest)
+            case res =>
+              sys.error(s"cannot find package $nextPackageName in $acc")
+    end followPackages
 
-  private def classRef(binaryName: String)(using Context): Type =
-    val className = binaryName.replace('/', '.').nn
-    ctx.getClassIfDefined(className) match
-      case Right(ref) =>
-        val tpe = ref.accessibleThisType
-        val rawArgs = rawTypeArguments(ref)
-        if rawArgs.nonEmpty then AppliedType(tpe, rawArgs)
-        else tpe
-      case Left(err) =>
-        // TODO: inner classes
-        throw err
+    val parts = binaryName.split('/').toList
+    (parts: @unchecked) match
+      case classInEmptyPackageName :: Nil =>
+        TypeRef(PackageRef(nme.EmptyPackageName), typeName(classInEmptyPackageName))
+      case firstPackageName :: rest =>
+        val firstPackageRef = PackageRef(termName(firstPackageName))
+        followPackages(firstPackageRef.resolveToSymbol, rest)
+  end classRef
 
   @throws[ReadException]
   def parseDescriptor(member: Symbol, desc: String)(using Context): Type =

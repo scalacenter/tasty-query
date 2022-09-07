@@ -133,53 +133,33 @@ object JavaSignatures:
       else None
 
     def classTypeSignature(env: JavaSignature): Option[Type] =
-
-      def findRawTopLevelClass: ClassSymbol =
-        // lookup will not force anything new as all packages and top-level classes are known,
-        // will fail fast if not on classpath.
-
-        def packageSpecifiers(acc: PackageClassSymbol): ClassSymbol =
+      def readSimpleClassType: TypeRef =
+        def followPackages(acc: PackageClassSymbol): TypeRef =
           val next = identifier
           if consume('/') then // must have '/', identifier, and terminal char.
-            acc.getDecl(next) match
-              case Some(pkg: PackageClassSymbol) =>
-                packageSpecifiers(pkg)
+            acc.findPackageSymbol(next) match
+              case Some(pkg) =>
+                followPackages(pkg)
               case res =>
-                sys.error(s"found $res in operation $acc lookup $next")
-                abort
-          else
-            acc.getDecl(next.toTypeName) match // TODO: encoded names?
-              case Some(cls: ClassSymbol) =>
-                cls
-              case res =>
-                sys.error(s"found $res in operation $acc lookup $next")
-                abort
-        end packageSpecifiers
+                sys.error(s"cannot find package $next in $acc")
+          else TypeRef(PackageRef(acc), next.toTypeName)
+        end followPackages
 
         val firstIdent = identifier
         if consume('/') then // must have '/', identifier, and terminal char.
           val init = PackageRef(firstIdent)
-          packageSpecifiers(init.resolveToSymbol)
-        else
-          val emptyPkg = PackageRef(nme.EmptyPackageName).resolveToSymbol
-          emptyPkg.getDecl(firstIdent.toTypeName) match
-            case Some(cls: ClassSymbol) => cls // TODO: encoded names?
-            case _                      => abort
-      end findRawTopLevelClass
+          followPackages(init.resolveToSymbol)
+        else TypeRef(PackageRef(nme.EmptyPackageName), firstIdent.toTypeName)
+      end readSimpleClassType
 
-      def simpleClassTypeSignature(cls: ClassSymbol): Type =
-        val clsTpe = cls.accessibleThisType
+      def simpleClassTypeSignature(clsTpe: TypeRef): Type =
         if consume('<') then // must have '<', '>', and class type
           AppliedType(clsTpe, typeArgumentsRest(env))
-        else
-          val rawArgs = Descriptors.rawTypeArguments(cls)
-          if rawArgs.nonEmpty then AppliedType(clsTpe, rawArgs)
-          else clsTpe
+        else clsTpe
       end simpleClassTypeSignature
 
       if consume('L') then // must have 'L', identifier, and ';'.
-        val rawTopLevelClass = findRawTopLevelClass
-        val clsTpe = simpleClassTypeSignature(rawTopLevelClass)
+        val clsTpe = simpleClassTypeSignature(readSimpleClassType)
         if consume(';') then Some(clsTpe)
         else None // TODO: read type arguments, inner classes
       else None
