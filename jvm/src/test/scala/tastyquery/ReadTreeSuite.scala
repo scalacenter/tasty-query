@@ -576,10 +576,11 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int")))),
             Literal(Constant(1)),
             symbol
-          ) if symbol.tree.exists(_.isInstanceOf[ValDef])
-              && symbol.flags.is(Mutable)
-              && !symbol.flags.is(Method)
-              && !symbol.flags.is(Accessor) =>
+          )
+          if symbol.tree.exists(_.isInstanceOf[ValDef])
+            && symbol.flags.is(Mutable)
+            && !symbol.flags.is(Method)
+            && !symbol.flags.is(Accessor) =>
     }
     val setterMatch: StructureCheck = {
       case DefDef(
