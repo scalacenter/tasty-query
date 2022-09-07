@@ -3,6 +3,7 @@ package tastyquery.reader.pickles
 import scala.annotation.switch
 
 import tastyquery.ast.Constants.*
+import tastyquery.ast.Flags.*
 import tastyquery.ast.Names.{TermName, termName, TypeName, typeName, nme}
 import tastyquery.ast.Symbols.{Symbol, NoSymbol}
 import tastyquery.ast.Types.*
@@ -147,7 +148,7 @@ class PickleReader {
     val name = at(nameref)(readName())
     val owner = readLocalSymbolRef()
 
-    val flagsRaw = pkl.readLongNat() // TODO: Decode into flags
+    val flags = readFlags(name.isTypeName)
 
     val (privateWithin, infoRef) = {
       val ref = pkl.readNat()
@@ -184,12 +185,9 @@ class PickleReader {
         case t: Throwable =>
           throw new IllegalStateException(s"error while unpickling the type of $owner.$name", t)
 
-    finishSym(tag match {
+    val sym = finishSym(tag match {
       case TYPEsym | ALIASsym =>
         var name1 = name.toTypeName
-        // var flags1 = flags
-        // if (flags.is(TypeParam)) flags1 |= owner.typeParamCreationFlags
-        // newSymbol(owner, name1, flags1, localMemberUnpickler, privateWithin, coord = start)
         RegularSymbolFactory.createSymbol(name1, owner)
       case CLASSsym =>
         val cls =
@@ -197,6 +195,8 @@ class PickleReader {
           else if isModuleClassRoot then clsCtx.moduleClassRoot
           else ClassSymbolFactory.createSymbol(name.toTypeName, owner) // TODO Read inner members
         //cls.withDeclaredType(ClassType(cls, ObjectType))
+        // the same class can be found twice in the symbol table
+        if cls.initialised then return cls
         cls.initialised = true
         cls
       case VALsym =>
@@ -210,6 +210,59 @@ class PickleReader {
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     })
+    sym
+      .withFlags(flags)
+      .withPrivateWithin(privateWithin)
+  }
+
+  private def readFlags(isType: Boolean)(using PklStream): FlagSet = {
+    val pickleFlags = PickleFlagSet(pkl.readLongNat(), isType)
+    var flags: FlagSet = EmptyFlagSet
+
+    if pickleFlags.isProtected then flags |= Protected
+    if pickleFlags.isOverride then flags |= Override
+    if pickleFlags.isPrivate then flags |= Private
+    if pickleFlags.isAbstract then flags |= Abstract
+    if pickleFlags.isDeferred then flags |= Deferred
+    if pickleFlags.isFinal then flags |= Final
+    if pickleFlags.isMethod then flags |= Method
+    if pickleFlags.isInterface then flags |= NoInitsInterface
+    if pickleFlags.isModule then flags |= (if isType then Module else Module | Lazy)
+    if pickleFlags.isImplicit then flags |= Implicit
+    if pickleFlags.isSealed then flags |= Sealed
+    if pickleFlags.isCase then flags |= Case
+    if pickleFlags.isMutable then flags |= Mutable
+    // if pickleFlags.isParam then flags |= Param
+    // if pickleFlags.isPackage then flags |= Package
+    if pickleFlags.isMacro then flags |= Macro
+    if pickleFlags.isCovariant then flags |= Covariant
+    // if pickleFlags.isByNameParam then flags |= ByNameParam
+    if pickleFlags.isContravariant then flags |= Contravariant
+    // if pickleFlags.isLabel then flags |= Label
+    if pickleFlags.isAbstractOverride then flags |= AbsOverride
+    if pickleFlags.isLocal then flags |= Local
+    // if pickleFlags.isJava then flags |= JavaDefined
+    if pickleFlags.isSynthetic then flags |= Synthetic
+    if pickleFlags.isStable then flags |= StableRealizable
+    if pickleFlags.isStatic then flags |= Static
+    if pickleFlags.isCaseAccessor then flags |= CaseAccessor
+    // if pickleFlags.hasDefault then flags |= HasDefault
+    if pickleFlags.isTrait then flags |= Trait
+    // if pickleFlags.isBridge then flags |= Bridge
+    if pickleFlags.isAccessor then flags |= Accessor
+    // if pickleFlags.isSuperAccessor then flags |= Scala2SuperAccessor
+    if pickleFlags.isParamAccessor then flags |= ParamAccessor
+    // if pickleFlags.isModuleVar then flags |= Scala2ModuleVar
+    if pickleFlags.isLazy then flags |= Lazy
+    // if pickleFlags.isMixedIn then flags |= MixedIn
+    // if pickleFlags.isExistential then flags |= Scala2Existential
+    // if pickleFlags.isExpandedName then flags |= Scala2ExpandedName
+    // if pickleFlags.isSpecialized then flags |= Specialized
+    // if pickleFlags.isVBridge then flags |= EmptyFlagSet
+    // if pickleFlags.isJavaVarargs then flags |= JavaVarargs
+    if pickleFlags.isEnum then flags |= Enum
+
+    flags
   }
 
   def missingSymbolEntry(index: Int)(using PklStream, Entries, Index): Boolean =

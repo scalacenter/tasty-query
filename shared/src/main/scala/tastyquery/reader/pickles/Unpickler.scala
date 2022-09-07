@@ -13,8 +13,7 @@ object Unpickler {
       index.loopWithIndices { (offset, i) =>
         if (reader.missingSymbolEntry(i)) {
           pkl.unsafeFork(offset) {
-            val maybeExternalSym = reader.readMaybeExternalSymbol(i)
-            reader.addEntry(i, maybeExternalSym)
+            reader.readMaybeExternalSymbolAt(i)
             //   sym.infoOrCompleter match {
             //     case info: ClassUnpickler => info.init()
             //     case _                    =>
