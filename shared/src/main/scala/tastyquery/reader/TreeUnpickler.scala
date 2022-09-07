@@ -205,6 +205,9 @@ class TreeUnpickler(
       flags |= flag
       reader.readByte()
     def ignoreFlag(): Unit = reader.readByte()
+    def ignoreAnnot(): Unit =
+      val end = reader.readEnd()
+      reader.goto(end)
     while reader.currentAddr.index != end.index do
       reader.nextByte match
         case PRIVATE   => addFlag(Private)
@@ -257,6 +260,7 @@ class TreeUnpickler(
           privateWithin = Some(readWithin)
         case ANNOTATION =>
           ignoreFlag()
+          ignoreAnnot()
         case tag =>
           assert(false, s"illegal modifier tag $tag at ${reader.currentAddr}, end = $end")
     end while
