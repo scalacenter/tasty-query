@@ -69,8 +69,13 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
   }
 
-  testWithContext("java.lang-is-not-loaded".fail) {
-    resolve(name"java" / name"lang" / tname"String").declaredType
+  testWithContext("java.lang.String") {
+    val StringClass = resolve(name"java" / name"lang" / tname"String").asClass
+    val CharClass = resolve(name"scala" / tname"Char").asClass
+
+    val charAt = StringClass.getDecl(name"charAt").get
+    val tpe = charAt.declaredType.asInstanceOf[MethodType]
+    assert(clue(tpe.resultType).isRef(CharClass))
   }
 
   def applyOverloadedTest(name: String)(callMethod: String, paramCls: DeclarationPath)(using munit.Location): Unit =

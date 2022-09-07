@@ -151,9 +151,8 @@ object Contexts {
       initialise(nothingClass)
 
       def fakeJavaLangClassIfNotFound(name: String): ClassSymbol =
-        // TODO: add java.lang package in tests
         val tname = typeName(name)
-        javaLangPackage.getDeclInternal(tname) match
+        javaLangPackage.getDecl(tname) match
           case Some(sym: ClassSymbol) =>
             sym
           case _ =>
