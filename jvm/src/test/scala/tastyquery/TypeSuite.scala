@@ -685,4 +685,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(outVar.declaredType).isApplied(_.isRef(DynamicVariable), List(_ => true)))
   }
 
+  testWithContext("scala-predef-declared-type") {
+    val predef = resolve(name"scala" / name"Predef")
+    val Predef = resolve(name"scala" / tname"Predef" / obj).asClass
+    assert(clue(predef.declaredType).isRef(Predef))
+  }
 }
