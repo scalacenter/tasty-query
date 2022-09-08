@@ -1420,7 +1420,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             // TypeMember { type AbstractType = Int }
             RefinedTypeTree(
               TypeIdent(TypeName(SimpleName("TypeMember"))),
-              TypeMember(TypeName(SimpleName("AbstractType")), TypeIdent(TypeName(SimpleName("Int"))), _) :: Nil
+              TypeMember(TypeName(SimpleName("AbstractType")), TypeIdent(TypeName(SimpleName("Int"))), _) :: Nil,
+              _
             ),
             _
           ) =>

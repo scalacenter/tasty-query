@@ -1065,7 +1065,7 @@ object Types {
       else AnnotatedType(typ, annotation)
   }
 
-  /** A refined type parent { refinement }
+  /** A refined type `parent { type refinedName <:> refinedInfo }`
     * @param parent      The type being refined
     * @param refinedName The name of the refinement declaration
     * @param refinedInfo The info of the refinement declaration

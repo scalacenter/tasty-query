@@ -1,7 +1,7 @@
 package tastyquery.ast
 
 import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.RegularSymbol
+import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.{DefTree, Tree, TypeParam}
 import tastyquery.ast.Types.*
 import tastyquery.ast.Spans.{Span, NoSpan}
@@ -52,11 +52,14 @@ object TypeTrees {
     override final def withSpan(span: Span): SingletonTypeTree = SingletonTypeTree(ref)(span)
   }
 
-  case class RefinedTypeTree(underlying: TypeTree, refinements: List[Tree])(span: Span) extends TypeTree(span) {
-    override protected def calculateType(using Context): Type =
-      throw new TypeTreeToTypeError(this) // TODO
+  case class RefinedTypeTree(underlying: TypeTree, refinements: List[Tree], refinedCls: ClassSymbol)(span: Span)
+      extends TypeTree(span) {
 
-    override final def withSpan(span: Span): RefinedTypeTree = RefinedTypeTree(underlying, refinements)(span)
+    override protected def calculateType(using Context): Type =
+      underlying.toType // TODO Actually take the refinements into account
+
+    override final def withSpan(span: Span): RefinedTypeTree =
+      RefinedTypeTree(underlying, refinements, refinedCls)(span)
   }
 
   /** => T */
