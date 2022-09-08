@@ -436,6 +436,11 @@ class TreeUnpickler(
       val end = reader.readEnd()
       val name = readName.toTypeName
       val bounds = readTypeParamType(using fileCtx.withOwner(paramSymbol))
+      val typeBounds = bounds match
+        case bounds: TypeBounds     => bounds
+        case bounds: TypeBoundsTree => bounds.toTypeBounds
+        case bounds: TypeLambdaTree => RealTypeBounds(NothingType, AnyType)
+      paramSymbol.withDeclaredType(WildcardTypeBounds(typeBounds))
       skipModifiers(end)
       TypeParam(name, bounds, paramSymbol)(spn).definesTreeOf(paramSymbol)
     }

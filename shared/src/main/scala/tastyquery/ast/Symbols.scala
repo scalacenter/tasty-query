@@ -112,6 +112,14 @@ object Symbols {
 
     private[tastyquery] def signature(using Context): Option[Signature]
 
+    /** If this symbol has a `MethodicType`, returns a `SignedName`, otherwise a `Name`. */
+    final def signedName(using Context): Name =
+      signature.fold(name) { sig =>
+        val name = this.name.asSimpleName
+        val targetName = name // TODO We may have to take `@targetName` into account here, one day
+        SignedName(name, sig, targetName)
+      }
+
     final def flags: FlagSet =
       if isFlagsInitialized then myFlags
       else throw IllegalStateException(s"flags of $this have not been initialized")
@@ -235,8 +243,8 @@ object Symbols {
       if local != null then local
       else
         val sig = declaredType match
-          case methodOrPoly: (MethodType | PolyType) => Some(Signature.fromMethodOrPoly(methodOrPoly))
-          case _                                     => None
+          case methodic: MethodicType => Some(Signature.fromMethodic(methodic))
+          case _                      => None
         mySignature = sig
         sig
   }
