@@ -57,7 +57,6 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
   test("sibling-top-level-class-loading") {
     val Constants = simple_trees / tname"Constants"
     val NestedMethod = simple_trees / tname"NestedMethod"
-    val outerMethod = NestedMethod / name"outerMethod"
     val unitVal = Constants / name"unitVal"
 
     given Context = getUnpicklingContext(Constants, extraClasspath = NestedMethod)
@@ -67,30 +66,24 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
     assertSymbolExistsAndIsLoaded(Constants) // we should have loaded Constants, we requested it
     assertSymbolExistsAndIsLoaded(unitVal) // outerMethod is a member of Constants, it should be seen.
 
-    assertSymbolExistsAndIsLoaded(NestedMethod) // sibling top-level class is also seen in same package
-    assertSymbolNotExistsOrNotLoadedYet(outerMethod) // members of sibling top-level class are not seen unless requested
+    assertSymbolNotExistsOrNotLoadedYet(NestedMethod) // sibling top-level class is not yet seen in same package
   }
 
   test("demo-symbolic-package-leaks".ignore) {
     // ignore because this passes only on clean builds
 
     def failingGetTopLevelClass(path: TopLevelDeclPath)(using Context): Nothing =
-      ctx.getClassIfDefined(path.rootClassName) match
-        case Right(classRoot) => fail(s"expected no class, but got $classRoot")
-        case Left(err)        => throw MissingTopLevelDecl(path, err)
+      if ctx.existsRoot(path.rootClassName) then fail(s"expected no class, but got ${path.rootClassName}")
+      else throw MissingTopLevelDecl(path, SymbolLookupException(path.name))
 
-    def forceTopLevel(path: TopLevelDeclPath)(using Context): Unit = {
-      val classRoot = ctx.getClassIfDefined(path.rootClassName) match
-        case Right(cls) => cls
-        case Left(err)  => throw MissingTopLevelDecl(path, err)
+    def forceTopLevel(path: TopLevelDeclPath)(using Context): Unit =
       try
-        ctx.classloader.scanClass(classRoot)
-        fail(s"expected failure when scanning class ${path.rootClassName}, $classRoot")
+        val cls = resolve(path)
+        fail(s"expected failure when scanning class ${cls.fullName}, but got $cls")
       catch
         case err: java.lang.AssertionError =>
           val msg = err.getMessage.nn
           assert(msg.contains("unexpected package symbolic_-- in owners of top level class symbolic_$minus$minus.#::"))
-    }
 
     def runTest(using Context): Unit =
       val `symbolic_--.#::` = name"symbolic_--" / tname"#::"

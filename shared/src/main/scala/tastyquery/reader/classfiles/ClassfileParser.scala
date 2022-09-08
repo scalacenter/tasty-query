@@ -176,8 +176,6 @@ object ClassfileParser {
   }
 
   private def toplevel(classRoot: ClassData)(using ClassContext): Structure = {
-    val root = clsCtx.classRoot
-
     def headerAndStructure(reader: ClassfileReader)(using DataStream) = {
       reader.acceptHeader()
       structure(reader)(using reader.readConstantPool())

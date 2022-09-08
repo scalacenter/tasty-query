@@ -7,6 +7,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 import dotty.tools.tasty.TastyFormat.NameTags
 
+import scala.reflect.NameTransformer
+
 import scala.io.Codec
 import scala.annotation.targetName
 
@@ -156,6 +158,12 @@ object Names {
     def isEmpty: Boolean
 
     def toDebugString: String = toString
+
+    def decode: Name = this match
+      case name: SimpleName                         => termName(NameTransformer.decode(name.name))
+      case SuffixedName(NameTags.OBJECTCLASS, name) => name.decode.toTermName.withObjectSuffix
+      case name: TypeName                           => name.toTermName.decode.toTypeName
+      case _                                        => this // TODO: add more cases
   }
 
   abstract class TermName extends Name {
@@ -183,6 +191,9 @@ object Names {
     def subnames: TermName.SubNamesOps = new TermName.SubNamesOps(this)
 
     def withObjectSuffix: SuffixedName = SuffixedName(NameTags.OBJECTCLASS, this)
+    def stripObjectSuffix: TermName = this match
+      case SuffixedName(NameTags.OBJECTCLASS, rest) => rest
+      case _                                        => this
   }
 
   object TermName {
@@ -298,8 +309,8 @@ object Names {
       case SuffixedName(NameTags.OBJECTCLASS, clsName) => clsName.toTypeName
       case name                                        => name.withObjectSuffix.toTypeName
 
-    def sourceObjectName: TermName = toTermName match
-      case SuffixedName(NameTags.OBJECTCLASS, objName) => objName
-      case name                                        => name
+    def sourceObjectName: SimpleName = toTermName match
+      case SuffixedName(NameTags.OBJECTCLASS, objName) => objName.asSimpleName
+      case name                                        => name.asSimpleName
   }
 }

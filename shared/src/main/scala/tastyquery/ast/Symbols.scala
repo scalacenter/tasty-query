@@ -15,6 +15,7 @@ import tastyquery.Contexts.{Context, ctx}
 import tastyquery.util.syntax.chaining.given
 
 import compiletime.codeOf
+import tastyquery.reader.classfiles.Classpaths.Loader
 
 object Symbols {
 
@@ -283,7 +284,12 @@ object Symbols {
         case overloaded: SignedName =>
           distinguishOverloaded(overloaded)
         case name =>
-          getDeclInternal(name)
+          getDeclInternal(name) match
+            case None =>
+              this match
+                case pkg: PackageClassSymbol => pkg.initialiseRootFor(name)
+                case _                       => None
+            case res => res
 
     private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[Symbol] =
       myDeclarations.get(overloaded.underlying) match
@@ -296,8 +302,15 @@ object Symbols {
     final def resolveOverloaded(name: SignedName)(using Context): Option[Symbol] =
       getDecl(name)
 
+    /** Note: this will force all trees in a package */
     final def declarations(using Context): List[Symbol] =
       ensureInitialised()
+      this match
+        case pkg: PackageClassSymbol => pkg.initialiseAllRoots()
+        case _                       => ()
+      declarationsInternal
+
+    private[tastyquery] final def declarationsInternal: List[Symbol] =
       myDeclarations.values.toList.flatten
 
     override def declaredType(using Context): Type =
@@ -354,12 +367,7 @@ object Symbols {
           ctx.classloader.scanPackage(pkg)
           assert(initialised, s"could not initialize package $fullName")
         case cls =>
-          def initRoot(root: ClassSymbol): Unit =
-            ctx.classloader.scanClass(root)
-            assert(Contexts.initialisedRoot(root), s"could not initialize root class $fullName")
-          require(owner.isPackage, s"inner class was not initialised by owner") // root classes only
-          if cls.name.toTypeName.wrapsObjectName then cls.companionClass.foreach(initRoot)
-          else initRoot(cls)
+          assert(false, s"class ${cls.fullName} was never initialised")
 
       if !initialised then
         // TODO: maybe add flag and check against if we are currently initialising this symbol?
@@ -408,22 +416,41 @@ object Symbols {
 
     this.withDeclaredType(PackageRef(this))
 
+    private[tastyquery] def possibleRoot(rootName: SimpleName)(using Context): Option[Loader.Root] =
+      ensureInitialised()
+      ctx.classloader.findRoot(this, rootName)
+
+    /** When no symbol exists, try to enter root symbols for the given Name, will shortcut if no root
+      * exists for the given name.
+      */
+    private[tastyquery] def initialiseRootFor(name: Name)(using Context): Option[Symbol] =
+      ctx.classloader.enterRoots(this, name)
+
+    private[tastyquery] def initialiseAllRoots()(using Context): Unit =
+      ctx.classloader.forceRoots(this)
+
+    final def getPackageDecl(name: SimpleName)(using Context): Option[PackageClassSymbol] =
+      ensureInitialised()
+      getPackageInternal(name)
+
     def findPackageSymbol(packageName: TermName): Option[PackageClassSymbol] = packageName match {
-      case packageName: SimpleName => getPackageDecl(packageName)
+      case packageName: SimpleName => getPackageInternal(packageName)
       case QualifiedName(NameTags.QUALIFIED, prefix, suffix) =>
         if (prefix == name)
-          getPackageDecl(suffix)
+          getPackageInternal(suffix)
         else
           // recurse
           findPackageSymbol(prefix).flatMap(_.findPackageSymbol(packageName))
       case _ => throw IllegalArgumentException(s"Unexpected package name: $name")
     }
 
-    private def getPackageDecl(packageName: SimpleName): Option[PackageClassSymbol] =
+    private def getPackageInternal(packageName: SimpleName): Option[PackageClassSymbol] =
       /* All subpackages are created eagerly when initializing contexts,
        * so we can use getDeclInternal here.
        */
-      getDeclInternal(packageName).map(_.asInstanceOf[PackageClassSymbol])
+      getDeclInternal(packageName).collect { case pkg: PackageClassSymbol =>
+        pkg
+      }
   }
 
   sealed abstract class SymbolFactory[T <: Symbol] {

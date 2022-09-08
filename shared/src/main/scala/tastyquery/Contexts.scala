@@ -11,9 +11,11 @@ import tastyquery.ast.Types.{Type, Symbolic, Binders, PackageRef, TypeRef, SymRe
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import tastyquery.reader.classfiles.Classpaths
-import tastyquery.reader.classfiles.Classpaths.Classpath
+import tastyquery.reader.classfiles.Classpaths.{Classpath, Loader}
 import scala.util.Try
 import scala.util.control.NonFatal
+
+import tastyquery.util.syntax.chaining.given
 
 object Contexts {
 
@@ -32,38 +34,62 @@ object Contexts {
     ctx.initializeFundamentalClasses()
     ctx
 
-  private[tastyquery] def initialisedRoot(classOrModuleRoot: ClassSymbol)(using Context): Boolean =
-    classOrModuleRoot.initialised || classOrModuleRoot.companionClass.map(_.initialised).getOrElse(false)
+  /** Has the root been initialised already? Does not force, but returns true if at least one root was entered */
+  private[tastyquery] def initialisedRoot(root: Loader.Root): Boolean =
+    root.pkg.getDeclInternal(root.rootName).isDefined // module value
+      || root.pkg.getDeclInternal(root.rootName.toTypeName).isDefined // class value
 
   /** Context is used throughout unpickling an entire project. */
   class Context private[Contexts] (val defn: Definitions, val classloader: Classpaths.Loader) {
     private given Context = this
 
-    def withFile(root: ClassSymbol, filename: String)(using Classpaths.permissions.LoadRoot): FileContext =
+    def withFile(root: Loader.Root, filename: String)(using Classpaths.permissions.LoadRoot): FileContext =
       new FileContext(defn, root, filename, classloader)
 
-    def withRoot(root: ClassSymbol)(using Classpaths.permissions.LoadRoot): ClassContext =
-      new ClassContext(defn, classloader, root)
+    def withRoot(root: Loader.Root)(using Classpaths.permissions.LoadRoot): ClassContext =
+      new ClassContext(defn, classloader, defn.RootPackage, root)
 
-    def getClassIfDefined(binaryName: String): Either[SymResolutionProblem, ClassSymbol] =
-      def packageAndClass(binaryName: String): TypeRef = {
+    /** basically an internal method for loading Java classes embedded in Java descriptors */
+    private[tastyquery] def getClassFromBinaryName(binaryName: String): Either[SymResolutionProblem, ClassSymbol] =
+      getRootIfDefined(binaryName).flatMap { root =>
+        root.pkg
+          .getDecl(root.rootName.toTypeName)
+          .collect { case cls: ClassSymbol => cls }
+          .toRight(SymbolLookupException(root.fullName, s"perhaps it is not on the classpath"))
+      }
+
+    /** Does there possibly exist a root for the given binary name. Does not force any classes covered by the name */
+    private[tastyquery] def existsRoot(binaryName: String): Boolean =
+      getRootIfDefined(binaryName).isRight
+
+    /** Force a root to discover any top level symbols covered by the root. */
+    private[tastyquery] def rootSymbolsIfDefined(binaryName: String): List[Symbol] =
+      getRootIfDefined(binaryName) match
+        case Right(root) =>
+          root.pkg.getDecl(root.rootName.toTypeName).toList // class value
+            ++ root.pkg.getDecl(root.rootName).toList // module value
+            ++ root.pkg.getDecl(root.rootName.withObjectSuffix.toTypeName).toList // module class value
+        case Left(_) => Nil
+
+    /** Returns a root if there exists one on the classpath, does not force the underlying root symbols */
+    private def getRootIfDefined(binaryName: String): Either[SymResolutionProblem, Loader.Root] =
+      val (packageName, rootName) =
         val lastSep = binaryName.lastIndexOf('.')
-        if (lastSep == -1) TypeRef(PackageRef(nme.EmptyPackageName), typeName(binaryName))
-        else {
+        if lastSep == -1 then
+          val rootName = termName(binaryName)
+          (nme.EmptyPackageName, rootName)
+        else
           import scala.language.unsafeNulls
           val packageName = binaryName.substring(0, lastSep)
-          val className = typeName(binaryName.substring(lastSep + 1))
-          TypeRef(PackageRef(classloader.toPackageName(packageName)), className)
-        }
-      }
-      val symEither =
-        try Right(packageAndClass(binaryName).resolveToSymbol(using this))
-        catch
-          case e: SymResolutionProblem =>
-            Left(e)
-      (symEither: @unchecked) match
-        case Right(cls: ClassSymbol) => Right(cls)
-        case Left(err)               => Left(err) // let Right of non-class throw - it should not occur
+          val rootName = termName(binaryName.substring(lastSep + 1))
+          (classloader.toPackageName(packageName), rootName)
+      def fullName = packageName.toTermName.select(rootName)
+      try
+        val pkg = PackageRef(packageName).resolveToSymbol
+        pkg.possibleRoot(rootName).toRight(SymbolLookupException(fullName, s"no root exists in package $packageName"))
+      catch
+        case e: SymResolutionProblem =>
+          Left(SymbolLookupException(fullName, s"unknown package $packageName"))
 
     def findSymbolFromRoot(path: List[Name]): Symbol =
       @tailrec
@@ -173,14 +199,39 @@ object Contexts {
   class ClassContext private[Contexts] (
     override val defn: Definitions,
     override val classloader: Classpaths.Loader,
-    val owner: ClassSymbol
+    val owner: Symbol,
+    val root: Loader.Root
   ) extends Context(defn, classloader) {
 
-    def classRoot: ClassSymbol = owner
+    private inline given ClassContext = this
 
-    def moduleClassRoot: ClassSymbol = classRoot.companionClass(using this).get
+    /** The class root of this Context, will create and enter the symbol if it does not exist yet. */
+    def classRoot: ClassSymbol =
+      val name = root.rootName.toTypeName
+      root.pkg
+        .getDeclInternal(name)
+        .collect { case cls: ClassSymbol => cls }
+        .getOrElse(createClassSymbol(name, root.pkg).useWith(root.pkg.addDecl))
 
-    def moduleRoot: RegularSymbol = classRoot.companionObject(using this).get
+    /** The module class root of this Context, will create and enter the symbol if it does not exist yet. */
+    def moduleClassRoot: ClassSymbol =
+      val name = root.rootName.withObjectSuffix.toTypeName
+      root.pkg
+        .getDeclInternal(name)
+        .collect { case modcls: ClassSymbol =>
+          modcls
+        }
+        .getOrElse(createClassSymbol(name, root.pkg).useWith(root.pkg.addDecl))
+
+    /** The module value root of this Context, will create and enter the symbol if it does not exist yet. */
+    def moduleRoot: RegularSymbol =
+      val name = root.rootName
+      root.pkg
+        .getDeclInternal(name)
+        .collect { case mod: RegularSymbol =>
+          mod
+        }
+        .getOrElse(createSymbol(name, root.pkg).useWith(root.pkg.addDecl))
 
     /*def createSymbol[T <: Symbol](name: Name, factory: SymbolFactory[T], addToDecls: Boolean): T =
       val sym = factory.createSymbol(name, owner)
@@ -213,7 +264,7 @@ object Contexts {
     */
   class FileContext private[Contexts] (
     override val defn: Definitions,
-    val classRoot: ClassSymbol,
+    val classRoot: Loader.Root,
     val owner: Symbol,
     private val fileLocalInfo: FileLocalInfo,
     override val classloader: Classpaths.Loader
@@ -221,7 +272,7 @@ object Contexts {
 
     private[Contexts] def this(
       defn: Definitions,
-      classRoot: ClassSymbol,
+      classRoot: Loader.Root,
       filename: String,
       classloader: Classpaths.Loader
     ) = this(defn, classRoot, defn.RootPackage, new FileLocalInfo(filename), classloader)
@@ -256,29 +307,8 @@ object Contexts {
       */
     def createSymbol[T <: Symbol](addr: Addr, name: Name, factory: ClosedSymbolFactory[T], addToDecls: Boolean): T =
 
-      extension (s: ClassSymbol)
-        def isModuleClassRoot: Boolean = s.name.toTermName match
-          case SuffixedName(NameTags.OBJECTCLASS, module) => module == classRoot.name.toTermName
-          case _                                          => false
-
-      extension (s: RegularSymbol)
-        def isModuleRoot: Boolean =
-          s.name == classRoot.name.toTermName
-
       def mkSymbol(name: Name, owner: Symbol): T =
-        if owner == classRoot.enclosingDecl then
-          val existing = owner match
-            case owner: DeclaringSymbol => owner.getDeclInternal(name)
-            case _                      => None
-          existing match
-            case Some(sym) =>
-              (factory, sym) match
-                case (ClassSymbolFactory, `classRoot`)                               => classRoot
-                case (ClassSymbolFactory, sym: ClassSymbol) if sym.isModuleClassRoot => sym
-                case (RegularSymbolFactory, sym: RegularSymbol) if sym.isModuleRoot  => sym
-                case _ => throw ExistingDefinitionException(owner, name, explanation = s"existing symbol: $sym")
-            case _ => factory.createSymbol(name, owner)(using this)
-        else factory.createSymbol(name, owner)(using this)
+        factory.createSymbol(name, owner)(using this)
 
       if !hasSymbolAt(addr) then registerSym(addr, mkSymbol(name, owner), addToDecls)
       else throw ExistingDefinitionException(owner, name)

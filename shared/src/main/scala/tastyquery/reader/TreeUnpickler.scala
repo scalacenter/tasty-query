@@ -64,7 +64,7 @@ class TreeUnpickler(
           if pkg != defn.EmptyPackage then
             // can happen for symbolic packages
             assert(
-              fileCtx.classRoot.enclosingDecls.exists(_ == pkg),
+              fileCtx.classRoot.packages.exists(_ == pkg),
               s"unexpected package ${pkg.name} in owners of top level class ${fileCtx.classRoot.fullName}"
             )
           pkg

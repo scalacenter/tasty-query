@@ -44,19 +44,19 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   }
 
   test("top-level-package-object[class]-empty-package") {
-    val toplevelEmptyPackage_package = EmptyPkg / objclass"toplevelEmptyPackage$$package"
+    val toplevelEmptyPackage_package = EmptyPkg / tname"toplevelEmptyPackage$$package" / obj
     given Context = getUnpicklingContext(toplevelEmptyPackage_package)
 
     val toplevelEmptyPackage_packageClass = resolve(toplevelEmptyPackage_package)
 
     val (tree @ _: ClassDef) = toplevelEmptyPackage_packageClass.tree.get: @unchecked
 
-    assert(tree.name == objclass"toplevelEmptyPackage$$package")
+    assert(tree.name == toplevelEmptyPackage_package.name)
     assert(tree.symbol == toplevelEmptyPackage_packageClass)
   }
 
   test("top-level-package-object[value]-empty-package") {
-    val toplevelEmptyPackage_package = (EmptyPkg / name"toplevelEmptyPackage$$package").obj
+    val toplevelEmptyPackage_package = EmptyPkg / name"toplevelEmptyPackage$$package" / obj
     given Context = getUnpicklingContext(toplevelEmptyPackage_package)
 
     val toplevelEmptyPackage_packageValue = resolve(toplevelEmptyPackage_package)
@@ -65,6 +65,19 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
     assert(tree.name == name"toplevelEmptyPackage$$package")
     assert(tree.symbol == toplevelEmptyPackage_packageValue)
+  }
+
+  test("top-level-package-object[companion class]-empty-package") {
+    val toplevelEmptyPackage_package = EmptyPkg / name"toplevelEmptyPackage$$package" / obj
+    val toplevelEmptyPackage_package_companion = EmptyPkg / tname"toplevelEmptyPackage$$package"
+    given Context = getUnpicklingContext(toplevelEmptyPackage_package)
+
+    try
+      resolve(toplevelEmptyPackage_package_companion)
+      fail(s"Expected not to resolve class ${toplevelEmptyPackage_package_companion.rootClassName}")
+    catch
+      case ex: IllegalArgumentException =>
+        assert(ex.getMessage.nn.contains(s"cannot find member ${tname"toplevelEmptyPackage$$package".toDebugString}"))
   }
 
   test("basic-symbol-structure") {

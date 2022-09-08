@@ -24,7 +24,7 @@ object Descriptors:
         case className :: Nil =>
           TypeRef(PackageRef(acc), typeName(className))
         case nextPackageName :: rest =>
-          acc.findPackageSymbol(termName(nextPackageName)) match
+          acc.getPackageDecl(termName(nextPackageName)) match
             case Some(pkg) =>
               followPackages(pkg, rest)
             case res =>

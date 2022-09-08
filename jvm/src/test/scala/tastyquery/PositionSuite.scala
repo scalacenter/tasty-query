@@ -25,10 +25,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
     s"${System.getProperty(ResourceCodeProperty)}/main/scala/$dir/$filename.scala"
 
   private def unpickleWithCode(path: TopLevelDeclPath): (Tree, String) = {
-    val (base, classRoot) = findTopLevelClass(path)()
-    val tree = base.classloader.topLevelTasty(classRoot)(using base) match
-      case Some(trees) => trees.head
-      case _           => fail(s"Missing tasty for ${path.rootClassName}, $classRoot")
+    val (base, tree) = findTopLevelTasty(path)()
     val codePath = getCodePath(path.rootClassName)
     val code = Source.fromFile(codePath).mkString
     (tree, code)

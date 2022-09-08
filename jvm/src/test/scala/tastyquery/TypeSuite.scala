@@ -108,7 +108,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   applyOverloadedTest("apply-overloaded-gen")("callB", name"simple_trees" / tname"OverloadedApply" / tname"Box")
   applyOverloadedTest("apply-overloaded-nestedObj")(
     "callC",
-    name"simple_trees" / tname"OverloadedApply" / objclass"Foo" / name"Bar"
+    name"simple_trees" / tname"OverloadedApply" / tname"Foo" / obj / name"Bar"
   )
   // applyOverloadedTest("apply-overloaded-arrayObj")("callD", name"scala" / tname"Array") // TODO: re-enable when we add types to scala 2 symbols
   applyOverloadedTest("apply-overloaded-byName")("callE", name"simple_trees" / tname"OverloadedApply" / tname"Num")
