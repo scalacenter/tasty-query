@@ -94,6 +94,8 @@ object Names {
     val Object: TypeName = typeName("Object")
 
     val scalaFunction0: TypeName = nme.scalaPackageName.select(termName("Function0")).toTypeName
+
+    val RefinedClassMagic: TypeName = typeName("<refinement>")
   }
 
   /** Create a type name from the characters in cs[offset..offset+len-1].

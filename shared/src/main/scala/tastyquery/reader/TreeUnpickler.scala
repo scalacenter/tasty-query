@@ -31,6 +31,10 @@ class TreeUnpickler(
   nameAtRef: NameTable,
   posUnpicklerOpt: Option[PositionUnpickler]
 ) {
+  private val recursiveTypeAtAddr = mutable.Map.empty[Addr, Type]
+
+  private val sharedTypesCache = mutable.Map.empty[Addr, Type]
+
   def unpickle(using FileContext): List[Tree] =
     @tailrec
     def read(acc: ListBuffer[Tree]): List[Tree] =
@@ -892,7 +896,8 @@ class TreeUnpickler(
       PackageTypeRef(readName)
     case SHAREDtype =>
       reader.readByte()
-      forkAt(reader.readAddr()).readType
+      val addr = reader.readAddr()
+      recursiveTypeAtAddr.getOrElse(addr, sharedTypesCache.getOrElseUpdate(addr, forkAt(addr).readType))
     case TERMREFdirect =>
       reader.readByte()
       val sym = readSymRef
@@ -973,14 +978,18 @@ class TreeUnpickler(
       fileCtx.getEnclosingBinders(lambdaAddr).asInstanceOf[TypeBinders].paramRefs(num)
     case REFINEDtype =>
       reader.readByte()
-      reader.readEnd()
-      // TODO: support term refinements, then the name won't always be a type name.
-      val refinementName = readName.toTypeName
+      val end = reader.readEnd()
+      val refinementName = readName
       val underlying = readType
-      if (tagFollowShared != TYPEBOUNDS) {
-        throw TreeUnpicklerException(s"Only type refinements are supported. Term refinement $posErrorMsg")
-      }
-      RefinedType(underlying, refinementName, readTypeBounds)
+      if tagFollowShared == TYPEBOUNDS then
+        // Type refinement with a type member of the form `Underlying { type refinementName <:> TypeBounds }`
+        val refinedMemberBounds = readTypeBounds
+        RefinedType(underlying, refinementName.toTypeName, refinedMemberBounds)
+      else
+        // Type refinement with a term member of the form `Underlying { def refinementName: Type }`
+        // TODO Actually take the refined member type into account
+        reader.goto(end)
+        underlying
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
     case tag =>
@@ -1000,9 +1009,13 @@ class TreeUnpickler(
       SingletonTypeTree(readTerm)(spn)
     case REFINEDtpt =>
       val spn = span
+      val cls = ClassSymbolFactory.createRefinedClassSymbol(ctx.owner, spn)
+      recursiveTypeAtAddr(reader.currentAddr) = cls.typeRef
       reader.readByte()
       val end = reader.readEnd()
-      RefinedTypeTree(readTypeTree, readStats(end))(spn)
+      val parent = readTypeTree
+      val statements = readStats(end)(using ctx.withOwner(cls))
+      RefinedTypeTree(parent, statements, cls)(spn)
     case APPLIEDtpt =>
       val spn = span
       reader.readByte()

@@ -7,6 +7,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.ast.Names.*
 import tastyquery.ast.Trees.{DefTree, Tree, DefDef}
 import tastyquery.ast.Flags.*
+import tastyquery.ast.Spans.*
 import tastyquery.ast.Types.*
 import tastyquery.ast.Variances.*
 import tastyquery.Contexts
@@ -401,6 +402,19 @@ object Symbols {
         maybeOuter match
           case pre: ClassSymbol => TypeRef(pre.accessibleThisType, cls)
           case _                => TypeRef(NoPrefix, cls)
+
+    private var myTypeRef: TypeRef | Null = null
+
+    private[tastyquery] final def typeRef(using Context): TypeRef =
+      val local = myTypeRef
+      if local != null then local
+      else
+        val pre = owner match
+          case owner: ClassSymbol => owner.accessibleThisType
+          case _                  => NoPrefix
+        val typeRef = TypeRef(pre, this)
+        myTypeRef = typeRef
+        typeRef
   }
 
   // TODO: typename or term name?
@@ -480,6 +494,14 @@ object Symbols {
       ClassSymbol(name, owner)
 
     override def castSymbol(symbol: Symbol): ClassSymbol = symbol.asInstanceOf[ClassSymbol]
+
+    def createRefinedClassSymbol(owner: OwnerSym, span: Span)(using Context): ClassSymbol =
+      val cls = createSymbol(tpnme.RefinedClassMagic, owner)
+      cls
+        .withDeclaredType(ClassType(cls, ObjectType))
+        .withFlags(EmptyFlagSet)
+      cls.initialised = true
+      cls
   }
 
   object PackageClassSymbolFactory extends SymbolFactory[PackageClassSymbol] {
