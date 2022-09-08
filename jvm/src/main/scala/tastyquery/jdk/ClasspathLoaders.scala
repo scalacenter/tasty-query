@@ -1,42 +1,35 @@
 package tastyquery.jdk
 
-import java.nio.file.Files
-import java.nio.file.Paths
-import java.io.InputStream
-import tastyquery.ast.Trees.Tree
-import java.util.jar.JarFile
-import org.apache.commons.io.FileUtils
-import java.io.File
-import scala.jdk.CollectionConverters.*
-import tastyquery.reader.classfiles.Classpaths.{Classpath, PackageData, ClassData, TastyData}
-import org.apache.commons.io.IOUtils
-import java.nio.file.FileSystems
-import tastyquery.ast.Names.{SimpleName, termName, nme}
-import scala.util.Using
+import java.io.{InputStream, IOException}
+import java.nio.file.*
+import java.nio.file.attribute.BasicFileAttributes
+import java.util.jar.{JarEntry, JarFile}
+
 import scala.collection.mutable
-import java.nio.file.Path
-import java.util.jar.JarEntry
-import tastyquery.ast.Names
 import scala.reflect.NameTransformer
+import scala.util.Using
+
+import org.apache.commons.io.IOUtils
+
+import tastyquery.ast.Names.{SimpleName, termName, nme}
+import tastyquery.reader.classfiles.Classpaths.{Classpath, PackageData, ClassData, TastyData}
 
 object ClasspathLoaders {
 
-  enum FileKind {
+  enum FileKind(val ext: String):
+    case Class extends FileKind("class")
+    case Tasty extends FileKind("tasty")
 
-    case Class, Tasty
+    def appliesTo(path: Path): Boolean =
+      path.getFileName().nn.toString().nn.endsWith("." + ext)
+  end FileKind
 
-    lazy val ext: String = this match
-      case FileKind.Class => "class"
-      case FileKind.Tasty => "tasty"
-
-  }
-
-  def splitClasspath(raw: String): List[String] = {
+  def splitClasspath(raw: String): List[Path] = {
     import scala.language.unsafeNulls
-    raw.split(File.pathSeparator).toList
+    raw.split(java.io.File.pathSeparator).toList.map(Paths.get(_))
   }
 
-  def read(classpath: List[String], kinds: Set[FileKind]): Classpath = {
+  def read(classpath: List[Path], kinds: Set[FileKind]): Classpath = {
     def load(): IArray[PackageData] = {
 
       def classAndPackage(binaryName: SimpleName): (SimpleName, SimpleName) = {
@@ -108,11 +101,11 @@ object ClasspathLoaders {
     IArray.from(bytes)
   }
 
-  private def classpathToEntries(classpath: List[String]): List[ClasspathEntry] =
+  private def classpathToEntries(classpath: List[Path]): List[ClasspathEntry] =
     classpath.flatMap(e =>
-      if (Files.exists(Paths.get(e))) {
-        if (e.endsWith(".jar")) ClasspathEntry.Jar(e) :: Nil
-        else if (Files.isDirectory(Paths.get(e))) ClasspathEntry.Directory(e) :: Nil
+      if (Files.exists(e)) {
+        if (Files.isDirectory(e)) ClasspathEntry.Directory(e) :: Nil
+        else if (e.getFileName().toString().endsWith(".jar")) ClasspathEntry.Jar(e) :: Nil
         else Nil
       } else {
         Nil
@@ -120,8 +113,8 @@ object ClasspathLoaders {
     )
 
   enum ClasspathEntry {
-    case Jar(path: String)
-    case Directory(path: String)
+    case Jar(path: Path)
+    case Directory(path: Path)
 
     def walkFiles[T](kinds: FileKind*)(op: (FileKind, String, String, IArray[Byte]) => T): Map[FileKind, List[T]] =
       this match {
@@ -129,7 +122,7 @@ object ClasspathLoaders {
           val exts0 = kinds.map(kind => s".${kind.ext}")
           def getFullPath(filename: String): String = s"$path:$filename"
           val matching = mutable.HashMap.from(kinds.map(kind => kind -> mutable.ListBuffer.empty[JarEntry]))
-          Using(JarFile(path)) { jar =>
+          Using(JarFile(path.toFile())) { jar =>
             val results = {
               import scala.language.unsafeNulls
               def matches(je: JarEntry): Boolean = {
@@ -155,27 +148,35 @@ object ClasspathLoaders {
             }
             results
           }.get
+
         case Directory(path) =>
           import scala.language.unsafeNulls
-          def getClassName(f: File): Path = {
-            val dirp = Paths.get(path)
-            dirp.relativize(f.toPath)
-          }
-          val matching = mutable.HashMap.from(kinds.map(kind => kind -> mutable.ListBuffer.empty[File]))
-          val matched = FileUtils.listFiles(new File(path), kinds.map(_.ext).toArray, true)
-          matched.forEach { f =>
-            val kind = kinds.find { kind =>
-              val name = f.getName
-              name.endsWith(kind.ext)
-            }.get
-            matching(kind) += f
-          }
+
+          val matching = mutable.HashMap.from(kinds.map(kind => kind -> mutable.ListBuffer.empty[Path]))
+
+          Files.walkFileTree(
+            path,
+            new FileVisitor[Path] {
+              def preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult =
+                FileVisitResult.CONTINUE
+
+              def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult =
+                for applicableKind <- kinds.find(_.appliesTo(file)) do matching(applicableKind) += file
+                FileVisitResult.CONTINUE
+
+              def visitFileFailed(file: Path, exc: IOException): FileVisitResult =
+                FileVisitResult.CONTINUE
+
+              def postVisitDirectory(dir: Path, exc: IOException): FileVisitResult =
+                FileVisitResult.CONTINUE
+            }
+          )
+
           matching.map { case ext -> files =>
             ext ->
               files.toList.map { f =>
-                Using(FileUtils.openInputStream(f))(is =>
-                  op(ext, getClassName(f).toString, f.getAbsolutePath(), loadBytes(is))
-                ).get
+                val bytes = IArray.from(Files.readAllBytes(f))
+                op(ext, path.relativize(f).toString(), f.toString(), bytes)
               }
           }.toMap
       }
