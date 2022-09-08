@@ -203,8 +203,14 @@ class PickleReader {
         val cls =
           if isClassRoot then clsCtx.classRoot
           else if isModuleClassRoot then clsCtx.moduleClassRoot
-          else ClassSymbolFactory.createSymbol(name.toTypeName, owner) // TODO Read inner members
-        //cls.withDeclaredType(ClassType(cls, ObjectType))
+          else
+            val sym = ClassSymbolFactory.createSymbol(name.toTypeName, owner) // TODO Read inner members
+            if name.toTypeName.wrapsObjectName then
+              val module = owner
+                .asInstanceOf[DeclaringSymbol]
+                .getDeclInternal(name.toTermName.stripObjectSuffix)
+              module.foreach(m => m.withDeclaredType(sym.typeRef))
+            sym
         // the same class can be found twice in the symbol table
         if cls.initialised then return cls
         cls.initialised = true
@@ -215,8 +221,15 @@ class PickleReader {
         val tpe = readSymType()
         sym.withDeclaredType(tpe)
       case MODULEsym =>
-        if isModuleRoot then clsCtx.moduleRoot
-        else RegularSymbolFactory.createSymbol(name.toTermName, owner) // TODO Assign type to companion module class
+        if isModuleRoot then clsCtx.moduleRoot.withDeclaredType(clsCtx.moduleClassRoot.typeRef)
+        else
+          val moduleClass = owner
+            .asInstanceOf[DeclaringSymbol]
+            .getDeclInternal(name.toTermName.withObjectSuffix.toTypeName)
+          val sym =
+            RegularSymbolFactory.createSymbol(name.toTermName, owner)
+          moduleClass.foreach(cls => sym.withDeclaredType(cls.asInstanceOf[ClassSymbol].typeRef))
+          sym
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     })
