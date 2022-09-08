@@ -22,7 +22,7 @@ case class Signature(paramsSig: List[ParamSig], resSig: TypeName) derives CanEqu
   }.mkString("(", ",", ")") + ":" + resSig.toString
 
 object Signature {
-  def fromMethodOrPoly(info: MethodType | PolyType)(using Context): Signature =
+  def fromMethodic(info: MethodicType)(using Context): Signature =
     def rec(info: Type, acc: List[ParamSig]): Signature =
       info match {
         case info: MethodType =>
@@ -33,5 +33,9 @@ object Signature {
         case tpe =>
           Signature(acc, ErasedTypeRef.erase(tpe))
       }
-    rec(info, Nil)
+
+    info match
+      case ExprType(resType) => Signature(Nil, ErasedTypeRef.erase(resType))
+      case _                 => rec(info, Nil)
+  end fromMethodic
 }
