@@ -41,24 +41,34 @@ object Types {
             case name: SimpleName =>
               name.append(suffix)
 
+      def classRef(arrayDims: Int, cls: ClassSymbol): TermName =
+        cls.erasedName.toTermName match
+          case SuffixedName(NameTags.OBJECTCLASS, full) => specialise(arrayDims, full).withObjectSuffix
+          case full                                     => specialise(arrayDims, full)
+
       def rec(arrayDims: Int, tpe: Type): TermName = tpe.widen match
-        case AppliedType(tycon, List(targ)) if tycon.isRef(scalaArray) =>
-          targ match
-            case _: TypeBounds => // TODO: fix
-              rec(arrayDims + 1, ObjectType)
-            case targ: Type =>
-              rec(arrayDims + 1, targ)
-        case AppliedType(tycon, _) =>
-          rec(arrayDims, tycon)
+        case tpe @ AppliedType(tycon, targs) =>
+          if tycon.isRef(scalaArray) then
+            val List(targ) = targs: @unchecked
+            targ match
+              case _: TypeBounds => // TODO: fix
+                rec(arrayDims + 1, ObjectType)
+              case targ: Type =>
+                rec(arrayDims + 1, targ)
+          else
+            tycon match
+              case tycon: Symbolic if tycon.symbol.isClass =>
+                // Fast path
+                classRef(arrayDims, tycon.symbol.asClass)
+              case _ =>
+                rec(arrayDims, tpe.superType)
         case tpe: Symbolic =>
           tpe.resolveToSymbol match
             case cls: ClassSymbol =>
-              cls.erasedName.toTermName match
-                case SuffixedName(NameTags.OBJECTCLASS, full) => specialise(arrayDims, full).withObjectSuffix
-                case full                                     => specialise(arrayDims, full)
-            case sym => // TODO: abstract types
+              classRef(arrayDims, cls)
+            case sym =>
               if sym.isAllOf(ClassTypeParam) then rec(arrayDims, sym.declaredType.upperBound)
-              else throw IllegalStateException(s"Cannot erase symbolic type $tpe, with symbol $sym")
+              else rec(arrayDims, sym.declaredType)
         case tpe: TypeParamRef =>
           rec(arrayDims, tpe.bounds.high)
         case tpe =>
@@ -133,7 +143,7 @@ object Types {
     }
 
     final def applyIfParameterized(args: List[Type])(using Context): Type =
-      if (typeParams.nonEmpty) appliedTo(args) else this
+      if (args.nonEmpty /*typeParams.nonEmpty*/ ) appliedTo(args) else this
 
     /** Substitute all types of the form `TypeParamRef(from, N)` by `TypeParamRef(to, N)`. */
     final def subst(from: Binders, to: Binders)(using Context): Type =
@@ -701,7 +711,7 @@ object Types {
 
     override protected def designator_=(d: Designator): Unit = myDesignator = d
 
-    override def underlying(using Context): Type = ???
+    override def underlying(using Context): Type = symbol.declaredType
 
     override def findMember(name: Name, pre: Type)(using Context): Symbol =
       val sym = resolveToSymbol
@@ -1019,7 +1029,7 @@ object Types {
 
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, TypeLambda] = TypeLambda
 
-    override def underlying(using Context): Type = ???
+    override def underlying(using Context): Type = AnyType
 
     override def toString: String =
       if evaluating then s"TypeLambda($paramNames)(<evaluating>)"

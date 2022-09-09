@@ -3,6 +3,7 @@ package tastyquery
 import scala.collection.mutable
 
 import tastyquery.Contexts.Context
+import tastyquery.ast.Flags.*
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.*
@@ -725,5 +726,29 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val BooleanOrdering = resolve(name"scala" / name"math" / tname"Ordering" / obj / name"Boolean")
     val ord = RichBoolean.getDecl(name"ord").get
     assert(clue(ord.declaredType).isRef(BooleanOrdering))
+  }
+
+  testWithContext("scala2-type-alias") {
+    val PredefString = resolve(name"scala" / tname"Predef" / obj / tname"String")
+    val JLString = resolve(name"java" / name"lang" / tname"String")
+
+    assert(PredefString.declaredType.isRef(JLString))
+  }
+
+  testWithContext("scala2-module-and-def-with-same-name") {
+    val StringContext = resolve(name"scala" / tname"StringContext").asClass
+    val sModuleClass = resolve(name"scala" / tname"StringContext" / tname"s" / obj)
+
+    val sDecls = StringContext.getDecls(name"s")
+    assert(clue(sDecls).sizeIs == 2)
+
+    val (sModule, sDef) =
+      if sDecls(0).is(Module) then (sDecls(0), sDecls(1))
+      else
+        assert(sDecls(1).is(Module))
+        (sDecls(1), sDecls(0))
+
+    assert(clue(sModule.declaredType).isRef(sModuleClass))
+    assert(clue(sDef.declaredType).isInstanceOf[MethodType])
   }
 }
