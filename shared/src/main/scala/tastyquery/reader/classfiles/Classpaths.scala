@@ -130,13 +130,13 @@ object Classpaths {
             entry match
               case Entry.ClassAndTasty(_, tasty) =>
                 // TODO: verify UUID of tasty matches classfile, then parse symbols
-                enterTasty(root, tasty)(using ctx.withFile(root, tasty.debugPath))
+                enterTasty(root, tasty)
               case _ => throw MissingTopLevelTasty(root)
           case _ =>
             false // no initialisation step to take
       end inspectClass
 
-      def enterTasty(root: Loader.Root, tastyData: TastyData)(using FileContext, permissions.LoadRoot): Boolean =
+      def enterTasty(root: Loader.Root, tastyData: TastyData)(using permissions.LoadRoot): Boolean =
         // TODO: test reading tree from dependency not directly queried??
         val unpickler = TastyUnpickler(tastyData.bytes)
         val trees = unpickler
@@ -144,7 +144,7 @@ object Classpaths {
             TastyUnpickler.TreeSectionUnpickler(unpickler.unpickle(new TastyUnpickler.PositionSectionUnpickler))
           )
           .get
-          .unpickle(using fileCtx)
+          .unpickle(tastyData.debugPath)
         if Contexts.initialisedRoot(root) then
           topLevelTastys += root -> trees
           true
@@ -162,7 +162,7 @@ object Classpaths {
             inspectClass(root, entry.classData, entry)
           case entry: Entry.TastyOnly =>
             // Tested in `SymbolSuite`, `ReadTreeSuite`, these do not need to see class files.
-            enterTasty(root, entry.tastyData)(using ctx.withFile(root, entry.tastyData.debugPath))
+            enterTasty(root, entry.tastyData)
       }
     end completeRoots
 
