@@ -678,7 +678,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("console-outvar-issue-78") {
-    val Console = resolve(name"scala" / tname"Console").asClass
+    val Console = resolve(name"scala" / tname"Console" / obj).asClass
     val DynamicVariable = resolve(name"scala" / name"util" / tname"DynamicVariable").asClass
 
     val outVar = Console.getDecl(name"outVar").get
@@ -689,5 +689,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val predef = resolve(name"scala" / name"Predef")
     val Predef = resolve(name"scala" / tname"Predef" / obj).asClass
     assert(clue(predef.declaredType).isRef(Predef))
+  }
+
+  testWithContext("scala.math.Ordering") {
+    val OrderingModClass = resolve(name"scala" / name"math" / tname"Ordering" / obj).asClass
+    assert(OrderingModClass.getDecl(name"by").isDefined)
   }
 }
