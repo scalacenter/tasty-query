@@ -790,9 +790,8 @@ class TreeUnpickler(
     case THIS =>
       val spn = span
       reader.readByte()
-      val typ = readType
-      // TODO: assign type
-      This(None)(spn)
+      val typ = readType.asInstanceOf[TypeRef]
+      This(Some(TypeIdent(typ.name)(typ)(spn)))(spn)
     case TERMREF =>
       val spn = span
       reader.readByte()

@@ -857,11 +857,12 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickle("super", simple_trees / tname"Super") { tree =>
-    val superMatch: StructureCheck = { case Super(This(None), None) =>
+    val superMatch: StructureCheck = { case Super(This(Some(TypeIdent(TypeName(SimpleName("Super"))))), None) =>
     }
     assert(containsSubtree(superMatch)(clue(tree)))
 
-    val mixinSuper: StructureCheck = { case Super(This(None), Some(TypeIdent(TypeName(SimpleName("Base"))))) =>
+    val mixinSuper: StructureCheck = {
+      case Super(This(Some(TypeIdent(TypeName(SimpleName("Super"))))), Some(TypeIdent(TypeName(SimpleName("Base"))))) =>
     }
     assert(containsSubtree(mixinSuper)(clue(tree)))
   }
@@ -1678,5 +1679,18 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
           ) =>
     }
     assert(containsSubtree(typerefCheck)(clue(tree)))
+  }
+
+  testUnpickle("thistype", simple_trees / tname"ThisType") { tree =>
+    val thisTypeCheck: StructureCheck = {
+      case DefDef(
+            SimpleName("m"),
+            _ :: Nil,
+            SingletonTypeTree(This(Some(TypeIdent(TypeName(SimpleName("ThisType")))))),
+            This(Some(TypeIdent(TypeName(SimpleName("ThisType"))))),
+            _
+          ) =>
+    }
+    assert(containsSubtree(thisTypeCheck)(clue(tree)))
   }
 }
