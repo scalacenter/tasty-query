@@ -56,9 +56,9 @@ object Types {
               cls.erasedName.toTermName match
                 case SuffixedName(NameTags.OBJECTCLASS, full) => specialise(arrayDims, full).withObjectSuffix
                 case full                                     => specialise(arrayDims, full)
-            case sym => // TODO: abstract types
+            case sym =>
               if sym.isAllOf(ClassTypeParam) then rec(arrayDims, sym.declaredType.upperBound)
-              else throw IllegalStateException(s"Cannot erase symbolic type $tpe, with symbol $sym")
+              else rec(arrayDims, sym.declaredType)
         case tpe: TypeParamRef =>
           rec(arrayDims, tpe.bounds.high)
         case tpe =>

@@ -59,4 +59,11 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(identity.signedName, "identity", "(1,scala.Any):scala.Any")
   }
 
+  testWithContext("RichInt") {
+    val RichInt = resolve(name"scala" / name"runtime" / tname"RichInt").asClass
+
+    val toHexString = RichInt.getDecl(name"toHexString").get
+    assertIsSignedName(toHexString.signedName, "toHexString", "():java.lang.String")
+  }
+
 end SignatureSuite
