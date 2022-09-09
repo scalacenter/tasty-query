@@ -192,7 +192,10 @@ class PickleReader {
     val sym = tag match {
       case TYPEsym | ALIASsym =>
         var name1 = name.toTypeName
-        RegularSymbolFactory.createSymbol(name1, owner)
+        val sym = RegularSymbolFactory.createSymbol(name1, owner)
+        storeResultInEntries(sym)
+        val tpe = readSymType()
+        sym.withDeclaredType(tpe)
       case CLASSsym =>
         val cls =
           if isClassRoot then clsCtx.classRoot

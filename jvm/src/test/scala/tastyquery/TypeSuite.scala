@@ -726,4 +726,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val ord = RichBoolean.getDecl(name"ord").get
     assert(clue(ord.declaredType).isRef(BooleanOrdering))
   }
+
+  testWithContext("scala2-type-alias") {
+    val PredefString = resolve(name"scala" / tname"Predef" / obj / tname"String")
+    val JLString = resolve(name"java" / name"lang" / tname"String")
+
+    assert(PredefString.declaredType.isRef(JLString))
+  }
 }
