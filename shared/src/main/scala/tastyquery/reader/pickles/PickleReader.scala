@@ -205,7 +205,7 @@ class PickleReader {
             if name.toTypeName.wrapsObjectName then
               val module = owner
                 .asInstanceOf[DeclaringSymbol]
-                .getDeclInternal(name.toTermName.stripObjectSuffix)
+                .getModuleDeclInternal(name.toTermName.stripObjectSuffix)
               module.foreach(m => m.withDeclaredType(sym.typeRef))
             sym
         assert(!cls.initialised, s"attempting to initialize the class $cls a second time")
@@ -221,7 +221,7 @@ class PickleReader {
         else
           val moduleClass = owner
             .asInstanceOf[DeclaringSymbol]
-            .getDeclInternal(name.toTermName.withObjectSuffix.toTypeName)
+            .getModuleDeclInternal(name.toTermName.withObjectSuffix.toTypeName)
           val sym =
             RegularSymbolFactory.createSymbol(name.toTermName, owner)
           moduleClass.foreach(cls => sym.withDeclaredType(cls.asInstanceOf[ClassSymbol].typeRef))
