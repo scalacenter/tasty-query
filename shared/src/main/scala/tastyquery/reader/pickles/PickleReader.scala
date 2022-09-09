@@ -177,18 +177,11 @@ class PickleReader {
       clsCtx.root.rootName
     ) //&& (owner == moduleClassRoot.owner) && flags.is(Module)
 
-    def finishSym(sym: Symbol): Symbol = {
-      // TODO: enter in scope
-      sym match {
-        case sym: ClassSymbol =>
-        case sym =>
-          sym.outer match {
-            case scope: DeclaringSymbol => scope.addDecl(sym)
-            case _                      =>
-          }
+    def enterIntoScope(sym: Symbol): Unit =
+      sym.outer match {
+        case scope: DeclaringSymbol => scope.addDecl(sym)
+        case _                      => ()
       }
-      sym
-    }
 
     def readSymType(): Type =
       try at(infoRef)(readType())
@@ -196,7 +189,7 @@ class PickleReader {
         case t: Throwable =>
           throw new IllegalStateException(s"error while unpickling the type of $owner.$name", t)
 
-    val sym = finishSym(tag match {
+    val sym = tag match {
       case TYPEsym | ALIASsym =>
         var name1 = name.toTypeName
         RegularSymbolFactory.createSymbol(name1, owner)
@@ -205,7 +198,7 @@ class PickleReader {
           if isClassRoot then clsCtx.classRoot
           else if isModuleClassRoot then clsCtx.moduleClassRoot
           else
-            val sym = ClassSymbolFactory.createSymbol(name.toTypeName, owner) // TODO Read inner members
+            val sym = ClassSymbolFactory.createSymbol(name.toTypeName, owner)
             if name.toTypeName.wrapsObjectName then
               val module = owner
                 .asInstanceOf[DeclaringSymbol]
@@ -232,7 +225,8 @@ class PickleReader {
           sym
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
-    })
+    }
+    enterIntoScope(sym)
     sym
       .withFlags(flags)
       .withPrivateWithin(privateWithin)

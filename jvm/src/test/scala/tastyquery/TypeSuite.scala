@@ -695,4 +695,28 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val OrderingModClass = resolve(name"scala" / name"math" / tname"Ordering" / obj).asClass
     assert(OrderingModClass.getDecl(name"by").isDefined)
   }
+
+  testWithContext("scala.math.Ordering.IntOrdering") {
+    val IntOrderingClass = resolve(name"scala" / name"math" / tname"Ordering" / obj / tname"IntOrdering").asClass
+    val IntClass = resolve(name"scala" / tname"Int").asClass
+
+    val compare = IntOrderingClass.getDecl(name"compare").get
+    val mt = compare.declaredType.asInstanceOf[MethodType]
+    assert(clue(mt.paramTypes(0)).isRef(IntClass))
+    assert(clue(mt.paramTypes(1)).isRef(IntClass))
+    assert(clue(mt.resultType).isRef(IntClass))
+  }
+
+  testWithContext("scala.math.Ordering.Float.TotalOrdering") {
+    val path = name"scala" / name"math" / tname"Ordering" / obj / tname"Float" / obj / tname"TotalOrdering"
+    val FloatTotalOrderingClass = resolve(path).asClass
+    val IntClass = resolve(name"scala" / tname"Int").asClass
+    val FloatClass = resolve(name"scala" / tname"Float").asClass
+
+    val compare = FloatTotalOrderingClass.getDecl(name"compare").get
+    val mt = compare.declaredType.asInstanceOf[MethodType]
+    assert(clue(mt.paramTypes(0)).isRef(FloatClass))
+    assert(clue(mt.paramTypes(1)).isRef(FloatClass))
+    assert(clue(mt.resultType).isRef(IntClass))
+  }
 }
