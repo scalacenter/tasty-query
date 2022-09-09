@@ -66,4 +66,11 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(toHexString.signedName, "toHexString", "():java.lang.String")
   }
 
+  testWithContext("Product") {
+    val Product = resolve(name"scala" / tname"Product").asClass
+
+    val productIterator = Product.getDecl(name"productIterator").get
+    assertIsSignedName(productIterator.signedName, "productIterator", "():scala.collection.Iterator")
+  }
+
 end SignatureSuite
