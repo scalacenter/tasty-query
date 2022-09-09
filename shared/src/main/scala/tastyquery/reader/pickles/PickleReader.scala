@@ -192,7 +192,10 @@ class PickleReader {
     val sym = tag match {
       case TYPEsym | ALIASsym =>
         var name1 = name.toTypeName
-        RegularSymbolFactory.createSymbol(name1, owner)
+        val sym = RegularSymbolFactory.createSymbol(name1, owner)
+        storeResultInEntries(sym)
+        val tpe = readSymType()
+        sym.withDeclaredType(tpe)
       case CLASSsym =>
         val cls =
           if isClassRoot then clsCtx.classRoot
@@ -201,8 +204,8 @@ class PickleReader {
             val sym = ClassSymbolFactory.createSymbol(name.toTypeName, owner)
             if name.toTypeName.wrapsObjectName then
               val module = owner
-                .asInstanceOf[DeclaringSymbol]
-                .getDeclInternal(name.toTermName.stripObjectSuffix)
+                .asClass
+                .getModuleDeclInternal(name.toTermName.stripObjectSuffix)
               module.foreach(m => m.withDeclaredType(sym.typeRef))
             sym
         assert(!cls.initialised, s"attempting to initialize the class $cls a second time")

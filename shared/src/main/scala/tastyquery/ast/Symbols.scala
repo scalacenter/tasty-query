@@ -277,6 +277,11 @@ object Symbols {
             else None // TODO: this should be an error
           case _ => None
 
+    private[tastyquery] final def getModuleDeclInternal(name: Name)(using Context): Option[Symbol] =
+      myDeclarations.get(name) match
+        case Some(decls) => decls.find(_.is(Module))
+        case _ => None
+
     private[Symbols] final def hasOverloads(name: SignedName): Boolean =
       myDeclarations.get(name.underlying) match
         case Some(decls) => decls.sizeIs > 1
