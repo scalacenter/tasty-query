@@ -687,7 +687,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
   testWithContext("scala-predef-declared-type") {
     val predef = resolve(name"scala" / name"Predef")
-    val Predef = resolve(name"scala" / tname"Predef" / obj).asClass
+    val Predef = resolve(name"scala" / tname"Predef" / obj)
     assert(clue(predef.declaredType).isRef(Predef))
   }
 
@@ -718,5 +718,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(mt.paramTypes(0)).isRef(FloatClass))
     assert(clue(mt.paramTypes(1)).isRef(FloatClass))
     assert(clue(mt.resultType).isRef(IntClass))
+  }
+
+  testWithContext("read-scala2-type-ref-type") {
+    val RichBoolean = resolve(name"scala" / name"runtime" / tname"RichBoolean").asClass
+    val BooleanOrdering = resolve(name"scala" / name"math" / tname"Ordering" / obj / name"Boolean")
+    val ord = RichBoolean.getDecl(name"ord").get
+    assert(clue(ord.declaredType).isRef(BooleanOrdering))
   }
 }

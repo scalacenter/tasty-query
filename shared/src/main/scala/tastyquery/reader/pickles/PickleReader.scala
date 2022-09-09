@@ -393,7 +393,7 @@ class PickleReader {
         //val tycon = select(pre, sym)
         val tycon = designator match
           case sym: Symbol                 => select(pre, sym)
-          case external: ExternalSymbolRef => external.toTypeRef(pre)
+          case external: ExternalSymbolRef => external.toNamedType(pre)
         val args = pkl.until(end, () => readTypeRef())
         /*if (sym == defn.ByNameParamClass2x) ExprType(args.head)
         else if (ctx.settings.scalajs.value && args.length == 2 &&

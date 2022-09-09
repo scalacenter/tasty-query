@@ -458,7 +458,8 @@ object Types {
         sym
       case Scala2ExternalSymRef(owner, path) =>
         val sym = path.foldLeft(owner) { (owner, name) =>
-          owner.asClass.getDecl(name).getOrElse {
+          val cls = if owner.isTerm then owner.declaredType.asInstanceOf[Symbolic].symbol else owner
+          cls.asClass.getDecl(name).getOrElse {
             throw new SymbolLookupException(name, s"cannot find symbol $owner.$name")
           }
         }
