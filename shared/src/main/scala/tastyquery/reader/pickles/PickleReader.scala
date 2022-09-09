@@ -151,10 +151,11 @@ class PickleReader {
     // symbols that were pickled with Pickler.writeSymInfo
     val nameref = pkl.readNat()
     val name0 = at(nameref)(readName())
-    val name = name0.decode
+    val name1 = name0.decode
     val owner = readLocalSymbolRef()
 
-    val flags = readFlags(name.isTypeName)
+    val flags = readFlags(name1.isTypeName)
+    val name = if flags.is(ModuleClass) then name1.toTermName.withObjectSuffix.toTypeName else name1
 
     val (privateWithin, infoRef) = {
       val ref = pkl.readNat()
@@ -211,8 +212,7 @@ class PickleReader {
                 .getDeclInternal(name.toTermName.stripObjectSuffix)
               module.foreach(m => m.withDeclaredType(sym.typeRef))
             sym
-        // the same class can be found twice in the symbol table
-        if cls.initialised then return cls
+        assert(!cls.initialised, s"attempting to initialize the class $cls a second time")
         cls.initialised = true
         cls
       case VALsym =>
@@ -250,7 +250,10 @@ class PickleReader {
     if pickleFlags.isFinal then flags |= Final
     if pickleFlags.isMethod then flags |= Method
     if pickleFlags.isInterface then flags |= NoInitsInterface
-    if pickleFlags.isModule then flags |= (if isType then Module else Module | Lazy)
+    if pickleFlags.isModule then
+      flags |= Module
+      if isType then flags |= ModuleClassCreationFlags
+      else flags |= ModuleValCreationFlags
     if pickleFlags.isImplicit then flags |= Implicit
     if pickleFlags.isSealed then flags |= Sealed
     if pickleFlags.isCase then flags |= Case
