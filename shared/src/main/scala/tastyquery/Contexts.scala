@@ -22,7 +22,6 @@ object Contexts {
   /** The current context */
   inline def fileCtx(using ctx: FileContext): FileContext = ctx
   transparent inline def ctx(using ctx: Context): Context = ctx
-  transparent inline def clsCtx(using clsCtx: ClassContext): ClassContext = clsCtx
   transparent inline def defn(using ctx: Context): ctx.defn.type = ctx.defn
 
   def init(classpath: Classpath): Context =
@@ -45,9 +44,6 @@ object Contexts {
 
     def withFile(root: Loader.Root, filename: String)(using Classpaths.permissions.LoadRoot): FileContext =
       new FileContext(defn, root, filename, classloader)
-
-    def withRoot(root: Loader.Root)(using Classpaths.permissions.LoadRoot): ClassContext =
-      new ClassContext(defn, classloader, defn.RootPackage, root)
 
     /** basically an internal method for loading Java classes embedded in Java descriptors */
     private[tastyquery] def getClassFromBinaryName(binaryName: String): Either[SymResolutionProblem, ClassSymbol] =
@@ -194,50 +190,6 @@ object Contexts {
       fakeJavaLangClassIfNotFound("Error")
       fakeJavaLangClassIfNotFound("Exception")
     }
-  }
-
-  class ClassContext private[Contexts] (
-    override val defn: Definitions,
-    override val classloader: Classpaths.Loader,
-    val owner: Symbol,
-    val root: Loader.Root
-  ) extends Context(defn, classloader) {
-
-    private inline given ClassContext = this
-
-    /** The class root of this Context, will create and enter the symbol if it does not exist yet. */
-    def classRoot: ClassSymbol =
-      val name = root.rootName.toTypeName
-      root.pkg
-        .getDeclInternal(name)
-        .collect { case cls: ClassSymbol => cls }
-        .getOrElse(createClassSymbol(name, root.pkg).useWith(root.pkg.addDecl))
-
-    /** The module class root of this Context, will create and enter the symbol if it does not exist yet. */
-    def moduleClassRoot: ClassSymbol =
-      val name = root.rootName.withObjectSuffix.toTypeName
-      root.pkg
-        .getDeclInternal(name)
-        .collect { case modcls: ClassSymbol =>
-          modcls
-        }
-        .getOrElse(createClassSymbol(name, root.pkg).useWith(root.pkg.addDecl))
-
-    /** The module value root of this Context, will create and enter the symbol if it does not exist yet. */
-    def moduleRoot: RegularSymbol =
-      val name = root.rootName
-      root.pkg
-        .getDeclInternal(name)
-        .collect { case mod: RegularSymbol =>
-          mod
-        }
-        .getOrElse(createSymbol(name, root.pkg).useWith(root.pkg.addDecl))
-
-    /*def createSymbol[T <: Symbol](name: Name, factory: SymbolFactory[T], addToDecls: Boolean): T =
-      val sym = factory.createSymbol(name, owner)
-      if (addToDecls) owner.addDecl(sym)
-      sym*/
-
   }
 
   /** FileLocalInfo maintains file-local information, used during unpickling:

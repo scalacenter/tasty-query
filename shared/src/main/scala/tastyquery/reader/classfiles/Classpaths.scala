@@ -1,17 +1,15 @@
 package tastyquery.reader.classfiles
 
-import tastyquery.ast.Names.SimpleName
-import tastyquery.Contexts
-import tastyquery.Contexts.{Context, ctx, fileCtx, defn}
 import scala.collection.mutable
-import tastyquery.ast.Names.{Name, TermName, TypeName, nme, termName, str}
-import tastyquery.ast.Symbols.{Symbol, PackageClassSymbol, ClassSymbol, DeclaringSymbol}
+
+import tastyquery.Contexts
+import tastyquery.Contexts.*
+import tastyquery.ast.Names.*
+import tastyquery.ast.Symbols.*
+import tastyquery.ast.Trees.Tree
 import tastyquery.reader.TastyUnpickler
 
 import ClassfileParser.ClassKind
-import tastyquery.Contexts.ClassContext
-import tastyquery.Contexts.FileContext
-import tastyquery.ast.Trees.Tree
 
 import tastyquery.util.syntax.chaining.given
 
@@ -118,7 +116,7 @@ object Classpaths {
     private def completeRoots(root: Loader.Root, entry: Entry)(using Context): Boolean =
 
       def inspectClass(root: Loader.Root, classData: ClassData, entry: Entry)(
-        using ClassContext,
+        using Context,
         permissions.LoadRoot
       ): Boolean =
         ClassfileParser.readKind(classData).toTry.get match
@@ -126,7 +124,7 @@ object Classpaths {
             ClassfileParser.loadScala2Class(structure, runtimeAnnotStart).toTry.get
             Contexts.initialisedRoot(root)
           case ClassKind.Java(structure, sig) =>
-            ClassfileParser.loadJavaClass(structure, sig).toTry.get
+            ClassfileParser.loadJavaClass(root.pkg, root.rootName, structure, sig).toTry.get
             Contexts.initialisedRoot(root)
           case ClassKind.TASTy =>
             entry match
@@ -157,11 +155,11 @@ object Classpaths {
         entry match
           case entry: Entry.ClassOnly =>
             // Tested in `TypeSuite` - aka Java and Scala 2 dependencies
-            inspectClass(root, entry.classData, entry)(using ctx.withRoot(root))
+            inspectClass(root, entry.classData, entry)
           case entry: Entry.ClassAndTasty =>
             // Tested in `TypeSuite` - read Tasty file that may reference Java and Scala 2 dependencies
             // maybe we do not need to parse the class, however the classfile could be missing the TASTY attribute.
-            inspectClass(root, entry.classData, entry)(using ctx.withRoot(root))
+            inspectClass(root, entry.classData, entry)
           case entry: Entry.TastyOnly =>
             // Tested in `SymbolSuite`, `ReadTreeSuite`, these do not need to see class files.
             enterTasty(root, entry.tastyData)(using ctx.withFile(root, entry.tastyData.debugPath))
