@@ -359,6 +359,10 @@ class TreeUnpickler(
         val typeBounds: TypeTree | TypeBounds =
           if tagFollowShared == TYPEBOUNDS then readTypeBounds(using localCtx)
           else readTypeTree(using localCtx)
+        val declaredType = typeBounds match
+          case tpt: TypeTree          => tpt.toType
+          case typeBounds: TypeBounds => WildcardTypeBounds(typeBounds)
+        symbol.withDeclaredType(declaredType)
         TypeMember(name, typeBounds, symbol)(spn).definesTreeOf(symbol)
       }
       // TODO: read modifiers
