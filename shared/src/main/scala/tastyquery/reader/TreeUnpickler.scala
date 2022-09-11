@@ -80,6 +80,7 @@ class TreeUnpickler(
         val tag = reader.nextByte
         val factory = if tag == TEMPLATE then ClassSymbolFactory else RegularSymbolFactory
         val newOwner = fileCtx.createSymbol(start, name, factory, addToDecls = fileCtx.owner.isClass)
+        readSymbolModifiers(newOwner, tag, end)
         reader.until(end)(createSymbols()(using fileCtx.withOwner(newOwner)))
         if tag == TEMPLATE then newOwner.asInstanceOf[ClassSymbol].initialised = true
       case DEFDEF | VALDEF | PARAM | TYPEPARAM =>
@@ -88,15 +89,7 @@ class TreeUnpickler(
         val addToDecls = tag != TYPEPARAM && fileCtx.owner.isClass
         val newSymbol =
           fileCtx.createSymbol(start, name, RegularSymbolFactory, addToDecls)
-        val modsReader = fork
-        modsReader.skipParams()
-        modsReader.skipTree() // tpt
-        val rhsIsEmpty = modsReader.nothingButMods(end)
-        if !rhsIsEmpty then modsReader.skipTree()
-        val (flags, privateWithin) = modsReader.readModifiers(end)
-        val normalizedFlags = normalizeFlags(tag, flags, name, rhsIsEmpty)
-        newSymbol.withFlags(normalizedFlags)
-        privateWithin.foreach(newSymbol.withPrivateWithin)
+        readSymbolModifiers(newSymbol, tag, end)
         reader.until(end)(createSymbols()(using fileCtx.withOwner(newSymbol)))
       case BIND =>
         val end = reader.readEnd()
@@ -200,6 +193,17 @@ class TreeUnpickler(
       tag
     }
   }
+
+  def readSymbolModifiers(sym: Symbol, tag: Int, end: Addr)(using FileContext): Unit =
+    val modsReader = fork
+    modsReader.skipParams()
+    modsReader.skipTree() // tpt
+    val rhsIsEmpty = modsReader.nothingButMods(end)
+    if !rhsIsEmpty then modsReader.skipTree()
+    val (flags, privateWithin) = modsReader.readModifiers(end)
+    val normalizedFlags = normalizeFlags(tag, flags, sym.name, rhsIsEmpty)
+    sym.withFlags(normalizedFlags)
+    privateWithin.foreach(sym.withPrivateWithin)
 
   /** Read modifiers into a set of flags and a privateWithin boundary symbol. */
   def readModifiers(end: Addr)(using FileContext): (FlagSet, Option[Symbol]) =
