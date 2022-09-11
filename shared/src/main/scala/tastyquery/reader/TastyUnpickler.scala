@@ -1,5 +1,6 @@
 package tastyquery.reader
 
+import tastyquery.Contexts.*
 import tastyquery.ast.Names.{nme, *}
 import tastyquery.ast.{ParamSig, Signature, TermSig, TypeLenSig}
 import tastyquery.reader.TreeUnpickler
@@ -14,16 +15,16 @@ import scala.collection.mutable
 object TastyUnpickler {
 
   abstract class SectionUnpickler[R](val name: String) {
-    def unpickle(reader: TastyReader, nameAtRef: NameTable): R
+    def unpickle(reader: TastyReader, nameAtRef: NameTable)(using Context): R
   }
 
   class TreeSectionUnpickler(posUnpickler: Option[PositionUnpickler]) extends SectionUnpickler[TreeUnpickler]("ASTs") {
-    def unpickle(reader: TastyReader, nameAtRef: NameTable): TreeUnpickler =
+    def unpickle(reader: TastyReader, nameAtRef: NameTable)(using Context): TreeUnpickler =
       new TreeUnpickler(reader, nameAtRef, posUnpickler)
   }
 
   class PositionSectionUnpickler extends SectionUnpickler[PositionUnpickler]("Positions") {
-    def unpickle(reader: TastyReader, nameAtRef: NameTable): PositionUnpickler =
+    def unpickle(reader: TastyReader, nameAtRef: NameTable)(using Context): PositionUnpickler =
       new PositionUnpickler(reader, nameAtRef)
   }
 
@@ -112,7 +113,7 @@ class TastyUnpickler(reader: TastyReader) {
     }
   }
 
-  def unpickle[R](sec: SectionUnpickler[R]): Option[R] =
+  def unpickle[R](sec: SectionUnpickler[R])(using Context): Option[R] =
     for (reader <- sectionReader.get(sec.name)) yield sec.unpickle(reader, nameAtRef)
 
   def bytes: Array[Byte] = reader.bytes

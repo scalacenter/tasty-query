@@ -1,6 +1,6 @@
 package tastyquery.reader.classfiles
 
-import tastyquery.Contexts.{Context, ClassContext, ctx, clsCtx}
+import tastyquery.Contexts.*
 import tastyquery.ast.Types
 import tastyquery.ast.Types.*
 import tastyquery.ast.Symbols.*
@@ -13,8 +13,8 @@ import scala.annotation.switch
 
 object Descriptors:
 
-  def parseSupers(superClass: Option[String], interfaces: IArray[String])(using ClassContext): Type =
-    clsCtx.classRoot.withTypeParams(Nil, Nil)
+  def parseSupers(cls: ClassSymbol, superClass: Option[String], interfaces: IArray[String])(using Context): Type =
+    cls.withTypeParams(Nil, Nil)
     val superRef = superClass.map(classRef).getOrElse(ObjectType)
     interfaces.foldLeft(superRef)((parents, interface) => AndType(parents, classRef(interface)))
 

@@ -2,11 +2,11 @@ package tastyquery.reader.pickles
 
 import PickleReader.{PklStream, index, pkl}
 
-import tastyquery.Contexts.ClassContext
+import tastyquery.Contexts.Context
 import tastyquery.ast.Symbols.Symbol
 
 object Unpickler {
-  def loadInfo(sigBytes: IArray[Byte])(using ClassContext): Either[PickleReader.BadSignature, Unit] = {
+  def loadInfo(sigBytes: IArray[Byte])(using Context): Either[PickleReader.BadSignature, Unit] = {
 
     def run(reader: PickleReader, structure: reader.Structure)(using PklStream): Unit = {
       import structure.given

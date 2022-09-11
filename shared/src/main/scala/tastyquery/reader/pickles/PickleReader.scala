@@ -2,26 +2,17 @@ package tastyquery.reader.pickles
 
 import scala.annotation.switch
 
+import tastyquery.Contexts.*
 import tastyquery.ast.Constants.*
 import tastyquery.ast.Flags.*
-import tastyquery.ast.Names.{TermName, termName, TypeName, typeName, nme}
-import tastyquery.ast.Symbols.{Symbol, NoSymbol}
+import tastyquery.ast.Names.*
+import tastyquery.ast.Symbols.*
 import tastyquery.ast.Types.*
-import tastyquery.Contexts.{ClassContext, clsCtx}
 
 import PickleReader.*
 import PickleFormat.*
-import tastyquery.ast.Names.Name
-import tastyquery.ast.Symbols.RegularSymbolFactory
-import tastyquery.ast.Symbols.ClassSymbolFactory
-import tastyquery.ast.Symbols.ClassSymbol
 
 import tastyquery.util.syntax.chaining.given
-import tastyquery.ast.Symbols.DeclaringSymbol
-import tastyquery.ast.Symbols.PackageClassSymbol
-import tastyquery.ast.Trees.TypeApply
-import tastyquery.Contexts.Context
-import tastyquery.ast.Names.SimpleName
 
 class PickleReader {
   opaque type Entries = Array[AnyRef | Null]
@@ -82,22 +73,22 @@ class PickleReader {
     }
   }
 
-  def readLocalSymbolRef()(using ClassContext, PklStream, Entries, Index): Symbol =
+  def readLocalSymbolRef()(using Context, PklStream, Entries, Index): Symbol =
     readMaybeExternalSymbolRef() match
       case sym: Symbol => sym
       case external =>
         errorBadSignature(s"expected local symbol reference but found $external")
 
-  def readLocalSymbolAt(i: Int)(using ClassContext, PklStream, Entries, Index): Symbol =
+  def readLocalSymbolAt(i: Int)(using Context, PklStream, Entries, Index): Symbol =
     readMaybeExternalSymbolAt(i) match
       case sym: Symbol => sym
       case external =>
         errorBadSignature(s"expected local symbol reference but found $external")
 
-  def readMaybeExternalSymbolRef()(using ClassContext, PklStream, Entries, Index): MaybeExternalSymbol =
+  def readMaybeExternalSymbolRef()(using Context, PklStream, Entries, Index): MaybeExternalSymbol =
     readMaybeExternalSymbolAt(pkl.readNat())
 
-  def readMaybeExternalSymbolAt(i: Int)(using ClassContext, PklStream, Entries, Index): MaybeExternalSymbol =
+  def readMaybeExternalSymbolAt(i: Int)(using Context, PklStream, Entries, Index): MaybeExternalSymbol =
     // Similar to at(), but sometimes readMaybeExternalSymbol stores the result itself in entries
     val tOpt = entries(i).asInstanceOf[MaybeExternalSymbol | Null]
     if tOpt == null then {
@@ -110,9 +101,7 @@ class PickleReader {
       res
     } else tOpt
 
-  def readMaybeExternalSymbol(
-    storeInEntriesAt: Int
-  )(using ClassContext, PklStream, Entries, Index): MaybeExternalSymbol = {
+  def readMaybeExternalSymbol(storeInEntriesAt: Int)(using Context, PklStream, Entries, Index): MaybeExternalSymbol = {
     // val start = indexCoord(readIndex) // no need yet to record the position of symbols
     val tag = pkl.readByte()
     val end = pkl.readEnd()
@@ -124,10 +113,10 @@ class PickleReader {
 
     def readExtSymbol(): MaybeExternalSymbol =
       val name = readNameRef() // TODO .decode
-      val owner = if (atEnd) clsCtx.defn.RootPackage else readMaybeExternalSymbolRef()
+      val owner = if (atEnd) ctx.defn.RootPackage else readMaybeExternalSymbolRef()
       name match
         case nme.RootName | nme.RootPackageName =>
-          clsCtx.defn.RootPackage
+          ctx.defn.RootPackage
         case _ =>
           def defaultRef = ExternalSymbolRef(owner, name)
           owner match
@@ -166,17 +155,6 @@ class PickleReader {
       }
     }
 
-    def nameMatches(rootName: Name) = name == rootName
-    def isClassRoot = owner == clsCtx.root.pkg && nameMatches(
-      clsCtx.root.rootName.toTypeName
-    ) //&& (owner == classRoot.owner) && !flags.is(ModuleClass)
-    def isModuleClassRoot = owner == clsCtx.root.pkg && nameMatches(
-      clsCtx.root.rootName.withObjectSuffix.toTypeName
-    ) //&& (owner == moduleClassRoot.owner) && flags.is(Module)
-    def isModuleRoot = owner == clsCtx.root.pkg && nameMatches(
-      clsCtx.root.rootName
-    ) //&& (owner == moduleClassRoot.owner) && flags.is(Module)
-
     def enterIntoScope(sym: Symbol): Unit =
       sym.outer match {
         case scope: DeclaringSymbol => scope.addDecl(sym)
@@ -197,17 +175,12 @@ class PickleReader {
         val tpe = readSymType()
         sym.withDeclaredType(tpe)
       case CLASSsym =>
-        val cls =
-          if isClassRoot then clsCtx.classRoot
-          else if isModuleClassRoot then clsCtx.moduleClassRoot
-          else
-            val sym = ClassSymbolFactory.createSymbol(name.toTypeName, owner)
-            if name.toTypeName.wrapsObjectName then
-              val module = owner
-                .asInstanceOf[DeclaringSymbol]
-                .getModuleDeclInternal(name.toTermName.stripObjectSuffix)
-              module.foreach(m => m.withDeclaredType(sym.typeRef))
-            sym
+        val cls = ClassSymbolFactory.createSymbol(name.toTypeName, owner)
+        if name.toTypeName.wrapsObjectName then
+          val module = owner
+            .asInstanceOf[DeclaringSymbol]
+            .getModuleDeclInternal(name.toTermName.stripObjectSuffix)
+          module.foreach(m => m.withDeclaredType(cls.typeRef))
         assert(!cls.initialised, s"attempting to initialize the class $cls a second time")
         cls.initialised = true
         cls
@@ -217,15 +190,13 @@ class PickleReader {
         val tpe = readSymType()
         sym.withDeclaredType(tpe)
       case MODULEsym =>
-        if isModuleRoot then clsCtx.moduleRoot.withDeclaredType(clsCtx.moduleClassRoot.typeRef)
-        else
-          val moduleClass = owner
-            .asInstanceOf[DeclaringSymbol]
-            .getModuleDeclInternal(name.toTermName.withObjectSuffix.toTypeName)
-          val sym =
-            RegularSymbolFactory.createSymbol(name.toTermName, owner)
-          moduleClass.foreach(cls => sym.withDeclaredType(cls.asInstanceOf[ClassSymbol].typeRef))
-          sym
+        val moduleClass = owner
+          .asInstanceOf[DeclaringSymbol]
+          .getModuleDeclInternal(name.toTermName.withObjectSuffix.toTypeName)
+        val sym =
+          RegularSymbolFactory.createSymbol(name.toTermName, owner)
+        moduleClass.foreach(cls => sym.withDeclaredType(cls.asInstanceOf[ClassSymbol].typeRef))
+        sym
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     }
@@ -321,12 +292,12 @@ class PickleReader {
     *  Package references should be TermRefs or ThisTypes but it was observed that
     *  nsc sometimes pickles them as TypeRefs instead.
     */
-  private def readPrefix()(using ClassContext, PklStream, Entries, Index): Type = readTypeRef() match {
+  private def readPrefix()(using Context, PklStream, Entries, Index): Type = readTypeRef() match {
     //case pre: TypeRef if pre.symbol.is(Package) => pre.symbol.thisType
     case pre => pre
   }
 
-  private def readTypeRef()(using ClassContext, PklStream, Entries, Index): Type =
+  private def readTypeRef()(using Context, PklStream, Entries, Index): Type =
     at(pkl.readNat())(readType())
 
   /** Read a type
@@ -335,7 +306,7 @@ class PickleReader {
     *        the flag say that a type of kind * is expected, so that PolyType(tps, restpe) can be disambiguated to PolyType(tps, NullaryMethodType(restpe))
     *        (if restpe is not a ClassInfoType, a MethodType or a NullaryMethodType, which leaves TypeRef/SingletonType -- the latter would make the polytype a type constructor)
     */
-  private def readType()(using ClassContext, PklStream, Entries, Index): Type = {
+  private def readType()(using Context, PklStream, Entries, Index): Type = {
     def select(pre: Type, sym: Symbol): Type =
       // structural members need to be selected by name, their symbols are only
       // valid in the synthetic refinement class that defines them.
@@ -469,7 +440,7 @@ class PickleReader {
     }
   }
 
-  private def readTypeParams()(using ClassContext, PklStream, Entries, Index): List[Symbol] = {
+  private def readTypeParams()(using Context, PklStream, Entries, Index): List[Symbol] = {
     val tag = pkl.readByte()
     val end = pkl.readEnd()
     if (tag == POLYtpe) {
@@ -481,11 +452,11 @@ class PickleReader {
   private def noSuchTypeTag(tag: Int, end: Int): Nothing =
     errorBadSignature("bad type tag: " + tag)
 
-  private def readConstantRef()(using ClassContext, PklStream, Entries, Index): Constant | TermRef =
+  private def readConstantRef()(using Context, PklStream, Entries, Index): Constant | TermRef =
     at(pkl.readNat())(readConstant())
 
   /** Read a constant */
-  private def readConstant()(using ClassContext, PklStream, Entries, Index): Constant | TermRef = {
+  private def readConstant()(using Context, PklStream, Entries, Index): Constant | TermRef = {
     import java.lang.Float.intBitsToFloat
     import java.lang.Double.longBitsToDouble
 

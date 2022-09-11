@@ -1,6 +1,6 @@
 package tastyquery.reader.classfiles
 
-import tastyquery.Contexts.{ClassContext, clsCtx}
+import tastyquery.Contexts.*
 import tastyquery.ast.Types
 import tastyquery.ast.Types.*
 import tastyquery.ast.Symbols.*
@@ -18,7 +18,7 @@ object JavaSignatures:
   private type JavaSignature = Null | Binders | Map[TypeName, RegularSymbol] | mutable.ListBuffer[TypeName]
 
   @throws[ReadException]
-  def parseSignature(member: Symbol, signature: String)(using ClassContext): Type =
+  def parseSignature(member: Symbol, signature: String)(using Context): Type =
     var offset = 0
     var end = signature.length
     val isClass = member.isClass
