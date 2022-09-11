@@ -487,6 +487,12 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case Literal(c) if c.tag == ClazzTag =>
     }
     assert(containsSubtree(classConstMatch)(clue(tree)))
+
+    val classDefMatch: StructureCheck = {
+      case ClassDef(TypeName(SuffixedName(NameTags.OBJECTCLASS, SimpleName("ScalaObject"))), _, symbol)
+          if symbol.flags.is(Module) =>
+    }
+    assert(containsSubtree(classDefMatch)(clue(tree)))
   }
 
   testUnpickle("typed", simple_trees / tname"Typed") { tree =>
