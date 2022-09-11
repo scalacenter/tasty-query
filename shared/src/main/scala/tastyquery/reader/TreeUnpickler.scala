@@ -996,6 +996,9 @@ class TreeUnpickler(
         underlying
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
+    case RECtype =>
+      reader.readByte()
+      readType
     case tag =>
       throw TreeUnpicklerException(s"Unexpected type tag ${astTagToString(tag)} $posErrorMsg")
   }

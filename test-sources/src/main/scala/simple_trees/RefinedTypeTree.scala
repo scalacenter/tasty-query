@@ -31,5 +31,5 @@ class RefinedTypeTree {
     class C1
   }
 
-  def innerRef(c: C { def c1: C1 }): Int = ???
+  val innerRef: C { def c1: C1 } = new C { def c1: C1 = new C1}
 }
