@@ -77,6 +77,8 @@ object Types {
         case OrType(left, right) =>
           // TODO Take `right` into account. Currently we just try not to crash.
           rec(arrayDims, left)
+        case WildcardTypeBounds(bounds) =>
+          rec(arrayDims, bounds.high)
         case tpe =>
           throw IllegalStateException(s"Cannot erase $tpe")
 
