@@ -902,7 +902,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case TypeMember(
             TypeName(SimpleName("AbstractWithBounds")),
             BoundedTypeTree(
-              TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("AnyRef")))),
+              TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("Product")))),
               EmptyTypeTree
             ),
             _
@@ -921,7 +921,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case TypeMember(
             TypeName(SimpleName("OpaqueWithBounds")),
             BoundedTypeTree(
-              TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("AnyRef")))),
+              TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("Product")))),
               TypeIdent(TypeName(SimpleName("Null")))
             ),
             _

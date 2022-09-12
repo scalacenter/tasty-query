@@ -92,4 +92,23 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(withArrayOfSubtype.signedName, "withArrayOfSubtype", "(1,scala.Any[]):scala.Unit")
   }
 
+  testWithContext("type-member") {
+    val TypeMember = resolve(name"simple_trees" / tname"TypeMember").asClass
+
+    val mTypeAlias = TypeMember.getDecl(name"mTypeAlias").get
+    assertIsSignedName(mTypeAlias.signedName, "mTypeAlias", "(scala.Int):scala.Int")
+
+    val mAbstractType = TypeMember.getDecl(name"mAbstractType").get
+    assertIsSignedName(mAbstractType.signedName, "mAbstractType", "(scala.Any):scala.Any")
+
+    val mAbstractTypeWithBounds = TypeMember.getDecl(name"mAbstractTypeWithBounds").get
+    assertIsSignedName(mAbstractTypeWithBounds.signedName, "mAbstractTypeWithBounds", "(scala.Product):scala.Product")
+
+    val mOpaque = TypeMember.getDecl(name"mOpaque").get
+    assertIsSignedName(mOpaque.signedName, "mOpaque", "(scala.Int):scala.Int")
+
+    val mOpaqueWithBounds = TypeMember.getDecl(name"mOpaqueWithBounds").get
+    assertIsSignedName(mOpaqueWithBounds.signedName, "mOpaqueWithBounds", "(scala.Null):scala.Null")
+  }
+
 end SignatureSuite

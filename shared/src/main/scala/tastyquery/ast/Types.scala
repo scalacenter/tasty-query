@@ -79,6 +79,10 @@ object Types {
           rec(arrayDims, left)
         case WildcardTypeBounds(bounds) =>
           rec(arrayDims, bounds.high)
+        case BoundedType(bounds, NoType) =>
+          rec(arrayDims, bounds.high)
+        case BoundedType(_, alias) =>
+          rec(arrayDims, alias)
         case tpe =>
           throw IllegalStateException(s"Cannot erase $tpe")
 
