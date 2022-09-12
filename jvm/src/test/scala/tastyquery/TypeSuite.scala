@@ -751,4 +751,17 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(sModule.declaredType).isRef(sModuleClass))
     assert(clue(sDef.declaredType).isInstanceOf[MethodType])
   }
+
+  testWithContext("scala2-class-type-params") {
+    val ListClass = resolve(name"scala" / name"collection" / name"immutable" / tname"List").asClass
+    val ArrayClass = resolve(name"scala" / tname"Array").asClass
+
+    val List(targList) = ListClass.typeParamSyms: @unchecked
+    // TODO Set flags ClassTypeParam on TypeParams
+    //assert(clue(targList.flags).isAllOf(ClassTypeParam))
+
+    val List(targArray) = ArrayClass.typeParamSyms: @unchecked
+    // TODO Set flags ClassTypeParam on TypeParams
+    //assert(clue(targArray.flags).isAllOf(ClassTypeParam))
+  }
 }
