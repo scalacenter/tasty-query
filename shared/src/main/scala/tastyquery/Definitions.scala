@@ -13,11 +13,15 @@ final class Definitions private[tastyquery] (
 ):
   private given Context = ctx
 
+  // Core packages
+
   val RootPackage = rootPackage
   val EmptyPackage = emptyPackage
 
   val scalaPackage = ctx.createPackageSymbolIfNew(nme.scalaPackageName, RootPackage)
   val javaLangPackage = ctx.createPackageSymbolIfNew(nme.javalangPackageName, RootPackage)
+
+  // Magic symbols that are not found on the classpath, but rather created by hand
 
   private def markInitialised(cls: ClassSymbol): cls.type =
     cls.initialised = true
@@ -52,5 +56,15 @@ final class Definitions private[tastyquery] (
       )
     )
   }
+
+  // Derived symbols, found on the classpath
+
+  extension (pkg: PackageClassSymbol)
+    private def requiredClass(name: String): ClassSymbol = pkg.getDecl(typeName(name)).get.asClass
+
+  lazy val ObjectClass = javaLangPackage.requiredClass("Object")
+
+  lazy val ArrayClass = scalaPackage.requiredClass("Array")
+  lazy val Function0Class = scalaPackage.requiredClass("Function0")
 
 end Definitions

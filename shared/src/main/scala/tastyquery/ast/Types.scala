@@ -22,73 +22,89 @@ object Types {
     val name = path.last
   }
 
-  object ErasedTypeRef {
-    // TODO: improve this to match dotty:
-    // - types must be erased before converting to TypeName
-    // - use correct type erasure algorithm from Scala 3, with specialisations
-    //   for Java types and Scala 2 types (i.e. varargs, value-classes)
-    def erase(tpe: Type)(using Context): TypeName =
+  enum ErasedTypeRef:
+    case ClassRef(cls: ClassSymbol)
+    case ArrayTypeRef(base: ClassRef, dimensions: Int)
 
-      val scalaArray = ArrayTypeUnapplied.resolveToSymbol
+    def toDebugString: String = this match
+      case ClassRef(cls)                  => s"ClassRef(${cls.erasedName.toDebugString})"
+      case ArrayTypeRef(base, dimensions) => s"ArrayTypeRef(${base.toDebugString}, $dimensions)"
 
-      def specialise(arrayDims: Int, full: TermName): TermName =
-        if arrayDims == 0 then full
-        else
-          val suffix = "[]" * arrayDims
-          (full: @unchecked) match
-            case QualifiedName(NameTags.QUALIFIED, pre, name) =>
-              pre.select(name.append(suffix))
+    override def toString(): String = this match
+      case ClassRef(cls)                  => cls.erasedName.toString()
+      case ArrayTypeRef(base, dimensions) => base.toString() + "[]" * dimensions
+
+    def arrayOf(): ArrayTypeRef = this match
+      case classRef: ClassRef             => ArrayTypeRef(classRef, 1)
+      case ArrayTypeRef(base, dimensions) => ArrayTypeRef(base, dimensions + 1)
+
+    /** The `TypeName` for this `ErasedTypeRef` as found in the `TermSig`s of `Signature`s. */
+    def toSigTypeName: TypeName = this match
+      case ClassRef(cls) =>
+        cls.erasedName.toTypeName
+
+      case ArrayTypeRef(base, dimensions) =>
+        def appendBracketsSuffix(name: TermName): TermName =
+          val suffix = "[]" * dimensions
+          name match
+            case QualifiedName(NameTags.QUALIFIED, pre, innerName) =>
+              pre.select(innerName.append(suffix))
             case name: SimpleName =>
               name.append(suffix)
 
-      def classRef(arrayDims: Int, cls: ClassSymbol): TermName =
-        cls.erasedName.toTermName match
-          case SuffixedName(NameTags.OBJECTCLASS, full) => specialise(arrayDims, full).withObjectSuffix
-          case full                                     => specialise(arrayDims, full)
+        base.cls.erasedName.toTermName match
+          case SuffixedName(NameTags.OBJECTCLASS, full) =>
+            appendBracketsSuffix(full).withObjectSuffix.toTypeName
+          case full =>
+            appendBracketsSuffix(full).toTypeName
+    end toSigTypeName
+  end ErasedTypeRef
 
-      def rec(arrayDims: Int, tpe: Type): TermName = tpe.widen match
+  object ErasedTypeRef {
+    // TODO: improve this to match dotty:
+    // - use correct type erasure algorithm from Scala 3, with specialisations
+    //   for Java types and Scala 2 types (i.e. varargs, value-classes)
+    def erase(tpe: Type)(using Context): ErasedTypeRef =
+      def rec(tpe: Type): ErasedTypeRef = tpe.widen match
         case tpe @ AppliedType(tycon, targs) =>
-          if tycon.isRef(scalaArray) then
+          if tycon.isRef(defn.ArrayClass) then
             val List(targ) = targs: @unchecked
-            targ match
-              case _: TypeBounds => // TODO: fix
-                rec(arrayDims + 1, ObjectType)
-              case targ: Type =>
-                rec(arrayDims + 1, targ)
+            rec(targ).arrayOf()
           else
             tycon match
               case tycon: Symbolic if tycon.symbol.isClass =>
                 // Fast path
-                classRef(arrayDims, tycon.symbol.asClass)
+                ClassRef(tycon.symbol.asClass)
               case _ =>
-                rec(arrayDims, tpe.superType)
+                rec(tpe.superType)
         case tpe: Symbolic =>
           tpe.resolveToSymbol match
             case cls: ClassSymbol =>
-              classRef(arrayDims, cls)
+              ClassRef(cls)
             case sym =>
-              if sym.isAllOf(ClassTypeParam) then rec(arrayDims, sym.declaredType.upperBound)
-              else rec(arrayDims, sym.declaredType)
+              if sym.isAllOf(ClassTypeParam) then rec(sym.declaredType.upperBound)
+              else rec(sym.declaredType)
         case tpe: TypeParamRef =>
-          rec(arrayDims, tpe.bounds.high)
+          rec(tpe.bounds.high)
         case AndType(left, right) =>
           // TODO Take `right` into account. Currently we just try not to crash.
-          rec(arrayDims, left)
+          rec(left)
         case OrType(left, right) =>
           // TODO Take `right` into account. Currently we just try not to crash.
-          rec(arrayDims, left)
+          rec(left)
         case WildcardTypeBounds(bounds) =>
-          rec(arrayDims, bounds.high)
+          rec(bounds.high)
         case BoundedType(bounds, NoType) =>
-          rec(arrayDims, bounds.high)
+          rec(bounds.high)
         case BoundedType(_, alias) =>
-          rec(arrayDims, alias)
+          rec(alias)
         case tpe =>
           throw IllegalStateException(s"Cannot erase $tpe")
 
       tpe match
-        case _: ExprType => tpnme.scalaFunction0
-        case _           => rec(0, tpe).toTypeName
+        case _: ExprType => ClassRef(defn.Function0Class)
+        case _           => rec(tpe)
+    end erase
   }
 
   abstract class Type {
