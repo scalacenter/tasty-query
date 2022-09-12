@@ -1079,18 +1079,35 @@ object Types {
       else AnnotatedType(typ, annotation)
   }
 
+  abstract class RefinedOrRecType extends TypeProxy
+
   /** A refined type `parent { type refinedName <:> refinedInfo }`
     * @param parent      The type being refined
     * @param refinedName The name of the refinement declaration
     * @param refinedInfo The info of the refinement declaration
     */
-  case class RefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds) extends TypeProxy with ValueType {
+  case class RefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds)
+      extends RefinedOrRecType
+      with ValueType {
     override def underlying(using Context): Type = parent
 
     def derivedRefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds)(using Context): Type =
       if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedInfo eq this.refinedInfo)) this
       else RefinedType(parent, refinedName, refinedInfo)
   }
+
+  final class RecType(parentExp: RecType => Type) extends RefinedOrRecType with Binders:
+    val parent: Type = parentExp(this: @unchecked)
+
+    def underlying(using Context): Type = parent
+  end RecType
+
+  object RecType:
+    def apply(parentExp: RecType => Type): RecType =
+      new RecType(parentExp) // TODO? Perform normalization like dotc?
+
+    def unapply(recType: RecType): Some[Type] = Some(recType.parent)
+  end RecType
 
   trait TypeBounds(val low: Type, val high: Type) {
 
