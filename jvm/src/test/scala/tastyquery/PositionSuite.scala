@@ -285,9 +285,9 @@ class PositionSuite extends RestrictedUnpicklingSuite {
       List(
         "type TypeMember = Int",
         "type AbstractType",
-        "type AbstractWithBounds >: Null <: AnyRef",
+        "type AbstractWithBounds >: Null <: Product",
         "opaque type Opaque = Int",
-        "opaque type OpaqueWithBounds >: Null <: AnyRef = Null"
+        "opaque type OpaqueWithBounds >: Null <: Product = Null"
       )
     )
   }
