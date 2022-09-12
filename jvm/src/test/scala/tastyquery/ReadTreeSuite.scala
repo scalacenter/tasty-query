@@ -1434,6 +1434,23 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
           ) =>
     }
     assert(containsSubtree(refinedTpt)(clue(tree)))
+
+    val recTpt: StructureCheck = {
+      case ValDef(
+            SimpleName("innerRefVal"),
+            RefinedTypeTree(
+              TypeIdent(TypeName(SimpleName("C"))),
+              DefDef(SimpleName("c1"), Nil, TypeIdent(TypeName(SimpleName("C1"))), EmptyTree, _) :: Nil,
+              _
+            ),
+            Block(
+              ClassDef(anonType1, _, _) :: Nil,
+              Typed(Apply(Select(New(TypeIdent(anonType2)), _), Nil), TypeWrapper(rt: RecType))
+            ),
+            _
+          ) if anonType1 == anonType2 =>
+    }
+    assert(containsSubtree(recTpt)(clue(tree)))
   }
 
   testUnpickle("refined-type", simple_trees / tname"RefinedType") { tree =>

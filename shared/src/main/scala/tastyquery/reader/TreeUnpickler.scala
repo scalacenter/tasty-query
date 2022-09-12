@@ -1010,6 +1010,18 @@ class TreeUnpickler(
         // TODO Actually take the refined member type into account
         reader.goto(end)
         underlying
+    case RECtype =>
+      val start = reader.currentAddr
+      reader.readByte()
+      recursiveTypeAtAddr.get(start) match
+        case Some(tp) =>
+          skipTree()
+          tp
+        case None =>
+          RecType { rt =>
+            recursiveTypeAtAddr(start) = rt
+            readType
+          }
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
     case tag =>
