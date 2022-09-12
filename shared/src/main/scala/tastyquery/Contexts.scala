@@ -4,16 +4,13 @@ import scala.annotation.tailrec
 
 import dotty.tools.tasty.TastyBuffer.Addr
 import dotty.tools.tasty.TastyFormat.NameTags
+
+import tastyquery.ast.Flags.*
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
-import tastyquery.ast.Types.{Type, Symbolic, Binders, PackageRef, TypeRef, SymResolutionProblem}
+import tastyquery.ast.Types.*
 
-import scala.collection.mutable
-import scala.collection.mutable.HashMap
-import tastyquery.reader.classfiles.Classpaths
 import tastyquery.reader.classfiles.Classpaths.{Classpath, Loader}
-import scala.util.Try
-import scala.util.control.NonFatal
 
 import tastyquery.util.syntax.chaining.given
 
@@ -38,7 +35,7 @@ object Contexts {
       || root.pkg.getDeclInternal(root.rootName.toTypeName).isDefined // class value
 
   /** Context is used throughout unpickling an entire project. */
-  final class Context private[Contexts] (val defn: Definitions, val classloader: Classpaths.Loader) {
+  final class Context private[Contexts] (val defn: Definitions, val classloader: Loader) {
     private given Context = this
 
     /** basically an internal method for loading Java classes embedded in Java descriptors */
@@ -167,6 +164,21 @@ object Contexts {
 
       val nothingClass = createClassSymbol(typeName("Nothing"), scalaPackage)
       initialise(nothingClass)
+
+      val AnyBounds = RealTypeBounds(NothingType, AnyType)
+      val andOrParamNames = List(SimpleName("A").toTypeName, SimpleName("B").toTypeName)
+
+      val andTypeAlias = createSymbol(typeName("&"), scalaPackage)
+      andTypeAlias.withFlags(EmptyFlagSet)
+      andTypeAlias.withDeclaredType(
+        PolyType(andOrParamNames)(pt => List(AnyBounds, AnyBounds), pt => AndType(pt.paramRefs(0), pt.paramRefs(1)))
+      )
+
+      val orTypeAlias = createSymbol(typeName("|"), scalaPackage)
+      orTypeAlias.withFlags(EmptyFlagSet)
+      orTypeAlias.withDeclaredType(
+        PolyType(andOrParamNames)(pt => List(AnyBounds, AnyBounds), pt => OrType(pt.paramRefs(0), pt.paramRefs(1)))
+      )
 
       def fakeJavaLangClassIfNotFound(name: String): ClassSymbol =
         val tname = typeName(name)
