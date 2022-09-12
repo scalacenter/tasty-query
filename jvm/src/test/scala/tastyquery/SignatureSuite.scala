@@ -73,4 +73,11 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(productIterator.signedName, "productIterator", "():scala.collection.Iterator")
   }
 
+  testWithContext("with type") {
+    val RefinedTypeTree = resolve(name"simple_trees" / tname"RefinedTypeTree").asClass
+
+    val andType = RefinedTypeTree.getDecl(name"andType").get
+    assertIsSignedName(andType.signedName, "andType", "():simple_trees.RefinedTypeTree.AndTypeA")
+  }
+
 end SignatureSuite

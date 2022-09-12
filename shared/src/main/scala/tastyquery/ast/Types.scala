@@ -71,6 +71,12 @@ object Types {
               else rec(arrayDims, sym.declaredType)
         case tpe: TypeParamRef =>
           rec(arrayDims, tpe.bounds.high)
+        case AndType(left, right) =>
+          // TODO Take `right` into account. Currently we just try not to crash.
+          rec(arrayDims, left)
+        case OrType(left, right) =>
+          // TODO Take `right` into account. Currently we just try not to crash.
+          rec(arrayDims, left)
         case tpe =>
           throw IllegalStateException(s"Cannot erase $tpe")
 
