@@ -61,6 +61,9 @@ class PickleReader {
     } else tOpt
   }
 
+  private def atNoCache[T <: AnyRef](i: Int)(op: PklStream ?=> T)(using PklStream, Entries, Index): T =
+    pkl.unsafeFork(index(i))(op)
+
   def readNameRef()(using PklStream, Entries, Index): Name = at(pkl.readNat())(readName())
 
   def readName()(using PklStream): Name = {
@@ -176,12 +179,16 @@ class PickleReader {
         sym.withDeclaredType(tpe)
       case CLASSsym =>
         val cls = ClassSymbolFactory.createSymbol(name.toTypeName, owner)
+        storeResultInEntries(cls)
         if name.toTypeName.wrapsObjectName then
           val module = owner
             .asInstanceOf[DeclaringSymbol]
             .getModuleDeclInternal(name.toTermName.stripObjectSuffix)
           module.foreach(m => m.withDeclaredType(cls.typeRef))
         assert(!cls.initialised, s"attempting to initialize the class $cls a second time")
+        val typeParams = atNoCache(infoRef)(readTypeParams())
+        val bounds = typeParams.map(_ => RealTypeBounds(NothingType, AnyType)) // TODO Read bounds
+        cls.withTypeParams(typeParams, bounds)
         cls.initialised = true
         cls
       case VALsym =>

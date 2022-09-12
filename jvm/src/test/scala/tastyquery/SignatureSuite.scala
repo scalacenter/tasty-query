@@ -80,4 +80,16 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(andType.signedName, "andType", "():simple_trees.RefinedTypeTree.AndTypeA")
   }
 
+  testWithContext("array types") {
+    val TypeRefIn = resolve(name"simple_trees" / tname"TypeRefIn").asClass
+
+    // TODO The erasure is not actually correct here, but at least we don't crash
+
+    val withArray = TypeRefIn.getDecl(name"withArray").get
+    assertIsSignedName(withArray.signedName, "withArray", "(1,scala.Any[]):scala.Unit")
+
+    val withArrayOfSubtype = TypeRefIn.getDecl(name"withArrayOfSubtype").get
+    assertIsSignedName(withArrayOfSubtype.signedName, "withArrayOfSubtype", "(1,scala.Any[]):scala.Unit")
+  }
+
 end SignatureSuite
