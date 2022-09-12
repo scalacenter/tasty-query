@@ -34,4 +34,12 @@ class RefinedTypeTree {
   def innerRef(c: C { def c1: C1 }): Int = ???
 
   val innerRefVal: C { def c1: C1 } = new C { def c1: C1 = new C1}
+
+  // With an additional 'with'
+
+  trait AndTypeA
+  trait AndTypeB extends AndTypeA
+
+  def andType(): AndTypeA with AndTypeB { def foo: String } =
+    new AndTypeA with AndTypeB { def foo: String = toString }
 }
