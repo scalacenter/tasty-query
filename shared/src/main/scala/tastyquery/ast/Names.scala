@@ -78,6 +78,7 @@ object Names {
     val Null: TypeName = typeName("Null")
 
     val Array: TypeName = typeName("Array")
+    val Seq: TypeName = typeName("Seq")
 
     val Unit: TypeName = typeName("Unit")
     val Boolean: TypeName = typeName("Boolean")
@@ -96,6 +97,8 @@ object Names {
     val scalaFunction0: TypeName = nme.scalaPackageName.select(termName("Function0")).toTypeName
 
     val RefinedClassMagic: TypeName = typeName("<refinement>")
+    val ByNameParamClassMagic: TypeName = typeName("<byname>")
+    val RepeatedParamClassMagic: TypeName = typeName("<repeated>")
   }
 
   /** Create a type name from the characters in cs[offset..offset+len-1].

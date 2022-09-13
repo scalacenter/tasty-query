@@ -141,4 +141,11 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(mOpaqueWithBounds.signedName, "mOpaqueWithBounds", "(scala.Null):scala.Null")
   }
 
+  testWithContext("scala2-case-class-varargs") {
+    val StringContext = resolve(name"scala" / tname"StringContext").asClass
+
+    val parts = StringContext.getDecl(name"parts").get
+    assertIsSignedName(parts.signedName, "parts", "():scala.collection.Seq")
+  }
+
 end SignatureSuite

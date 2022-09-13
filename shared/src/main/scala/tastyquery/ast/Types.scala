@@ -136,6 +136,7 @@ object Types {
     private def finishErase(typeRef: ErasedTypeRef)(using Context): ErasedTypeRef = typeRef match
       case ClassRef(cls) =>
         if cls == defn.AnyClass || cls == defn.AnyValClass then ClassRef(defn.ObjectClass)
+        else if cls == defn.RepeatedParamClass then ClassRef(defn.SeqClass)
         else typeRef
       case ArrayTypeRef(_, _) =>
         typeRef
@@ -398,6 +399,9 @@ object Types {
 
   def ArrayTypeUnapplied: TypeRef = scalaDot(tpnme.Array)
   def ArrayTypeOf(tpe: Type): AppliedType = AppliedType(ArrayTypeUnapplied, List(tpe))
+
+  def SeqTypeUnapplied: TypeRef = scalaDot(tpnme.Seq)
+  def SeqTypeOf(tpe: Type): AppliedType = AppliedType(SeqTypeUnapplied, List(tpe))
 
   def UnitType: Type = scalaDot(tpnme.Unit)
   def BooleanType: Type = scalaDot(tpnme.Boolean)

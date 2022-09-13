@@ -62,15 +62,44 @@ final class Definitions private[tastyquery] (
     AnyRefAlias.withDeclaredType(BoundedType(TypeAlias(ObjectType), NoType))
   }
 
+  private def createSpecialPolyClass(
+    name: TypeName,
+    paramFlags: FlagSet,
+    parentConstrs: Type => Seq[Type]
+  ): ClassSymbol =
+    val cls = ctx.createClassSymbol(name, scalaPackage)
+
+    val tparam = ctx.createSymbol(typeName("T"), cls)
+    tparam.withFlags(ClassTypeParam)
+    tparam.withDeclaredType(WildcardTypeBounds(NothingAnyBounds))
+
+    cls.withTypeParams(tparam :: Nil, NothingAnyBounds :: Nil)
+    cls.withFlags(EmptyFlagSet | Artifact)
+
+    val parents = parentConstrs(TypeRef(NoPrefix, tparam))
+    // TODO Set parents in cls
+
+    cls
+  end createSpecialPolyClass
+
+  val ByNameParamClass2x: ClassSymbol =
+    createSpecialPolyClass(tpnme.ByNameParamClassMagic, Covariant, _ => Seq(AnyType))
+
+  val RepeatedParamClass: ClassSymbol =
+    createSpecialPolyClass(tpnme.RepeatedParamClassMagic, Covariant, tp => Seq(ObjectType, SeqTypeOf(tp)))
+
   // Derived symbols, found on the classpath
 
   extension (pkg: PackageClassSymbol)
     private def requiredClass(name: String): ClassSymbol = pkg.getDecl(typeName(name)).get.asClass
 
+  private lazy val scalaCollectionPackage = scalaPackage.getPackageDecl(termName("collection")).get
+
   lazy val ObjectClass = javaLangPackage.requiredClass("Object")
 
   lazy val AnyValClass = scalaPackage.requiredClass("AnyVal")
   lazy val ArrayClass = scalaPackage.requiredClass("Array")
+  lazy val SeqClass = scalaCollectionPackage.requiredClass("Seq")
   lazy val Function0Class = scalaPackage.requiredClass("Function0")
 
 end Definitions
