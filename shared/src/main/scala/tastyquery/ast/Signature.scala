@@ -26,16 +26,16 @@ object Signature {
     def rec(info: Type, acc: List[ParamSig]): Signature =
       info match {
         case info: MethodType =>
-          val erased = info.paramTypes.map((ErasedTypeRef.erase) andThen (TermSig(_)))
+          val erased = info.paramTypes.map(tpe => TermSig(ErasedTypeRef.erase(tpe).toSigTypeName))
           rec(info.resultType, acc ::: erased)
         case PolyType(_, tbounds, res) =>
           rec(res, acc ::: TypeLenSig(tbounds.length) :: Nil)
         case tpe =>
-          Signature(acc, ErasedTypeRef.erase(tpe))
+          Signature(acc, ErasedTypeRef.erase(tpe).toSigTypeName)
       }
 
     info match
-      case ExprType(resType) => Signature(Nil, ErasedTypeRef.erase(resType))
+      case ExprType(resType) => Signature(Nil, ErasedTypeRef.erase(resType).toSigTypeName)
       case _                 => rec(info, Nil)
   end fromMethodic
 }

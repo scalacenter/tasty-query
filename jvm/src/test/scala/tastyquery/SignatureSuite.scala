@@ -46,17 +46,17 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertNotSignedName(field.signedName)
 
     val getter = GenericClass.getDecl(name"getter").get
-    assertIsSignedName(getter.signedName, "getter", "():scala.Any")
+    assertIsSignedName(getter.signedName, "getter", "():java.lang.Object")
 
     val method = GenericClass.getDecl(name"method").get
-    assertIsSignedName(method.signedName, "method", "(scala.Any):scala.Any")
+    assertIsSignedName(method.signedName, "method", "(java.lang.Object):java.lang.Object")
   }
 
   testWithContext("GenericMethod") {
     val GenericMethod = resolve(name"simple_trees" / tname"GenericMethod").asClass
 
     val identity = GenericMethod.getDecl(name"identity").get
-    assertIsSignedName(identity.signedName, "identity", "(1,scala.Any):scala.Any")
+    assertIsSignedName(identity.signedName, "identity", "(1,java.lang.Object):java.lang.Object")
   }
 
   testWithContext("RichInt") {
@@ -86,10 +86,40 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     // TODO The erasure is not actually correct here, but at least we don't crash
 
     val withArray = TypeRefIn.getDecl(name"withArray").get
-    assertIsSignedName(withArray.signedName, "withArray", "(1,scala.Any[]):scala.Unit")
+    assertIsSignedName(withArray.signedName, "withArray", "(1,java.lang.Object):scala.Unit")
 
     val withArrayOfSubtype = TypeRefIn.getDecl(name"withArrayOfSubtype").get
-    assertIsSignedName(withArrayOfSubtype.signedName, "withArrayOfSubtype", "(1,scala.Any[]):scala.Unit")
+    assertIsSignedName(withArrayOfSubtype.signedName, "withArrayOfSubtype", "(1,java.lang.Object):scala.Unit")
+
+    val withArrayAnyRef = TypeRefIn.getDecl(name"withArrayAnyRef").get
+    assertIsSignedName(withArrayAnyRef.signedName, "withArrayAnyRef", "(1,java.lang.Object[]):scala.Unit")
+
+    val withArrayOfSubtypeAnyRef = TypeRefIn.getDecl(name"withArrayOfSubtypeAnyRef").get
+    assertIsSignedName(
+      withArrayOfSubtypeAnyRef.signedName,
+      "withArrayOfSubtypeAnyRef",
+      "(1,java.lang.Object[]):scala.Unit"
+    )
+
+    val withArrayAnyVal = TypeRefIn.getDecl(name"withArrayAnyVal").get
+    assertIsSignedName(withArrayAnyVal.signedName, "withArrayAnyVal", "(1,java.lang.Object):scala.Unit")
+
+    val withArrayOfSubtypeAnyVal = TypeRefIn.getDecl(name"withArrayOfSubtypeAnyVal").get
+    assertIsSignedName(
+      withArrayOfSubtypeAnyVal.signedName,
+      "withArrayOfSubtypeAnyVal",
+      "(1,java.lang.Object):scala.Unit"
+    )
+
+    val withArrayList = TypeRefIn.getDecl(name"withArrayList").get
+    assertIsSignedName(withArrayList.signedName, "withArrayList", "(1,scala.collection.immutable.List[]):scala.Unit")
+
+    val withArrayOfSubtypeList = TypeRefIn.getDecl(name"withArrayOfSubtypeList").get
+    assertIsSignedName(
+      withArrayOfSubtypeList.signedName,
+      "withArrayOfSubtypeList",
+      "(1,scala.collection.immutable.List[]):scala.Unit"
+    )
   }
 
   testWithContext("type-member") {
@@ -99,7 +129,7 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(mTypeAlias.signedName, "mTypeAlias", "(scala.Int):scala.Int")
 
     val mAbstractType = TypeMember.getDecl(name"mAbstractType").get
-    assertIsSignedName(mAbstractType.signedName, "mAbstractType", "(scala.Any):scala.Any")
+    assertIsSignedName(mAbstractType.signedName, "mAbstractType", "(java.lang.Object):java.lang.Object")
 
     val mAbstractTypeWithBounds = TypeMember.getDecl(name"mAbstractTypeWithBounds").get
     assertIsSignedName(mAbstractTypeWithBounds.signedName, "mAbstractTypeWithBounds", "(scala.Product):scala.Product")

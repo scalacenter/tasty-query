@@ -22,7 +22,7 @@ object Contexts {
 
   def init(classpath: Classpath): Context =
     val ctx = classpath.loader { classloader =>
-      val ctx = new Context(Definitions(), classloader)
+      val ctx = new Context(classloader)
       ctx.classloader.initPackages()(using ctx)
       ctx
     }
@@ -35,8 +35,12 @@ object Contexts {
       || root.pkg.getDeclInternal(root.rootName.toTypeName).isDefined // class value
 
   /** Context is used throughout unpickling an entire project. */
-  final class Context private[Contexts] (val defn: Definitions, val classloader: Loader) {
+  final class Context private[Contexts] (val classloader: Loader) {
     private given Context = this
+
+    private val (RootPackage @ _, EmptyPackage @ _) = PackageClassSymbolFactory.createRoots
+
+    val defn: Definitions = Definitions(this: @unchecked, RootPackage, EmptyPackage)
 
     /** basically an internal method for loading Java classes embedded in Java descriptors */
     private[tastyquery] def getClassFromBinaryName(binaryName: String): Either[SymResolutionProblem, ClassSymbol] =
@@ -97,7 +101,7 @@ object Contexts {
               throw IllegalArgumentException(s"cannot find member ${name.toDebugString} in $symbol")
             }
             rec(next, pathRest)
-      rec(defn.RootPackage, path)
+      rec(RootPackage, path)
     end findSymbolFromRoot
 
     def createClassSymbol(name: TypeName, owner: DeclaringSymbol): ClassSymbol =
@@ -120,12 +124,12 @@ object Contexts {
 
     def createPackageSymbolIfNew(name: TermName, owner: PackageClassSymbol): PackageClassSymbol = {
       def create(): PackageClassSymbol = {
-        val trueOwner = if (owner == defn.EmptyPackage) defn.RootPackage else owner
+        val trueOwner = if (owner == EmptyPackage) RootPackage else owner
         val sym = PackageClassSymbolFactory.createSymbol(name, trueOwner)
         sym
       }
 
-      defn.RootPackage.findPackageSymbol(name) match {
+      RootPackage.findPackageSymbol(name) match {
         case Some(pkg) => pkg
         case None =>
           name match {
@@ -144,50 +148,19 @@ object Contexts {
       }
     }
 
-    def getPackageSymbol(name: TermName): PackageClassSymbol = defn.RootPackage.findPackageSymbol(name).get
+    def getPackageSymbol(name: TermName): PackageClassSymbol = RootPackage.findPackageSymbol(name).get
 
     private[Contexts] def initializeFundamentalClasses(): Unit = {
-      val scalaPackage = createPackageSymbolIfNew(nme.scalaPackageName, defn.RootPackage)
-      val javaLangPackage = createPackageSymbolIfNew(nme.javalangPackageName, defn.RootPackage)
-
       // TODO Assign superclasses and create members
-
-      def initialise(cls: ClassSymbol): Unit =
-        cls.withTypeParams(Nil, Nil)
-        cls.initialised = true
-
-      val anyClass = createClassSymbol(typeName("Any"), scalaPackage)
-      initialise(anyClass)
-
-      val nullClass = createClassSymbol(typeName("Null"), scalaPackage)
-      initialise(nullClass)
-
-      val nothingClass = createClassSymbol(typeName("Nothing"), scalaPackage)
-      initialise(nothingClass)
-
-      val AnyBounds = RealTypeBounds(NothingType, AnyType)
-      val andOrParamNames = List(SimpleName("A").toTypeName, SimpleName("B").toTypeName)
-
-      val andTypeAlias = createSymbol(typeName("&"), scalaPackage)
-      andTypeAlias.withFlags(EmptyFlagSet)
-      andTypeAlias.withDeclaredType(
-        PolyType(andOrParamNames)(pt => List(AnyBounds, AnyBounds), pt => AndType(pt.paramRefs(0), pt.paramRefs(1)))
-      )
-
-      val orTypeAlias = createSymbol(typeName("|"), scalaPackage)
-      orTypeAlias.withFlags(EmptyFlagSet)
-      orTypeAlias.withDeclaredType(
-        PolyType(andOrParamNames)(pt => List(AnyBounds, AnyBounds), pt => OrType(pt.paramRefs(0), pt.paramRefs(1)))
-      )
 
       def fakeJavaLangClassIfNotFound(name: String): ClassSymbol =
         val tname = typeName(name)
-        javaLangPackage.getDecl(tname) match
+        defn.javaLangPackage.getDecl(tname) match
           case Some(sym: ClassSymbol) =>
             sym
           case _ =>
-            val sym = createClassSymbol(tname, javaLangPackage)
-            initialise(sym)
+            val sym = createClassSymbol(tname, defn.javaLangPackage)
+            sym.initialised = true
             sym
 
       fakeJavaLangClassIfNotFound("Object")
