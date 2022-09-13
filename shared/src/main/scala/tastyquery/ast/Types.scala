@@ -65,46 +65,81 @@ object Types {
     // - use correct type erasure algorithm from Scala 3, with specialisations
     //   for Java types and Scala 2 types (i.e. varargs, value-classes)
     def erase(tpe: Type)(using Context): ErasedTypeRef =
-      def rec(tpe: Type): ErasedTypeRef = tpe.widen match
+      tpe match
+        case _: ExprType => ClassRef(defn.Function0Class)
+        case _           => finishErase(preErase(tpe))
+    end erase
+
+    /** First pass of erasure, where some special types are preserved as is.
+      *
+      * In particular, `Any` is preserved as `Any`, instead of becoming
+      * `java.lang.Object`.
+      */
+    private def preErase(tpe: Type)(using Context): ErasedTypeRef =
+      def arrayOfBounds(bounds: TypeBounds): ErasedTypeRef =
+        preErase(bounds.high) match
+          case ClassRef(cls) if cls == defn.AnyClass || cls == defn.AnyValClass =>
+            ClassRef(defn.ObjectClass)
+          case typeRef =>
+            typeRef.arrayOf()
+
+      def arrayOf(tpe: Type): ErasedTypeRef = tpe match
+        case tpe: Symbolic =>
+          val sym = tpe.symbol
+          if sym.isClass then ClassRef(sym.asClass).arrayOf()
+          else arrayOf(sym.declaredType)
+        case tpe: TypeParamRef           => arrayOfBounds(tpe.bounds)
+        case WildcardTypeBounds(bounds)  => arrayOfBounds(bounds)
+        case BoundedType(bounds, NoType) => arrayOfBounds(bounds)
+        case BoundedType(_, alias)       => arrayOf(alias)
+        case _ =>
+          preErase(tpe)
+      end arrayOf
+
+      tpe.widen match
         case tpe @ AppliedType(tycon, targs) =>
           if tycon.isRef(defn.ArrayClass) then
             val List(targ) = targs: @unchecked
-            rec(targ).arrayOf()
+            arrayOf(targ)
           else
             tycon match
               case tycon: Symbolic if tycon.symbol.isClass =>
                 // Fast path
                 ClassRef(tycon.symbol.asClass)
               case _ =>
-                rec(tpe.superType)
+                preErase(tpe.superType)
         case tpe: Symbolic =>
           tpe.resolveToSymbol match
             case cls: ClassSymbol =>
               ClassRef(cls)
             case sym =>
-              if sym.isAllOf(ClassTypeParam) then rec(sym.declaredType.upperBound)
-              else rec(sym.declaredType)
+              if sym.isAllOf(ClassTypeParam) then preErase(sym.declaredType.upperBound)
+              else preErase(sym.declaredType)
         case tpe: TypeParamRef =>
-          rec(tpe.bounds.high)
+          preErase(tpe.bounds.high)
         case AndType(left, right) =>
           // TODO Take `right` into account. Currently we just try not to crash.
-          rec(left)
+          preErase(left)
         case OrType(left, right) =>
           // TODO Take `right` into account. Currently we just try not to crash.
-          rec(left)
+          preErase(left)
         case WildcardTypeBounds(bounds) =>
-          rec(bounds.high)
+          preErase(bounds.high)
         case BoundedType(bounds, NoType) =>
-          rec(bounds.high)
+          preErase(bounds.high)
         case BoundedType(_, alias) =>
-          rec(alias)
+          preErase(alias)
         case tpe =>
           throw IllegalStateException(s"Cannot erase $tpe")
+    end preErase
 
-      tpe match
-        case _: ExprType => ClassRef(defn.Function0Class)
-        case _           => rec(tpe)
-    end erase
+    private def finishErase(typeRef: ErasedTypeRef)(using Context): ErasedTypeRef = typeRef match
+      case ClassRef(cls) =>
+        if cls == defn.AnyClass || cls == defn.AnyValClass then ClassRef(defn.ObjectClass)
+        else typeRef
+      case ArrayTypeRef(_, _) =>
+        typeRef
+    end finishErase
   }
 
   abstract class Type {

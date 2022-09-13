@@ -55,6 +55,11 @@ final class Definitions private[tastyquery] (
         pt => OrType(pt.paramRefs(0), pt.paramRefs(1))
       )
     )
+
+    val AnyRefAlias = ctx.createSymbol(typeName("AnyRef"), scalaPackage)
+    AnyRefAlias.withFlags(EmptyFlagSet)
+    val ObjectType = TypeRef(javaLangPackage.accessibleThisType, typeName("Object"))
+    AnyRefAlias.withDeclaredType(BoundedType(TypeAlias(ObjectType), NoType))
   }
 
   // Derived symbols, found on the classpath
@@ -64,6 +69,7 @@ final class Definitions private[tastyquery] (
 
   lazy val ObjectClass = javaLangPackage.requiredClass("Object")
 
+  lazy val AnyValClass = scalaPackage.requiredClass("AnyVal")
   lazy val ArrayClass = scalaPackage.requiredClass("Array")
   lazy val Function0Class = scalaPackage.requiredClass("Function0")
 
