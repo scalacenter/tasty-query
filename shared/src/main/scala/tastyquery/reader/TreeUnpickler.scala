@@ -70,14 +70,7 @@ class TreeUnpickler(
         val end = reader.readEnd()
         val pid = readPotentiallyShared({
           assert(reader.readByte() == TERMREFpkg, posErrorMsg)
-          val pkg = localCtx.createPackageSymbolIfNew(readName)
-          /*if pkg != defn.EmptyPackage then
-            // can happen for symbolic packages
-            assert(
-              localCtx.classRoot.packages.exists(_ == pkg),
-              s"unexpected package ${pkg.name} in owners of top level class ${localCtx.classRoot.fullName}"
-            )*/
-          pkg
+          ctx.createPackageSymbolIfNew(readFullyQualifiedName)
         })
         reader.until(end)(createSymbols()(using localCtx.withOwner(pid)))
       case TYPEDEF =>
@@ -305,7 +298,9 @@ class TreeUnpickler(
       read
     }
 
-  def readName: TermName = nameAtRef(reader.readNameRef())
+  def readName: TermName = nameAtRef.simple(reader.readNameRef())
+
+  def readFullyQualifiedName: FullyQualifiedName = nameAtRef.fullyQualified(reader.readNameRef())
 
   def readSignedName(): SignedName = readName.asInstanceOf[SignedName]
 
@@ -316,8 +311,7 @@ class TreeUnpickler(
       val packageEnd = reader.readEnd()
       val pid = readPotentiallyShared({
         assert(reader.readByte() == TERMREFpkg, posErrorMsg)
-        // Symbol is already created during symbol creation phase
-        ctx.getPackageSymbol(readName)
+        ctx.createPackageSymbolIfNew(readFullyQualifiedName)
       })
       PackageDef(pid, reader.until(packageEnd)(readTopLevelStat(using localCtx.withOwner(pid))))(spn)
     case _ => readStat
@@ -815,7 +809,7 @@ class TreeUnpickler(
     case TERMREFpkg =>
       val spn = span
       reader.readByte()
-      val name = readName
+      val name = readFullyQualifiedName
       // TODO: create a termref and store as a tpe
       new ReferencedPackage(name)(spn)
     case TERMREFdirect =>
@@ -913,7 +907,7 @@ class TreeUnpickler(
       TypeRef(readType, sym)
     case TYPEREFpkg =>
       reader.readByte()
-      PackageTypeRef(readName)
+      PackageTypeRef(readFullyQualifiedName)
     case SHAREDtype =>
       reader.readByte()
       val addr = reader.readAddr()
@@ -928,8 +922,7 @@ class TreeUnpickler(
       TermRef(readType, sym)
     case TERMREFpkg =>
       reader.readByte()
-      val name = readName
-      new PackageRef(name)
+      new PackageRef(readFullyQualifiedName)
     case TERMREF =>
       reader.readByte()
       val name = readName
@@ -1251,11 +1244,6 @@ object TreeUnpickler {
     ): T =
       if !hasSymbolAt(addr) then registerSym(addr, factory.createSymbol(name, owner), addToDecls)
       else throw ExistingDefinitionException(owner, name)
-
-    def createPackageSymbolIfNew(name: TermName)(using Context): PackageClassSymbol = owner match {
-      case owner: PackageClassSymbol => ctx.createPackageSymbolIfNew(name, owner)
-      case owner                     => assert(false, s"Unexpected non-package owner: $owner")
-    }
 
     def getSymbol(addr: Addr): Symbol =
       localSymbols(addr)

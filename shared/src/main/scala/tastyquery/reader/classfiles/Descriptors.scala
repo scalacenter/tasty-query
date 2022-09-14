@@ -32,12 +32,8 @@ object Descriptors:
     end followPackages
 
     val parts = binaryName.split('/').toList
-    (parts: @unchecked) match
-      case classInEmptyPackageName :: Nil =>
-        TypeRef(PackageRef(nme.EmptyPackageName), typeName(classInEmptyPackageName))
-      case firstPackageName :: rest =>
-        val firstPackageRef = PackageRef(termName(firstPackageName))
-        followPackages(firstPackageRef.resolveToSymbol, rest)
+    val initPackage = if parts.tail.isEmpty then defn.EmptyPackage else defn.RootPackage
+    followPackages(initPackage, parts)
   end classRef
 
   @throws[ReadException]

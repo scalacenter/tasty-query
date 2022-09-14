@@ -75,8 +75,8 @@ object Classpaths {
       def packages: IterableOnce[PackageClassSymbol] =
         (pkg #:: LazyList.from(pkg.enclosingDecls)).asInstanceOf[IterableOnce[PackageClassSymbol]]
 
-      def fullName: TermName =
-        pkg.fullName.toTermName.select(rootName)
+      def fullName: FullyQualifiedName =
+        pkg.fullName.select(rootName)
 
   class Loader(val classpath: Classpath) { loader =>
 
@@ -90,18 +90,11 @@ object Classpaths {
     private var roots: Map[PackageClassSymbol, Map[SimpleName, Entry]] = Map.empty
     private var topLevelTastys: Map[Loader.Root, List[Tree]] = Map.empty
 
-    // TODO: do not use fully qualified name for storing packages in decls
-    private val packageNameCache = mutable.HashMap.empty[TermName, TermName]
-
-    def toPackageName(dotSeparated: String): TermName =
-      def cached(name: TermName): TermName =
-        packageNameCache.getOrElseUpdate(name, name)
-
-      def qualified(parts: IndexedSeq[String]): TermName =
-        if parts.isEmpty then nme.EmptyPackageName
-        else parts.view.drop(1).foldLeft(cached(termName(parts.head)))((name, p) => cached(name select termName(p)))
-
-      qualified(IArray.unsafeFromArray(dotSeparated.split('.')))
+    def toPackageName(dotSeparated: String): FullyQualifiedName =
+      val parts =
+        if dotSeparated.isEmpty() then nme.EmptyPackageName :: Nil
+        else dotSeparated.split('.').toList.map(termName(_))
+      FullyQualifiedName(parts)
 
     /** If this is a root symbol, lookup possible top level tasty trees associated with it. */
     private[tastyquery] def topLevelTasty(rootSymbol: Symbol)(using Context): Option[List[Tree]] =
@@ -245,16 +238,14 @@ object Classpaths {
         searched = true
 
         def enterPackages(packages: IArray[PackageData]) = {
-          packageNameCache.sizeHint(packages.size)
-
           val packageNames = packages.map(pkg => toPackageName(pkg.name.name))
 
           var debugPackageCount = 0
 
-          def createSubpackages(packageName: TermName)(using Context): PackageClassSymbol = {
+          def createSubpackages(packageName: FullyQualifiedName)(using Context): PackageClassSymbol = {
             var currentOwner = defn.RootPackage
-            for subpackageName <- packageName.subnames do
-              currentOwner = ctx.createPackageSymbolIfNew(subpackageName, currentOwner)
+            for subpackageName <- packageName.path do
+              currentOwner = ctx.createPackageSymbolIfNew(subpackageName.asSimpleName, currentOwner)
               debugPackageCount += 1
 
             currentOwner
