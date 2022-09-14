@@ -2,7 +2,7 @@ package tastyquery
 
 import dotty.tools.tasty.TastyFormat.NameTags
 
-import munit.Location
+import munit.{Location, TestOptions}
 
 import tastyquery.Contexts
 import tastyquery.Contexts.Context
@@ -46,19 +46,31 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
         ) =>
   }
 
-  def testUnpickleTopLevel(name: String, path: TopLevelDeclPath)(
+  def testUnpickleTopLevel(name: String, path: TopLevelDeclPath)(using Location)(
+    body: Contexts.Context ?=> Tree => Unit
+  ): Unit =
+    testUnpickleTopLevel(new TestOptions(name), path)(body)
+  end testUnpickleTopLevel
+
+  def testUnpickleTopLevel(testOptions: TestOptions, path: TopLevelDeclPath)(
     using Location
   )(body: Contexts.Context ?=> Tree => Unit): Unit =
-    test(name) {
+    test(testOptions) {
       val (base, tree) = findTopLevelTasty(path)()
       body(using base)(tree)
     }
   end testUnpickleTopLevel
 
-  def testUnpickle(name: String, path: TopLevelDeclPath)(
+  def testUnpickle(name: String, path: TopLevelDeclPath)(using Location)(
+    body: Contexts.Context ?=> Tree => Unit
+  ): Unit =
+    testUnpickle(new TestOptions(name), path)(body)
+  end testUnpickle
+
+  def testUnpickle(testOptions: TestOptions, path: TopLevelDeclPath)(
     using Location
   )(body: Contexts.Context ?=> Tree => Unit): Unit =
-    test(name) {
+    test(testOptions) {
       given Context = getUnpicklingContext(path)
       val cls = resolve(path)
       val tree = cls.tree.getOrElse {
