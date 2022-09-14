@@ -23,15 +23,19 @@ final class Definitions private[tastyquery] (
 
   // Magic symbols that are not found on the classpath, but rather created by hand
 
-  private def markInitialised(cls: ClassSymbol): cls.type =
+  private def createSpecialClass(name: TypeName, parents: List[Type], flags: FlagSet): ClassSymbol =
+    val cls = ctx.createClassSymbol(name, scalaPackage)
+    cls.withTypeParams(Nil, Nil)
+    cls.withDeclaredType(ClassType(cls, if parents.isEmpty then NoType else parents.reduce(_ & _)))
+    cls.withFlags(flags)
     cls.initialised = true
     cls
 
-  val AnyClass = markInitialised(ctx.createClassSymbol(typeName("Any"), scalaPackage))
+  val AnyClass = createSpecialClass(typeName("Any"), Nil, Abstract)
 
-  val NullClass = markInitialised(ctx.createClassSymbol(typeName("Null"), scalaPackage))
+  val NullClass = createSpecialClass(typeName("Null"), AnyClass.typeRef :: Nil, Abstract | Final)
 
-  val NothingClass = markInitialised(ctx.createClassSymbol(typeName("Nothing"), scalaPackage))
+  val NothingClass = createSpecialClass(typeName("Nothing"), AnyClass.typeRef :: Nil, Abstract | Final)
 
   val NothingAnyBounds = RealTypeBounds(NothingClass.typeRef, AnyClass.typeRef)
 
@@ -77,7 +81,7 @@ final class Definitions private[tastyquery] (
     cls.withFlags(EmptyFlagSet | Artifact)
 
     val parents = parentConstrs(TypeRef(NoPrefix, tparam))
-    // TODO Set parents in cls
+    cls.withDeclaredType(ClassType(cls, parents.reduce(_ & _)))
 
     cls
   end createSpecialPolyClass

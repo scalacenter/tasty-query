@@ -764,4 +764,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     // TODO Set flags ClassTypeParam on TypeParams
     //assert(clue(targArray.flags).isAllOf(ClassTypeParam))
   }
+
+  testWithContext("poly-type-in-higher-kinded") {
+    val HigherKindedClass = resolve(name"simple_trees" / tname"HigherKinded").asClass
+    val polyMethod = HigherKindedClass.getDecl(name"m").get
+    println(polyMethod.declaredType.asInstanceOf[PolyType].resultType)
+  }
 }
