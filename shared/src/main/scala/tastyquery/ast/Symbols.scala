@@ -181,21 +181,15 @@ object Symbols {
         .takeWhile(s => s.maybeOuter.exists)
         .forall(s => s.isPackage || s.isClass && s.name.toTypeName.wrapsObjectName)
 
-    private def nameWithPrefix(addPrefix: Symbol => Boolean): Name =
-      if isPackage then name
+    private def nameWithPrefix(addPrefix: Symbol => Boolean): FullyQualifiedName =
+      if isRoot then FullyQualifiedName.rootPackageName
       else
         val pre = maybeOuter
-        if pre.exists && addPrefix(pre) then
-          val withPrefix = name match
-            case TypeName(SuffixedName(NameTags.OBJECTCLASS, module)) =>
-              pre.nameWithPrefix(addPrefix).toTermName.select(module.asSimpleName).withObjectSuffix
-            case _ => pre.nameWithPrefix(addPrefix).toTermName.select(name.asSimpleName)
-          if name.isTypeName then withPrefix.toTypeName
-          else withPrefix
-        else name
+        if addPrefix(pre) then pre.nameWithPrefix(addPrefix).mapLastOption(_.toTermName).select(name)
+        else FullyQualifiedName(name :: Nil)
 
-    final def fullName: Name = nameWithPrefix(_.isStatic)
-    private[tastyquery] final def erasedName: Name = nameWithPrefix(_ => true)
+    final def fullName: FullyQualifiedName = nameWithPrefix(_.isStatic)
+    private[tastyquery] final def erasedName: FullyQualifiedName = nameWithPrefix(_ => true)
 
     final def exists: Boolean = this ne NoSymbol
 
@@ -204,6 +198,7 @@ object Symbols {
 
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
     final def isPackage: Boolean = this.isInstanceOf[PackageClassSymbol]
+    final def isRoot: Boolean = isPackage && rawowner == null
 
     final def asClass: ClassSymbol = this.asInstanceOf[ClassSymbol]
 
@@ -260,10 +255,7 @@ object Symbols {
       mutable.HashMap[Name, mutable.HashSet[Symbol]]()
 
     private[tastyquery] final def addDecl(decl: Symbol): Unit =
-      val key = decl.name match
-        case QualifiedName(_, _, last) => last // drop package prefixes
-        case name                      => name
-      myDeclarations.getOrElseUpdate(key, new mutable.HashSet) += decl
+      myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet) += decl
 
     /** direct lookup without requiring `Context`, can not resolve overloads */
     private[tastyquery] final def getDeclInternal(name: Name): Option[Symbol] = name match
@@ -467,20 +459,9 @@ object Symbols {
 
     final def getPackageDecl(name: SimpleName)(using Context): Option[PackageClassSymbol] =
       ensureInitialised()
-      getPackageInternal(name)
+      getPackageDeclInternal(name)
 
-    def findPackageSymbol(packageName: TermName): Option[PackageClassSymbol] = packageName match {
-      case packageName: SimpleName => getPackageInternal(packageName)
-      case QualifiedName(NameTags.QUALIFIED, prefix, suffix) =>
-        if (prefix == name)
-          getPackageInternal(suffix)
-        else
-          // recurse
-          findPackageSymbol(prefix).flatMap(_.findPackageSymbol(packageName))
-      case _ => throw IllegalArgumentException(s"Unexpected package name: $name")
-    }
-
-    private def getPackageInternal(packageName: SimpleName): Option[PackageClassSymbol] =
+    private[tastyquery] def getPackageDeclInternal(packageName: SimpleName): Option[PackageClassSymbol] =
       /* All subpackages are created eagerly when initializing contexts,
        * so we can use getDeclInternal here.
        */
@@ -529,6 +510,8 @@ object Symbols {
   object PackageClassSymbolFactory extends SymbolFactory[PackageClassSymbol] {
     type OwnerSym = PackageClassSymbol // can only be created when the owner is a PackageClassSymbol
     override protected def factory(name: Name, owner: OwnerSym): PackageClassSymbol =
+      if owner.getPackageDeclInternal(name.asSimpleName).isDefined then
+        throw IllegalStateException(s"Trying to recreate package $name in $owner")
       PackageClassSymbol(name, owner)
 
     def createRoots: (PackageClassSymbol, PackageClassSymbol) =

@@ -28,14 +28,29 @@ object TastyUnpickler {
       new PositionUnpickler(reader, nameAtRef)
   }
 
-  class NameTable extends (NameRef => TermName) {
-    private val names = new mutable.ArrayBuffer[TermName]
+  final class NameTable {
+    private[TastyUnpickler] type EitherName = TermName | FullyQualifiedName
 
-    def add(name: TermName): mutable.ArrayBuffer[TermName] = names += name
+    private val names = new mutable.ArrayBuffer[EitherName]
 
-    def apply(ref: NameRef): TermName = names(ref.index)
+    private[TastyUnpickler] def add(name: EitherName): Unit = names += name
 
-    def contents: Iterable[TermName] = names
+    private[TastyUnpickler] def apply(ref: NameRef): EitherName =
+      names(ref.index)
+
+    def simple(ref: NameRef): TermName =
+      apply(ref) match
+        case name: TermName =>
+          name
+        case name: FullyQualifiedName =>
+          throw IllegalArgumentException(s"Expected TermName but got ${name.toDebugString}")
+
+    def fullyQualified(ref: NameRef): FullyQualifiedName =
+      apply(ref) match
+        case name: FullyQualifiedName =>
+          name
+        case name: TermName =>
+          FullyQualifiedName(name :: Nil)
   }
 
 }
@@ -53,7 +68,11 @@ class TastyUnpickler(reader: TastyReader) {
   private val sectionReader = new mutable.HashMap[String, TastyReader]
   val nameAtRef: NameTable = new NameTable
 
-  private def readName(): TermName = nameAtRef(readNameRef())
+  private def readName(): TermName = nameAtRef.simple(readNameRef())
+
+  private def readFullyQualifiedName(): FullyQualifiedName = nameAtRef.fullyQualified(readNameRef())
+
+  private def readEitherName(): nameAtRef.EitherName = nameAtRef(readNameRef())
 
   private def readString(): String = readName().toString
 
@@ -62,20 +81,24 @@ class TastyUnpickler(reader: TastyReader) {
     if (ref < 0)
       TypeLenSig(ref.abs)
     else
-      TermSig(nameAtRef(new NameRef(ref)).toTypeName)
+      TermSig(nameAtRef.fullyQualified(new NameRef(ref)).mapLast(_.toTypeName))
   }
 
-  private def readNameContents(): TermName = {
+  private def readNameContents(): nameAtRef.EitherName = {
     val tag = readByte()
     val length = readNat()
     val start: Addr = reader.currentAddr
     val end: Addr = start + length
-    val result = tag match {
+    val result: nameAtRef.EitherName = tag match {
       case NameTags.UTF8 =>
         reader.goto(end)
         termName(bytes, start.index, length)
-      case NameTags.QUALIFIED | NameTags.EXPANDED | NameTags.EXPANDPREFIX =>
-        new QualifiedName(tag, readName(), readName().asSimpleName)
+      case NameTags.QUALIFIED =>
+        val qual = readFullyQualifiedName()
+        val item = readName()
+        FullyQualifiedName(qual.path :+ item)
+      case NameTags.EXPANDED | NameTags.EXPANDPREFIX =>
+        new ExpandedName(tag, readName(), readName().asSimpleName)
       case NameTags.UNIQUE =>
         val separator = readName().toString
         val num = readNat()
@@ -87,14 +110,18 @@ class TastyUnpickler(reader: TastyReader) {
       case NameTags.SIGNED | NameTags.TARGETSIGNED =>
         val original = readName()
         val target = if (tag == NameTags.TARGETSIGNED) readName() else original
-        val result = readName().toTypeName
+        val result = readFullyQualifiedName().mapLast(_.toTypeName)
         val paramsSig = reader.until(end)(readParamSig())
         val sig = Signature(paramsSig, result)
         new SignedName(original, sig, target)
       case NameTags.SUPERACCESSOR | NameTags.INLINEACCESSOR =>
         new PrefixedName(tag, readName())
-      case NameTags.BODYRETAINER | NameTags.OBJECTCLASS =>
+      case NameTags.BODYRETAINER =>
         new SuffixedName(tag, readName())
+      case NameTags.OBJECTCLASS =>
+        readEitherName() match
+          case simple: TermName              => simple.withObjectSuffix
+          case qualified: FullyQualifiedName => qualified.mapLast(_.asSimpleName.withObjectSuffix)
       case _ => throw new UnsupportedOperationException(s"unexpected tag: $tag")
     }
     assert(reader.currentAddr == end, s"bad name $result $start ${reader.currentAddr} $end")

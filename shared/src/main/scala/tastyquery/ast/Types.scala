@@ -6,7 +6,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.Contexts.*
 import tastyquery.ast.Constants.Constant
 import tastyquery.ast.Flags.*
-import tastyquery.ast.Names.{Name, QualifiedName, SimpleName, TermName, TypeName}
+import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Trees.{EmptyTree, Tree, TypeParam}
 import tastyquery.ast.Names.*
@@ -38,26 +38,23 @@ object Types {
       case classRef: ClassRef             => ArrayTypeRef(classRef, 1)
       case ArrayTypeRef(base, dimensions) => ArrayTypeRef(base, dimensions + 1)
 
-    /** The `TypeName` for this `ErasedTypeRef` as found in the `TermSig`s of `Signature`s. */
-    def toSigTypeName: TypeName = this match
+    /** The `FullyQualifiedName` for this `ErasedTypeRef` as found in the `TermSig`s of `Signature`s. */
+    def toSigFullName: FullyQualifiedName = this match
       case ClassRef(cls) =>
-        cls.erasedName.toTypeName
+        cls.erasedName
 
       case ArrayTypeRef(base, dimensions) =>
-        def appendBracketsSuffix(name: TermName): TermName =
-          val suffix = "[]" * dimensions
-          name match
-            case QualifiedName(NameTags.QUALIFIED, pre, innerName) =>
-              pre.select(innerName.append(suffix))
-            case name: SimpleName =>
-              name.append(suffix)
-
-        base.cls.erasedName.toTermName match
-          case SuffixedName(NameTags.OBJECTCLASS, full) =>
-            appendBracketsSuffix(full).withObjectSuffix.toTypeName
-          case full =>
-            appendBracketsSuffix(full).toTypeName
-    end toSigTypeName
+        val suffix = "[]" * dimensions
+        val baseName = base.cls.erasedName
+        val suffixedLast = baseName.path.last match
+          case TypeName(SuffixedName(NameTags.OBJECTCLASS, baseModuleName)) =>
+            baseModuleName.asSimpleName.append(suffix).withObjectSuffix.toTypeName
+          case last: TypeName =>
+            last.toTermName.asSimpleName.append(suffix).toTypeName
+          case last: TermName =>
+            last.asSimpleName.append(suffix)
+        FullyQualifiedName(baseName.path.init :+ suffixedLast)
+    end toSigFullName
   end ErasedTypeRef
 
   object ErasedTypeRef {
@@ -383,9 +380,9 @@ object Types {
       NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
   }
 
-  private def scalaPackage: PackageRef = PackageRef(nme.scalaPackageName)
+  private def scalaPackage: PackageRef = PackageRef(FullyQualifiedName.scalaPackageName)
 
-  private def javalangPackage: PackageRef = PackageRef(nme.javalangPackageName)
+  private def javalangPackage: PackageRef = PackageRef(FullyQualifiedName.javaLangPackageName)
 
   private def scalaDot(name: TypeName): TypeRef =
     TypeRef(scalaPackage, name)
@@ -732,16 +729,16 @@ object Types {
           tp.findMember(name, pre)
   }
 
-  class PackageRef(val packageName: TermName) extends NamedType with SingletonType {
+  class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends NamedType with SingletonType {
     private var packageSymbol: PackageClassSymbol | Null = null
 
     def this(packageSym: PackageClassSymbol) =
-      this(packageSym.name.toTermName)
+      this(packageSym.fullName)
       packageSymbol = packageSym
 
     override def designator: Designator =
       val pkgOpt = packageSymbol
-      if pkgOpt == null then packageName else pkgOpt
+      if pkgOpt == null then fullyQualifiedName.path.last else pkgOpt
 
     override protected def designator_=(d: Designator): Unit = throw UnsupportedOperationException(
       s"Can't assign designator of a package"
@@ -755,18 +752,17 @@ object Types {
     override def resolveToSymbol(using Context): PackageClassSymbol = {
       val local = packageSymbol
       if (local == null) {
-        def searchPkg = defn.RootPackage.findPackageSymbol(packageName)
-        val resolved = searchPkg.getOrElse(throw new SymbolLookupException(packageName))
+        val resolved = ctx.findPackageFromRoot(fullyQualifiedName)
         packageSymbol = resolved
         resolved
       } else local
     }
 
-    override def toString: String = s"PackageRef($packageName)"
+    override def toString: String = s"PackageRef($fullyQualifiedName)"
   }
 
   object PackageRef {
-    def unapply(r: PackageRef): Option[Name] = Some(r.packageName)
+    def unapply(r: PackageRef): Option[FullyQualifiedName] = Some(r.fullyQualifiedName)
   }
 
   case class TypeRef(override val prefix: Type, private var myDesignator: Designator) extends NamedType {
@@ -796,8 +792,9 @@ object Types {
       throw new AssertionError(s"Cannot find member in NoPrefix")
   }
 
-  class PackageTypeRef(packageName: TermName) extends TypeRef(NoPrefix, packageName.toTypeName) {
-    private val packageRef = PackageRef(packageName)
+  class PackageTypeRef(fullyQualifiedName: FullyQualifiedName)
+      extends TypeRef(NoPrefix, fullyQualifiedName.path.last.toTypeName) {
+    private val packageRef = PackageRef(fullyQualifiedName)
 
     override def resolveToSymbol(using Context): Symbol = packageRef.resolveToSymbol
   }

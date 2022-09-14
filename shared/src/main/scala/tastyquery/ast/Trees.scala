@@ -254,13 +254,14 @@ object Trees {
   }
 
   /** reference to a package, seen as a term */
-  final class ReferencedPackage(override val name: TermName)(span: Span) extends Ident(name)(span) {
+  final class ReferencedPackage(val fullyQualifiedName: FullyQualifiedName)(span: Span)
+      extends Ident(fullyQualifiedName.path.last.asSimpleName)(span) {
     override protected final def calculateType(using Context): Type =
-      PackageRef(name)
+      PackageRef(fullyQualifiedName)
 
-    override final def withSpan(span: Span): ReferencedPackage = ReferencedPackage(name)(span)
+    override final def withSpan(span: Span): ReferencedPackage = ReferencedPackage(fullyQualifiedName)(span)
 
-    override def toString: String = s"ReferencedPackage($name)"
+    override def toString: String = s"ReferencedPackage($fullyQualifiedName)"
   }
 
   object ReferencedPackage {

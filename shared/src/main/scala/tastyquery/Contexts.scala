@@ -48,7 +48,7 @@ object Contexts {
         root.pkg
           .getDecl(root.rootName.toTypeName)
           .collect { case cls: ClassSymbol => cls }
-          .toRight(SymbolLookupException(root.fullName, s"perhaps it is not on the classpath"))
+          .toRight(SymbolLookupException(root.rootName, s"in ${root.pkg.fullName}; perhaps it is not on the classpath"))
       }
 
     /** Does there possibly exist a root for the given binary name. Does not force any classes covered by the name */
@@ -70,19 +70,36 @@ object Contexts {
         val lastSep = binaryName.lastIndexOf('.')
         if lastSep == -1 then
           val rootName = termName(binaryName)
-          (nme.EmptyPackageName, rootName)
+          (FullyQualifiedName(nme.EmptyPackageName :: Nil), rootName)
         else
           import scala.language.unsafeNulls
           val packageName = binaryName.substring(0, lastSep)
           val rootName = termName(binaryName.substring(lastSep + 1))
           (classloader.toPackageName(packageName), rootName)
-      def fullName = packageName.toTermName.select(rootName)
       try
         val pkg = PackageRef(packageName).resolveToSymbol
-        pkg.possibleRoot(rootName).toRight(SymbolLookupException(fullName, s"no root exists in package $packageName"))
+        pkg
+          .possibleRoot(rootName)
+          .toRight(SymbolLookupException(rootName, s"no root $rootName exists in package $packageName"))
       catch
         case e: SymResolutionProblem =>
-          Left(SymbolLookupException(fullName, s"unknown package $packageName"))
+          Left(SymbolLookupException(rootName, s"unknown package $packageName"))
+
+    def findPackageFromRoot(fullyQualifiedName: FullyQualifiedName): PackageClassSymbol =
+      @tailrec
+      def rec(owner: PackageClassSymbol, path: List[Name]): PackageClassSymbol =
+        path match
+          case Nil =>
+            owner
+          case (name: SimpleName) :: pathRest =>
+            val next = owner.getPackageDecl(name).getOrElse {
+              throw SymbolLookupException(name, s"cannot find package member $name of $owner")
+            }
+            rec(next, pathRest)
+          case name :: pathRest =>
+            throw SymbolLookupException(name, s"cannot find package member $name of $owner")
+      rec(RootPackage, fullyQualifiedName.path)
+    end findPackageFromRoot
 
     def findSymbolFromRoot(path: List[Name]): Symbol =
       @tailrec
@@ -122,33 +139,17 @@ object Contexts {
         case some =>
           throw ExistingDefinitionException(owner, name)
 
-    def createPackageSymbolIfNew(name: TermName, owner: PackageClassSymbol): PackageClassSymbol = {
-      def create(): PackageClassSymbol = {
-        val trueOwner = if (owner == EmptyPackage) RootPackage else owner
-        val sym = PackageClassSymbolFactory.createSymbol(name, trueOwner)
-        sym
-      }
-
-      RootPackage.findPackageSymbol(name) match {
+    def createPackageSymbolIfNew(name: SimpleName, owner: PackageClassSymbol): PackageClassSymbol =
+      assert(owner != EmptyPackage, s"Trying to create a subpackage $name of $owner")
+      owner.getPackageDeclInternal(name) match {
         case Some(pkg) => pkg
-        case None =>
-          name match {
-            case _: SimpleName => create()
-            case QualifiedName(NameTags.QUALIFIED, prefix, _) =>
-              if (prefix == owner.name) {
-                create()
-              } else {
-                // create intermediate packages
-                val newOwner = createPackageSymbolIfNew(prefix, owner)
-                createPackageSymbolIfNew(name, newOwner)
-              }
-            case _ =>
-              throw IllegalArgumentException(s"Unexpected package name: $name")
-          }
+        case None      => PackageClassSymbolFactory.createSymbol(name, owner)
       }
-    }
 
-    def getPackageSymbol(name: TermName): PackageClassSymbol = RootPackage.findPackageSymbol(name).get
+    def createPackageSymbolIfNew(fullyQualifiedName: FullyQualifiedName): PackageClassSymbol =
+      fullyQualifiedName.path.foldLeft(RootPackage) { (owner, name) =>
+        createPackageSymbolIfNew(name.asSimpleName, owner)
+      }
 
     private[Contexts] def initializeFundamentalClasses(): Unit = {
       // TODO Assign superclasses and create members

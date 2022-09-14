@@ -19,7 +19,8 @@ final class Definitions private[tastyquery] (
   val EmptyPackage = emptyPackage
 
   val scalaPackage = ctx.createPackageSymbolIfNew(nme.scalaPackageName, RootPackage)
-  val javaLangPackage = ctx.createPackageSymbolIfNew(nme.javalangPackageName, RootPackage)
+  private val javaPackage = ctx.createPackageSymbolIfNew(nme.javaPackageName, RootPackage)
+  val javaLangPackage = ctx.createPackageSymbolIfNew(nme.langPackageName, javaPackage)
 
   // Magic symbols that are not found on the classpath, but rather created by hand
 

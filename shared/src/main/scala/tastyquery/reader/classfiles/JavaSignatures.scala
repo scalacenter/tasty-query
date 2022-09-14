@@ -1,11 +1,11 @@
 package tastyquery.reader.classfiles
 
 import tastyquery.Contexts.*
+import tastyquery.ast.Flags
+import tastyquery.ast.Names.*
 import tastyquery.ast.Types
 import tastyquery.ast.Types.*
 import tastyquery.ast.Symbols.*
-import tastyquery.ast.Flags
-import tastyquery.ast.Names.{SimpleName, TypeName, termName, nme}
 import tastyquery.util.syntax.chaining.given
 
 import scala.annotation.switch
@@ -147,9 +147,11 @@ object JavaSignatures:
 
         val firstIdent = identifier
         if consume('/') then // must have '/', identifier, and terminal char.
-          val init = PackageRef(firstIdent)
-          followPackages(init.resolveToSymbol)
-        else TypeRef(PackageRef(nme.EmptyPackageName), firstIdent.toTypeName)
+          val firstPackage = defn.RootPackage.getPackageDecl(firstIdent).getOrElse {
+            sys.error(s"cannot find package $firstIdent in ${defn.RootPackage}")
+          }
+          followPackages(firstPackage)
+        else TypeRef(PackageRef(FullyQualifiedName.emptyPackageName), firstIdent.toTypeName)
       end readSimpleClassType
 
       def simpleClassTypeSignature(clsTpe: TypeRef): Type =

@@ -12,7 +12,7 @@ import TastyFormat.SOURCE
 import TastyBuffer.{Addr, NameRef}
 
 /** Unpickler for tree positions */
-class PositionUnpickler(reader: TastyReader, nameAtRef: NameRef => TermName) {
+class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnpickler.NameTable) {
   import reader.*
 
   private var myLineSizes: Array[Int] = _
@@ -37,7 +37,7 @@ class PositionUnpickler(reader: TastyReader, nameAtRef: NameRef => TermName) {
       while (!isAtEnd) {
         val header = readInt()
         if (header == SOURCE) {
-          val path = nameAtRef(readNameRef()).toString
+          val path = nameAtRef.simple(readNameRef()).toString
           mySourcePaths(Addr(curIndex)) = path
         } else {
           val addrDelta = header >> 3

@@ -67,9 +67,9 @@ object Names {
     val Wildcard: SimpleName = termName("_")
     val RefinementClass = typeName("<refinement>")
 
-    val scalaPackageName: TermName = termName("scala")
-    val javaPackageName: TermName = termName("java")
-    val javalangPackageName: TermName = javaPackageName.select(termName("lang"))
+    val scalaPackageName: SimpleName = termName("scala")
+    val javaPackageName: SimpleName = termName("java")
+    val langPackageName: SimpleName = termName("lang")
   }
 
   object tpnme {
@@ -93,8 +93,6 @@ object Names {
     val String: TypeName = typeName("String")
     val Class: TypeName = typeName("Class")
     val Object: TypeName = typeName("Object")
-
-    val scalaFunction0: TypeName = nme.scalaPackageName.select(termName("Function0")).toTypeName
 
     val RefinedClassMagic: TypeName = typeName("<refinement>")
     val ByNameParamClassMagic: TypeName = typeName("<byname>")
@@ -191,26 +189,10 @@ object Names {
       }
     }
 
-    infix def select(name: SimpleName): QualifiedName = QualifiedName(NameTags.QUALIFIED, this, name)
-
-    def subnames: TermName.SubNamesOps = new TermName.SubNamesOps(this)
-
     def withObjectSuffix: SuffixedName = SuffixedName(NameTags.OBJECTCLASS, this)
     def stripObjectSuffix: TermName = this match
       case SuffixedName(NameTags.OBJECTCLASS, rest) => rest
       case _                                        => this
-  }
-
-  object TermName {
-    class SubNamesOps(val termName: TermName) extends AnyVal {
-      def foreach(f: TermName => Unit): Unit = {
-        def addStack(name: TermName): Unit = name match
-          case name @ QualifiedName(NameTags.QUALIFIED, pre, _) => { addStack(pre); f(name) }
-          case name @ SimpleName(_)                             => f(name)
-          case _                                                => ()
-        addStack(termName)
-      }
-    }
   }
 
   final case class SimpleName(name: String) extends TermName {
@@ -242,16 +224,14 @@ object Names {
     override def toString: String = s"$underlying[with sig $sig @$target]"
   }
 
-  final case class QualifiedName(override val tag: Int, prefix: TermName, name: SimpleName)
-      extends DerivedName(prefix) {
+  final case class ExpandedName(override val tag: Int, prefix: TermName, name: SimpleName) extends DerivedName(prefix) {
     def separator: String = tag match {
-      case NameTags.QUALIFIED    => "."
       case NameTags.EXPANDED     => "$$"
       case NameTags.EXPANDPREFIX => "$"
     }
 
     override def toDebugString: String =
-      s"${prefix.toDebugString}[Qualified $separator $name]"
+      s"${prefix.toDebugString}[Expanded $separator $name]"
 
     override def toString: String = s"$prefix$separator$name"
   }
@@ -318,4 +298,28 @@ object Names {
       case SuffixedName(NameTags.OBJECTCLASS, objName) => objName.asSimpleName
       case name                                        => name.asSimpleName
   }
+
+  final case class FullyQualifiedName(path: List[Name]):
+    override def toString(): String =
+      path.mkString(".")
+
+    def toDebugString: String =
+      path.map(_.toDebugString).mkString(".")
+
+    def select(name: Name): FullyQualifiedName = FullyQualifiedName(path :+ name)
+
+    def mapLast(op: Name => Name): FullyQualifiedName =
+      FullyQualifiedName(path.init :+ op(path.last))
+
+    def mapLastOption(op: Name => Name): FullyQualifiedName =
+      if path.isEmpty then this
+      else mapLast(op)
+  end FullyQualifiedName
+
+  object FullyQualifiedName:
+    val rootPackageName = FullyQualifiedName(Nil)
+    val emptyPackageName = FullyQualifiedName(nme.EmptyPackageName :: Nil)
+    val scalaPackageName = FullyQualifiedName(nme.scalaPackageName :: Nil)
+    val javaLangPackageName = FullyQualifiedName(nme.javaPackageName :: nme.langPackageName :: Nil)
+  end FullyQualifiedName
 }

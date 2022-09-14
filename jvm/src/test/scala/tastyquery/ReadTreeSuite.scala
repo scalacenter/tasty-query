@@ -2,7 +2,7 @@ package tastyquery
 
 import dotty.tools.tasty.TastyFormat.NameTags
 
-import munit.Location
+import munit.{Location, TestOptions}
 
 import tastyquery.Contexts
 import tastyquery.Contexts.Context
@@ -29,13 +29,22 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   def containsSubtree(p: StructureCheck)(t: Tree): Boolean =
     t.walkTree(p.isDefinedAt)(_ || _, false)
 
+  private object SymbolWithFullName:
+    def unapplySeq(sym: Symbol): Option[List[Name]] = Some(sym.fullName.path)
+
+  private object ScalaPackageRef:
+    def unapply(tree: PackageRef): Boolean = tree.fullyQualifiedName.path == List(SimpleName("scala"))
+
+  private object SimpleTreesPackageRef:
+    def unapply(tree: PackageRef): Boolean = tree.fullyQualifiedName.path == List(SimpleName("simple_trees"))
+
   val isJavaLangObject: StructureCheck = {
     case Apply(
           Select(
             New(
               TypeWrapper(
                 TypeRef(
-                  PackageRef(QualifiedName(NameTags.QUALIFIED, SimpleName("java"), SimpleName("lang"))),
+                  PackageRef(FullyQualifiedName(List(SimpleName("java"), SimpleName("lang")))),
                   TypeName(SimpleName("Object"))
                 )
               )
@@ -46,19 +55,31 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
         ) =>
   }
 
-  def testUnpickleTopLevel(name: String, path: TopLevelDeclPath)(
+  def testUnpickleTopLevel(name: String, path: TopLevelDeclPath)(using Location)(
+    body: Contexts.Context ?=> Tree => Unit
+  ): Unit =
+    testUnpickleTopLevel(new TestOptions(name), path)(body)
+  end testUnpickleTopLevel
+
+  def testUnpickleTopLevel(testOptions: TestOptions, path: TopLevelDeclPath)(
     using Location
   )(body: Contexts.Context ?=> Tree => Unit): Unit =
-    test(name) {
+    test(testOptions) {
       val (base, tree) = findTopLevelTasty(path)()
       body(using base)(tree)
     }
   end testUnpickleTopLevel
 
-  def testUnpickle(name: String, path: TopLevelDeclPath)(
+  def testUnpickle(name: String, path: TopLevelDeclPath)(using Location)(
+    body: Contexts.Context ?=> Tree => Unit
+  ): Unit =
+    testUnpickle(new TestOptions(name), path)(body)
+  end testUnpickle
+
+  def testUnpickle(testOptions: TestOptions, path: TopLevelDeclPath)(
     using Location
   )(body: Contexts.Context ?=> Tree => Unit): Unit =
-    test(name) {
+    test(testOptions) {
       given Context = getUnpicklingContext(path)
       val cls = resolve(path)
       val tree = cls.tree.getOrElse {
@@ -81,7 +102,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                     DefDef(
                       SimpleName("<init>"),
                       Left(Nil) :: Nil,
-                      TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Unit")))),
+                      TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Unit")))),
                       EmptyTree,
                       _
                     ),
@@ -106,9 +127,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val nestedPackages: StructureCheck = {
       case PackageDef(
             Symbol(SimpleName("simple_trees")),
-            List(
-              PackageDef(Symbol(QualifiedName(NameTags.QUALIFIED, SimpleName("simple_trees"), SimpleName("nested"))), _)
-            )
+            List(PackageDef(SymbolWithFullName(SimpleName("simple_trees"), SimpleName("nested")), _))
           ) =>
     }
 
@@ -117,7 +136,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
   testUnpickleTopLevel("qualified-nested-package", `simple_trees.nested` / tname"InQualifiedNestedPackage") { tree =>
     val packageCheck: StructureCheck = {
-      case PackageDef(Symbol(QualifiedName(NameTags.QUALIFIED, SimpleName("simple_trees"), SimpleName("nested"))), _) =>
+      case PackageDef(SymbolWithFullName(SimpleName("simple_trees"), SimpleName("nested")), _) =>
     }
 
     assert(containsSubtree(packageCheck)(clue(tree)))
@@ -448,7 +467,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val selfDefMatch: StructureCheck = {
       case ValDef(
             SimpleName("self"),
-            TypeWrapper(TypeRef(PackageRef(SimpleName("simple_trees")), Symbol(TypeName(SimpleName("ClassWithSelf"))))),
+            TypeWrapper(TypeRef(SimpleTreesPackageRef(), Symbol(TypeName(SimpleName("ClassWithSelf"))))),
             EmptyTree,
             NoSymbol
           ) =>
@@ -507,12 +526,12 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case Typed(
             SeqLiteral(
               Literal(c1) :: Literal(c2) :: Literal(c3) :: Nil,
-              TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int"))))
+              TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Int"))))
             ),
             TypeWrapper(
               AppliedType(
-                TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("<repeated>"))),
-                TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int"))) :: Nil
+                TypeRef(ScalaPackageRef(), TypeName(SimpleName("<repeated>"))),
+                TypeRef(ScalaPackageRef(), TypeName(SimpleName("Int"))) :: Nil
               )
             )
           ) =>
@@ -539,7 +558,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             // "Inner" inside THIS
             TypeWrapper(
               TypeRef(
-                ThisType(TypeRef(PackageRef(SimpleName("simple_trees")), Symbol(TypeName(SimpleName("InnerClass"))))),
+                ThisType(TypeRef(SimpleTreesPackageRef(), Symbol(TypeName(SimpleName("InnerClass"))))),
                 Symbol(TypeName(SimpleName("Inner")))
               )
             ),
@@ -556,7 +575,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             // apply[Int]
             TypeApply(
               Select(Ident(SimpleName("Seq")), SignedName(SimpleName("apply"), _, _)),
-              TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int")))) :: Nil
+              TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Int")))) :: Nil
             ),
             Typed(SeqLiteral(Literal(Constant(1)) :: Nil, _), _) :: Nil
           ) =>
@@ -576,7 +595,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val valDefMatch: StructureCheck = {
       case ValDef(
             SimpleName("x"),
-            TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int")))),
+            TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Int")))),
             Literal(Constant(1)),
             symbol
           )
@@ -589,7 +608,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case DefDef(
             SimpleName("x_="),
             Left((ValDef(SimpleName("x$1"), _, _, _): Matchable) :: Nil) :: Nil,
-            TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Unit")))),
+            TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Unit")))),
             Literal(Constant(())),
             symbol
           ) if symbol.flags.isAllOf(Accessor | Method | Mutable) =>
@@ -688,7 +707,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               EmptyTree,
               _
             ),
-            TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Object")))) :: Nil,
+            TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Object")))) :: Nil,
             _,
             ValDef(SimpleName("param"), _, _, _) :: Nil
           ) =>
@@ -736,7 +755,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 Ident(SimpleName("$anonfun")),
                 TypeWrapper(
                   TypeRef(
-                    PackageRef(QualifiedName(NameTags.QUALIFIED, SimpleName("java"), SimpleName("lang"))),
+                    PackageRef(FullyQualifiedName(List(SimpleName("java"), SimpleName("lang")))),
                     TypeName(SimpleName("Runnable"))
                   )
                 )
@@ -831,7 +850,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 TypeWrapper(
                   AnnotatedType(
                     TermRef(NoPrefix, Symbol(SimpleName("x$1"))),
-                    New(TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("unchecked")))))
+                    New(TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("unchecked")))))
                   )
                 )
               ),
@@ -887,8 +906,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeName(SimpleName("AbstractType")),
             BoundedTypeTree(
               TypeBoundsTree(
-                TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
               ),
               EmptyTypeTree
             ),
@@ -948,8 +967,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                       TypeParam(
                         TypeName(SimpleName("T")),
                         TypeBoundsTree(
-                          TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                          TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                          TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                          TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                         ),
                         firstTypeParamSymbol
                       )
@@ -968,8 +987,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               TypeParam(
                 TypeName(SimpleName("T")),
                 RealTypeBounds(
-                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
-                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
+                  TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing"))),
+                  TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any")))
                 ),
                 secondTypeParamSymbol
               ) :: _
@@ -996,8 +1015,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                   TypeParam(
                     TypeName(SimpleName("T")),
                     TypeBoundsTree(
-                      TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                      TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                      TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                      TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                     ),
                     _
                   )
@@ -1024,8 +1043,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                   TypeParam(
                     TypeName(SimpleName("T")),
                     TypeBoundsTree(
-                      TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                      TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                      TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                      TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                     ),
                     _
                   )
@@ -1072,8 +1091,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               TypeParam(
                 TypeName(SimpleName("T")),
                 RealTypeBounds(
-                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Null"))),
-                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("AnyRef")))
+                  TypeRef(ScalaPackageRef(), TypeName(SimpleName("Null"))),
+                  TypeRef(ScalaPackageRef(), TypeName(SimpleName("AnyRef")))
                 ),
                 _
               ) :: _
@@ -1099,8 +1118,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                       TypeParam(
                         TypeName(SimpleName("T")),
                         TypeBoundsTree(
-                          TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                          TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                          TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                          TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                         ),
                         _
                       )
@@ -1117,8 +1136,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               TypeParam(
                 TypeName(SimpleName("T")),
                 RealTypeBounds(
-                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
-                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
+                  TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing"))),
+                  TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any")))
                 ),
                 _
               ) :: ClassDef(TypeName(SimpleName("NestedGeneric")), _, innerSymbol) :: _
@@ -1140,8 +1159,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                       TypeParam(
                         TypeName(SimpleName("U")),
                         TypeBoundsTree(
-                          TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                          TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                          TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                          TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                         ),
                         _
                       )
@@ -1158,8 +1177,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               TypeParam(
                 TypeName(SimpleName("U")),
                 RealTypeBounds(
-                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
-                  TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
+                  TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing"))),
+                  TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any")))
                 ),
                 _
               ) :: _
@@ -1200,7 +1219,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             SimpleName("random"),
             TypeWrapper(
               TypeRef(
-                PackageRef(QualifiedName(NameTags.QUALIFIED, SimpleName("scala"), SimpleName("util"))),
+                PackageRef(FullyQualifiedName(List(SimpleName("scala"), SimpleName("util")))),
                 TypeName(SimpleName("Random"))
               )
             ),
@@ -1209,7 +1228,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               Select(
                 New(
                   SelectTypeTree(
-                    TypeWrapper(PackageRef(QualifiedName(NameTags.QUALIFIED, SimpleName("scala"), SimpleName("util")))),
+                    TypeWrapper(PackageRef(FullyQualifiedName(List(SimpleName("scala"), SimpleName("util"))))),
                     TypeName(SimpleName("Random"))
                   )
                 ),
@@ -1242,7 +1261,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val byName: StructureCheck = {
       case ValDef(
             SimpleName("byNameParam"),
-            TypeWrapper(ExprType(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int"))))),
+            TypeWrapper(ExprType(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Int"))))),
             EmptyTree,
             _
           ) =>
@@ -1272,8 +1291,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             ),
             TypeWrapper(
               OrType(
-                TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Int"))),
-                TypeRef(TermRef(PackageRef(SimpleName("scala")), SimpleName("Predef")), TypeName(SimpleName("String")))
+                TypeRef(ScalaPackageRef(), TypeName(SimpleName("Int"))),
+                TypeRef(TermRef(ScalaPackageRef(), SimpleName("Predef")), TypeName(SimpleName("String")))
               )
             ),
             _,
@@ -1308,8 +1327,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             ),
             TypeWrapper(
               AndType(
-                TypeRef(PackageRef(SimpleName("simple_trees")), Symbol(TypeName(SimpleName("IntersectionType")))),
-                TypeRef(PackageRef(SimpleName("simple_trees")), TypeName(SimpleName("UnionType")))
+                TypeRef(SimpleTreesPackageRef(), Symbol(TypeName(SimpleName("IntersectionType")))),
+                TypeRef(SimpleTreesPackageRef(), TypeName(SimpleName("UnionType")))
               )
             ),
             _,
@@ -1329,8 +1348,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               TypeParam(
                 TypeName(SimpleName("X")),
                 TypeBoundsTree(
-                  TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                  TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                  TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                  TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                 ),
                 _
               ) :: Nil,
@@ -1345,8 +1364,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickle("type-lambda-type", simple_trees / tname"HigherKinded") { tree =>
-    val typeLambdaResultIsAny: TypeStructureCheck = {
-      case TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))) =>
+    val typeLambdaResultIsAny: TypeStructureCheck = { case TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))) =>
     }
 
     // A[_], i.e. A >: Nothing <: [X] =>> Any
@@ -1460,12 +1478,12 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeWrapper(
               RefinedType(
                 RefinedType(
-                  TypeRef(PackageRef(SimpleName("simple_trees")), TypeName(SimpleName("TypeMember"))),
+                  TypeRef(SimpleTreesPackageRef(), TypeName(SimpleName("TypeMember"))),
                   TypeName(SimpleName("AbstractType")),
                   TypeAlias(alias)
                 ),
                 TypeName(SimpleName("AbstractWithBounds")),
-                TypeAlias(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Null"))))
+                TypeAlias(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Null"))))
               )
             )
           ) =>
@@ -1482,8 +1500,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 TypeParam(
                   TypeName(SimpleName("X")),
                   TypeBoundsTree(
-                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                    TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                   ),
                   _
                 )
@@ -1508,8 +1526,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 TypeParam(
                   TypeName(SimpleName("X")),
                   TypeBoundsTree(
-                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                    TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                   ),
                   _
                 )
@@ -1533,8 +1551,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 TypeParam(
                   TypeName(SimpleName("X")),
                   TypeBoundsTree(
-                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                    TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                   ),
                   _
                 )
@@ -1549,8 +1567,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                       TypeName(UniqueName("_$", nme.EmptySimpleName, 1)),
                       BoundedTypeTree(
                         TypeBoundsTree(
-                          TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                          TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                          TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                          TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                         ),
                         EmptyTypeTree
                       ),
@@ -1574,8 +1592,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 TypeParam(
                   TypeName(SimpleName("X")),
                   TypeBoundsTree(
-                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                    TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                    TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                    TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                   ),
                   _
                 )
@@ -1625,8 +1643,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 TypeRef(PackageRef(_), TypeName(SimpleName("List"))),
                 WildcardTypeBounds(
                   RealTypeBounds(
-                    TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
-                    TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any")))
+                    TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing"))),
+                    TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any")))
                   )
                 ) :: Nil
               )
@@ -1645,8 +1663,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               TypeIdent(TypeName(SimpleName("List"))),
               WildcardTypeBoundsTree(
                 TypeBoundsTree(
-                  TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing")))),
-                  TypeWrapper(TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Any"))))
+                  TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
+                  TypeWrapper(TypeRef(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                 )
               ) :: Nil
             ),
@@ -1664,8 +1682,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               TypeWrapper(
                 WildcardTypeBounds(
                   RealTypeBounds(
-                    TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("Nothing"))),
-                    TypeRef(PackageRef(SimpleName("scala")), TypeName(SimpleName("AnyKind")))
+                    TypeRef(ScalaPackageRef(), TypeName(SimpleName("Nothing"))),
+                    TypeRef(ScalaPackageRef(), TypeName(SimpleName("AnyKind")))
                   )
                 )
               ) :: Nil
@@ -1679,9 +1697,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val newInner: StructureCheck = {
       case New(
             SelectTypeTree(
-              TypeWrapper(
-                ThisType(TypeRef(PackageRef(SimpleName("simple_trees")), Symbol(TypeName(SimpleName("QualThisType")))))
-              ),
+              TypeWrapper(ThisType(TypeRef(SimpleTreesPackageRef(), Symbol(TypeName(SimpleName("QualThisType")))))),
               TypeName(SimpleName("Inner"))
             )
           ) =>
