@@ -2,6 +2,9 @@ package tastyquery.testutil.jdk
 
 import java.nio.file.*
 
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
+
 import tastyquery.jdk.ClasspathLoaders
 import tastyquery.reader.classfiles.Classpaths.Classpath
 import tastyquery.testutil.TestPlatform
@@ -22,6 +25,6 @@ object JavaTestPlatform extends TestPlatform {
     ClasspathLoaders.read(entries)
   end classpath
 
-  def loadClasspath(): Classpath =
-    classpath
+  def loadClasspath(): Future[Classpath] =
+    Future(classpath)
 }

@@ -1,5 +1,7 @@
 package tastyquery
 
+import scala.concurrent.ExecutionContext.Implicits.global
+
 import dotty.tools.tasty.TastyFormat.NameTags
 
 import munit.{Location, TestOptions}
@@ -65,8 +67,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     using Location
   )(body: Contexts.Context ?=> Tree => Unit): Unit =
     test(testOptions) {
-      val (base, tree) = findTopLevelTasty(path)()
-      body(using base)(tree)
+      for (base, tree) <- findTopLevelTasty(path)() yield body(using base)(tree)
     }
   end testUnpickleTopLevel
 
@@ -80,12 +81,13 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     using Location
   )(body: Contexts.Context ?=> Tree => Unit): Unit =
     test(testOptions) {
-      given Context = getUnpicklingContext(path)
-      val cls = resolve(path)
-      val tree = cls.tree.getOrElse {
-        fail(s"Missing tasty for ${path.rootClassName}, $cls")
-      }
-      body(tree.asInstanceOf[Tree])
+      for ctx <- getUnpicklingContext(path) yield
+        given Context = ctx
+        val cls = resolve(path)
+        val tree = cls.tree.getOrElse {
+          fail(s"Missing tasty for ${path.rootClassName}, $cls")
+        }
+        body(tree.asInstanceOf[Tree])
     }
   end testUnpickle
 

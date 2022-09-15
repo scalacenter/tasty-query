@@ -1,5 +1,6 @@
 package tastyquery
 
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.io.Source
 import scala.reflect.TypeTest
 
@@ -34,10 +35,10 @@ class PositionSuite extends RestrictedUnpicklingSuite {
     using munit.Location
   )(body: (Tree, String) => Unit): Unit =
     test(testOptions) {
-      val (base, tree) = findTopLevelTasty(path)()
-      val codePath = getCodePath(path.rootClassName)
-      val code = Source.fromFile(codePath).mkString
-      body(tree, code)
+      for (base, tree) <- findTopLevelTasty(path)() yield
+        val codePath = getCodePath(path.rootClassName)
+        val code = Source.fromFile(codePath).mkString
+        body(tree, code)
     }
   end testUnpickleWithCode
 
