@@ -134,6 +134,7 @@ object Types {
       case ClassRef(cls) =>
         if cls == defn.AnyClass || cls == defn.AnyValClass then ClassRef(defn.ObjectClass)
         else if cls == defn.RepeatedParamClass then ClassRef(defn.SeqClass)
+        else if cls == defn.ByNameParamClass2x then ClassRef(defn.Function0Class)
         else typeRef
       case ArrayTypeRef(_, _) =>
         typeRef
