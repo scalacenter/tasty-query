@@ -458,7 +458,8 @@ object Symbols {
       ctx.classloader.forceRoots(this)
 
     final def getPackageDecl(name: SimpleName)(using Context): Option[PackageClassSymbol] =
-      ensureInitialised()
+      // wrapper that ensures the Context is available, just in case we need it
+      // to be side-effecting in the future.
       getPackageDeclInternal(name)
 
     private[tastyquery] def getPackageDeclInternal(packageName: SimpleName): Option[PackageClassSymbol] =
@@ -517,6 +518,7 @@ object Symbols {
     def createRoots: (PackageClassSymbol, PackageClassSymbol) =
       val root = PackageClassSymbol(nme.RootName, null)
       val empty = PackageClassSymbol(nme.EmptyPackageName, root)
+      root.initialised = true // should not be any class files for the root package
       (root, empty)
 
     override def castSymbol(symbol: Symbol): PackageClassSymbol = symbol.asInstanceOf[PackageClassSymbol]
