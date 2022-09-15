@@ -87,7 +87,7 @@ object Classpaths {
 
     private var searched = false
     private var packages: Map[PackageClassSymbol, PackageData] = compiletime.uninitialized
-    private var roots: Map[PackageClassSymbol, Map[SimpleName, Entry]] = Map.empty
+    private val roots: mutable.Map[PackageClassSymbol, mutable.Map[SimpleName, Entry]] = mutable.HashMap.empty
     private var topLevelTastys: Map[Loader.Root, List[Tree]] = Map.empty
 
     def toPackageName(dotSeparated: String): FullyQualifiedName =
@@ -160,16 +160,9 @@ object Classpaths {
     end completeRoots
 
     private[tastyquery] def forceRoots(pkg: PackageClassSymbol)(using Context): Unit =
-      var optEntries = Option.empty[Map[SimpleName, Entry]]
-      roots = roots.updatedWith(pkg) {
-        case Some(entries) =>
-          optEntries = Some(entries)
-          None
-        case _ => None
-      }
       for
-        entries <- optEntries
-        (rootName, entry) <- IArray.from(entries).sortBy(_(0))
+        entries <- roots.remove(pkg)
+        (rootName, entry) <- IArray.from(entries).sortBy(_(0)) // sort for determinism.
       do completeRoots(Loader.Root(pkg, rootName), entry)
 
     /** @return true if loaded the classes inner definitions */
@@ -177,13 +170,11 @@ object Classpaths {
       roots.get(pkg) match
         case Some(entries) =>
           val rootName = name.toTermName.stripObjectSuffix.asSimpleName
-          entries.get(rootName) match
-            case Some(entry) =>
-              roots = roots.updated(pkg, entries - rootName)
-              if completeRoots(Loader.Root(pkg, rootName), entry) then
-                pkg.getDeclInternal(name) // should have entered some roots, now lookup the requested root
-              else None
-            case _ => None
+          for
+            entry <- entries.remove(rootName)
+            if completeRoots(Loader.Root(pkg, rootName), entry)
+            resolved <- pkg.getDeclInternal(name) // should have entered some roots, now lookup the requested root
+          yield resolved
         case _ => None
     end enterRoots
 
@@ -220,7 +211,7 @@ object Classpaths {
 
           packages -= pkg
 
-          var localRoots = Map.newBuilder[SimpleName, Entry]
+          val localRoots = mutable.HashMap.empty[SimpleName, Entry]
 
           if data.classes.isEmpty then
             for tData <- data.tastys if !isNestedOrModuleClassName(tData.simpleName) do
@@ -232,7 +223,7 @@ object Classpaths {
                 tastyMap.get(cData.simpleName).map(Entry.ClassAndTasty(cData, _)).getOrElse(Entry.ClassOnly(cData))
               localRoots += (cData.simpleName -> entry)
 
-          roots += pkg -> localRoots.result()
+          roots(pkg) = localRoots
 
         case _ => // probably a synthetic package that only has other packages as members. (i.e. `package java`)
       } andThen { pkg.initialised = true }
