@@ -4,7 +4,8 @@ val usedScalaCompiler = "3.1.0"
 val usedScala2StdLib = "2.13.7"
 val usedTastyRelease = usedScalaCompiler
 
-val StdLibClasspath = Configuration.of("StdLibClasspath", "StdLibClasspath")
+val rtJarOpt = taskKey[Option[String]]("Path to rt.jar if it exists")
+val javalibEntry = taskKey[String]("Path to rt.jar or \"jrt:/\"")
 
 val commonSettings = Seq(
   scalaVersion := usedScalaCompiler,
@@ -31,39 +32,41 @@ lazy val tastyQuery =
       libraryDependencies += "org.scalameta" %%% "munit" % "0.7.29" % Test,
       testFrameworks += new TestFramework("munit.Framework")
     )
-    .configs(StdLibClasspath)
     .settings(
-      inConfig(StdLibClasspath)(Defaults.configSettings),
-      libraryDependencies ++= Seq(
-        "org.scala-lang" % "scala-library" % usedScala2StdLib % StdLibClasspath,
-        "org.scala-lang" %% "scala3-library" % usedScalaCompiler % StdLibClasspath,
-      ),
+      Test / rtJarOpt := {
+        for (bootClasspath <- Option(System.getProperty("sun.boot.class.path"))) yield {
+          val rtJarOpt = bootClasspath.split(java.io.File.pathSeparatorChar).find { path =>
+            new java.io.File(path).getName() == "rt.jar"
+          }
+          rtJarOpt match {
+            case Some(rtJar) =>
+              rtJar
+            case None =>
+              throw new AssertionError(s"cannot find rt.jar in $bootClasspath")
+          }
+        }
+      },
+
+      Test / envVars ++= {
+        val javalib = (Test / javalibEntry).value
+        val testSourcesCP = Attributed.data((testSources / Compile / fullClasspath).value)
+        val testClasspath = (javalib +: testSourcesCP.map(_.getAbsolutePath())).mkString(";")
+
+        val testResourcesCode = (testSources / sourceDirectory).value.getAbsolutePath()
+
+        Map(
+          "TASTY_TEST_CLASSPATH" -> testClasspath,
+          "TASTY_TEST_SOURCES" -> testResourcesCode,
+        )
+      }
     )
-    .settings(javaOptions ++= {
-      val testResources = {
-        val testSourcesProducts = (testSources / Compile / products).value
-        // Only one output location expected
-        assert(testSourcesProducts.size == 1)
-        testSourcesProducts.map(_.getAbsolutePath).head
-      }
-      val stdLibrary = {
-        val parts = (StdLibClasspath / managedClasspath).value.seq.map(_.data)
-        parts.mkString(java.io.File.pathSeparator)
-      }
-      val testResourcesCode = {
-        (testSources / sourceDirectory).value.getAbsolutePath
-      }
-      Seq(
-        s"-Dtest-resources=$testResources",
-        s"-Dstd-library=$stdLibrary",
-        s"-Dtest-resources-code=$testResourcesCode"
-      )
-    })
     .jvmSettings(
       fork := true,
       libraryDependencies += "commons-io" % "commons-io" % "2.11.0",
+      Test / javalibEntry := (Test / rtJarOpt).value.getOrElse("jrt:/modules/java.base/"),
     )
     .jsSettings(
       scalaJSUseMainModuleInitializer := true,
-      scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.ESModule))
+      scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.ESModule)),
+      Test / javalibEntry := (Test / rtJarOpt).value.getOrElse("jrt:/modules/java.base/"), // TODO
     )

@@ -11,7 +11,7 @@ import tastyquery.ast.Spans.*
 import Paths.*
 
 class PositionSuite extends RestrictedUnpicklingSuite {
-  val ResourceCodeProperty = "test-resources-code"
+  val ResourceCodeEnvVar = "TASTY_TEST_SOURCES"
 
   val empty_class = RootPkg / name"empty_class"
   val simple_trees = RootPkg / name"simple_trees"
@@ -22,7 +22,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
     // A temporary workaround for path
     // TODO: remove the workaround
     if filename == "TraitWithSelf" then filename = "ClassWithSelf"
-    s"${System.getProperty(ResourceCodeProperty)}/main/scala/$dir/$filename.scala"
+    s"${System.getenv(ResourceCodeEnvVar)}/main/scala/$dir/$filename.scala"
 
   def testUnpickleWithCode(name: String, path: TopLevelDeclPath)(using munit.Location)(
     body: (Tree, String) => Unit
