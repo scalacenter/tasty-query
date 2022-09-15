@@ -55,7 +55,7 @@ class PickleReader {
     val tOpt = entries(i).asInstanceOf[T | Null]
     if tOpt == null then {
       val res = pkl.unsafeFork(index(i))(op)
-      assert(entries(i) == null, entries(i))
+      assert(entries(i) == null || (entries(i) == res), entries(i))
       entries(i) = res
       res
     } else tOpt

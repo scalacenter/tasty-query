@@ -770,4 +770,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val polyMethod = HigherKindedClass.getDecl(name"m").get
     println(polyMethod.declaredType.asInstanceOf[PolyType].resultType)
   }
+
+  testWithContext("scala.collection.:+") {
+    // type parameter C <: SeqOps[A, CC, C]
+    val `:+` = resolve(name"scala" / name"collection" / tname"package" / obj / tname":+" / obj).asClass
+  }
 }
