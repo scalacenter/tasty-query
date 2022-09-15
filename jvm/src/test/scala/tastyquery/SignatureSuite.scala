@@ -148,4 +148,11 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(parts.signedName, "parts", "():scala.collection.immutable.Seq")
   }
 
+  testWithContext("scala2-method-byname") {
+    val StringContext = resolve(name"scala" / tname"Option").asClass
+
+    val getOrElse = StringContext.getDecl(name"getOrElse").get
+    assertIsSignedName(getOrElse.signedName, "getOrElse", "(1,scala.Function0):java.lang.Object")
+  }
+
 end SignatureSuite
