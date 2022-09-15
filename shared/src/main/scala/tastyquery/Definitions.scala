@@ -99,12 +99,14 @@ final class Definitions private[tastyquery] (
     private def requiredClass(name: String): ClassSymbol = pkg.getDecl(typeName(name)).get.asClass
 
   private lazy val scalaCollectionPackage = scalaPackage.getPackageDecl(termName("collection")).get
+  private lazy val scalaCollectionImmutablePackage =
+    scalaCollectionPackage.getPackageDecl(termName("immutable")).get
 
   lazy val ObjectClass = javaLangPackage.requiredClass("Object")
 
   lazy val AnyValClass = scalaPackage.requiredClass("AnyVal")
   lazy val ArrayClass = scalaPackage.requiredClass("Array")
-  lazy val SeqClass = scalaCollectionPackage.requiredClass("Seq")
+  lazy val SeqClass = scalaCollectionImmutablePackage.requiredClass("Seq")
   lazy val Function0Class = scalaPackage.requiredClass("Function0")
 
 end Definitions
