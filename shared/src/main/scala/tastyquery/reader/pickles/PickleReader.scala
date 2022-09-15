@@ -145,7 +145,17 @@ class PickleReader {
     val nameref = pkl.readNat()
     val name0 = at(nameref)(readName())
     val name1 = name0.decode
+
+    assert(entries(storeInEntriesAt) == null, entries(storeInEntriesAt))
     val owner = readLocalSymbolRef()
+
+    /* In some situations, notably involving EXISTENTIALtpe, reading the
+     * reference to the owner may re-try to read this very symbol. In that
+     * case, the entries(storeInEntriesAt) will have been filled while reading
+     * the owner, and we must immediately return what was already stored.
+     */
+    val storedWhileReadingOwner = entries(storeInEntriesAt)
+    if storedWhileReadingOwner != null then return storedWhileReadingOwner.asInstanceOf[MaybeExternalSymbol]
 
     val flags = readFlags(name1.isTypeName)
     val name = if flags.is(ModuleClass) then name1.toTermName.withObjectSuffix.toTypeName else name1
@@ -434,10 +444,9 @@ class PickleReader {
           PolyType(typeParams.map(_.name.toTypeName), typeParams.map(_ => UnconstrainedTypeBounds), restpe)
         else ExprType(restpe)
       case EXISTENTIALtpe =>
-        /*val restpe = readTypeRef()
+        val restpe = readTypeRef()
         val boundSyms = pkl.until(end, () => readLocalSymbolRef())
-        elimExistentials(boundSyms, restpe)*/
-        AnyType
+        elimExistentials(boundSyms, restpe)
       case ANNOTATEDtpe =>
         // TODO AnnotatedType.make(readTypeRef(), pkl.until(end, () => readAnnotationRef()))
         val underlying = readTypeRef()
@@ -493,6 +502,77 @@ class PickleReader {
 
   private def noSuchConstantTag(tag: Int, len: Int): Nothing =
     errorBadSignature("bad constant tag: " + tag)
+
+  /** Convert
+    *   tp { type name = sym } forSome { sym >: L <: H }
+    * to
+    *   tp { name >: L <: H }
+    * and
+    *   tp { name: sym } forSome { sym <: T with Singleton }
+    * to
+    *   tp { name: T }
+    */
+  private def elimExistentials(boundSyms: List[Symbol], tp: Type)(using Context): Type =
+    // Need to be careful not to run into cyclic references here (observed when
+    // compiling t247.scala). That's why we avoid taking `symbol` of a TypeRef
+    // unless names match up.
+    val isBound = { (tp: Type) =>
+      def refersTo(tp: Type, sym: Symbol): Boolean = tp match {
+        case tp: TypeRef => tp.isLocalRef(sym)
+        /*case tp: TypeVar => refersTo(tp.underlying, sym)
+        case tp : LazyRef => refersTo(tp.ref, sym)*/
+        case _ => false
+      }
+      boundSyms.exists(refersTo(tp, _))
+    }
+    // Cannot use standard `existsPart` method because it calls `lookupRefined`
+    // which can cause CyclicReference errors.
+    /*val isBoundAccumulator = new ExistsAccumulator(isBound, StopAt.Static, forceLazy = true):
+      override def foldOver(x: Boolean, tp: Type): Boolean = tp match
+        case tp: TypeRef => applyToPrefix(x, tp)
+        case _ => super.foldOver(x, tp)*/
+
+    /*def removeSingleton(tp: Type): Type =
+      if (tp isRef defn.SingletonClass) defn.AnyType else tp*/
+    def mapArg(arg: Type) = arg match {
+      case arg: TypeRef if isBound(arg) => arg.symbol.declaredType
+      case _                            => arg
+    }
+    def elim(tp: Type): Type = tp match {
+      /*case tp @ RefinedType(parent, name, rinfo) =>
+        val parent1 = elim(tp.parent)
+        rinfo match {
+          case TypeAlias(info: TypeRef) if isBound(info) =>
+            RefinedType(parent1, name, info.symbol.info)
+          case info: TypeRef if isBound(info) =>
+            val info1 = info.symbol.info
+            assert(info1.derivesFrom(defn.SingletonClass))
+            RefinedType(parent1, name, info1.mapReduceAnd(removeSingleton)(_ & _))
+          case info =>
+            tp.derivedRefinedType(parent1, name, info)
+        }*/
+      case tp @ AppliedType(tycon, args) =>
+        /*val tycon1 = tycon tycon.safeDealias
+        if (tycon1 ne tycon) elim(tycon1.appliedTo(args))
+        else*/
+        tp.derivedAppliedType(tycon, args.map(mapArg))
+      /*case tp: AndOrType =>
+        // scalajs.js.|.UnionOps has a type parameter upper-bounded by `_ | _`
+        tp.derivedAndOrType(mapArg(tp.tp1).bounds.hi, mapArg(tp.tp2).bounds.hi)*/
+      case _ =>
+        tp
+    }
+    val tp1 = elim(tp)
+    /*if (isBoundAccumulator(false, tp1)) {
+      val anyTypes = boundSyms map (_ => defn.AnyType)
+      val boundBounds = boundSyms map (_.info.bounds.hi)
+      val tp2 = tp1.subst(boundSyms, boundBounds).subst(boundSyms, anyTypes)
+      report.warning(FailureToEliminateExistential(tp, tp1, tp2, boundSyms, classRoot.symbol))
+      tp2
+    }
+    else*/
+    tp1
+  end elimExistentials
 }
 
 object PickleReader {
