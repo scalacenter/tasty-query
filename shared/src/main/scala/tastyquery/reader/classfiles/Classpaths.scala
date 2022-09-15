@@ -160,12 +160,17 @@ object Classpaths {
     end completeRoots
 
     private[tastyquery] def forceRoots(pkg: PackageClassSymbol)(using Context): Unit =
+      var optEntries = Option.empty[Map[SimpleName, Entry]]
       roots = roots.updatedWith(pkg) {
         case Some(entries) =>
-          for (rootName, entry) <- IArray.from(entries).sortBy(_(0)) do completeRoots(Loader.Root(pkg, rootName), entry)
+          optEntries = Some(entries)
           None
         case _ => None
       }
+      for
+        entries <- optEntries
+        (rootName, entry) <- IArray.from(entries).sortBy(_(0))
+      do completeRoots(Loader.Root(pkg, rootName), entry)
 
     /** @return true if loaded the classes inner definitions */
     private[tastyquery] def enterRoots(pkg: PackageClassSymbol, name: Name)(using Context): Option[Symbol] =
