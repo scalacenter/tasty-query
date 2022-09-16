@@ -155,4 +155,11 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(getOrElse.signedName, "getOrElse", "(1,scala.Function0):java.lang.Object")
   }
 
+  testWithContext("scala2-existential-type") {
+    val ClassTag = resolve(name"scala" / name"reflect" / tname"ClassTag" / obj).asClass
+
+    val apply = ClassTag.getDecl(name"apply").get
+    assertIsSignedName(apply.signedName, "apply", "(1,java.lang.Class):scala.reflect.ClassTag")
+  }
+
 end SignatureSuite

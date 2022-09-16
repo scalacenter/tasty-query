@@ -775,6 +775,9 @@ object Types {
 
     override protected def designator_=(d: Designator): Unit = myDesignator = d
 
+    private[tastyquery] def isLocalRef(sym: Symbol): Boolean =
+      myDesignator == sym
+
     override def underlying(using Context): Type = symbol.declaredType
 
     override def findMember(name: Name, pre: Type)(using Context): Symbol =
