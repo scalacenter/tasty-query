@@ -159,6 +159,15 @@ object Symbols {
       case null          => NoSymbol
     }
 
+    def ref(using Context): Type = this match
+      case pkg: PackageClassSymbol => pkg.declaredType // should be PackageRef set in ctor
+      case cls: ClassSymbol        => cls.typeRef
+      case sym: RegularSymbol => // TODO: should we cache in RegularSymbol?
+        val pre = sym.maybeOuter match
+          case pre: ClassSymbol => pre.ref
+          case _                => NoPrefix
+        NamedType(pre, sym)
+
     /** The type parameters of a class symbol, Nil for all other symbols. */
     def typeParams(using Context): List[Symbol] = Nil
 

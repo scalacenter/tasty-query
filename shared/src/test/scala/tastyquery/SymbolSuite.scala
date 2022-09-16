@@ -12,6 +12,7 @@ import tastyquery.ast.Trees.{ClassDef, ValDef}
 class SymbolSuite extends RestrictedUnpicklingSuite {
   val empty_class = RootPkg / name"empty_class"
   val simple_trees = RootPkg / name"simple_trees"
+  val inheritance = RootPkg / name"inheritance"
   val `simple_trees.nested` = simple_trees / name"nested"
 
   def testWithContext(name: String, path: TopLevelDeclPath)(using munit.Location)(body: Context ?=> Unit): Unit =
@@ -192,5 +193,13 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     assert(simpleTreesNestedPkg.fullName.toString == "simple_trees.nested")
 
     assert(TermRef(PackageRef(simpleTreesPkg), name"nested").symbol == simpleTreesNestedPkg)
+  }
+
+  testWithContext("basic-inheritance-same-root".ignore, inheritance / tname"SameTasty" / obj) {
+    val Sub = inheritance / tname"SameTasty" / obj / tname"Sub"
+
+    val SubClass = resolve(Sub).asClass
+
+    val fooMethod = SubClass.ref.member(name"foo")
   }
 }

@@ -797,6 +797,7 @@ object Types {
       sym match
         case sym: ClassSymbol =>
           sym.getDecl(name).getOrElse {
+            // TODO: resolve in parent classes here
             throw new AssertionError(s"Cannot find member named '$name' in $pre")
           }
         case _ =>
