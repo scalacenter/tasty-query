@@ -162,4 +162,11 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(apply.signedName, "apply", "(1,java.lang.Class):scala.reflect.ClassTag")
   }
 
+  testWithContext("iarray") {
+    val IArraySig = resolve(name"simple_trees" / tname"IArraySig").asClass
+
+    val from = IArraySig.getDecl(name"from").get
+    assertIsSignedName(from.signedName, "from", "():java.lang.String[]")
+  }
+
 end SignatureSuite

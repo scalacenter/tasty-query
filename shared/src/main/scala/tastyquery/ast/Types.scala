@@ -104,7 +104,7 @@ object Types {
                 // Fast path
                 ClassRef(tycon.symbol.asClass)
               case _ =>
-                preErase(tpe.superType)
+                preErase(tpe.translucentSuperType)
         case tpe: Symbolic =>
           tpe.resolveToSymbol match
             case cls: ClassSymbol =>
@@ -439,6 +439,18 @@ object Types {
       case WildcardTypeBounds(bounds) => bounds.high
       case st                         => st
     }
+
+    /** Same as superType, except for two differences:
+      *
+      *  - opaque types are treated as transparent aliases
+      *  - applied type are matchtype-reduced if possible
+      *
+      * Note: the reason to reduce match type aliases here and not in `superType`
+      * is that `superType` is context-independent and cached, whereas matchtype
+      * reduction depends on context and should not be cached (at least not without
+      * the very specific cache invalidation condition for matchtypes).
+      */
+    def translucentSuperType(using Context): Type = superType
 
     def findMember(name: Name, pre: Type)(using Context): Symbol =
       underlying.findMember(name, pre)
@@ -830,6 +842,13 @@ object Types {
         case tycon: TypeRef if tycon.symbol.isClass => tycon
         case tycon: TypeProxy                       => tycon.superType.applyIfParameterized(args)
         case _                                      => AnyType
+
+    override def translucentSuperType(using Context): Type = tycon match
+      case tycon: TypeRef if tycon.symbol.isOpaqueTypeAlias =>
+        tycon.translucentSuperType.applyIfParameterized(args)
+      case _ =>
+        // tryNormalize.orElse(superType) // TODO for match types
+        superType
 
     def tyconTypeParams(using Context): List[ParamInfo] =
       val tparams = tycon.typeParams
