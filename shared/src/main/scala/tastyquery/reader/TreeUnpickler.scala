@@ -500,7 +500,7 @@ class TreeUnpickler(
           case _     => readTypeTree
         }
       }
-    cls.withDeclaredType(ClassType(cls, ObjectType))
+    cls.withDeclaredType(ClassInfo(cls, ObjectType))
     val self = readSelf
     // The first entry is the constructor
     val cstr = readStat.asInstanceOf[DefDef]

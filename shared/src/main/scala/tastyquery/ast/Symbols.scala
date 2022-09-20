@@ -514,7 +514,7 @@ object Symbols {
     def createRefinedClassSymbol(owner: OwnerSym, span: Span)(using Context): ClassSymbol =
       val cls = createSymbol(tpnme.RefinedClassMagic, owner)
       cls
-        .withDeclaredType(ClassType(cls, ObjectType))
+        .withDeclaredType(ClassInfo(cls, ObjectType))
         .withFlags(EmptyFlagSet)
       cls.initialised = true
       cls

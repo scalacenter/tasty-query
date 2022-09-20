@@ -473,7 +473,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   testWithContext("java-class-parents") {
     val SubJavaDefined = name"javadefined" / tname"SubJavaDefined"
 
-    val (SubJavaDefinedTpe @ _: ClassType) = resolve(SubJavaDefined).declaredType: @unchecked
+    val (SubJavaDefinedTpe @ _: ClassInfo) = resolve(SubJavaDefined).declaredType: @unchecked
 
     val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
     val JavaInterface1Class = resolve(name"javadefined" / tname"JavaInterface1")
@@ -488,7 +488,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   testWithContext("java-class-signatures-[RecClass]") {
     val RecClass = name"javadefined" / tname"RecClass"
 
-    val (RecClassTpe @ _: ClassType) = resolve(RecClass).declaredType: @unchecked
+    val (RecClassTpe @ _: ClassInfo) = resolve(RecClass).declaredType: @unchecked
 
     val ObjectClass = resolve(name"java" / name"lang" / tname"Object")
 
@@ -498,7 +498,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   testWithContext("java-class-signatures-[SubRecClass]") {
     val SubRecClass = name"javadefined" / tname"SubRecClass"
 
-    val (SubRecClassTpe @ _: ClassType) = resolve(SubRecClass).declaredType: @unchecked
+    val (SubRecClassTpe @ _: ClassInfo) = resolve(SubRecClass).declaredType: @unchecked
 
     val RecClass = resolve(name"javadefined" / tname"RecClass")
     val JavaInterface1 = resolve(name"javadefined" / tname"JavaInterface1")

@@ -144,7 +144,7 @@ object Types {
   abstract class Type {
 
     /** The type parameters of this type are:
-      * For a ClassType type, the type parameters of its class.
+      * For a ClassInfo type, the type parameters of its class.
       * For a typeref referring to a class, the type parameters of the class.
       * For a refinement type, the type parameters of its parent, dropping
       * any type parameter that is-rebound by the refinement.
@@ -160,7 +160,7 @@ object Types {
         case self: AppliedType =>
           if (self.tycon.typeSymbol.isClass) Nil
           else self.superType.typeParams
-        case self: ClassType =>
+        case self: ClassInfo =>
           self.cls.typeParams
         case _: SingletonType | _: RefinedType =>
           Nil
@@ -277,7 +277,7 @@ object Types {
     @tailrec final def normalizedPrefix(using Context): Type = this match {
       case tp: NamedType =>
         if (tp.symbol.declaredType.isTypeAlias) tp.symbol.declaredType.normalizedPrefix else tp.prefix
-      case tp: ClassType =>
+      case tp: ClassInfo =>
         // TODO tp.prefix
         tp.cls.accessibleThisType
       case tp: TypeProxy =>
@@ -298,7 +298,7 @@ object Types {
     final def member(name: Name)(using Context): Symbol =
       // We need a valid prefix for `asSeenFrom`
       val pre = this match
-        case tp: ClassType => ??? // tp.appliedRef
+        case tp: ClassInfo => ??? // tp.appliedRef
         case _             => widenIfUnstable
       findMember(name, pre)
 
@@ -1287,15 +1287,15 @@ object Types {
       else AndType(first, second)
   }
 
-  case class ClassType(cls: ClassSymbol, rawParents: Type) extends GroundType {
+  case class ClassInfo(cls: ClassSymbol, rawParents: Type) extends GroundType {
     def findMember(name: Name, pre: Type)(using Context): Symbol =
       cls.getDecl(name).getOrElse {
         throw new SymbolLookupException(name, s"in $cls")
       }
 
-    def derivedClassType(rawParents: Type)(using Context): ClassType =
+    def derivedClassInfo(rawParents: Type)(using Context): ClassInfo =
       if rawParents eq this.rawParents then this
-      else ClassType(cls, rawParents)
+      else ClassInfo(cls, rawParents)
   }
 
   case object NoType extends GroundType {

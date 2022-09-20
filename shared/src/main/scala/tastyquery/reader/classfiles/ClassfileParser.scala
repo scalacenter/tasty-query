@@ -4,7 +4,7 @@ import tastyquery.Contexts.*
 import tastyquery.ast.Flags
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
-import tastyquery.ast.Types.{ClassType, ObjectType}
+import tastyquery.ast.Types.{ClassInfo, ObjectType}
 import tastyquery.reader.pickles.{Unpickler, PickleReader}
 import tastyquery.util.Forked
 
@@ -63,7 +63,7 @@ object ClassfileParser {
       .createClassSymbol(name.withObjectSuffix.toTypeName, classOwner)
       .withTypeParams(Nil, Nil)
       .withFlags(Flags.ModuleClassCreationFlags)
-    moduleClass.withDeclaredType(ClassType(moduleClass, ObjectType))
+    moduleClass.withDeclaredType(ClassInfo(moduleClass, ObjectType))
 
     val module = ctx
       .createSymbol(name.toTermName, classOwner)
@@ -105,7 +105,7 @@ object ClassfileParser {
             Descriptors.parseSupers(cls, superClass, interfaces)
           }
       end parents
-      val classType = ClassType(cls, parents)
+      val classType = ClassInfo(cls, parents)
       cls.withDeclaredType(classType)
     end initParents
 
