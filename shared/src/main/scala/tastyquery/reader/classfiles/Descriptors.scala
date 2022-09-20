@@ -13,10 +13,10 @@ import scala.annotation.switch
 
 object Descriptors:
 
-  def parseSupers(cls: ClassSymbol, superClass: Option[String], interfaces: IArray[String])(using Context): Type =
+  def parseSupers(cls: ClassSymbol, superClass: Option[String], interfaces: IArray[String])(using Context): List[Type] =
     cls.withTypeParams(Nil, Nil)
     val superRef = superClass.map(classRef).getOrElse(ObjectType)
-    interfaces.foldLeft(superRef)((parents, interface) => AndType(parents, classRef(interface)))
+    superRef :: interfaces.map(classRef).toList
 
   private def classRef(binaryName: String)(using Context): TypeRef =
     def followPackages(acc: PackageClassSymbol, parts: List[String]): TypeRef =

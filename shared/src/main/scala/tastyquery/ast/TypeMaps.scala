@@ -74,8 +74,8 @@ object TypeMaps {
       tp.derivedOrType(tp1, tp2)
     protected def derivedAnnotatedType(tp: AnnotatedType, underlying: Type, annot: Tree): Type =
       tp.derivedAnnotatedType(underlying, annot)
-    protected def derivedClassInfo(tp: ClassInfo, parents: Type): Type =
-      tp.derivedClassInfo(parents)
+    protected def derivedClassInfo(tp: ClassInfo, pre: Type): Type =
+      tp.derivedClassInfo(pre)
     protected def derivedExprType(tp: ExprType, restpe: Type): Type =
       tp.derivedExprType(restpe)
     protected def derivedLambdaType(tp: LambdaType, formals: List[tp.PInfo], restpe: Type): Type =

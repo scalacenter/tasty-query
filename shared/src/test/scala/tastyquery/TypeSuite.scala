@@ -17,6 +17,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
   }
 
+  extension (tpes: List[Type])
+    def isIntersectionOf(tpeTests: (Type => Boolean)*)(using Context): Boolean =
+      tpes.corresponds(tpeTests)((tpe, test) => test(tpe))
+
   extension (tpe: Type)
     def isAny(using Context): Boolean = tpe.isRef(resolve(name"scala" / tname"Any"))
 
@@ -30,11 +34,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case _                          => false
 
     def isIntersectionOf(tpes: (Type => Boolean)*)(using Context): Boolean =
-      def parts(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
-        case AndType(tp1, tp2) => parts(tp2, parts(tp1, acc))
-        case tpe: Type         => acc += tpe
-      val all = parts(tpe.widen, mutable.ListBuffer[Type]()).toList
-      all.corresponds(tpes)((tpe, test) => test(tpe))
+      def parts(tpe: Type): List[Type] = tpe match
+        case tpe: AndType => tpe.parts
+        case tpe: Type    => tpe :: Nil
+      parts(tpe.widen).isIntersectionOf(tpes*)
 
     def isApplied(cls: Type => Boolean, argRefs: Seq[Type => Boolean])(using Context): Boolean =
       tpe.widen match
@@ -492,7 +495,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val ObjectClass = resolve(name"java" / name"lang" / tname"Object")
 
-    assert(RecClassTpe.rawParents.isRef(ObjectClass))
+    assert(RecClassTpe.rawParents.isIntersectionOf(_.isRef(ObjectClass)))
   }
 
   testWithContext("java-class-signatures-[SubRecClass]") {

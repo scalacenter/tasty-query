@@ -1,6 +1,7 @@
 package tastyquery.ast
 
 import scala.annotation.{constructorOnly, tailrec}
+import scala.collection.mutable
 
 import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.Contexts.*
@@ -1278,6 +1279,12 @@ object Types {
     def derivedAndType(first: Type, second: Type)(using Context): Type =
       if ((first eq this.first) && (second eq this.second)) this
       else AndType.make(first, second)
+
+    def parts: List[Type] =
+      def rec(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
+        case AndType(tp1, tp2) => rec(tp2, rec(tp1, acc))
+        case tpe: Type         => acc += tpe
+      rec(this, mutable.ListBuffer.empty).toList
   }
 
   object AndType {
@@ -1287,16 +1294,35 @@ object Types {
       else AndType(first, second)
   }
 
-  case class ClassInfo(cls: ClassSymbol, rawParents: Type) extends GroundType {
+  case class ClassInfo(cls: ClassSymbol)(private var mkRawParents: (() => List[Type]) | Null) extends GroundType {
+    var _rawParents: List[Type] | Null = null
+
+    def rawParents: List[Type] =
+      val localParents = _rawParents
+      if localParents != null then localParents
+      else
+        val localFactory = mkRawParents
+        if localFactory == null then throw CyclicReference(s"class info for ${cls.toDebugString}")
+        else
+          mkRawParents = null // we are evaluating the parents, avoid cycles by set to null
+          val computedParents = localFactory()
+          _rawParents = computedParents
+          computedParents
+
     def findMember(name: Name, pre: Type)(using Context): Symbol =
       cls.getDecl(name).getOrElse {
         throw new SymbolLookupException(name, s"in $cls")
       }
 
-    def derivedClassInfo(rawParents: Type)(using Context): ClassInfo =
-      if rawParents eq this.rawParents then this
-      else ClassInfo(cls, rawParents)
+    def derivedClassInfo(pre: Type)(using Context): ClassInfo =
+      this // so far do not store pre in ClassInfo
   }
+
+  object ClassInfo:
+    def direct(cls: ClassSymbol, rawParents: List[Type])(using Context): ClassInfo =
+      ClassInfo(cls)(() => rawParents)
+    def defer(cls: ClassSymbol, rawParents: => List[Type])(using Context): ClassInfo =
+      ClassInfo(cls)(() => rawParents)
 
   case object NoType extends GroundType {
     def findMember(name: Name, pre: Type)(using Context): Symbol =
