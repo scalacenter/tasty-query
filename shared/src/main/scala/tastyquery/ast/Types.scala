@@ -144,6 +144,16 @@ object Types {
 
   abstract class Type {
 
+    /** The class symbol of this type, None if reduction is not possible */
+    private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this.widen match
+      case tpe: Symbolic =>
+        val sym = tpe.resolveToSymbol
+        if sym.isClass then Some(sym.asClass)
+        else sym.declaredType.classSymbol
+      case info: ClassInfo =>
+        Some(info.cls)
+      case _ => None
+
     /** The type parameters of this type are:
       * For a ClassInfo type, the type parameters of its class.
       * For a typeref referring to a class, the type parameters of the class.
@@ -797,10 +807,7 @@ object Types {
       val sym = resolveToSymbol
       sym match
         case sym: ClassSymbol =>
-          sym.getDecl(name).getOrElse {
-            // TODO: resolve in parent classes here
-            throw new AssertionError(s"Cannot find member named '$name' in $pre")
-          }
+          ClassInfo.findMember(sym, name, pre)
         case _ =>
           sym.declaredType.findMember(name, pre)
   }
@@ -1310,15 +1317,18 @@ object Types {
           computedParents
 
     def findMember(name: Name, pre: Type)(using Context): Symbol =
-      cls.getDecl(name).getOrElse {
-        throw new SymbolLookupException(name, s"in $cls")
-      }
+      ClassInfo.findMember(cls, name, pre)
 
     def derivedClassInfo(pre: Type)(using Context): ClassInfo =
       this // so far do not store pre in ClassInfo
   }
 
   object ClassInfo:
+    private[Types] def findMember(cls: ClassSymbol, name: Name, pre: Type)(using Context): Symbol =
+      cls.findMember(pre, name).getOrElse {
+        throw new AssertionError(s"Cannot find member named '$name' in $pre")
+      }
+
     def direct(cls: ClassSymbol, rawParents: List[Type])(using Context): ClassInfo =
       ClassInfo(cls)(() => rawParents)
     def defer(cls: ClassSymbol, rawParents: => List[Type])(using Context): ClassInfo =

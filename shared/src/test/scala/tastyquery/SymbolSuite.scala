@@ -15,14 +15,18 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   val inheritance = RootPkg / name"inheritance"
   val `simple_trees.nested` = simple_trees / name"nested"
 
-  def testWithContext(name: String, path: TopLevelDeclPath)(using munit.Location)(body: Context ?=> Unit): Unit =
-    testWithContext(new munit.TestOptions(name), path)(body)
+  val scUnit = RootPkg / name"scala" / tname"Unit"
 
-  def testWithContext(options: munit.TestOptions, path: TopLevelDeclPath)(
+  def testWithContext(name: String, path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*)(using munit.Location)(
+    body: Context ?=> Unit
+  ): Unit =
+    testWithContext(new munit.TestOptions(name), path, extraClasspath*)(body)
+
+  def testWithContext(options: munit.TestOptions, path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*)(
     using munit.Location
   )(body: Context ?=> Unit): Unit =
     test(options) {
-      for ctx <- getUnpicklingContext(path) yield body(using ctx)
+      for ctx <- getUnpicklingContext(path, extraClasspath*) yield body(using ctx)
     }
 
   def getDeclsByPrefix(prefix: DeclarationPath)(using Context): Seq[Symbol] = {
@@ -195,7 +199,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     assert(TermRef(PackageRef(simpleTreesPkg), name"nested").symbol == simpleTreesNestedPkg)
   }
 
-  testWithContext("basic-inheritance-same-root".ignore, inheritance / tname"SameTasty" / obj) {
+  testWithContext("basic-inheritance-same-root".ignore, inheritance / tname"SameTasty" / obj, scUnit) {
     val Sub = inheritance / tname"SameTasty" / obj / tname"Sub"
 
     val SubClass = resolve(Sub).asClass
