@@ -12,6 +12,17 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   val simple_trees = RootPkg / name"simple_trees"
   val `simple_trees.nested` = simple_trees / name"nested"
 
+  def testWithContext(name: String, path: TopLevelDeclPath)(using munit.Location)(body: Context ?=> Unit): Unit =
+    testWithContext(new munit.TestOptions(name), path)(body)
+
+  def testWithContext(options: munit.TestOptions, path: TopLevelDeclPath)(
+    using munit.Location
+  )(body: Context ?=> Unit): Unit =
+    test(options) {
+      val ctx = getUnpicklingContext(path)
+      body(using ctx)
+    }
+
   def getDeclsByPrefix(prefix: DeclarationPath)(using Context): Seq[Symbol] = {
     def symbolsInSubtree(root: Symbol): Seq[Symbol] =
       if (root.isInstanceOf[DeclaringSymbol]) {
@@ -43,9 +54,11 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     )
   }
 
-  test("top-level-package-object[class]-empty-package") {
+  testWithContext(
+    "top-level-package-object[class]-empty-package",
+    EmptyPkg / tname"toplevelEmptyPackage$$package" / obj
+  ) {
     val toplevelEmptyPackage_package = EmptyPkg / tname"toplevelEmptyPackage$$package" / obj
-    given Context = getUnpicklingContext(toplevelEmptyPackage_package)
 
     val toplevelEmptyPackage_packageClass = resolve(toplevelEmptyPackage_package)
 
@@ -55,9 +68,11 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     assert(tree.symbol == toplevelEmptyPackage_packageClass)
   }
 
-  test("top-level-package-object[value]-empty-package") {
+  testWithContext(
+    "top-level-package-object[value]-empty-package",
+    EmptyPkg / name"toplevelEmptyPackage$$package" / obj
+  ) {
     val toplevelEmptyPackage_package = EmptyPkg / name"toplevelEmptyPackage$$package" / obj
-    given Context = getUnpicklingContext(toplevelEmptyPackage_package)
 
     val toplevelEmptyPackage_packageValue = resolve(toplevelEmptyPackage_package)
 
@@ -67,10 +82,11 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     assert(tree.symbol == toplevelEmptyPackage_packageValue)
   }
 
-  test("top-level-package-object[companion class]-empty-package") {
-    val toplevelEmptyPackage_package = EmptyPkg / name"toplevelEmptyPackage$$package" / obj
+  testWithContext(
+    "top-level-package-object[companion class]-empty-package",
+    EmptyPkg / name"toplevelEmptyPackage$$package" / obj
+  ) {
     val toplevelEmptyPackage_package_companion = EmptyPkg / tname"toplevelEmptyPackage$$package"
-    given Context = getUnpicklingContext(toplevelEmptyPackage_package)
 
     try
       resolve(toplevelEmptyPackage_package_companion)
@@ -80,9 +96,8 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
         assert(ex.getMessage.nn.contains(s"cannot find member ${tname"toplevelEmptyPackage$$package".toDebugString}"))
   }
 
-  test("basic-symbol-structure") {
+  testWithContext("basic-symbol-structure", empty_class / tname"EmptyClass") {
     val EmptyClass = empty_class / tname"EmptyClass"
-    given Context = getUnpicklingContext(EmptyClass)
     resolve(EmptyClass)
     // EmptyClass and its constructor are the only declarations in empty_class package
     assertContainsExactly(
@@ -91,9 +106,8 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     )
   }
 
-  test("basic-symbol-structure-nested") {
+  testWithContext("basic-symbol-structure-nested", `simple_trees.nested` / tname"InNestedPackage") {
     val InNestedPackage = `simple_trees.nested` / tname"InNestedPackage"
-    given Context = getUnpicklingContext(InNestedPackage)
     resolve(InNestedPackage)
     // EmptyClass and its constructor are the only declarations in empty_class package
     assertContainsExactly(
@@ -102,22 +116,19 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     )
   }
 
-  test("inner-class") {
+  testWithContext("inner-class", simple_trees / tname"InnerClass") {
     val InnerClass = simple_trees / tname"InnerClass"
-    given Context = getUnpicklingContext(InnerClass)
     // Inner is a declaration in InnerClass
     resolve(InnerClass / tname"Inner")
   }
 
-  test("empty-package-contains-no-packages") {
-    given Context = getUnpicklingContext(simple_trees / tname"SharedPackageReference$$package")
+  testWithContext("empty-package-contains-no-packages", simple_trees / tname"SharedPackageReference$$package") {
     // simple_trees is not a subpackage of empty package
     assertForallWithPrefix(EmptyPkg, s => s.name == nme.EmptyPackageName || !s.isInstanceOf[PackageClassSymbol])
   }
 
-  test("class-parameter-is-a-decl") {
+  testWithContext("class-parameter-is-a-decl", simple_trees / tname"ConstructorWithParameters") {
     val ConstructorWithParameters = simple_trees / tname"ConstructorWithParameters"
-    given Context = getUnpicklingContext(ConstructorWithParameters)
     assertContainsExactly(
       ConstructorWithParameters,
       Set(
@@ -132,15 +143,13 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     )
   }
 
-  test("class-type-parameter-is-not-a-decl") {
+  testWithContext("class-type-parameter-is-not-a-decl", simple_trees / tname"GenericClass") {
     val GenericClass = simple_trees / tname"GenericClass"
-    given Context = getUnpicklingContext(GenericClass)
     assertContainsExactly(simple_trees, Set(GenericClass, GenericClass / name"<init>"))
   }
 
-  test("method-type-parameter-is-not-a-decl") {
+  testWithContext("method-type-parameter-is-not-a-decl", simple_trees / tname"GenericMethod") {
     val GenericMethod = simple_trees / tname"GenericMethod"
-    given Context = getUnpicklingContext(GenericMethod)
     assertContainsExactly(
       GenericMethod / name"usesTypeParam",
       // No declaratiins as type parameter `T` is not a declaration of `usesTypeParam`
@@ -148,9 +157,8 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     )
   }
 
-  test("method-term-parameter-is-not-a-decl") {
+  testWithContext("method-term-parameter-is-not-a-decl", simple_trees / tname"GenericMethod") {
     val GenericMethod = simple_trees / tname"GenericMethod"
-    given Context = getUnpicklingContext(GenericMethod)
     assertContainsExactly(
       GenericMethod / name"usesTermParam",
       // No declaratiins as term parameter `i: Int` is not a declaration of `usesTermParam`
@@ -158,9 +166,8 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     )
   }
 
-  test("nested-method-is-not-a-decl") {
+  testWithContext("nested-method-is-not-a-decl", simple_trees / tname"NestedMethod") {
     val NestedMethod = simple_trees / tname"NestedMethod"
-    given Context = getUnpicklingContext(NestedMethod)
     assertContainsExactly(
       NestedMethod / name"outerMethod",
       // local method `innerMethod` is not a declaration of `outerMethod`
@@ -168,11 +175,10 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     )
   }
 
-  test("nested-package-lookup") {
+  testWithContext("nested-package-lookup", `simple_trees.nested` / tname"InNestedPackage") {
     import tastyquery.ast.Types.*
 
     val InNestedPackage = `simple_trees.nested` / tname"InNestedPackage"
-    given Context = getUnpicklingContext(InNestedPackage)
 
     assert(resolve(InNestedPackage).fullName.toString == "simple_trees.nested.InNestedPackage")
 
