@@ -970,18 +970,22 @@ class TreeUnpickler(
       val lambdaAddr = reader.currentAddr
       reader.readByte()
       val end = reader.readEnd()
-      val resultUnpickler = fork
-      // skip the result type: it might refer to the parameters, which we haven't read yet
-      skipTree()
-      val params = reader.until(end)({
-        val spn = span
-        val bounds = readTypeBounds
-        val name = readName.toTypeName
-        // cannot have symbols inside types
-        TypeParam(name, bounds, NoSymbol)(spn)
-      })
-      TypeLambda.fromParams(params)((b: Binders) =>
-        resultUnpickler.readType(using localCtx.withEnclosingBinders(lambdaAddr, b))
+      val resultUnpickler = fork // remember where the result type is
+      skipTree() // skip the result type
+      val paramTypeBoundsUnpickler = fork // remember where the params are
+      val paramNames = reader.until(end) {
+        skipTree() // skip the type bounds
+        readName.toTypeName
+      }
+      def readParamTypeBounds()(using LocalContext): List[TypeBounds] =
+        paramTypeBoundsUnpickler.reader.until(end) {
+          val bounds = paramTypeBoundsUnpickler.readTypeBounds
+          paramTypeBoundsUnpickler.reader.readNat() // skip name
+          bounds
+        }
+      TypeLambda.rec(paramNames)(
+        tl => readParamTypeBounds()(using localCtx.withEnclosingBinders(lambdaAddr, tl)),
+        tl => resultUnpickler.readType(using localCtx.withEnclosingBinders(lambdaAddr, tl))
       )
     case PARAMtype =>
       reader.readByte()

@@ -104,7 +104,7 @@ object Types {
                 // Fast path
                 ClassRef(tycon.symbol.asClass)
               case _ =>
-                preErase(tpe.superType)
+                preErase(tpe.translucentSuperType)
         case tpe: Symbolic =>
           tpe.resolveToSymbol match
             case cls: ClassSymbol =>
@@ -187,7 +187,7 @@ object Types {
         this
       else
         dealiased match {
-          case dealiased: PolyType =>
+          case dealiased: TypeLambdaType =>
             dealiased.instantiate(args)
           case dealiased: AndType =>
             dealiased.derivedAndType(dealiased.first.appliedTo(args), dealiased.second.appliedTo(args))
@@ -439,6 +439,18 @@ object Types {
       case WildcardTypeBounds(bounds) => bounds.high
       case st                         => st
     }
+
+    /** Same as superType, except for two differences:
+      *
+      *  - opaque types are treated as transparent aliases
+      *  - applied type are matchtype-reduced if possible
+      *
+      * Note: the reason to reduce match type aliases here and not in `superType`
+      * is that `superType` is context-independent and cached, whereas matchtype
+      * reduction depends on context and should not be cached (at least not without
+      * the very specific cache invalidation condition for matchtypes).
+      */
+    def translucentSuperType(using Context): Type = superType
 
     def findMember(name: Name, pre: Type)(using Context): Symbol =
       underlying.findMember(name, pre)
@@ -831,6 +843,13 @@ object Types {
         case tycon: TypeProxy                       => tycon.superType.applyIfParameterized(args)
         case _                                      => AnyType
 
+    override def translucentSuperType(using Context): Type = tycon match
+      case tycon: TypeRef if tycon.symbol.isOpaqueTypeAlias =>
+        tycon.translucentSuperType.applyIfParameterized(args)
+      case _ =>
+        // tryNormalize.orElse(superType) // TODO for match types
+        superType
+
     def tyconTypeParams(using Context): List[ParamInfo] =
       val tparams = tycon.typeParams
       /*if (tparams.isEmpty) HKTypeLambda.any(args.length).typeParams else*/
@@ -937,6 +956,9 @@ object Types {
 
     protected def newParamRef(n: Int): ParamRefType = TypeParamRef(this, n)
 
+    def instantiate(args: List[Type])(using Context): Type =
+      Substituters.substParams(resType, this, args)
+
     /** The type `[tparams := paramRefs] tp`, where `tparams` can be
       * either a list of type parameter symbols or a list of lambda parameters
       */
@@ -1016,9 +1038,6 @@ object Types {
     def findMember(name: Name, pre: Type)(using Context): Symbol =
       throw new AssertionError(s"Cannot find member in $this")
 
-    def instantiate(args: List[Type])(using Context): Type =
-      Substituters.substParams(resType, this, args)
-
     override def toString: String =
       if evaluating then s"PolyType($paramNames)(<evaluating>...)"
       else s"PolyType($paramNames)($myBounds, $myRes)"
@@ -1068,30 +1087,32 @@ object Types {
     def paramNum: Int
 
   case class TypeLambda(paramNames: List[TypeName])(
-    @constructorOnly paramTypeBoundsExp: TypeLambda => List[TypeBounds],
-    @constructorOnly resultTypeExp: TypeLambda => Type
+    paramTypeBoundsExp: TypeLambda => List[TypeBounds],
+    resultTypeExp: TypeLambda => Type
   ) extends TypeProxy
       with TermType
       with TypeLambdaType {
     type This = TypeLambda
 
     private var evaluating: Boolean = false
+    private var myBounds: List[TypeBounds] | Null = null
+    private var myRes: Type | Null = null
 
-    val paramTypeBounds: List[TypeBounds] =
-      evaluating = true
-      val r = paramTypeBoundsExp(this: @unchecked)
-      evaluating = false
-      r
-
-    private val myResult: Type =
-      evaluating = true
-      resultTypeExp(this: @unchecked /* safe as long as `rest` does not call `resultType` */ ).andThen {
+    private def initialize(): Unit =
+      if evaluating then throw CyclicReference(s"polymorphic method [$paramNames]=>???")
+      else
+        evaluating = true
+        myBounds = paramTypeBoundsExp(this)
+        myRes = resultTypeExp(this)
         evaluating = false
-      }
+
+    def paramTypeBounds: List[TypeBounds] =
+      if myBounds == null then initialize()
+      myBounds.nn
 
     def resType: Type =
-      if evaluating then throw CyclicReference(s"type lambda [$paramNames] =>> ???")
-      else myResult
+      if myRes == null then initialize()
+      myRes.nn
 
     def paramInfos: List[PInfo] = paramTypeBounds
 
@@ -1101,7 +1122,7 @@ object Types {
 
     override def toString: String =
       if evaluating then s"TypeLambda($paramNames)(<evaluating>)"
-      else s"TypeLambda($paramNames)($myResult)"
+      else s"TypeLambda($paramNames)($myRes)"
   }
 
   object TypeLambda extends LambdaTypeCompanion[TypeName, TypeBounds, TypeLambda]:
@@ -1109,6 +1130,13 @@ object Types {
       paramNames: List[TypeName]
     )(paramInfosExp: TypeLambda => List[TypeBounds], resultTypeExp: TypeLambda => Type)(using Context): TypeLambda =
       new TypeLambda(paramNames)(paramInfosExp, resultTypeExp)
+
+    def rec(
+      paramNames: List[TypeName]
+    )(paramTypeBoundsExp: Binders => List[TypeBounds], resultTypeExp: Binders => Type): TypeLambda =
+      val tpe = new TypeLambda(paramNames)(paramTypeBoundsExp, resultTypeExp)
+      tpe.resType // initialize now
+      tpe
 
     def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type)(using Context): TypeLambda =
       apply(params.map(_.name))(_ => params.map(_.computeDeclarationTypeBounds()), resultTypeExp)(using ctx)

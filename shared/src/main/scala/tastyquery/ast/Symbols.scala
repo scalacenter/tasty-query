@@ -210,6 +210,9 @@ object Symbols {
       case scope: DeclaringSymbol => scope.allOverloads(name)
       case _                      => Nil
 
+    /** Is this symbol a user-defined opaque type alias? */
+    final def isOpaqueTypeAlias(using Context): Boolean = is(Opaque) && !isClass
+
     override def toString: String = {
       val kind = this match
         case _: PackageClassSymbol => "package "
