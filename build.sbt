@@ -4,6 +4,8 @@ val usedScalaCompiler = "3.1.0"
 val usedScala2StdLib = "2.13.7"
 val usedTastyRelease = usedScalaCompiler
 
+val SourceDeps = config("sourcedeps").hide
+
 val rtJarOpt = taskKey[Option[String]]("Path to rt.jar if it exists")
 val javalibEntry = taskKey[String]("Path to rt.jar or \"jrt:/\"")
 
@@ -28,7 +30,6 @@ lazy val tastyQuery =
     .settings(strictCompileSettings)
     .settings(name := "tasty-query", version := "0.1-SNAPSHOT")
     .settings(
-      libraryDependencies += "org.scala-lang" %% "tasty-core" % usedTastyRelease, // TODO: publish for JS or shade?
       libraryDependencies += "org.scalameta" %%% "munit" % "0.7.29" % Test,
       testFrameworks += new TestFramework("munit.Framework")
     )
@@ -62,11 +63,53 @@ lazy val tastyQuery =
     )
     .jvmSettings(
       fork := true,
+      libraryDependencies += "org.scala-lang" %% "tasty-core" % usedTastyRelease,
       libraryDependencies += "commons-io" % "commons-io" % "2.11.0",
       Test / javalibEntry := (Test / rtJarOpt).value.getOrElse("jrt:/modules/java.base/"),
     )
     .jsSettings(
+      // Add the sources of tasty-core, since it is not published for Scala.js
+      ivyConfigurations += SourceDeps.hide,
+      transitiveClassifiers := Seq("sources"),
+      libraryDependencies += "org.scala-lang" %% "tasty-core" % usedTastyRelease % SourceDeps,
+      (Compile / sourceGenerators) += Def.task {
+        val s = streams.value
+        val cacheDir = s.cacheDirectory
+        val trgDir = (Compile / sourceManaged).value / "tasty-core-src"
+
+        val report = updateClassifiers.value
+        val tastyCoreSourcesJar = report.select(
+            configuration = configurationFilter(SourceDeps.name),
+            module = (_: ModuleID).name.startsWith("tasty-core_"),
+            artifact = artifactFilter(`type` = "src")).headOption.getOrElse {
+          throw new MessageOnlyException(s"Could not fetch tasty-core sources")
+        }
+
+        FileFunction.cached(cacheDir / s"fetchTastyCoreSource",
+            FilesInfo.lastModified, FilesInfo.exists) { dependencies =>
+          s.log.info(s"Unpacking tasty-core sources to $trgDir...")
+          if (trgDir.exists)
+            IO.delete(trgDir)
+          IO.createDirectory(trgDir)
+          IO.unzip(tastyCoreSourcesJar, trgDir)
+          val sourceFiles = (trgDir ** "*.scala").get.toSet
+          for (f <- sourceFiles)
+            IO.writeLines(f, patchTastyCoreSource(IO.readLines(f)))
+          sourceFiles
+        } (Set(tastyCoreSourcesJar)).toSeq
+      }.taskValue,
+
       scalaJSUseMainModuleInitializer := true,
       scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.ESModule)),
       Test / javalibEntry := (Test / rtJarOpt).value.getOrElse("jrt:/modules/java.base/"), // TODO
     )
+
+def patchTastyCoreSource(lines: List[String]): List[String] = {
+  val importStatement = raw"""(?s)(^ *import .+\.)_$$""".r
+  for (line <- lines) yield {
+    line match {
+      case importStatement(allButUnderscore) => allButUnderscore + "*"
+      case _                                 => line
+    }
+  }
+}
