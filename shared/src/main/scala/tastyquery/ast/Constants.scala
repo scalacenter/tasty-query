@@ -19,9 +19,6 @@ object Constants {
   final val ClazzTag = 12
 
   class Constant(val value: Matchable, val tag: Int) {
-    import java.lang.Double.doubleToRawLongBits
-    import java.lang.Float.floatToRawIntBits
-
     def wideType: Type = tag match
       case UnitTag    => Types.UnitType
       case BooleanTag => Types.BooleanType
@@ -49,7 +46,7 @@ object Constants {
     /** We need the equals method to take account of tags as well as values. */
     override def equals(other: Any): Boolean = other.asMatchable match {
       case that: Constant =>
-        this.tag == that.tag && equalHashValue == that.equalHashValue
+        this.tag == that.tag && java.util.Objects.equals(value, that.value)
       case _ => false
     }
 
@@ -144,27 +141,12 @@ object Constants {
 
     def typeValue: Type = value.asInstanceOf[Type]
 
-    /** Consider two `NaN`s to be identical, despite non-equality
-      * Consider -0d to be distinct from 0d, despite equality
-      *
-      * We use the raw versions (i.e. `floatToRawIntBits` rather than `floatToIntBits`)
-      * to avoid treating different encodings of `NaN` as the same constant.
-      * You probably can't express different `NaN` varieties as compile time
-      * constants in regular Scala code, but it is conceivable that you could
-      * conjure them with a macro.
-      */
-    private def equalHashValue: Any = value match {
-      case f: Float  => floatToRawIntBits(f)
-      case d: Double => doubleToRawLongBits(d)
-      case v         => v
-    }
-
     override def hashCode: Int = {
       import scala.util.hashing.MurmurHash3.*
       val seed = 17
       var h = seed
       h = mix(h, tag.##) // include tag in the hash, otherwise 0, 0d, 0L, 0f collide.
-      h = mix(h, equalHashValue.##)
+      h = mix(h, value.hashCode()) // use hashCode() instead of ## to correctly handle Float/Double
       finalizeHash(h, length = 2)
     }
 
