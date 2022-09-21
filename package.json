@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "devDependencies": {
+    "jszip": "3.10.1"
+  }
+}
