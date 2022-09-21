@@ -3,6 +3,7 @@ package tastyquery.ast
 import tastyquery.ast.Names.*
 import tastyquery.ast.Types.*
 import tastyquery.Contexts.Context
+import tastyquery.ast.Symbols.ClassSymbol
 
 abstract class ParamSig
 
@@ -22,7 +23,7 @@ case class Signature(paramsSig: List[ParamSig], resSig: FullyQualifiedName) deri
   }.mkString("(", ",", ")") + ":" + resSig.toString
 
 object Signature {
-  def fromMethodic(info: MethodicType)(using Context): Signature =
+  def fromMethodic(info: MethodicType, optCtorReturn: Option[ClassSymbol])(using Context): Signature =
     def rec(info: Type, acc: List[ParamSig]): Signature =
       info match {
         case info: MethodType =>
@@ -31,7 +32,8 @@ object Signature {
         case PolyType(_, tbounds, res) =>
           rec(res, acc ::: TypeLenSig(tbounds.length) :: Nil)
         case tpe =>
-          Signature(acc, ErasedTypeRef.erase(tpe).toSigFullName)
+          val retType = optCtorReturn.map(_.erasedName).getOrElse(ErasedTypeRef.erase(tpe).toSigFullName)
+          Signature(acc, retType)
       }
 
     info match

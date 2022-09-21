@@ -894,6 +894,18 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(mixinSuper)(clue(tree)))
   }
 
+  testUnpickle("parents", simple_trees / tname"Super") { tree =>
+    val classWithParams: StructureCheck = {
+      case Template(
+            _,
+            Apply(Select(New(TypeIdent(Base @ _)), SignedName(nme.Constructor, _, _)), List()) :: Nil,
+            _,
+            _
+          ) =>
+    }
+    assert(containsSubtree(classWithParams)(clue(tree)))
+  }
+
   testUnpickle("type-member", simple_trees / tname"TypeMember") { tree =>
     // simple type member
     val typeMember: StructureCheck = {

@@ -245,13 +245,17 @@ object Symbols {
         companionClass.foreach(_.ensureInitialised()) // init the root class
       else () // member symbol, should be initialised by owner
 
+    private def isConstructor: Boolean =
+      maybeOuter.isClass && is(Method) && name == nme.Constructor
+
     private[tastyquery] override final def signature(using Context): Option[Signature] =
       val local = mySignature
       if local != null then local
       else
         val sig = declaredType match
-          case methodic: MethodicType => Some(Signature.fromMethodic(methodic))
-          case _                      => None
+          case methodic: MethodicType =>
+            Some(Signature.fromMethodic(methodic, Option.when(isConstructor)(maybeOuter.asClass)))
+          case _ => None
         mySignature = sig
         sig
   }
@@ -321,8 +325,9 @@ object Symbols {
     private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[Symbol] =
       myDeclarations.get(overloaded.underlying) match
         case Some(overloads) =>
-          if overloads.sizeIs == 1 then Some(overloads.head) // TODO: verify signature matches?
-          else if overloads.sizeIs > 1 then overloads.find(s => s.signature.exists(_ == overloaded.sig))
+          def matchingSig(s: Symbol): Boolean = s.signature.exists(_ == overloaded.sig)
+          if overloads.sizeIs == 1 then Some(overloads.head).filter(matchingSig)
+          else if overloads.sizeIs > 1 then overloads.find(matchingSig)
           else None // TODO: this should be an error
         case None => None
 

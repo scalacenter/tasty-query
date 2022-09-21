@@ -16,6 +16,10 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   val `simple_trees.nested` = simple_trees / name"nested"
 
   val scUnit = RootPkg / name"scala" / tname"Unit"
+  val scAnyVal = RootPkg / name"scala" / tname"AnyVal"
+
+  /** Needed for correct resolving of ctor signatures */
+  val fundamentalClasses = Seq(scUnit, scAnyVal)
 
   def testWithContext(name: String, path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*)(using munit.Location)(
     body: Context ?=> Unit
@@ -199,11 +203,23 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     assert(TermRef(PackageRef(simpleTreesPkg), name"nested").symbol == simpleTreesNestedPkg)
   }
 
-  testWithContext("basic-inheritance-same-root".ignore, inheritance / tname"SameTasty" / obj, scUnit) {
+  testWithContext("basic-inheritance-same-root", inheritance / tname"SameTasty" / obj, fundamentalClasses*) {
     val Sub = inheritance / tname"SameTasty" / obj / tname"Sub"
 
     val SubClass = resolve(Sub).asClass
 
     val fooMethod = SubClass.ref.member(name"foo")
+  }
+
+  testWithContext(
+    "basic-inheritance-different-root",
+    inheritance / tname"CrossTasty",
+    (inheritance / tname"SubCrossTasty" +: fundamentalClasses)*
+  ) {
+    val SubCrossTasty = inheritance / tname"SubCrossTasty"
+
+    val SubCrossTastyClass = resolve(SubCrossTasty).asClass
+
+    val fooMethod = SubCrossTastyClass.ref.member(name"foo")
   }
 }
