@@ -16,6 +16,19 @@ import RestrictedUnpicklingSuite.MissingTopLevelDecl
 class LazyLoadingSuite extends RestrictedUnpicklingSuite {
   val simple_trees = RootPkg / name"simple_trees"
 
+  def testWithContext(name: String, path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*)(using munit.Location)(
+    body: Context ?=> Unit
+  ): Unit =
+    testWithContext(new munit.TestOptions(name), path, extraClasspath*)(body)
+
+  def testWithContext(options: munit.TestOptions, path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*)(
+    using munit.Location
+  )(body: Context ?=> Unit): Unit =
+    test(options) {
+      val ctx = getUnpicklingContext(path, extraClasspath*)
+      body(using ctx)
+    }
+
   /** Dangerous operations that break auto-loading semantics of the API.
     *
     * They can only do that because they access `private[tastyquery]` methods,
@@ -54,12 +67,14 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
       case sym: DeclaringSymbol => sym.declarations // trigger the initialization
       case _                    => () // already initialized, by construction
 
-  test("sibling-top-level-class-loading") {
+  testWithContext(
+    "sibling-top-level-class-loading",
+    simple_trees / tname"Constants",
+    extraClasspath = simple_trees / tname"NestedMethod"
+  ) {
     val Constants = simple_trees / tname"Constants"
     val NestedMethod = simple_trees / tname"NestedMethod"
     val unitVal = Constants / name"unitVal"
-
-    given Context = getUnpicklingContext(Constants, extraClasspath = NestedMethod)
 
     explicitlyInitialize(resolve(Constants))
 
