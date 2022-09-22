@@ -158,7 +158,10 @@ class PickleReader {
     if storedWhileReadingOwner != null then return storedWhileReadingOwner.asInstanceOf[MaybeExternalSymbol]
 
     val flags = readFlags(name1.isTypeName)
-    val name = if flags.is(ModuleClass) then name1.toTermName.withObjectSuffix.toTypeName else name1
+    val name =
+      if flags.is(ModuleClass) then name1.toTermName.withObjectSuffix.toTypeName
+      else if flags.is(Method) && name1 == nme.Scala2Constructor then nme.Constructor
+      else name1
 
     val (privateWithin, infoRef) = {
       val ref = pkl.readNat()

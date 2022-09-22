@@ -11,7 +11,7 @@ import tastyquery.ast.Spans.*
 import tastyquery.ast.Types.*
 import tastyquery.ast.Variances.*
 import tastyquery.Contexts
-import tastyquery.Contexts.{Context, ctx}
+import tastyquery.Contexts.{Context, ctx, defn}
 
 import tastyquery.util.syntax.chaining.given
 
@@ -215,6 +215,10 @@ object Symbols {
       case scope: DeclaringSymbol => scope.hasOverloads(name)
       case _                      => false
 
+    private[tastyquery] final def memberPossiblyOverloaded(name: SignedName): Boolean = this match
+      case scope: DeclaringSymbol => scope.hasPossibleOverloads(name)
+      case _                      => false
+
     private[tastyquery] final def memberOverloads(name: SignedName): List[Symbol] = this match
       case scope: DeclaringSymbol => scope.allOverloads(name)
       case _                      => Nil
@@ -295,6 +299,11 @@ object Symbols {
         case Some(decls) => decls.sizeIs > 1
         case _           => false
 
+    private[Symbols] final def hasPossibleOverloads(name: SignedName): Boolean =
+      myDeclarations.get(name.underlying) match
+        case Some(decls) => decls.sizeIs >= 1
+        case _           => false
+
     private[Symbols] final def allOverloads(name: SignedName): List[Symbol] =
       myDeclarations.get(name.underlying) match
         case Some(decls) => decls.toList
@@ -355,6 +364,13 @@ object Symbols {
 
     // TODO: how do we associate some Symbols with TypeBounds, and some with Type?
     private var myTypeParams: List[(Symbol, TypeBounds)] | Null = null
+
+    private[tastyquery] def isDerivedValueClass(using Context): Boolean =
+      ensureInitialised()
+      def isValueClass: Boolean =
+        tree.isDefined && // TODO: Remove when Scala 2 classes have a ClassInfo
+          declaredType.asInstanceOf[ClassInfo].rawParents.head.classSymbol.exists(_ == defn.AnyValClass)
+      isValueClass && !defn.isPrimitiveValueClass(this)
 
     /** Get the companion object of class definition, if it exists:
       * - for `class C` => `object val C`

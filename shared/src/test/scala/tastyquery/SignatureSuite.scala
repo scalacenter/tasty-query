@@ -169,4 +169,10 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(from.signedName, "from", "():java.lang.String[]")
   }
 
+  testWithContext("value-class-arrayOps") {
+    val MyArrayOps = resolve(name"inheritance" / tname"MyArrayOps" / obj).asClass
+    val genericArrayOps = MyArrayOps.getDecl(name"genericArrayOps").get
+    assertIsSignedName(genericArrayOps.signedName, "genericArrayOps", "(1,java.lang.Object):java.lang.Object")
+  }
+
 end SignatureSuite

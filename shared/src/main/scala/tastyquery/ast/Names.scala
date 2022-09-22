@@ -67,6 +67,8 @@ object Names {
     val Wildcard: SimpleName = termName("_")
     val RefinementClass = typeName("<refinement>")
 
+    val Scala2Constructor: SimpleName = termName("this")
+
     val scalaPackageName: SimpleName = termName("scala")
     val javaPackageName: SimpleName = termName("java")
     val langPackageName: SimpleName = termName("lang")

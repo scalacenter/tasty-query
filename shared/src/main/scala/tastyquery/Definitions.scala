@@ -109,4 +109,19 @@ final class Definitions private[tastyquery] (
   lazy val SeqClass = scalaCollectionImmutablePackage.requiredClass("Seq")
   lazy val Function0Class = scalaPackage.requiredClass("Function0")
 
+  lazy val IntClass = scalaPackage.requiredClass("Int")
+  lazy val LongClass = scalaPackage.requiredClass("Long")
+  lazy val FloatClass = scalaPackage.requiredClass("Float")
+  lazy val DoubleClass = scalaPackage.requiredClass("Double")
+  lazy val BooleanClass = scalaPackage.requiredClass("Boolean")
+  lazy val ByteClass = scalaPackage.requiredClass("Byte")
+  lazy val ShortClass = scalaPackage.requiredClass("Short")
+  lazy val CharClass = scalaPackage.requiredClass("Char")
+  lazy val UnitClass = scalaPackage.requiredClass("Unit")
+
+  def isPrimitiveValueClass(sym: ClassSymbol): Boolean =
+    sym == IntClass || sym == LongClass || sym == FloatClass || sym == DoubleClass ||
+      sym == BooleanClass || sym == ByteClass || sym == ShortClass || sym == CharClass ||
+      sym == UnitClass
+
 end Definitions

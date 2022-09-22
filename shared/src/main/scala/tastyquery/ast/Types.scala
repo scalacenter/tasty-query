@@ -136,6 +136,10 @@ object Types {
         if cls == defn.AnyClass || cls == defn.AnyValClass then ClassRef(defn.ObjectClass)
         else if cls == defn.RepeatedParamClass then ClassRef(defn.SeqClass)
         else if cls == defn.ByNameParamClass2x then ClassRef(defn.Function0Class)
+        else if cls.isDerivedValueClass then
+          val ctor = cls.getDecl(nme.Constructor).get
+          val List(List(param)) = ctor.paramSymss.dropWhile(_.headOption.exists(_.isType)): @unchecked
+          erase(param.declaredType)
         else typeRef
       case ArrayTypeRef(_, _) =>
         typeRef
@@ -584,16 +588,21 @@ object Types {
               val candidate = declaring.getDecl(name)
               candidate.getOrElse {
                 val msg = this match
-                  case TermRef(_, name: SignedName) if declaring.memberIsOverloaded(name) =>
+                  case TermRef(_, name: SignedName) if declaring.memberPossiblyOverloaded(name) =>
                     def debugSig(sym: Symbol): String = sym.signature match {
                       case Some(sig) => sig.toDebugString
                       case None      => "<Not A Method>"
                     }
                     val debugQueried = name.sig.toDebugString
-                    val debugCandidates = declaring.memberOverloads(name).map(debugSig).mkString("\n-  ", "\n-  ", "")
-                    s"could not resolve overload:\nQueried:\n- $debugQueried\nPossible signatures:$debugCandidates"
+                    val debugCandidates = declaring.memberOverloads(name).map(debugSig).mkString("\n - ", "\n - ", "")
+                    s"""could not resolve overload for `${name.underlying}`:
+                       |Queried signature:
+                       | - $debugQueried
+                       |Overloads found with signatures:$debugCandidates
+                       |Perhaps the classpath is out of date.""".stripMargin
                   case _ =>
-                    s"not a member of $prefixSym"
+                    val possible = declaring.declarations.map(_.name.toDebugString).mkString("[", ", ", "]")
+                    s"not a member of $prefixSym, found possible members: $possible."
                 throw SymbolLookupException(name, msg)
               }
             case _ =>
