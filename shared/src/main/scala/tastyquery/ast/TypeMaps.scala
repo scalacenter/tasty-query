@@ -74,8 +74,8 @@ object TypeMaps {
       tp.derivedOrType(tp1, tp2)
     protected def derivedAnnotatedType(tp: AnnotatedType, underlying: Type, annot: Tree): Type =
       tp.derivedAnnotatedType(underlying, annot)
-    protected def derivedClassType(tp: ClassType, parents: Type): Type =
-      tp.derivedClassType(parents)
+    protected def derivedClassInfo(tp: ClassInfo, pre: Type): Type =
+      tp.derivedClassInfo(pre)
     protected def derivedExprType(tp: ExprType, restpe: Type): Type =
       tp.derivedExprType(restpe)
     protected def derivedLambdaType(tp: LambdaType, formals: List[tp.PInfo], restpe: Type): Type =
@@ -150,8 +150,8 @@ object TypeMaps {
         case tp: RefinedType =>
           derivedRefinedType(tp, this(tp.parent), this(tp.refinedInfo))
 
-        case tp: ClassType =>
-          mapClassType(tp)
+        case tp: ClassInfo =>
+          mapClassInfo(tp)
 
         case tp: AndType =>
           derivedAndType(tp, this(tp.first), this(tp.second))
@@ -174,8 +174,8 @@ object TypeMaps {
     //def mapOver(syms: List[Symbol]): List[Symbol] = mapSymbols(syms, treeTypeMap)
 
     /** Can be overridden. By default, only the prefix is mapped. */
-    protected def mapClassType(tp: ClassType): Type =
-      // TODO Should we even have prefixes in our ClassType?
+    protected def mapClassInfo(tp: ClassInfo): Type =
+      // TODO Should we even have prefixes in our ClassInfo?
       tp
 
     def andThen(f: Type => Type): TypeMap = new TypeMap {
@@ -435,11 +435,11 @@ object TypeMaps {
       // a range.
       else range(defn.NothingType, info)*/
 
-    /*override protected def derivedClassInfo(tp: ClassType, pre: Type): Type = {
+    /*override protected def derivedClassInfo(tp: ClassInfo, pre: Type): Type = {
       assert(!isRange(pre))
         // we don't know what to do here; this case has to be handled in subclasses
         // (typically by handling ClassInfo's specially, in case they can be encountered).
-      tp.derivedClassType(pre)
+      tp.derivedClassInfo(pre)
     }*/
 
     /*override protected def derivedLambdaType(tp: LambdaType)(formals: List[tp.PInfo], restpe: Type): Type =

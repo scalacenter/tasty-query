@@ -159,6 +159,15 @@ object Symbols {
       case null          => NoSymbol
     }
 
+    def ref(using Context): Type = this match
+      case pkg: PackageClassSymbol => pkg.declaredType // should be PackageRef set in ctor
+      case cls: ClassSymbol        => cls.typeRef
+      case sym: RegularSymbol => // TODO: should we cache in RegularSymbol?
+        val pre = sym.maybeOuter match
+          case pre: ClassSymbol => pre.ref
+          case _                => NoPrefix
+        NamedType(pre, sym)
+
     /** The type parameters of a class symbol, Nil for all other symbols. */
     def typeParams(using Context): List[Symbol] = Nil
 
@@ -236,13 +245,17 @@ object Symbols {
         companionClass.foreach(_.ensureInitialised()) // init the root class
       else () // member symbol, should be initialised by owner
 
+    private def isConstructor: Boolean =
+      maybeOuter.isClass && is(Method) && name == nme.Constructor
+
     private[tastyquery] override final def signature(using Context): Option[Signature] =
       val local = mySignature
       if local != null then local
       else
         val sig = declaredType match
-          case methodic: MethodicType => Some(Signature.fromMethodic(methodic))
-          case _                      => None
+          case methodic: MethodicType =>
+            Some(Signature.fromMethodic(methodic, Option.when(isConstructor)(maybeOuter.asClass)))
+          case _ => None
         mySignature = sig
         sig
   }
@@ -311,11 +324,8 @@ object Symbols {
 
     private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[Symbol] =
       myDeclarations.get(overloaded.underlying) match
-        case Some(overloads) =>
-          if overloads.sizeIs == 1 then Some(overloads.head) // TODO: verify signature matches?
-          else if overloads.sizeIs > 1 then overloads.find(s => s.signature.exists(_ == overloaded.sig))
-          else None // TODO: this should be an error
-        case None => None
+        case Some(overloads) => overloads.find(_.signature.exists(_ == overloaded.sig))
+        case None            => None
 
     final def resolveOverloaded(name: SignedName)(using Context): Option[Symbol] =
       getDecl(name)
@@ -412,6 +422,23 @@ object Symbols {
     override def typeParams(using Context): List[Symbol] =
       typeParamSyms
 
+    private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[Symbol] =
+      def lookup(parents: List[Type]): Option[Symbol] = parents match
+        case p :: ps =>
+          p.classSymbol.flatMap { parentCls =>
+            // val inherited = parentd.membersNamedNoShadowingBasedOnFlags(name, required, excluded | Private)
+            // denots1.union(inherited.mapInherited(ownDenots, denots1, thisType))
+            parentCls.findMember(pre, name) // lookup in parents of parent
+          }.orElse(lookup(ps))
+        case nil => None
+      end lookup
+
+      getDecl(name).orElse {
+        if name == nme.Constructor then None
+        else lookup(declaredType.asInstanceOf[ClassInfo].rawParents)
+      }
+    end findMember
+
     /** Get the self type of this class, as if viewed from an external package */
     private[tastyquery] final def accessibleThisType: Type = this match
       case pkg: PackageClassSymbol => PackageRef(pkg) // TODO: maybe we need this-type of package for package-private
@@ -505,7 +532,7 @@ object Symbols {
     def createRefinedClassSymbol(owner: OwnerSym, span: Span)(using Context): ClassSymbol =
       val cls = createSymbol(tpnme.RefinedClassMagic, owner)
       cls
-        .withDeclaredType(ClassType(cls, ObjectType))
+        .withDeclaredType(ClassInfo.direct(cls, ObjectType :: Nil))
         .withFlags(EmptyFlagSet)
       cls.initialised = true
       cls

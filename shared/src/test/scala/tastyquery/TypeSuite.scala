@@ -17,6 +17,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
   }
 
+  extension [T](elems: List[T])
+    def isListOf(tests: (T => Boolean)*)(using Context): Boolean =
+      elems.corresponds(tests)((t, test) => test(t))
+
   extension (tpe: Type)
     def isAny(using Context): Boolean = tpe.isRef(resolve(name"scala" / tname"Any"))
 
@@ -30,11 +34,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case _                          => false
 
     def isIntersectionOf(tpes: (Type => Boolean)*)(using Context): Boolean =
-      def parts(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
-        case AndType(tp1, tp2) => parts(tp2, parts(tp1, acc))
-        case tpe: Type         => acc += tpe
-      val all = parts(tpe.widen, mutable.ListBuffer[Type]()).toList
-      all.corresponds(tpes)((tpe, test) => test(tpe))
+      def parts(tpe: Type): List[Type] = tpe match
+        case tpe: AndType => tpe.parts
+        case tpe: Type    => tpe :: Nil
+      parts(tpe.widen).isListOf(tpes*)
 
     def isApplied(cls: Type => Boolean, argRefs: Seq[Type => Boolean])(using Context): Boolean =
       tpe.widen match
@@ -473,7 +476,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   testWithContext("java-class-parents") {
     val SubJavaDefined = name"javadefined" / tname"SubJavaDefined"
 
-    val (SubJavaDefinedTpe @ _: ClassType) = resolve(SubJavaDefined).declaredType: @unchecked
+    val (SubJavaDefinedTpe @ _: ClassInfo) = resolve(SubJavaDefined).declaredType: @unchecked
 
     val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
     val JavaInterface1Class = resolve(name"javadefined" / tname"JavaInterface1")
@@ -481,24 +484,24 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     assert(
       SubJavaDefinedTpe.rawParents
-        .isIntersectionOf(_.isRef(JavaDefinedClass), _.isRef(JavaInterface1Class), _.isRef(JavaInterface2Class))
+        .isListOf(_.isRef(JavaDefinedClass), _.isRef(JavaInterface1Class), _.isRef(JavaInterface2Class))
     )
   }
 
   testWithContext("java-class-signatures-[RecClass]") {
     val RecClass = name"javadefined" / tname"RecClass"
 
-    val (RecClassTpe @ _: ClassType) = resolve(RecClass).declaredType: @unchecked
+    val (RecClassTpe @ _: ClassInfo) = resolve(RecClass).declaredType: @unchecked
 
     val ObjectClass = resolve(name"java" / name"lang" / tname"Object")
 
-    assert(RecClassTpe.rawParents.isRef(ObjectClass))
+    assert(RecClassTpe.rawParents.isListOf(_.isRef(ObjectClass)))
   }
 
   testWithContext("java-class-signatures-[SubRecClass]") {
     val SubRecClass = name"javadefined" / tname"SubRecClass"
 
-    val (SubRecClassTpe @ _: ClassType) = resolve(SubRecClass).declaredType: @unchecked
+    val (SubRecClassTpe @ _: ClassInfo) = resolve(SubRecClass).declaredType: @unchecked
 
     val RecClass = resolve(name"javadefined" / tname"RecClass")
     val JavaInterface1 = resolve(name"javadefined" / tname"JavaInterface1")
@@ -506,7 +509,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val List(tparamT) = SubRecClassTpe.cls.typeParamSyms: @unchecked
 
     assert(
-      SubRecClassTpe.rawParents.isIntersectionOf(
+      SubRecClassTpe.rawParents.isListOf(
         _.isApplied(_.isRef(RecClass), List(_.isApplied(_.isRef(SubRecClassTpe.cls), List(_.isRef(tparamT))))),
         _.isRef(JavaInterface1)
       )

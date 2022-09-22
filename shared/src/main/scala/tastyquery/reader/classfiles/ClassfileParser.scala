@@ -4,7 +4,7 @@ import tastyquery.Contexts.*
 import tastyquery.ast.Flags
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
-import tastyquery.ast.Types.{ClassType, ObjectType}
+import tastyquery.ast.Types.{ClassInfo, ObjectType}
 import tastyquery.reader.pickles.{Unpickler, PickleReader}
 import tastyquery.util.Forked
 
@@ -12,6 +12,7 @@ import ClassfileReader.*
 import Classpaths.ClassData
 
 import tastyquery.util.syntax.chaining.given
+import tastyquery.ast.Types.AndType
 
 object ClassfileParser {
 
@@ -63,7 +64,7 @@ object ClassfileParser {
       .createClassSymbol(name.withObjectSuffix.toTypeName, classOwner)
       .withTypeParams(Nil, Nil)
       .withFlags(Flags.ModuleClassCreationFlags)
-    moduleClass.withDeclaredType(ClassType(moduleClass, ObjectType))
+    moduleClass.withDeclaredType(ClassInfo.direct(moduleClass, ObjectType :: Nil))
 
     val module = ctx
       .createSymbol(name.toTermName, classOwner)
@@ -97,7 +98,9 @@ object ClassfileParser {
         pool.utf8(cls.nameIdx).name
       val parents = classSig match
         case SigOrSupers.Sig(sig) =>
-          JavaSignatures.parseSignature(cls, sig)
+          JavaSignatures.parseSignature(cls, sig) match
+            case mix: AndType => mix.parts
+            case sup          => sup :: Nil
         case SigOrSupers.Supers =>
           structure.supers.use {
             val superClass = reader.readSuperClass().map(binaryName)
@@ -105,7 +108,7 @@ object ClassfileParser {
             Descriptors.parseSupers(cls, superClass, interfaces)
           }
       end parents
-      val classType = ClassType(cls, parents)
+      val classType = ClassInfo.direct(cls, parents)
       cls.withDeclaredType(classType)
     end initParents
 

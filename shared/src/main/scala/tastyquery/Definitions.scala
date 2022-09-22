@@ -27,7 +27,7 @@ final class Definitions private[tastyquery] (
   private def createSpecialClass(name: TypeName, parents: List[Type], flags: FlagSet): ClassSymbol =
     val cls = ctx.createClassSymbol(name, scalaPackage)
     cls.withTypeParams(Nil, Nil)
-    cls.withDeclaredType(ClassType(cls, if parents.isEmpty then NoType else parents.reduce(_ & _)))
+    cls.withDeclaredType(ClassInfo.direct(cls, if parents.isEmpty then Nil else parents))
     cls.withFlags(flags)
     cls.initialised = true
     cls
@@ -70,7 +70,7 @@ final class Definitions private[tastyquery] (
   private def createSpecialPolyClass(
     name: TypeName,
     paramFlags: FlagSet,
-    parentConstrs: Type => Seq[Type]
+    parentConstrs: Type => List[Type]
   ): ClassSymbol =
     val cls = ctx.createClassSymbol(name, scalaPackage)
 
@@ -82,16 +82,16 @@ final class Definitions private[tastyquery] (
     cls.withFlags(EmptyFlagSet | Artifact)
 
     val parents = parentConstrs(TypeRef(NoPrefix, tparam))
-    cls.withDeclaredType(ClassType(cls, parents.reduce(_ & _)))
+    cls.withDeclaredType(ClassInfo.direct(cls, parents))
 
     cls
   end createSpecialPolyClass
 
   val ByNameParamClass2x: ClassSymbol =
-    createSpecialPolyClass(tpnme.ByNameParamClassMagic, Covariant, _ => Seq(AnyType))
+    createSpecialPolyClass(tpnme.ByNameParamClassMagic, Covariant, _ => List(AnyType))
 
   val RepeatedParamClass: ClassSymbol =
-    createSpecialPolyClass(tpnme.RepeatedParamClassMagic, Covariant, tp => Seq(ObjectType, SeqTypeOf(tp)))
+    createSpecialPolyClass(tpnme.RepeatedParamClassMagic, Covariant, tp => List(ObjectType, SeqTypeOf(tp)))
 
   // Derived symbols, found on the classpath
 

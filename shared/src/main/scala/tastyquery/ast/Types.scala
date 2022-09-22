@@ -1,6 +1,7 @@
 package tastyquery.ast
 
 import scala.annotation.{constructorOnly, tailrec}
+import scala.collection.mutable
 
 import dotty.tools.tasty.TastyFormat.NameTags
 import tastyquery.Contexts.*
@@ -143,8 +144,18 @@ object Types {
 
   abstract class Type {
 
+    /** The class symbol of this type, None if reduction is not possible */
+    private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this.widen match
+      case tpe: Symbolic =>
+        val sym = tpe.resolveToSymbol
+        if sym.isClass then Some(sym.asClass)
+        else sym.declaredType.classSymbol
+      case info: ClassInfo =>
+        Some(info.cls)
+      case _ => None
+
     /** The type parameters of this type are:
-      * For a ClassType type, the type parameters of its class.
+      * For a ClassInfo type, the type parameters of its class.
       * For a typeref referring to a class, the type parameters of the class.
       * For a refinement type, the type parameters of its parent, dropping
       * any type parameter that is-rebound by the refinement.
@@ -160,7 +171,7 @@ object Types {
         case self: AppliedType =>
           if (self.tycon.typeSymbol.isClass) Nil
           else self.superType.typeParams
-        case self: ClassType =>
+        case self: ClassInfo =>
           self.cls.typeParams
         case _: SingletonType | _: RefinedType =>
           Nil
@@ -277,7 +288,7 @@ object Types {
     @tailrec final def normalizedPrefix(using Context): Type = this match {
       case tp: NamedType =>
         if (tp.symbol.declaredType.isTypeAlias) tp.symbol.declaredType.normalizedPrefix else tp.prefix
-      case tp: ClassType =>
+      case tp: ClassInfo =>
         // TODO tp.prefix
         tp.cls.accessibleThisType
       case tp: TypeProxy =>
@@ -298,7 +309,7 @@ object Types {
     final def member(name: Name)(using Context): Symbol =
       // We need a valid prefix for `asSeenFrom`
       val pre = this match
-        case tp: ClassType => ??? // tp.appliedRef
+        case tp: ClassInfo => ??? // tp.appliedRef
         case _             => widenIfUnstable
       findMember(name, pre)
 
@@ -796,9 +807,7 @@ object Types {
       val sym = resolveToSymbol
       sym match
         case sym: ClassSymbol =>
-          sym.getDecl(name).getOrElse {
-            throw new AssertionError(s"Cannot find member named '$name' in $pre")
-          }
+          ClassInfo.findMember(sym, name, pre)
         case _ =>
           sym.declaredType.findMember(name, pre)
   }
@@ -1277,6 +1286,12 @@ object Types {
     def derivedAndType(first: Type, second: Type)(using Context): Type =
       if ((first eq this.first) && (second eq this.second)) this
       else AndType.make(first, second)
+
+    def parts: List[Type] =
+      def rec(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
+        case AndType(tp1, tp2) => rec(tp2, rec(tp1, acc))
+        case tpe: Type         => acc += tpe
+      rec(this, mutable.ListBuffer.empty).toList
   }
 
   object AndType {
@@ -1286,16 +1301,38 @@ object Types {
       else AndType(first, second)
   }
 
-  case class ClassType(cls: ClassSymbol, rawParents: Type) extends GroundType {
+  case class ClassInfo(cls: ClassSymbol)(private var mkRawParents: (() => List[Type]) | Null) extends GroundType {
+    var _rawParents: List[Type] | Null = null
+
+    def rawParents: List[Type] =
+      val localParents = _rawParents
+      if localParents != null then localParents
+      else
+        val localFactory = mkRawParents
+        if localFactory == null then throw CyclicReference(s"class info for ${cls.toDebugString}")
+        else
+          mkRawParents = null // we are evaluating the parents, avoid cycles by set to null
+          val computedParents = localFactory()
+          _rawParents = computedParents
+          computedParents
+
     def findMember(name: Name, pre: Type)(using Context): Symbol =
-      cls.getDecl(name).getOrElse {
-        throw new SymbolLookupException(name, s"in $cls")
+      ClassInfo.findMember(cls, name, pre)
+
+    def derivedClassInfo(pre: Type)(using Context): ClassInfo =
+      this // so far do not store pre in ClassInfo
+  }
+
+  object ClassInfo:
+    private[Types] def findMember(cls: ClassSymbol, name: Name, pre: Type)(using Context): Symbol =
+      cls.findMember(pre, name).getOrElse {
+        throw new AssertionError(s"Cannot find member named '$name' in $pre")
       }
 
-    def derivedClassType(rawParents: Type)(using Context): ClassType =
-      if rawParents eq this.rawParents then this
-      else ClassType(cls, rawParents)
-  }
+    def direct(cls: ClassSymbol, rawParents: List[Type])(using Context): ClassInfo =
+      ClassInfo(cls)(() => rawParents)
+    def defer(cls: ClassSymbol, rawParents: => List[Type])(using Context): ClassInfo =
+      ClassInfo(cls)(() => rawParents)
 
   case object NoType extends GroundType {
     def findMember(name: Name, pre: Type)(using Context): Symbol =

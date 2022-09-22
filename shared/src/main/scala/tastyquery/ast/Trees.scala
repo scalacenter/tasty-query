@@ -17,6 +17,31 @@ object Trees {
     def unapply(e: TypeComputationError): Option[Tree] = Some(e.tree)
   }
 
+  /** The method part of an application node, possibly enclosed in a block
+    *  with only valdefs as statements. the reason for also considering blocks
+    *  is that named arguments can transform a call into a block, e.g.
+    *   <init>(b = foo, a = bar)
+    * is transformed to
+    *   { val x$1 = foo
+    *     val x$2 = bar
+    *     <init>(x$2, x$1)
+    *   }
+    */
+  private def methPart(tree: Tree): Tree = stripApply(tree) match {
+    case TypeApply(fn, _) => methPart(fn)
+    // case AppliedTypeTree(fn, _) => methPart(fn) // !!! should not be needed
+    case Block(stats, expr) => methPart(expr)
+    case mp                 => mp
+  }
+
+  /** If this is an application, its function part, stripping all
+    *  Apply nodes (but leaving TypeApply nodes in). Otherwise the tree itself.
+    */
+  private def stripApply(tree: Tree): Tree = tree match {
+    case Apply(fn, _) => stripApply(fn)
+    case _            => tree
+  }
+
   abstract class Tree(val span: Span) {
     protected var myType: Type | Null = null
 
@@ -317,7 +342,18 @@ object Trees {
           throw NonMethodReference(s"application of args ${args.mkString} to $tpe")
 
     override def calculateType(using Context): Type =
-      resolveMethodType(fun.tpe, args.map(_.tpe))
+      val original = resolveMethodType(fun.tpe, args.map(_.tpe))
+      // If the resolved method type is not methodic, then it is the final result type.
+      // in this case, check the method part to see if it is a constructor selection.
+      // if it is, then the result type is the type of new.
+      original match
+        case partial: MethodicType => partial // Nothing to do here, it is partially applied.
+        case _ =>
+          methPart(fun) match
+            case Select(newObj @ New(_), SignedName(nme.Constructor, _, nme.Constructor)) =>
+              newObj.tpe
+            case _ =>
+              original
 
     override final def withSpan(span: Span): Apply = Apply(fun, args)(span)
 

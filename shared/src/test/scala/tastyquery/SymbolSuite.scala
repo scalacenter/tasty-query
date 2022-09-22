@@ -12,16 +12,26 @@ import tastyquery.ast.Trees.{ClassDef, ValDef}
 class SymbolSuite extends RestrictedUnpicklingSuite {
   val empty_class = RootPkg / name"empty_class"
   val simple_trees = RootPkg / name"simple_trees"
+  val inheritance = RootPkg / name"inheritance"
   val `simple_trees.nested` = simple_trees / name"nested"
 
-  def testWithContext(name: String, path: TopLevelDeclPath)(using munit.Location)(body: Context ?=> Unit): Unit =
-    testWithContext(new munit.TestOptions(name), path)(body)
+  val jlObject = RootPkg / name"java" / name"lang" / tname"Object"
+  val scUnit = RootPkg / name"scala" / tname"Unit"
+  val scAnyVal = RootPkg / name"scala" / tname"AnyVal"
 
-  def testWithContext(options: munit.TestOptions, path: TopLevelDeclPath)(
+  /** Needed for correct resolving of ctor signatures */
+  val fundamentalClasses = Seq(jlObject, scUnit, scAnyVal)
+
+  def testWithContext(name: String, path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*)(using munit.Location)(
+    body: Context ?=> Unit
+  ): Unit =
+    testWithContext(new munit.TestOptions(name), path, extraClasspath*)(body)
+
+  def testWithContext(options: munit.TestOptions, path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*)(
     using munit.Location
   )(body: Context ?=> Unit): Unit =
     test(options) {
-      for ctx <- getUnpicklingContext(path) yield body(using ctx)
+      for ctx <- getUnpicklingContext(path, extraClasspath*) yield body(using ctx)
     }
 
   def getDeclsByPrefix(prefix: DeclarationPath)(using Context): Seq[Symbol] = {
@@ -192,5 +202,42 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     assert(simpleTreesNestedPkg.fullName.toString == "simple_trees.nested")
 
     assert(TermRef(PackageRef(simpleTreesPkg), name"nested").symbol == simpleTreesNestedPkg)
+  }
+
+  testWithContext("basic-inheritance-same-root", inheritance / tname"SameTasty" / obj, fundamentalClasses*) {
+    val Sub = inheritance / tname"SameTasty" / obj / tname"Sub"
+
+    val SubClass = resolve(Sub).asClass
+
+    val fooMethod = SubClass.ref.member(name"foo")
+  }
+
+  testWithContext("complex-inheritance-same-root", inheritance / tname"SameTasty" / obj, fundamentalClasses*) {
+    //    Any     Mixin { def bar: Int }
+    //     │               │
+    //  AnyRef         SubMixin
+    //     │               │
+    //     └───────┬───────┘
+    //             │
+    //          WithMixin
+    //             │
+    //         SubWithMixin
+    val SubWithMixin = inheritance / tname"SameTasty" / obj / tname"SubWithMixin"
+
+    val SubWithMixinClass = resolve(SubWithMixin).asClass
+
+    val barMethod = SubWithMixinClass.ref.member(name"bar")
+  }
+
+  testWithContext(
+    "basic-inheritance-different-root",
+    inheritance / tname"CrossTasty",
+    (inheritance / tname"SubCrossTasty" +: fundamentalClasses)*
+  ) {
+    val SubCrossTasty = inheritance / tname"SubCrossTasty"
+
+    val SubCrossTastyClass = resolve(SubCrossTasty).asClass
+
+    val fooMethod = SubCrossTastyClass.ref.member(name"foo")
   }
 }

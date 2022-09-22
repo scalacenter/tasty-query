@@ -500,7 +500,12 @@ class TreeUnpickler(
           case _     => readTypeTree
         }
       }
-    cls.withDeclaredType(ClassType(cls, ObjectType))
+    def parentsTpes = parents.map {
+      case parent: Apply    => parent.tpe
+      case parent: Block    => parent.tpe
+      case parent: TypeTree => parent.toType
+    }
+    cls.withDeclaredType(ClassInfo.defer(cls, parentsTpes))
     val self = readSelf
     // The first entry is the constructor
     val cstr = readStat.asInstanceOf[DefDef]
