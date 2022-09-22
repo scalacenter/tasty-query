@@ -324,12 +324,8 @@ object Symbols {
 
     private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[Symbol] =
       myDeclarations.get(overloaded.underlying) match
-        case Some(overloads) =>
-          def matchingSig(s: Symbol): Boolean = s.signature.exists(_ == overloaded.sig)
-          if overloads.sizeIs == 1 then Some(overloads.head).filter(matchingSig)
-          else if overloads.sizeIs > 1 then overloads.find(matchingSig)
-          else None // TODO: this should be an error
-        case None => None
+        case Some(overloads) => overloads.find(_.signature.exists(_ == overloaded.sig))
+        case None            => None
 
     final def resolveOverloaded(name: SignedName)(using Context): Option[Symbol] =
       getDecl(name)
@@ -427,24 +423,21 @@ object Symbols {
       typeParamSyms
 
     private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[Symbol] =
-      getDecl(name).orElse(getInheritedMember(pre, name))
-
-    private final def getInheritedMember(pre: Type, name: Name)(using Context): Option[Symbol] =
-      // prerequisite: member not found in parents
       def lookup(parents: List[Type]): Option[Symbol] = parents match
         case p :: ps =>
-          locally {
-            p.classSymbol match
-              case Some(parentCls) =>
-                // val inherited = parentd.membersNamedNoShadowingBasedOnFlags(name, required, excluded | Private)
-                // denots1.union(inherited.mapInherited(ownDenots, denots1, thisType))
-                parentCls.getDecl(name)
-              case _ =>
-                None
+          p.classSymbol.flatMap { parentCls =>
+            // val inherited = parentd.membersNamedNoShadowingBasedOnFlags(name, required, excluded | Private)
+            // denots1.union(inherited.mapInherited(ownDenots, denots1, thisType))
+            parentCls.findMember(pre, name) // lookup in parents of parent
           }.orElse(lookup(ps))
         case nil => None
-      if name == nme.Constructor then None
-      else lookup(declaredType.asInstanceOf[ClassInfo].rawParents)
+      end lookup
+
+      getDecl(name).orElse {
+        if name == nme.Constructor then None
+        else lookup(declaredType.asInstanceOf[ClassInfo].rawParents)
+      }
+    end findMember
 
     /** Get the self type of this class, as if viewed from an external package */
     private[tastyquery] final def accessibleThisType: Type = this match

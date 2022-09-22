@@ -347,13 +347,11 @@ object Trees {
       // in this case, check the method part to see if it is a constructor selection.
       // if it is, then the result type is the type of new.
       original match
-        case partial: MethodOrPoly => partial // Nothing to do here, it is partially applied.
+        case partial: MethodicType => partial // Nothing to do here, it is partially applied.
         case _ =>
           methPart(fun) match
             case Select(newObj @ New(_), SignedName(nme.Constructor, _, nme.Constructor)) =>
               newObj.tpe
-            // TODO: dotty indicates that there could possibly be cases for `super.<init>` and
-            // `this.<init>` internally inside a class
             case _ =>
               original
 

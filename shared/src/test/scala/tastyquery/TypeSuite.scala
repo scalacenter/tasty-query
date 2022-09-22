@@ -17,9 +17,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
   }
 
-  extension (tpes: List[Type])
-    def isIntersectionOf(tpeTests: (Type => Boolean)*)(using Context): Boolean =
-      tpes.corresponds(tpeTests)((tpe, test) => test(tpe))
+  extension [T](elems: List[T])
+    def isListOf(tests: (T => Boolean)*)(using Context): Boolean =
+      elems.corresponds(tests)((t, test) => test(t))
 
   extension (tpe: Type)
     def isAny(using Context): Boolean = tpe.isRef(resolve(name"scala" / tname"Any"))
@@ -37,7 +37,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       def parts(tpe: Type): List[Type] = tpe match
         case tpe: AndType => tpe.parts
         case tpe: Type    => tpe :: Nil
-      parts(tpe.widen).isIntersectionOf(tpes*)
+      parts(tpe.widen).isListOf(tpes*)
 
     def isApplied(cls: Type => Boolean, argRefs: Seq[Type => Boolean])(using Context): Boolean =
       tpe.widen match
@@ -484,7 +484,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     assert(
       SubJavaDefinedTpe.rawParents
-        .isIntersectionOf(_.isRef(JavaDefinedClass), _.isRef(JavaInterface1Class), _.isRef(JavaInterface2Class))
+        .isListOf(_.isRef(JavaDefinedClass), _.isRef(JavaInterface1Class), _.isRef(JavaInterface2Class))
     )
   }
 
@@ -495,7 +495,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val ObjectClass = resolve(name"java" / name"lang" / tname"Object")
 
-    assert(RecClassTpe.rawParents.isIntersectionOf(_.isRef(ObjectClass)))
+    assert(RecClassTpe.rawParents.isListOf(_.isRef(ObjectClass)))
   }
 
   testWithContext("java-class-signatures-[SubRecClass]") {
@@ -509,7 +509,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val List(tparamT) = SubRecClassTpe.cls.typeParamSyms: @unchecked
 
     assert(
-      SubRecClassTpe.rawParents.isIntersectionOf(
+      SubRecClassTpe.rawParents.isListOf(
         _.isApplied(_.isRef(RecClass), List(_.isApplied(_.isRef(SubRecClassTpe.cls), List(_.isRef(tparamT))))),
         _.isRef(JavaInterface1)
       )

@@ -478,7 +478,6 @@ object Types {
   trait TermType extends Type
 
   trait MethodicType extends TermType
-  trait MethodOrPoly extends MethodicType
 
   /** A marker trait for types that can be types of values or prototypes of value types */
   trait ValueTypeOrProto extends TermType
@@ -985,7 +984,7 @@ object Types {
   case class MethodType(paramNames: List[TermName])(
     paramTypesExp: MethodType => List[Type],
     resultTypeExp: MethodType => Type
-  ) extends MethodOrPoly
+  ) extends MethodicType
       with TermLambdaType:
     type This = MethodType
 
@@ -1015,7 +1014,7 @@ object Types {
   final class PolyType private (val paramNames: List[TypeName])(
     boundsRest: PolyType => List[TypeBounds],
     resultRest: PolyType => Type
-  ) extends MethodOrPoly
+  ) extends MethodicType
       with Binders
       with TypeLambdaType {
     type This = PolyType
