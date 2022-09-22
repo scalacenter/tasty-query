@@ -15,11 +15,12 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   val inheritance = RootPkg / name"inheritance"
   val `simple_trees.nested` = simple_trees / name"nested"
 
+  val jlObject = RootPkg / name"java" / name"lang" / tname"Object"
   val scUnit = RootPkg / name"scala" / tname"Unit"
   val scAnyVal = RootPkg / name"scala" / tname"AnyVal"
 
   /** Needed for correct resolving of ctor signatures */
-  val fundamentalClasses = Seq(scUnit, scAnyVal)
+  val fundamentalClasses = Seq(jlObject, scUnit, scAnyVal)
 
   def testWithContext(name: String, path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*)(using munit.Location)(
     body: Context ?=> Unit
@@ -209,6 +210,23 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val SubClass = resolve(Sub).asClass
 
     val fooMethod = SubClass.ref.member(name"foo")
+  }
+
+  testWithContext("complex-inheritance-same-root", inheritance / tname"SameTasty" / obj, fundamentalClasses*) {
+    //    Any     Mixin { def bar: Int }
+    //     │               │
+    //  AnyRef         SubMixin
+    //     │               │
+    //     └───────┬───────┘
+    //             │
+    //          WithMixin
+    //             │
+    //         SubWithMixin
+    val SubWithMixin = inheritance / tname"SameTasty" / obj / tname"SubWithMixin"
+
+    val SubWithMixinClass = resolve(SubWithMixin).asClass
+
+    val barMethod = SubWithMixinClass.ref.member(name"bar")
   }
 
   testWithContext(
