@@ -217,12 +217,13 @@ object Types {
             dealiased.derivedAndType(dealiased.first.appliedTo(args), dealiased.second.appliedTo(args))
           case dealiased: OrType =>
             dealiased.derivedOrType(dealiased.first.appliedTo(args), dealiased.second.appliedTo(args))
-          case dealiased: TypeAlias =>
-            dealiased.derivedTypeAlias(dealiased.alias.appliedTo(args))
           case dealiased @ WildcardTypeBounds(bounds) =>
-            dealiased.derivedWildcardTypeBounds(
-              bounds.derivedTypeBounds(bounds.low.appliedTo(args), bounds.high.appliedTo(args))
-            )
+            val newBounds = bounds match
+              case bounds @ TypeAlias(alias) =>
+                bounds.derivedTypeAlias(alias.appliedTo(args))
+              case _ =>
+                bounds.derivedTypeBounds(bounds.low.appliedTo(args), bounds.high.appliedTo(args))
+            dealiased.derivedWildcardTypeBounds(newBounds)
           case dealiased =>
             AppliedType(this, args)
         }
@@ -278,7 +279,9 @@ object Types {
         if tpSym.isClass then tp
         else
           tpSym.declaredType match
-            case TypeAlias(alias) if !(keepOpaques && tp.symbol.is(Opaque)) =>
+            case BoundedType(_, alias) if !keepOpaques && alias != NoType =>
+              alias.dealias1(keepOpaques)
+            case WildcardTypeBounds(TypeAlias(alias)) =>
               alias.dealias1(keepOpaques)
             case _ =>
               tp
@@ -310,7 +313,9 @@ object Types {
         NoType
     }
 
-    final def isTypeAlias: Boolean = this.isInstanceOf[TypeAlias]
+    final def isTypeAlias: Boolean = this match
+      case WildcardTypeBounds(bounds) => bounds.isInstanceOf[TypeAlias]
+      case _                          => false
 
     /** The basetype of this type with given class symbol, NoType if `base` is not a class. */
     final def baseType(base: Symbol)(using Context): Type =
@@ -1232,7 +1237,7 @@ object Types {
     def unapply(recType: RecType): Some[Type] = Some(recType.parent)
   end RecType
 
-  trait TypeBounds(val low: Type, val high: Type) {
+  abstract class TypeBounds(val low: Type, val high: Type) {
 
     /** The non-alias type bounds type with given bounds */
     def derivedTypeBounds(low: Type, high: Type)(using Context): TypeBounds =
@@ -1242,9 +1247,7 @@ object Types {
 
   case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high)
 
-  case class TypeAlias(alias: Type) extends TypeProxy with TypeBounds(alias, alias) {
-    override def underlying(using Context): Type = alias
-
+  case class TypeAlias(alias: Type) extends TypeBounds(alias, alias) {
     def derivedTypeAlias(alias: Type): TypeAlias =
       if alias eq this.alias then this
       else TypeAlias(alias)
