@@ -102,8 +102,17 @@ object Types {
           else
             tycon match
               case tycon: Symbolic if tycon.symbol.isClass =>
-                // Fast path
-                ClassRef(tycon.symbol.asClass)
+                val cls = tycon.symbol.asClass
+                if cls.isDerivedValueClass then
+                  val ctor = cls.getDecl(nme.Constructor).get
+                  val tparamSyms = ctor.paramSymss.headOption.filter(_.headOption.exists(_.isType)).getOrElse(Nil)
+                  val List(List(param)) = ctor.paramSymss.dropWhile(_.headOption.exists(_.isType)): @unchecked
+                  val paramType = param.declaredType
+                  val subbed = Substituters.subst(paramType, tparamSyms, targs)
+                  erase(subbed)
+                else
+                  // Fast path
+                  ClassRef(tycon.symbol.asClass)
               case _ =>
                 preErase(tpe.translucentSuperType)
         case tpe: Symbolic =>
@@ -136,10 +145,6 @@ object Types {
         if cls == defn.AnyClass || cls == defn.AnyValClass then ClassRef(defn.ObjectClass)
         else if cls == defn.RepeatedParamClass then ClassRef(defn.SeqClass)
         else if cls == defn.ByNameParamClass2x then ClassRef(defn.Function0Class)
-        else if cls.isDerivedValueClass then
-          val ctor = cls.getDecl(nme.Constructor).get
-          val List(List(param)) = ctor.paramSymss.dropWhile(_.headOption.exists(_.isType)): @unchecked
-          erase(param.declaredType)
         else typeRef
       case ArrayTypeRef(_, _) =>
         typeRef
@@ -538,7 +543,7 @@ object Types {
         val computed = computeName
         myName = computed
         computed
-      else local
+      else local.asInstanceOf[ThisName]
     }
 
     private def computeName: ThisName = (designator match {

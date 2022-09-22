@@ -83,7 +83,7 @@ final class Definitions private[tastyquery] (
 
     val parents = parentConstrs(TypeRef(NoPrefix, tparam))
     cls.withDeclaredType(ClassInfo.direct(cls, parents))
-
+    cls.initialised = true
     cls
   end createSpecialPolyClass
 
