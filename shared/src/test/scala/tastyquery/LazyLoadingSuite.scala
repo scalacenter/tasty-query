@@ -1,5 +1,7 @@
 package tastyquery
 
+import scala.concurrent.ExecutionContext.Implicits.global
+
 import tastyquery.Contexts.*
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
@@ -25,8 +27,7 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
     using munit.Location
   )(body: Context ?=> Unit): Unit =
     test(options) {
-      val ctx = getUnpicklingContext(path, extraClasspath*)
-      body(using ctx)
+      for ctx <- getUnpicklingContext(path, extraClasspath*) yield body(using ctx)
     }
 
   /** Dangerous operations that break auto-loading semantics of the API.
@@ -114,6 +115,6 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
       // package in tasty - the owners of the classroot do not match
       forceTopLevel(`symbolic_$minus$minus.#::`)
 
-    runTest(using Contexts.init(testClasspath))
+    for classpath <- testClasspath yield runTest(using Contexts.init(classpath))
   }
 }

@@ -1,5 +1,7 @@
 package tastyquery
 
+import scala.concurrent.ExecutionContext.Implicits.global
+
 import tastyquery.Contexts.Context
 import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
@@ -19,8 +21,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     using munit.Location
   )(body: Context ?=> Unit): Unit =
     test(options) {
-      val ctx = getUnpicklingContext(path)
-      body(using ctx)
+      for ctx <- getUnpicklingContext(path) yield body(using ctx)
     }
 
   def getDeclsByPrefix(prefix: DeclarationPath)(using Context): Seq[Symbol] = {

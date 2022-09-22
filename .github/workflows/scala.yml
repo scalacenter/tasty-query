@@ -22,7 +22,11 @@ jobs:
         distribution: 'adopt'
         java-version: ${{ matrix.java }}
         cache: 'sbt'
-    - name: Run tests
-      run: sbt test
+    - name: npm install
+      run: npm install
+    - name: Run JVM tests
+      run: sbt tastyQueryJVM/test
+    - name: Run JS tests
+      run: sbt tastyQueryJS/test
     - name: Run scalafmt check
       run: sbt scalafmtCheck

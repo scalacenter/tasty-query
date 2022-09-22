@@ -24,10 +24,17 @@ object ClasspathLoaders {
       path.getFileName().nn.toString().nn.endsWith("." + ext)
   end FileKind
 
+  object FileKind:
+    lazy val All: Set[FileKind] = Set(Class, Tasty)
+  end FileKind
+
   def splitClasspath(raw: String): List[Path] = {
     import scala.language.unsafeNulls
     raw.split(java.io.File.pathSeparator).toList.map(Paths.get(_))
   }
+
+  def read(classpath: List[Path]): Classpath =
+    read(classpath, FileKind.All)
 
   def read(classpath: List[Path], kinds: Set[FileKind]): Classpath = {
     def load(): IArray[PackageData] = {

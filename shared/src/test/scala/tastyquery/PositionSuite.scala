@@ -1,6 +1,6 @@
 package tastyquery
 
-import scala.io.Source
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.TypeTest
 
 import tastyquery.ast.Trees.*
@@ -11,18 +11,16 @@ import tastyquery.ast.Spans.*
 import Paths.*
 
 class PositionSuite extends RestrictedUnpicklingSuite {
-  val ResourceCodeProperty = "test-resources-code"
-
   val empty_class = RootPkg / name"empty_class"
   val simple_trees = RootPkg / name"simple_trees"
   val imports = RootPkg / name"imports"
 
-  private def getCodePath(name: String): String =
+  private def getCodeRelPath(name: String): String =
     var Array(dir, filename) = name.split('.')
     // A temporary workaround for path
     // TODO: remove the workaround
     if filename == "TraitWithSelf" then filename = "ClassWithSelf"
-    s"${System.getProperty(ResourceCodeProperty)}/main/scala/$dir/$filename.scala"
+    s"main/scala/$dir/$filename.scala"
 
   def testUnpickleWithCode(name: String, path: TopLevelDeclPath)(using munit.Location)(
     body: (Tree, String) => Unit
@@ -34,10 +32,10 @@ class PositionSuite extends RestrictedUnpicklingSuite {
     using munit.Location
   )(body: (Tree, String) => Unit): Unit =
     test(testOptions) {
-      val (base, tree) = findTopLevelTasty(path)()
-      val codePath = getCodePath(path.rootClassName)
-      val code = Source.fromFile(codePath).mkString
-      body(tree, code)
+      for (base, tree) <- findTopLevelTasty(path)() yield
+        val codePath = getCodeRelPath(path.rootClassName)
+        val code = tastyquery.testutil.TestPlatform.readResourceCodeFile(codePath)
+        body(tree, code)
     }
   end testUnpickleWithCode
 
