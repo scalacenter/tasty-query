@@ -37,7 +37,7 @@ object Symbols {
       if (explanation.isEmpty) msg else s"$msg: $explanation"
   }
 
-  val NoSymbol = new RegularSymbol(nme.EmptyTermName, null)
+  val NoSymbol = RegularSymbol.createNoSymbol()
 
   sealed abstract class Symbol private[Symbols] (val name: Name, rawowner: Symbol | Null) extends ParamInfo {
     private var isFlagsInitialized = false
@@ -84,11 +84,6 @@ object Symbols {
       case _ => None // not possible yet for local symbols
 
     private var myDeclaredType: Type | Null = null
-
-    /** Hook called by a SymbolFactory for debugging purposes
-      *  Example usage: throw an exception when some specific symbol is created.
-      */
-    private[Symbols] def postCreate(using Context): Unit = ()
 
     private[tastyquery] final def withDeclaredType(tpe: Type): this.type =
       val local = myDeclaredType
@@ -240,8 +235,7 @@ object Symbols {
     def unapply(s: Symbol): Option[Name] = Some(s.name)
   }
 
-  final class RegularSymbol private[Symbols] (override val name: Name, rawowner: Symbol | Null)
-      extends Symbol(name, rawowner) {
+  final class RegularSymbol private (override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner) {
     private var mySignature: Option[Signature] | Null = null
 
     private[tastyquery] override final def ensureInitialised()(using Context): Unit =
@@ -264,7 +258,15 @@ object Symbols {
         sig
   }
 
-  sealed abstract class DeclaringSymbol private[Symbols] (override val name: Name, rawowner: Symbol | Null)
+  object RegularSymbol:
+    private[tastyquery] def create(name: Name, owner: Symbol): RegularSymbol =
+      RegularSymbol(name, owner)
+
+    private[Symbols] def createNoSymbol(): RegularSymbol =
+      RegularSymbol(nme.EmptyTermName, null)
+  end RegularSymbol
+
+  sealed abstract class DeclaringSymbol protected (override val name: Name, rawowner: Symbol | Null)
       extends Symbol(name, rawowner) {
 
     private[tastyquery] override final def signature(using Context): Option[Signature] = None
@@ -358,7 +360,7 @@ object Symbols {
       s"${super.toString} with declarations [${myDeclarations.keys.map(_.toDebugString).mkString(", ")}]"
   }
 
-  class ClassSymbol private[Symbols] (override val name: Name, rawowner: Symbol | Null)
+  class ClassSymbol protected (override val name: Name, rawowner: Symbol | Null)
       extends DeclaringSymbol(name, rawowner) {
     private[tastyquery] var initialised: Boolean = false
 
@@ -477,17 +479,22 @@ object Symbols {
         typeRef
   }
 
-  // TODO: typename or term name?
-  class PackageClassSymbol private[Symbols] (override val name: Name, rawowner: PackageClassSymbol | Null)
-      extends ClassSymbol(name, rawowner) {
-    if (rawowner != null) {
-      // A package symbol is always a declaration in its owner package
-      rawowner.addDecl(this)
-    } else {
-      // Root package is the only symbol that is allowed to not have an owner
-      assert(name == nme.RootName)
-    }
+  object ClassSymbol:
+    private[tastyquery] def create(name: TypeName, owner: Symbol): ClassSymbol =
+      ClassSymbol(name, owner)
 
+    private[tastyquery] def createRefinedClassSymbol(owner: Symbol, span: Span)(using Context): ClassSymbol =
+      val cls = create(tpnme.RefinedClassMagic, owner)
+      cls
+        .withDeclaredType(ClassInfo.direct(cls, ObjectType :: Nil))
+        .withFlags(EmptyFlagSet)
+      cls.initialised = true
+      cls
+  end ClassSymbol
+
+  // TODO: typename or term name?
+  class PackageClassSymbol private (override val name: Name, rawowner: PackageClassSymbol | Null)
+      extends ClassSymbol(name, rawowner) {
     this.withDeclaredType(PackageRef(this))
 
     private[tastyquery] def possibleRoot(rootName: SimpleName)(using Context): Option[Loader.Root] =
@@ -517,56 +524,19 @@ object Symbols {
       }
   }
 
-  sealed abstract class SymbolFactory[T <: Symbol] {
-    type OwnerSym <: Symbol
-
-    final def createSymbol(name: Name, owner: OwnerSym)(using Context): T =
-      factory(name, owner).useWith(_.postCreate)
-
-    protected def factory(name: Name, owner: OwnerSym): T
-
-    def castSymbol(symbol: Symbol): T
-  }
-
-  /** A factory for symbols without open scopes, i.e. not a package */
-  sealed abstract class ClosedSymbolFactory[T <: Symbol] extends SymbolFactory[T]:
-    final type OwnerSym = Symbol
-
-  object RegularSymbolFactory extends ClosedSymbolFactory[RegularSymbol] {
-    override protected def factory(name: Name, owner: OwnerSym): RegularSymbol =
-      RegularSymbol(name, owner)
-
-    override def castSymbol(symbol: Symbol): RegularSymbol = symbol.asInstanceOf[RegularSymbol]
-  }
-
-  object ClassSymbolFactory extends ClosedSymbolFactory[ClassSymbol] {
-    override protected def factory(name: Name, owner: OwnerSym): ClassSymbol =
-      ClassSymbol(name, owner)
-
-    override def castSymbol(symbol: Symbol): ClassSymbol = symbol.asInstanceOf[ClassSymbol]
-
-    def createRefinedClassSymbol(owner: OwnerSym, span: Span)(using Context): ClassSymbol =
-      val cls = createSymbol(tpnme.RefinedClassMagic, owner)
-      cls
-        .withDeclaredType(ClassInfo.direct(cls, ObjectType :: Nil))
-        .withFlags(EmptyFlagSet)
-      cls.initialised = true
-      cls
-  }
-
-  object PackageClassSymbolFactory extends SymbolFactory[PackageClassSymbol] {
-    type OwnerSym = PackageClassSymbol // can only be created when the owner is a PackageClassSymbol
-    override protected def factory(name: Name, owner: OwnerSym): PackageClassSymbol =
-      if owner.getPackageDeclInternal(name.asSimpleName).isDefined then
+  object PackageClassSymbol:
+    private[tastyquery] def create(name: SimpleName, owner: PackageClassSymbol): PackageClassSymbol =
+      if owner.getPackageDeclInternal(name).isDefined then
         throw IllegalStateException(s"Trying to recreate package $name in $owner")
-      PackageClassSymbol(name, owner)
+      val pkg = PackageClassSymbol(name, owner)
+      owner.addDecl(pkg)
+      pkg
 
-    def createRoots: (PackageClassSymbol, PackageClassSymbol) =
+    private[tastyquery] def createRoots(): (PackageClassSymbol, PackageClassSymbol) =
       val root = PackageClassSymbol(nme.RootName, null)
+      root.initialised = true
       val empty = PackageClassSymbol(nme.EmptyPackageName, root)
-      root.initialised = true // should not be any class files for the root package
+      root.addDecl(empty)
       (root, empty)
-
-    override def castSymbol(symbol: Symbol): PackageClassSymbol = symbol.asInstanceOf[PackageClassSymbol]
-  }
+  end PackageClassSymbol
 }

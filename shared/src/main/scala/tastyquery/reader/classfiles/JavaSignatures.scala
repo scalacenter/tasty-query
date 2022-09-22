@@ -33,7 +33,7 @@ object JavaSignatures:
         def lookupTParam(scope: Symbol): Some[Type] =
           if scope.isPackage then cookFailure(tname, "no enclosing scope declares it")
           else if scope.isClass then
-            ClassSymbolFactory.castSymbol(scope).typeParamSymsNoInitialize.find(_.name == tname) match
+            scope.asClass.typeParamSymsNoInitialize.find(_.name == tname) match
               case Some(ref) => Some(TypeRef(NoPrefix, ref))
               case _         => lookupTParam(scope.outer)
           else cookFailure(tname, "unexpected non-class scope")
@@ -255,7 +255,7 @@ object JavaSignatures:
         interfaces(env, mutable.ListBuffer(superTpe))
       if consume('<') then
         val tparamNames = lookaheadTypeParamNames
-        val tparams = tparamNames.map(tname => RegularSymbolFactory.createSymbol(tname, cls))
+        val tparams = tparamNames.map(tname => ctx.createSymbol(tname, cls))
         val lookup = tparamNames.lazyZip(tparams).toMap
         cls.withTypeParams(tparams, typeParamsRest(lookup))
         classRest(lookup)
@@ -284,7 +284,7 @@ object JavaSignatures:
       throw ReadException(s"$msg of $member, original: `$signature` [is method? $isMethod]")
 
     (if isMethod then methodSignature
-     else if isClass then classSignature(ClassSymbolFactory.castSymbol(member))
+     else if isClass then classSignature(member.asClass)
      else fieldSignature) andThen { if available > 0 then unconsumed }
   end parseSignature
 end JavaSignatures
