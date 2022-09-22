@@ -49,9 +49,15 @@ object TypeMaps {
   abstract class TypeMap(using protected val mapCtx: Context) extends VariantTraversal {
     thisMap =>
 
-    final def apply(tp: Type | TypeBounds): Type | TypeBounds = tp match
-      case tp: Type       => apply(tp)
-      case tp: TypeBounds => apply(tp)
+    final def apply(tp: TypeMappable): tp.ThisTypeMappableType =
+      // Unfortunately, GADT reasoning is not smart enough to refine the type of `tp`
+      tp match
+        case tp2: Type =>
+          val result: tp2.ThisTypeMappableType = apply(tp2)
+          result.asInstanceOf[tp.ThisTypeMappableType]
+        case tp2: TypeBounds =>
+          val result: tp2.ThisTypeMappableType = apply(tp2)
+          result.asInstanceOf[tp.ThisTypeMappableType]
 
     def apply(tp: Type): Type
 

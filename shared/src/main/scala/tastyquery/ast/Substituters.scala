@@ -7,25 +7,15 @@ import tastyquery.ast.TypeMaps.*
 
 object Substituters:
 
-  def subst(tp: Type, from: Binders, to: Binders)(using Context): Type =
+  def subst(tp: TypeMappable, from: Binders, to: Binders)(using Context): tp.ThisTypeMappableType =
     new SubstBindingMap(from, to).apply(tp)
 
-  def subst(tp: Type | TypeBounds, from: Binders, to: Binders)(using Context): Type | TypeBounds =
-    new SubstBindingMap(from, to).apply(tp)
-
-  def substParams(tp: Type, from: Binders, to: List[Type])(using Context): Type =
+  def substParams(tp: TypeMappable, from: Binders, to: List[Type])(using Context): tp.ThisTypeMappableType =
     new SubstParamsMap(from, to).apply(tp)
 
-  def substParams(tp: Type | TypeBounds, from: Binders, to: List[Type])(using Context): Type | TypeBounds =
-    new SubstParamsMap(from, to).apply(tp)
-
-  def subst(tp: Type, from: List[Symbol], to: List[Type])(using Context): Type =
+  def subst(tp: TypeMappable, from: List[Symbol], to: List[Type])(using Context): tp.ThisTypeMappableType =
     if from.isEmpty then tp
     else new SubstMap(from, to).apply(tp)
-
-  def subst(bounds: TypeBounds, from: List[Symbol], to: List[Type])(using Context): TypeBounds =
-    if from.isEmpty then bounds
-    else new SubstMap(from, to).apply(bounds)
 
   final class SubstBindingMap(from: Binders, to: Binders)(using Context) extends DeepTypeMap:
     def apply(tp: Type): Type =

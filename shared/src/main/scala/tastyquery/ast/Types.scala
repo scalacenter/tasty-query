@@ -155,7 +155,12 @@ object Types {
     end finishErase
   }
 
-  abstract class Type {
+  sealed trait TypeMappable:
+    type ThisTypeMappableType >: this.type <: TypeMappable
+  end TypeMappable
+
+  abstract class Type extends TypeMappable {
+    type ThisTypeMappableType = Type
 
     /** The class symbol of this type, None if reduction is not possible */
     private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this.widen match
@@ -1237,7 +1242,8 @@ object Types {
     def unapply(recType: RecType): Some[Type] = Some(recType.parent)
   end RecType
 
-  abstract class TypeBounds(val low: Type, val high: Type) {
+  abstract class TypeBounds(val low: Type, val high: Type) extends TypeMappable {
+    type ThisTypeMappableType = TypeBounds
 
     /** The non-alias type bounds type with given bounds */
     def derivedTypeBounds(low: Type, high: Type)(using Context): TypeBounds =
