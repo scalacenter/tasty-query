@@ -181,6 +181,18 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(intArrayOps.signedName, "intArrayOps", "(scala.Int[]):java.lang.Object")
   }
 
+  testWithContext("scala2-value-class-arrayOps-generic") {
+    val Predef = resolve(name"scala" / tname"Predef" / obj).asClass
+    val genericArrayOps = Predef.getDecl(name"genericArrayOps").get.asTerm
+    assertIsSignedName(genericArrayOps.signedName, "genericArrayOps", "(1,java.lang.Object):java.lang.Object")
+  }
+
+  testWithContext("scala2-value-class-arrayOps-int") {
+    val Predef = resolve(name"scala" / tname"Predef" / obj).asClass
+    val intArrayOps = Predef.getDecl(name"intArrayOps").get.asTerm
+    assertIsSignedName(intArrayOps.signedName, "intArrayOps", "(scala.Int[]):java.lang.Object")
+  }
+
   testWithContext("value-class-monomorphic") {
     val MyFlags = resolve(name"inheritance" / tname"MyFlags").asClass
     val merge = MyFlags.getDecl(name"merge").get.asTerm

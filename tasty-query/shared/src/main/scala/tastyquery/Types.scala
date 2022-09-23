@@ -13,6 +13,8 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 
+import scala.annotation.targetName
+
 object Types {
   type Designator = Symbol | Name | LookupIn | Scala2ExternalSymRef
 
@@ -141,8 +143,8 @@ object Types {
     private def finishErase(typeRef: ErasedTypeRef)(using Context): ErasedTypeRef =
       def valueClass(cls: ClassSymbol): ErasedTypeRef =
         val ctor = cls.getDecl(nme.Constructor).get.asTerm
-        val List(Left(List(param))) = ctor.paramSymss.dropWhile(_.isRight): @unchecked
-        val paramType = param.declaredType
+        val List(Left(List(paramRef))) = ctor.paramRefss.dropWhile(_.isRight): @unchecked
+        val paramType = paramRef.underlying
         erase(paramType)
 
       typeRef match
@@ -268,6 +270,14 @@ object Types {
         case tp: TermRef => tp.underlying.widenOverloads
         case tp          => tp
 
+    /** Widen from ExprType type to its result type.
+      *  (Note: no stripTypeVar needed because TypeVar's can't refer to ExprTypes.)
+      */
+    final def widenExpr: Type = this match {
+      case tp: ExprType => tp.resType
+      case _            => this
+    }
+
     /** remove singleton types, ExprTypes and AnnotatedTypes */
     final def widen(using Context): Type = this match
       case _: TypeRef | _: MethodType | _: PolyType => this // fast path for most frequent cases
@@ -379,10 +389,12 @@ object Types {
 
     final def isRef(sym: Symbol)(using Context): Boolean =
       this match {
-        case tpe: NamedType   => tpe.symbol == sym
-        case tpe: AppliedType => tpe.underlying.isRef(sym)
-        case tpe: ExprType    => tpe.underlying.isRef(sym)
-        case _                => false // todo: add ProxyType (need to fill in implementations of underlying)
+        case tpe: NamedType    => tpe.symbol == sym
+        case tpe: AppliedType  => tpe.underlying.isRef(sym)
+        case tpe: ExprType     => tpe.underlying.isRef(sym)
+        case tpe: TermParamRef => tpe.underlying.isRef(sym)
+        case tpe: TypeParamRef => tpe.bounds.high.isRef(sym)
+        case _                 => false // todo: add ProxyType (need to fill in implementations of underlying)
       }
 
     /** Is this type exactly Nothing (no vars, aliases, refinements etc allowed)? */
@@ -580,7 +592,7 @@ object Types {
 
     final def symbol(using Context): ThisSymbolType =
       val local = mySymbol
-      if local != null then local
+      if local != null then local.asInstanceOf[ThisSymbolType] // Cast needed for expression evaluator
       else
         val computed = asThisSymbolType(computeSymbol())
         mySymbol = computed
@@ -963,6 +975,12 @@ object Types {
 
     def companion: LambdaTypeCompanion[ThisName, PInfo, This]
 
+    /** The type `[params := this.paramRefs] tp`, where `params` can be
+      * either a list of type parameter symbols or a list of lambda parameters
+      */
+    private[tastyquery] def integrate(params: List[Symbol], tp: Type)(using Context): Type =
+      Substituters.subst(tp, params, paramRefs)
+
     final def derivedLambdaType(
       paramNames: List[ThisName] = this.paramNames,
       paramInfos: List[PInfo] = this.paramInfos,
@@ -986,6 +1004,21 @@ object Types {
       apply(paramNames)(_ => paramInfos, _ => resultType)
   }
 
+  abstract class TypeLambdaTypeCompanion[LT <: TypeLambdaType] extends LambdaTypeCompanion[TypeName, TypeBounds, LT] {
+    @targetName("fromParamsSymbols")
+    private[tastyquery] final def fromParams(params: List[LocalTypeParamSymbol], resultType: Type)(
+      using Context
+    ): Type =
+      if params.isEmpty then resultType
+      else
+        val paramNames = params.map(_.name)
+        val paramTypeBounds = params.map(_.bounds)
+        apply(paramNames)(
+          tpLambda => paramTypeBounds.map(tpLambda.integrate(params, _)),
+          tpLambda => tpLambda.integrate(params, resultType)
+        )(using ctx)
+  }
+
   trait TermLambdaType extends LambdaType:
     type ThisName = TermName
     type PInfo = Type
@@ -1006,17 +1039,9 @@ object Types {
     def instantiate(args: List[Type])(using Context): Type =
       Substituters.substParams(resType, this, args)
 
-    /** The type `[tparams := paramRefs] tp`, where `tparams` can be
-      * either a list of type parameter symbols or a list of lambda parameters
-      */
-    private[tastyquery] def integrate(params: List[Symbol], tp: Type)(using Context): Type =
-      Substituters.subst(tp, params, paramRefs)
-
-    /** The type `[tparams := paramRefs] tp`, where `tparams` can be
-      * either a list of type parameter symbols or a list of lambda parameters
-      */
-    private[tastyquery] def integrate(params: List[Symbol], bounds: TypeBounds)(using Context): TypeBounds =
-      Substituters.subst(bounds, params, paramRefs)
+    /** The type-bounds `[tparams := this.paramRefs] bounds`, where `tparams` is a list of type parameter symbols */
+    private[tastyquery] def integrate(tparams: List[TypeParamSymbol], bounds: TypeBounds)(using Context): TypeBounds =
+      Substituters.subst(bounds, tparams, paramRefs)
   end TypeLambdaType
 
   case class MethodType(paramNames: List[TermName])(
@@ -1026,12 +1051,28 @@ object Types {
       with TermLambdaType:
     type This = MethodType
 
-    private var evaluating: Boolean = true
-    val paramTypes: List[Type] = paramTypesExp(this: @unchecked)
-    val resType: Type = resultTypeExp(this: @unchecked)
-    evaluating = false
+    private var evaluating: Boolean = false
+    private var myParamTypes: List[Type] | Null = null
+    private var myRes: Type | Null = null
 
-    def paramInfos: List[PInfo] = paramTypes
+    private def initialize(): Unit =
+      if evaluating then throw CyclicReference(s"method [$paramNames]=>???")
+      else
+        evaluating = true
+        myParamTypes = paramTypesExp(this)
+        myRes = resultTypeExp(this)
+        evaluating = false
+
+    def paramTypes: List[Type] =
+      if myParamTypes == null then initialize()
+      myParamTypes.nn
+
+    def resType: Type =
+      if myRes == null then initialize()
+      myRes.nn
+
+    def paramInfos: List[PInfo] =
+      paramTypes
 
     def companion: LambdaTypeCompanion[TermName, Type, MethodType] = MethodType
 
@@ -1048,6 +1089,33 @@ object Types {
       using Context
     ): MethodType =
       new MethodType(paramNames)(paramInfosExp, resultTypeExp)
+
+    /** Produce method type from parameter symbols, with special mappings for repeated
+      *  and inline parameters:
+      *   - replace @repeated annotations on Seq or Array types by <repeated> types
+      *   - add @inlineParam to inline parameters
+      */
+    private[tastyquery] def fromSymbols(params: List[TermSymbol], resultType: Type)(using Context): MethodType = {
+      // def translateInline(tp: Type): Type = tp match {
+      //   case ExprType(resType) => ExprType(AnnotatedType(resType, Annotation(defn.InlineParamAnnot)))
+      //   case _ => AnnotatedType(tp, Annotation(defn.InlineParamAnnot))
+      // }
+      // def translateErased(tp: Type): Type = tp match {
+      //   case ExprType(resType) => ExprType(AnnotatedType(resType, Annotation(defn.ErasedParamAnnot)))
+      //   case _ => AnnotatedType(tp, Annotation(defn.ErasedParamAnnot))
+      // }
+      def paramInfo(param: TermSymbol) = {
+        var paramType = param.declaredType //.annotatedToRepeated
+        // if (param.is(Inline)) paramType = translateInline(paramType)
+        // if (param.is(Erased)) paramType = translateErased(paramType)
+        paramType
+      }
+
+      MethodType.apply(params.map(_.name.toTermName))(
+        tl => params.map(p => tl.integrate(params, paramInfo(p))),
+        tl => tl.integrate(params, resultType)
+      )(using ctx)
+    }
 
   final class PolyType private (val paramNames: List[TypeName])(
     boundsRest: PolyType => List[TypeBounds],
@@ -1090,7 +1158,8 @@ object Types {
       else s"PolyType($paramNames)($myBounds, $myRes)"
   }
 
-  object PolyType extends LambdaTypeCompanion[TypeName, TypeBounds, PolyType]:
+  object PolyType extends TypeLambdaTypeCompanion[PolyType]:
+
     def apply(
       paramNames: List[TypeName]
     )(paramTypeBoundsExp: PolyType => List[TypeBounds], resultTypeExp: PolyType => Type)(using Context): PolyType =
@@ -1106,7 +1175,7 @@ object Types {
     def unapply(tpe: PolyType): (List[TypeName], List[TypeBounds], Type) =
       (tpe.paramNames, tpe.paramTypeBounds, tpe.resultType)
 
-    def fromParams(params: List[TypeParam], resultType: Type)(using Context): Type =
+    private[tastyquery] def fromParams(params: List[TypeParam], resultType: Type)(using Context): Type =
       if params.isEmpty then resultType
       else
         val paramNames = params.map(_.name)
@@ -1172,7 +1241,7 @@ object Types {
       else s"TypeLambda($paramNames)($myRes)"
   }
 
-  object TypeLambda extends LambdaTypeCompanion[TypeName, TypeBounds, TypeLambda]:
+  object TypeLambda extends TypeLambdaTypeCompanion[TypeLambda]:
     def apply(
       paramNames: List[TypeName]
     )(paramInfosExp: TypeLambda => List[TypeBounds], resultTypeExp: TypeLambda => Type)(using Context): TypeLambda =
@@ -1185,7 +1254,9 @@ object Types {
       tpe.resType // initialize now
       tpe
 
-    def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type)(using Context): TypeLambda =
+    private[tastyquery] def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type)(
+      using Context
+    ): TypeLambda =
       apply(params.map(_.name))(_ => params.map(_.computeDeclarationTypeBounds()), resultTypeExp)(using ctx)
   end TypeLambda
 
