@@ -32,8 +32,8 @@ object Signature {
         case PolyType(_, tbounds, res) =>
           rec(res, acc ::: TypeLenSig(tbounds.length) :: Nil)
         case tpe =>
-          val retType = optCtorReturn.map(_.erasedName).getOrElse(ErasedTypeRef.erase(tpe).toSigFullName)
-          Signature(acc, retType)
+          val retType = optCtorReturn.map(_.typeRef).getOrElse(tpe)
+          Signature(acc, ErasedTypeRef.erase(retType).toSigFullName)
       }
 
     info match
