@@ -160,7 +160,7 @@ class PickleReader {
     val flags = readFlags(name1.isTypeName)
     val name =
       if flags.is(ModuleClass) then name1.toTermName.withObjectSuffix.toTypeName
-      else if flags.is(Method) && name1 == nme.Scala2Constructor then nme.Constructor
+      else if flags.is(Method) && name1 == Scala2Constructor then nme.Constructor
       else name1
 
     val (privateWithin, infoRef) = {
@@ -642,5 +642,7 @@ object PickleReader {
   }
 
   type MaybeExternalSymbol = Symbol | ExternalSymbolRef
+
+  private val Scala2Constructor: SimpleName = termName("this")
 
 }

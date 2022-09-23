@@ -178,7 +178,25 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("value-class-arrayOps-int") {
     val MyArrayOps = resolve(name"inheritance" / tname"MyArrayOps" / obj).asClass
     val intArrayOps = MyArrayOps.getDecl(name"intArrayOps").get
-    assertIsSignedName(intArrayOps.signedName, "intArrayOps", "(scala.Int[]):scala.Int[]")
+    assertIsSignedName(intArrayOps.signedName, "intArrayOps", "(scala.Int[]):java.lang.Object")
+  }
+
+  testWithContext("value-class-monomorphic") {
+    val MyFlags = resolve(name"inheritance" / tname"MyFlags").asClass
+    val merge = MyFlags.getDecl(name"merge").get
+    assertIsSignedName(merge.signedName, "merge", "(scala.Long):scala.Long")
+  }
+
+  testWithContext("value-class-monomorphic-arrayOf") {
+    val MyFlags = resolve(name"inheritance" / tname"MyFlags" / obj).asClass
+    val mergeAll = MyFlags.getDecl(name"mergeAll").get
+    assertIsSignedName(mergeAll.signedName, "mergeAll", "(inheritance.MyFlags[]):scala.Long")
+  }
+
+  testWithContext("value-class-polymorphic-arrayOf") {
+    val MyArrayOps = resolve(name"inheritance" / tname"MyArrayOps" / obj).asClass
+    val arrayOfIntArrayOps = MyArrayOps.getDecl(name"arrayOfIntArrayOps").get
+    assertIsSignedName(arrayOfIntArrayOps.signedName, "arrayOfIntArrayOps", "(scala.Int[][]):inheritance.MyArrayOps[]")
   }
 
 end SignatureSuite

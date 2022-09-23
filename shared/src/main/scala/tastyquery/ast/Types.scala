@@ -82,6 +82,11 @@ object Types {
             typeRef.arrayOf()
 
       def arrayOf(tpe: Type): ErasedTypeRef = tpe match
+        case tpe @ AppliedType(tycon, targs) =>
+          if tycon.isRef(defn.ArrayClass) then
+            val List(targ) = targs: @unchecked
+            arrayOf(targ).arrayOf()
+          else arrayOf(tycon)
         case tpe: Symbolic =>
           val sym = tpe.symbol
           if sym.isClass then ClassRef(sym.asClass).arrayOf()
@@ -91,7 +96,7 @@ object Types {
         case BoundedType(bounds, NoType) => arrayOfBounds(bounds)
         case BoundedType(_, alias)       => arrayOf(alias)
         case _ =>
-          preErase(tpe)
+          preErase(tpe).arrayOf()
       end arrayOf
 
       tpe.widen match
@@ -102,17 +107,8 @@ object Types {
           else
             tycon match
               case tycon: Symbolic if tycon.symbol.isClass =>
-                val cls = tycon.symbol.asClass
-                if cls.isDerivedValueClass then
-                  val ctor = cls.getDecl(nme.Constructor).get
-                  val tparamSyms = ctor.paramSymss.headOption.filter(_.headOption.exists(_.isType)).getOrElse(Nil)
-                  val List(List(param)) = ctor.paramSymss.dropWhile(_.headOption.exists(_.isType)): @unchecked
-                  val paramType = param.declaredType
-                  val subbed = Substituters.subst(paramType, tparamSyms, targs)
-                  erase(subbed)
-                else
-                  // Fast path
-                  ClassRef(tycon.symbol.asClass)
+                // Fast path
+                ClassRef(tycon.symbol.asClass)
               case _ =>
                 preErase(tpe.translucentSuperType)
         case tpe: Symbolic =>
@@ -140,14 +136,22 @@ object Types {
           throw IllegalStateException(s"Cannot erase $tpe")
     end preErase
 
-    private def finishErase(typeRef: ErasedTypeRef)(using Context): ErasedTypeRef = typeRef match
-      case ClassRef(cls) =>
-        if cls == defn.AnyClass || cls == defn.AnyValClass then ClassRef(defn.ObjectClass)
-        else if cls == defn.RepeatedParamClass then ClassRef(defn.SeqClass)
-        else if cls == defn.ByNameParamClass2x then ClassRef(defn.Function0Class)
-        else typeRef
-      case ArrayTypeRef(_, _) =>
-        typeRef
+    private def finishErase(typeRef: ErasedTypeRef)(using Context): ErasedTypeRef =
+      def valueClass(cls: ClassSymbol): ErasedTypeRef =
+        val ctor = cls.getDecl(nme.Constructor).get
+        val List(List(param)) = ctor.paramSymss.dropWhile(_.headOption.exists(_.isType)): @unchecked
+        val paramType = param.declaredType
+        erase(paramType)
+
+      typeRef match
+        case ClassRef(cls) =>
+          if cls == defn.AnyClass || cls == defn.AnyValClass then ClassRef(defn.ObjectClass)
+          else if cls == defn.RepeatedParamClass then ClassRef(defn.SeqClass)
+          else if cls == defn.ByNameParamClass2x then ClassRef(defn.Function0Class)
+          else if cls.isDerivedValueClass then valueClass(cls)
+          else typeRef
+        case ArrayTypeRef(_, _) =>
+          typeRef
     end finishErase
   }
 
@@ -543,7 +547,7 @@ object Types {
         val computed = computeName
         myName = computed
         computed
-      else local.asInstanceOf[ThisName]
+      else local.asInstanceOf[ThisName] // do not remove - it is needed to satisfy the debugger's expression evaluator
     }
 
     private def computeName: ThisName = (designator match {
