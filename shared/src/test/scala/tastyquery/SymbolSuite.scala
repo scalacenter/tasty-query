@@ -209,7 +209,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
     val SubClass = resolve(Sub).asClass
 
-    val fooMethod = SubClass.ref.member(name"foo")
+    val fooMethod = SubClass.typeRef.member(name"foo")
   }
 
   testWithContext("complex-inheritance-same-root", inheritance / tname"SameTasty" / obj, fundamentalClasses*) {
@@ -226,7 +226,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
     val SubWithMixinClass = resolve(SubWithMixin).asClass
 
-    val barMethod = SubWithMixinClass.ref.member(name"bar")
+    val barMethod = SubWithMixinClass.typeRef.member(name"bar")
   }
 
   testWithContext(
@@ -238,6 +238,6 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
     val SubCrossTastyClass = resolve(SubCrossTasty).asClass
 
-    val fooMethod = SubCrossTastyClass.ref.member(name"foo")
+    val fooMethod = SubCrossTastyClass.typeRef.member(name"foo")
   }
 }

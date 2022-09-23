@@ -79,24 +79,33 @@ class TreeUnpickler(
         val tag = reader.nextByte
         val newOwner =
           if tag == TEMPLATE then ClassSymbol.create(name, localCtx.owner)
-          else RegularSymbol.create(name, localCtx.owner)
-        localCtx.registerSym(start, newOwner, addToDecls = localCtx.owner.isDeclaringSymbol)
+          else TypeMemberSymbol.create(name, localCtx.owner)
+        localCtx.registerSym(start, newOwner)
         readSymbolModifiers(newOwner, tag, end)
         reader.until(end)(createSymbols()(using localCtx.withOwner(newOwner)))
-      case DEFDEF | VALDEF | PARAM | TYPEPARAM =>
+      case DEFDEF | VALDEF | PARAM =>
         val end = reader.readEnd()
-        val name = if tag == TYPEPARAM then readName.toTypeName else readName
-        val addToDecls = tag != TYPEPARAM && localCtx.owner.isDeclaringSymbol
-        val newSymbol = RegularSymbol.create(name, localCtx.owner)
-        localCtx.registerSym(start, newSymbol, addToDecls)
+        val name = readName
+        val newSymbol = TermSymbol.create(name, localCtx.owner)
+        localCtx.registerSym(start, newSymbol)
+        readSymbolModifiers(newSymbol, tag, end)
+        reader.until(end)(createSymbols()(using localCtx.withOwner(newSymbol)))
+      case TYPEPARAM =>
+        val end = reader.readEnd()
+        val name = readName.toTypeName
+        val newSymbol =
+          if localCtx.owner.isClass then ClassTypeParamSymbol.create(name, localCtx.owner.asClass)
+          else LocalTypeParamSymbol.create(name, localCtx.owner)
+        localCtx.registerSym(start, newSymbol)
         readSymbolModifiers(newSymbol, tag, end)
         reader.until(end)(createSymbols()(using localCtx.withOwner(newSymbol)))
       case BIND =>
         val end = reader.readEnd()
-        var name: Name = readName
-        if (tagFollowShared == TYPEBOUNDS) name = name.toTypeName
-        val sym = RegularSymbol.create(name, localCtx.owner)
-        localCtx.registerSym(start, sym, addToDecls = false)
+        val name = readName
+        val sym =
+          if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(name.toTypeName, localCtx.owner)
+          else TermSymbol.create(name, localCtx.owner)
+        localCtx.registerSym(start, sym)
         // bind is never an owner
         reader.until(end)(createSymbols())
 
@@ -360,15 +369,20 @@ class TreeUnpickler(
         val classSymbol = localCtx.getSymbol[ClassSymbol](start)
         ClassDef(name, readTemplate(using localCtx.withOwner(classSymbol)), classSymbol)(spn).definesTreeOf(classSymbol)
       } else {
-        val symbol = localCtx.getSymbol[RegularSymbol](start)
+        val symbol = localCtx.getSymbol[TypeMemberSymbol](start)
         val innerCtx = localCtx.withOwner(symbol)
         val typeBounds: TypeTree | TypeBounds =
           if tagFollowShared == TYPEBOUNDS then readTypeBounds(using innerCtx)
           else readTypeTree(using innerCtx)
-        val declaredType = typeBounds match
-          case tpt: TypeTree          => tpt.toType
-          case typeBounds: TypeBounds => WildcardTypeBounds(typeBounds)
-        symbol.withDeclaredType(declaredType)
+        val typeDef = typeBounds match
+          case tpt: TypeTree =>
+            tpt.toType match
+              case BoundedType(bounds, NoType) => TypeMemberDefinition.AbstractType(bounds)
+              case BoundedType(bounds, alias)  => TypeMemberDefinition.OpaqueTypeAlias(bounds, alias)
+              case alias                       => TypeMemberDefinition.TypeAlias(alias)
+          case bounds: TypeBounds =>
+            TypeMemberDefinition.AbstractType(bounds)
+        symbol.withDefinition(typeDef)
         TypeMember(name, typeBounds, symbol)(spn).definesTreeOf(symbol)
       }
       // TODO: read modifiers
@@ -439,7 +453,7 @@ class TreeUnpickler(
     def readTypeParam: TypeParam = {
       val spn = span
       val start = reader.currentAddr
-      val paramSymbol = localCtx.getSymbol[RegularSymbol](start)
+      val paramSymbol = localCtx.getSymbol[TypeParamSymbol](start)
       val expectedFlags = if paramSymbol.owner.isClass then ClassTypeParam else TypeParameter
       assert(paramSymbol.flags.isAllOf(expectedFlags))
       reader.readByte()
@@ -450,7 +464,7 @@ class TreeUnpickler(
         case bounds: TypeBounds     => bounds
         case bounds: TypeBoundsTree => bounds.toTypeBounds
         case bounds: TypeLambdaTree => RealTypeBounds(NothingType, AnyType)
-      paramSymbol.withDeclaredType(WildcardTypeBounds(typeBounds))
+      paramSymbol.setBounds(typeBounds)
       skipModifiers(end)
       TypeParam(name, bounds, paramSymbol)(spn).definesTreeOf(paramSymbol)
     }
@@ -490,7 +504,10 @@ class TreeUnpickler(
     val end = reader.readEnd()
     val cls = localCtx.owner.asClass
     val tparams = readTypeParams
-    cls.withTypeParams(tparams.map(_.symbol), tparams.map(_.computeDeclarationTypeBounds()))
+    cls.withTypeParams(
+      tparams.map(_.symbol.asInstanceOf[ClassTypeParamSymbol]),
+      tparams.map(_.computeDeclarationTypeBounds())
+    )
     val params = readParams
     val parents: List[Apply | Block | TypeTree] =
       reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF) {
@@ -568,7 +585,7 @@ class TreeUnpickler(
     val end = reader.readEnd()
     val name = readName
     // Only for DefDef, but reading works for empty lists
-    val symbol = localCtx.getSymbol[RegularSymbol](start)
+    val symbol = localCtx.getSymbol[TermSymbol](start)
     val insideCtx = localCtx.withOwner(symbol)
     val params = readAllParams(using insideCtx)
     val tpt = readTypeTree(using insideCtx)
@@ -739,7 +756,7 @@ class TreeUnpickler(
       val typ = readType
       val term = readTerm
       skipModifiers(end)
-      val symbol = localCtx.getSymbol[RegularSymbol](start)
+      val symbol = localCtx.getSymbol[TermSymbol](start)
       Bind(name, term, symbol)(spn).definesTreeOf(symbol)
     case ALTERNATIVE =>
       reader.readByte()
@@ -1123,7 +1140,7 @@ class TreeUnpickler(
         NamedTypeBoundsTree(typeName, typ)(bodySpn)
       } else readTypeTree
       skipModifiers(end)
-      val sym = localCtx.getSymbol[RegularSymbol](start)
+      val sym = localCtx.getSymbol[LocalTypeParamSymbol](start)
       TypeTreeBind(name, body, sym)(spn).definesTreeOf(sym)
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree
@@ -1239,22 +1256,10 @@ object TreeUnpickler {
 
     def hasSymbolAt(addr: Addr): Boolean = localSymbols.contains(addr)
 
-    /** Registers a symbol at @addr with @name.
-      *
-      * If `addToDecls` is true, the symbol is added to the owner's declarations.
-      * This requires that the owner is a `DeclaringSymbol`, or else throws.
-      *
-      * @note `addToDecls` should be `true` for ValDef and DefDef, `false` for parameters and type parameters.
-      * @note A method is added to the declarations of its class, but a nested method should not added
-      *    to declarations of the outer method.
-      */
-    def registerSym(addr: Addr, sym: Symbol, addToDecls: Boolean): sym.type =
+    /** Registers a symbol at @addr with @name. */
+    def registerSym(addr: Addr, sym: Symbol): sym.type =
       if hasSymbolAt(addr) then throw ExistingDefinitionException(owner, sym.name)
       localSymbols(addr) = sym
-      if addToDecls then
-        owner match
-          case owner: DeclaringSymbol => owner.addDecl(sym)
-          case _ => throw IllegalArgumentException(s"can not add $sym to decls of non-declaring symbol $owner")
       sym
 
     def getSymbol[T <: Symbol](addr: Addr)(using TypeTest[Symbol, T], NotGiven[T =:= Nothing]): T =

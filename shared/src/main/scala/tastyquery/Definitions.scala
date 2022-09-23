@@ -21,7 +21,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   // Magic symbols that are not found on the classpath, but rather created by hand
 
   private def createSpecialClass(name: TypeName, parents: List[Type], flags: FlagSet): ClassSymbol =
-    val cls = ctx.createClassSymbol(name, scalaPackage)
+    val cls = ClassSymbol.create(name, scalaPackage)
     cls.withTypeParams(Nil, Nil)
     cls.withParentsDirect(parents)
     cls.withFlags(flags)
@@ -38,28 +38,32 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   locally {
     val andOrParamNames = List(typeName("A"), typeName("B"))
 
-    val andTypeAlias = ctx.createSymbol(typeName("&"), scalaPackage)
+    val andTypeAlias = TypeMemberSymbol.create(typeName("&"), scalaPackage)
     andTypeAlias.withFlags(EmptyFlagSet)
-    andTypeAlias.withDeclaredType(
-      PolyType(andOrParamNames)(
-        pt => List(NothingAnyBounds, NothingAnyBounds),
-        pt => AndType(pt.paramRefs(0), pt.paramRefs(1))
+    andTypeAlias.withDefinition(
+      TypeMemberDefinition.TypeAlias(
+        PolyType(andOrParamNames)(
+          pt => List(NothingAnyBounds, NothingAnyBounds),
+          pt => AndType(pt.paramRefs(0), pt.paramRefs(1))
+        )
       )
     )
 
-    val orTypeAlias = ctx.createSymbol(typeName("|"), scalaPackage)
+    val orTypeAlias = TypeMemberSymbol.create(typeName("|"), scalaPackage)
     orTypeAlias.withFlags(EmptyFlagSet)
-    orTypeAlias.withDeclaredType(
-      PolyType(andOrParamNames)(
-        pt => List(NothingAnyBounds, NothingAnyBounds),
-        pt => OrType(pt.paramRefs(0), pt.paramRefs(1))
+    orTypeAlias.withDefinition(
+      TypeMemberDefinition.TypeAlias(
+        PolyType(andOrParamNames)(
+          pt => List(NothingAnyBounds, NothingAnyBounds),
+          pt => OrType(pt.paramRefs(0), pt.paramRefs(1))
+        )
       )
     )
 
-    val AnyRefAlias = ctx.createSymbol(typeName("AnyRef"), scalaPackage)
+    val AnyRefAlias = TypeMemberSymbol.create(typeName("AnyRef"), scalaPackage)
     AnyRefAlias.withFlags(EmptyFlagSet)
     val ObjectType = TypeRef(javaLangPackage.packageRef, typeName("Object"))
-    AnyRefAlias.withDeclaredType(BoundedType(TypeAlias(ObjectType), NoType))
+    AnyRefAlias.withDefinition(TypeMemberDefinition.TypeAlias(ObjectType))
   }
 
   private def createSpecialPolyClass(
@@ -67,11 +71,11 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     paramFlags: FlagSet,
     parentConstrs: Type => List[Type]
   ): ClassSymbol =
-    val cls = ctx.createClassSymbol(name, scalaPackage)
+    val cls = ClassSymbol.create(name, scalaPackage)
 
-    val tparam = ctx.createSymbol(typeName("T"), cls)
+    val tparam = ClassTypeParamSymbol.create(typeName("T"), cls)
     tparam.withFlags(ClassTypeParam)
-    tparam.withDeclaredType(WildcardTypeBounds(NothingAnyBounds))
+    tparam.setBounds(NothingAnyBounds)
 
     cls.withTypeParams(tparam :: Nil, NothingAnyBounds :: Nil)
     cls.withFlags(EmptyFlagSet | Artifact)

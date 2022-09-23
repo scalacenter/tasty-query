@@ -47,7 +47,7 @@ object TypeOps:
               /*else if (pre.termSymbol.isPackage && !thiscls.isPackage)
               toPrefix(pre.select(nme.PACKAGE), cls, thiscls)*/
               else
-                toPrefix(pre.baseType(cls).normalizedPrefix, cls.owner, thiscls)
+                toPrefix(pre.baseType(cls).normalizedPrefix, cls.owner.nn, thiscls)
           }
       end toPrefix
 

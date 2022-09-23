@@ -121,32 +121,14 @@ object Contexts {
       rec(RootPackage, path)
     end findSymbolFromRoot
 
-    def createClassSymbol(name: TypeName, owner: DeclaringSymbol): ClassSymbol =
-      owner.getDeclInternal(name) match
-        case None =>
-          val cls = ClassSymbol.create(name, owner)
-          owner.addDecl(cls)
-          cls
-        case some =>
-          throw ExistingDefinitionException(owner, name)
-
-    def createSymbol(name: Name, owner: DeclaringSymbol): RegularSymbol =
-      owner.getDeclInternal(name) match
-        case None =>
-          val sym = RegularSymbol.create(name, owner)
-          owner.addDecl(sym)
-          sym
-        case some =>
-          throw ExistingDefinitionException(owner, name)
-
-    def createPackageSymbolIfNew(name: SimpleName, owner: PackageSymbol): PackageSymbol =
+    private[tastyquery] def createPackageSymbolIfNew(name: SimpleName, owner: PackageSymbol): PackageSymbol =
       assert(owner != EmptyPackage, s"Trying to create a subpackage $name of $owner")
       owner.getPackageDeclInternal(name) match {
         case Some(pkg) => pkg
         case None      => PackageSymbol.create(name, owner)
       }
 
-    def createPackageSymbolIfNew(fullyQualifiedName: FullyQualifiedName): PackageSymbol =
+    private[tastyquery] def createPackageSymbolIfNew(fullyQualifiedName: FullyQualifiedName): PackageSymbol =
       fullyQualifiedName.path.foldLeft(RootPackage) { (owner, name) =>
         createPackageSymbolIfNew(name.asSimpleName, owner)
       }
@@ -160,7 +142,7 @@ object Contexts {
           case Some(sym: ClassSymbol) =>
             sym
           case _ =>
-            createClassSymbol(tname, defn.javaLangPackage)
+            ClassSymbol.create(tname, defn.javaLangPackage)
 
       fakeJavaLangClassIfNotFound("Object")
       fakeJavaLangClassIfNotFound("Comparable")

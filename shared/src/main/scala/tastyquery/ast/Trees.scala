@@ -177,7 +177,7 @@ object Trees {
     *  mods type name >: lo <: hi,          if rhs = TypeBoundsTree(lo, hi)      or
     *  mods type name >: lo <: hi = rhs     if rhs = TypeBoundsTree(lo, hi, alias) and opaque in mods
     */
-  abstract class TypeDef(name: TypeName, override val symbol: Symbol)(span: Span)
+  abstract class TypeDef(name: TypeName, override val symbol: TypeSymbol)(span: Span)
       extends Tree(span)
       with DefTree(symbol) {
     override protected final def calculateType(using Context): Type = NoType
@@ -189,7 +189,7 @@ object Trees {
   }
 
   /** A type member has a type tree rhs if the member is defined by the user, or typebounds if it's synthetic */
-  case class TypeMember(name: TypeName, rhs: TypeTree | TypeBounds, override val symbol: RegularSymbol)(span: Span)
+  case class TypeMember(name: TypeName, rhs: TypeTree | TypeBounds, override val symbol: TypeMemberSymbol)(span: Span)
       extends TypeDef(name, symbol)(span) {
     override final def withSpan(span: Span): TypeMember = TypeMember(name, rhs, symbol)(span)
   }
@@ -198,7 +198,7 @@ object Trees {
   case class TypeParam(
     name: TypeName,
     bounds: TypeBoundsTree | TypeBounds | TypeLambdaTree,
-    override val symbol: RegularSymbol
+    override val symbol: TypeParamSymbol
   )(span: Span)
       extends TypeDef(name, symbol)(span) {
     private[tastyquery] def computeDeclarationTypeBounds()(using Context): TypeBounds = bounds match
@@ -226,7 +226,7 @@ object Trees {
   }
 
   /** mods val name: tpt = rhs */
-  case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: RegularSymbol)(span: Span)
+  case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: TermSymbol)(span: Span)
       extends Tree(span)
       with DefTree(symbol) {
     override protected final def calculateType(using Context): Type = NoType
@@ -254,7 +254,7 @@ object Trees {
     paramLists: List[ParamsClause],
     resultTpt: TypeTree,
     rhs: Tree,
-    override val symbol: RegularSymbol
+    override val symbol: TermSymbol
   )(span: Span)
       extends Tree(span)
       with DefTree(symbol) {
@@ -481,7 +481,7 @@ object Trees {
   }
 
   /** pattern in {@link Unapply} */
-  case class Bind(name: Name, body: Tree, override val symbol: RegularSymbol)(span: Span)
+  case class Bind(name: Name, body: Tree, override val symbol: TermSymbol)(span: Span)
       extends Tree(span)
       with DefTree(symbol) {
     override def calculateType(using Context): Type =

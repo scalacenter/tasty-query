@@ -98,7 +98,7 @@ object Classpaths {
 
     /** If this is a root symbol, lookup possible top level tasty trees associated with it. */
     private[tastyquery] def topLevelTasty(rootSymbol: Symbol)(using Context): Option[List[Tree]] =
-      rootSymbol.outer match
+      rootSymbol.owner match
         case pkg: PackageSymbol =>
           val rootName = rootSymbol.name.toTermName.stripObjectSuffix.asSimpleName
           val root = Loader.Root(pkg, rootName)
@@ -230,28 +230,10 @@ object Classpaths {
     }
 
     def initPackages()(using ctx: Context): Unit =
-      if !searched then {
+      if !searched then
         searched = true
-
-        def enterPackages(packages: IArray[PackageData]) = {
-          val packageNames = packages.map(pkg => toPackageName(pkg.name.name))
-
-          var debugPackageCount = 0
-
-          def createSubpackages(packageName: FullyQualifiedName)(using Context): PackageSymbol = {
-            var currentOwner = defn.RootPackage
-            for subpackageName <- packageName.path do
-              currentOwner = ctx.createPackageSymbolIfNew(subpackageName.asSimpleName, currentOwner)
-              debugPackageCount += 1
-
-            currentOwner
-          }
-
-          loader.packages =
-            Map.from(for (pkgName, data) <- packageNames.zip(packages) yield createSubpackages(pkgName) -> data)
-        }
-
-        enterPackages(classpath.packages)
-      }
+        val packages = classpath.packages
+        val packageSymbols = packages.map(pkg => ctx.createPackageSymbolIfNew(toPackageName(pkg.name.name)))
+        loader.packages = Map.from(packageSymbols.zip(packages))
   }
 }

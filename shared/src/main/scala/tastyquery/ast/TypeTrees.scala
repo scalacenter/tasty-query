@@ -115,7 +115,7 @@ object TypeTrees {
 
   case class TypeCaseDef(pattern: TypeTree, body: TypeTree)
 
-  case class TypeTreeBind(name: TypeName, body: TypeTree, override val symbol: RegularSymbol)(span: Span)
+  case class TypeTreeBind(name: TypeName, body: TypeTree, override val symbol: LocalTypeParamSymbol)(span: Span)
       extends TypeTree(span)
       with DefTree(symbol) {
     override protected def calculateType(using Context): Type =
