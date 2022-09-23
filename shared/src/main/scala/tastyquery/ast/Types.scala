@@ -250,10 +250,8 @@ object Types {
       case _            => NoSymbol
 
     final def termSymbol(using Context): Symbol = this match
-      case tpe: TermRef        => tpe.resolveToSymbol
-      case tpe: PackageRef     => tpe.resolveToSymbol
-      case tpe: PackageTypeRef => tpe.resolveToSymbol
-      case _                   => NoSymbol
+      case tpe: TermRef => tpe.resolveToSymbol
+      case _            => NoSymbol
 
     final def widenOverloads(using Context): Type =
       this.widen match
@@ -591,6 +589,8 @@ object Types {
         def findPrefixSym(prefix: Type): Symbol = prefix match {
           case NoPrefix =>
             throw new SymbolLookupException(name, "reference by name to a local symbol")
+          case ref: PackageRef =>
+            ref.symbol
           case t: TermRef =>
             findPrefixSym(t.underlying)
           case other: Symbolic =>
@@ -781,27 +781,14 @@ object Types {
           tp.findMember(name, pre)
   }
 
-  class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends NamedType with SingletonType {
+  final case class PackageRef(fullyQualifiedName: FullyQualifiedName) extends Type {
     private var packageSymbol: PackageClassSymbol | Null = null
 
     def this(packageSym: PackageClassSymbol) =
       this(packageSym.fullName)
       packageSymbol = packageSym
 
-    override def designator: Designator =
-      val pkgOpt = packageSymbol
-      if pkgOpt == null then fullyQualifiedName.path.last else pkgOpt
-
-    override protected def designator_=(d: Designator): Unit = throw UnsupportedOperationException(
-      s"Can't assign designator of a package"
-    )
-
-    override def underlying(using Context): Type = ???
-
-    // TODO: root package?
-    override val prefix: Type = NoType
-
-    override def resolveToSymbol(using Context): PackageClassSymbol = {
+    def symbol(using Context): PackageClassSymbol = {
       val local = packageSymbol
       if (local == null) {
         val resolved = ctx.findPackageFromRoot(fullyQualifiedName)
@@ -810,11 +797,15 @@ object Types {
       } else local
     }
 
-    override def toString: String = s"PackageRef($fullyQualifiedName)"
+    def findMember(name: Name, pre: Type)(using Context): Symbol =
+      symbol.getDecl(name).getOrElse {
+        throw SymbolLookupException(name, s"Cannot find a member $name in $symbol")
+      }
   }
 
   object PackageRef {
-    def unapply(r: PackageRef): Option[FullyQualifiedName] = Some(r.fullyQualifiedName)
+    def apply(packageSym: PackageClassSymbol): PackageRef =
+      new PackageRef(packageSym)
   }
 
   case class TypeRef(override val prefix: Type, private var myDesignator: Designator) extends NamedType {
@@ -843,13 +834,6 @@ object Types {
   case object NoPrefix extends Type {
     def findMember(name: Name, pre: Type)(using Context): Symbol =
       throw new AssertionError(s"Cannot find member in NoPrefix")
-  }
-
-  class PackageTypeRef(fullyQualifiedName: FullyQualifiedName)
-      extends TypeRef(NoPrefix, fullyQualifiedName.path.last.toTypeName) {
-    private val packageRef = PackageRef(fullyQualifiedName)
-
-    override def resolveToSymbol(using Context): Symbol = packageRef.resolveToSymbol
   }
 
   case class ThisType(tref: TypeRef) extends PathType with SingletonType with Symbolic {

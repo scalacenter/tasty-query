@@ -198,7 +198,7 @@ object Symbols {
     final def exists: Boolean = this ne NoSymbol
 
     final def isType: Boolean = name.isTypeName
-    final def isTerm: Boolean = name.isTermName
+    final def isTerm: Boolean = name.isTermName && !isPackage
 
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
     final def isPackage: Boolean = this.isInstanceOf[PackageClassSymbol]

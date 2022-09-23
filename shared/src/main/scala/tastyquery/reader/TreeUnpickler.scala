@@ -915,7 +915,7 @@ class TreeUnpickler(
       TypeRef(readType, sym)
     case TYPEREFpkg =>
       reader.readByte()
-      PackageTypeRef(readFullyQualifiedName)
+      PackageRef(readFullyQualifiedName)
     case SHAREDtype =>
       reader.readByte()
       val addr = reader.readAddr()
@@ -946,7 +946,11 @@ class TreeUnpickler(
       )
     case THIS =>
       reader.readByte()
-      ThisType(readType.asInstanceOf[TypeRef])
+      readType match
+        case typeRef: TypeRef       => ThisType(typeRef)
+        case packageRef: PackageRef => packageRef
+        case tpe =>
+          throw TreeUnpicklerException(s"Unexpected underlying type of THIS: $tpe")
     case QUALTHIS =>
       reader.readByte()
       if (tagFollowShared != IDENTtpt) {

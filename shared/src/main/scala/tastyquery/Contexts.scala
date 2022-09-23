@@ -77,7 +77,7 @@ object Contexts {
           val rootName = termName(binaryName.substring(lastSep + 1))
           (classloader.toPackageName(packageName), rootName)
       try
-        val pkg = PackageRef(packageName).resolveToSymbol
+        val pkg = PackageRef(packageName).symbol
         pkg
           .possibleRoot(rootName)
           .toRight(SymbolLookupException(rootName, s"no root $rootName exists in package $packageName"))
