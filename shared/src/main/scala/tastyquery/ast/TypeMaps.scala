@@ -49,9 +49,15 @@ object TypeMaps {
   abstract class TypeMap(using protected val mapCtx: Context) extends VariantTraversal {
     thisMap =>
 
-    final def apply(tp: Type | TypeBounds): Type | TypeBounds = tp match
-      case tp: Type       => apply(tp)
-      case tp: TypeBounds => apply(tp)
+    final def apply(tp: TypeMappable): tp.ThisTypeMappableType =
+      // Unfortunately, GADT reasoning is not smart enough to refine the type of `tp`
+      tp match
+        case tp2: Type =>
+          val result: tp2.ThisTypeMappableType = apply(tp2)
+          result.asInstanceOf[tp.ThisTypeMappableType]
+        case tp2: TypeBounds =>
+          val result: tp2.ThisTypeMappableType = apply(tp2)
+          result.asInstanceOf[tp.ThisTypeMappableType]
 
     def apply(tp: Type): Type
 
@@ -62,8 +68,6 @@ object TypeMaps {
       tp.derivedSelect(pre)
     protected def derivedRefinedType(tp: RefinedType, parent: Type, info: TypeBounds): Type =
       tp.derivedRefinedType(parent, tp.refinedName, info)
-    protected def derivedTypeAlias(tp: TypeAlias, alias: Type): Type =
-      tp.derivedTypeAlias(alias)
     protected def derivedWildcardTypeBounds(tp: WildcardTypeBounds, bounds: TypeBounds): Type =
       tp.derivedWildcardTypeBounds(bounds)
     protected def derivedAppliedType(tp: AppliedType, tycon: Type, args: List[Type]): Type =
@@ -81,6 +85,8 @@ object TypeMaps {
     protected def derivedLambdaType(tp: LambdaType, formals: List[tp.PInfo], restpe: Type): Type =
       tp.derivedLambdaType(tp.paramNames, formals, restpe)
 
+    protected def derivedTypeAlias(tp: TypeAlias, alias: Type): TypeBounds =
+      tp.derivedTypeAlias(alias)
     protected def derivedTypeBounds(bounds: TypeBounds, low: Type, high: Type): TypeBounds =
       bounds.derivedTypeBounds(low, high)
 
@@ -128,9 +134,6 @@ object TypeMaps {
         case tp: LambdaType =>
           mapOverLambda(tp)
 
-        case tp: TypeAlias =>
-          derivedTypeAlias(tp, atVariance(0)(this(tp.alias)))
-
         case tp @ WildcardTypeBounds(bounds) =>
           derivedWildcardTypeBounds(tp, this(bounds))
 
@@ -165,11 +168,16 @@ object TypeMaps {
     }
 
     def mapOver(bounds: TypeBounds): TypeBounds =
-      variance = -variance
-      val low1 = this(bounds.low)
-      variance = -variance
-      val high1 = this(bounds.high)
-      derivedTypeBounds(bounds, low1, high1)
+      bounds match
+        case bounds: TypeAlias =>
+          derivedTypeAlias(bounds, atVariance(0)(this(bounds.alias)))
+        case _ =>
+          variance = -variance
+          val low1 = this(bounds.low)
+          variance = -variance
+          val high1 = this(bounds.high)
+          derivedTypeBounds(bounds, low1, high1)
+    end mapOver
 
     //def mapOver(syms: List[Symbol]): List[Symbol] = mapSymbols(syms, treeTypeMap)
 
@@ -239,14 +247,16 @@ object TypeMaps {
       if memberSym.exists then
         val tp1 = memberSym.declaredType.dealias
         tp1 match
-          case TypeAlias(alias) =>
-            // if H#T = U, then for any x in L..H, x.T =:= U,
-            // hence we can replace with U under all variances
-            reapply(alias)
           case WildcardTypeBounds(bounds) =>
-            // If H#T = ? >: S <: U, then for any x in L..H, S <: x.T <: U,
-            // hence we can replace with S..U under all variances
-            expandBounds(bounds)
+            bounds match
+              case TypeAlias(alias) =>
+                // if H#T = U, then for any x in L..H, x.T =:= U,
+                // hence we can replace with U under all variances
+                reapply(alias)
+              case _ =>
+                // If H#T = ? >: S <: U, then for any x in L..H, S <: x.T <: U,
+                // hence we can replace with S..U under all variances
+                expandBounds(bounds)
           case info: SingletonType =>
             // if H#x: y.type, then for any x in L..H, x.type =:= y.type,
             // hence we can replace with y.type under all variances
@@ -267,8 +277,8 @@ object TypeMaps {
             case WildcardTypeBounds(bounds) => expandBounds(bounds)
             case argInfo                    => reapply(arg)
           }
-        case arg: TypeBounds => expandBounds(arg)
-        case arg             => reapply(arg)
+        case WildcardTypeBounds(arg) => expandBounds(arg)
+        case arg                     => reapply(arg)
       }
 
     /** Derived selection.
@@ -319,13 +329,13 @@ object TypeMaps {
         case _ => tp.rebind(parent)
       }*/
 
-    override protected def derivedTypeAlias(tp: TypeAlias, alias: Type): Type =
+    override protected def derivedTypeAlias(tp: TypeAlias, alias: Type): TypeBounds =
       if (alias eq tp.alias) tp
       else
         alias match {
           case Range(lo, hi) =>
-            if (variance > 0) WildcardTypeBounds(RealTypeBounds(lo, hi))
-            else range(tp.derivedTypeAlias(lo), tp.derivedTypeAlias(hi))
+            if (variance > 0) RealTypeBounds(lo, hi)
+            else TypeAlias(range(lo, hi))
           case _ => tp.derivedTypeAlias(alias)
         }
 

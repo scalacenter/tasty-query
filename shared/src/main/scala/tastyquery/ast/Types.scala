@@ -155,7 +155,12 @@ object Types {
     end finishErase
   }
 
-  abstract class Type {
+  sealed trait TypeMappable:
+    type ThisTypeMappableType >: this.type <: TypeMappable
+  end TypeMappable
+
+  abstract class Type extends TypeMappable {
+    type ThisTypeMappableType = Type
 
     /** The class symbol of this type, None if reduction is not possible */
     private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this.widen match
@@ -217,12 +222,13 @@ object Types {
             dealiased.derivedAndType(dealiased.first.appliedTo(args), dealiased.second.appliedTo(args))
           case dealiased: OrType =>
             dealiased.derivedOrType(dealiased.first.appliedTo(args), dealiased.second.appliedTo(args))
-          case dealiased: TypeAlias =>
-            dealiased.derivedTypeAlias(dealiased.alias.appliedTo(args))
           case dealiased @ WildcardTypeBounds(bounds) =>
-            dealiased.derivedWildcardTypeBounds(
-              bounds.derivedTypeBounds(bounds.low.appliedTo(args), bounds.high.appliedTo(args))
-            )
+            val newBounds = bounds match
+              case bounds @ TypeAlias(alias) =>
+                bounds.derivedTypeAlias(alias.appliedTo(args))
+              case _ =>
+                bounds.derivedTypeBounds(bounds.low.appliedTo(args), bounds.high.appliedTo(args))
+            dealiased.derivedWildcardTypeBounds(newBounds)
           case dealiased =>
             AppliedType(this, args)
         }
@@ -244,10 +250,8 @@ object Types {
       case _            => NoSymbol
 
     final def termSymbol(using Context): Symbol = this match
-      case tpe: TermRef        => tpe.resolveToSymbol
-      case tpe: PackageRef     => tpe.resolveToSymbol
-      case tpe: PackageTypeRef => tpe.resolveToSymbol
-      case _                   => NoSymbol
+      case tpe: TermRef => tpe.resolveToSymbol
+      case _            => NoSymbol
 
     final def widenOverloads(using Context): Type =
       this.widen match
@@ -278,7 +282,9 @@ object Types {
         if tpSym.isClass then tp
         else
           tpSym.declaredType match
-            case TypeAlias(alias) if !(keepOpaques && tp.symbol.is(Opaque)) =>
+            case BoundedType(_, alias) if !keepOpaques && alias != NoType =>
+              alias.dealias1(keepOpaques)
+            case WildcardTypeBounds(TypeAlias(alias)) =>
               alias.dealias1(keepOpaques)
             case _ =>
               tp
@@ -310,7 +316,9 @@ object Types {
         NoType
     }
 
-    final def isTypeAlias: Boolean = this.isInstanceOf[TypeAlias]
+    final def isTypeAlias: Boolean = this match
+      case WildcardTypeBounds(bounds) => bounds.isInstanceOf[TypeAlias]
+      case _                          => false
 
     /** The basetype of this type with given class symbol, NoType if `base` is not a class. */
     final def baseType(base: Symbol)(using Context): Type =
@@ -581,6 +589,8 @@ object Types {
         def findPrefixSym(prefix: Type): Symbol = prefix match {
           case NoPrefix =>
             throw new SymbolLookupException(name, "reference by name to a local symbol")
+          case ref: PackageRef =>
+            ref.symbol
           case t: TermRef =>
             findPrefixSym(t.underlying)
           case other: Symbolic =>
@@ -771,27 +781,14 @@ object Types {
           tp.findMember(name, pre)
   }
 
-  class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends NamedType with SingletonType {
+  final case class PackageRef(fullyQualifiedName: FullyQualifiedName) extends Type {
     private var packageSymbol: PackageClassSymbol | Null = null
 
     def this(packageSym: PackageClassSymbol) =
       this(packageSym.fullName)
       packageSymbol = packageSym
 
-    override def designator: Designator =
-      val pkgOpt = packageSymbol
-      if pkgOpt == null then fullyQualifiedName.path.last else pkgOpt
-
-    override protected def designator_=(d: Designator): Unit = throw UnsupportedOperationException(
-      s"Can't assign designator of a package"
-    )
-
-    override def underlying(using Context): Type = ???
-
-    // TODO: root package?
-    override val prefix: Type = NoType
-
-    override def resolveToSymbol(using Context): PackageClassSymbol = {
+    def symbol(using Context): PackageClassSymbol = {
       val local = packageSymbol
       if (local == null) {
         val resolved = ctx.findPackageFromRoot(fullyQualifiedName)
@@ -800,11 +797,15 @@ object Types {
       } else local
     }
 
-    override def toString: String = s"PackageRef($fullyQualifiedName)"
+    def findMember(name: Name, pre: Type)(using Context): Symbol =
+      symbol.getDecl(name).getOrElse {
+        throw SymbolLookupException(name, s"Cannot find a member $name in $symbol")
+      }
   }
 
   object PackageRef {
-    def unapply(r: PackageRef): Option[FullyQualifiedName] = Some(r.fullyQualifiedName)
+    def apply(packageSym: PackageClassSymbol): PackageRef =
+      new PackageRef(packageSym)
   }
 
   case class TypeRef(override val prefix: Type, private var myDesignator: Designator) extends NamedType {
@@ -833,13 +834,6 @@ object Types {
   case object NoPrefix extends Type {
     def findMember(name: Name, pre: Type)(using Context): Symbol =
       throw new AssertionError(s"Cannot find member in NoPrefix")
-  }
-
-  class PackageTypeRef(fullyQualifiedName: FullyQualifiedName)
-      extends TypeRef(NoPrefix, fullyQualifiedName.path.last.toTypeName) {
-    private val packageRef = PackageRef(fullyQualifiedName)
-
-    override def resolveToSymbol(using Context): Symbol = packageRef.resolveToSymbol
   }
 
   case class ThisType(tref: TypeRef) extends PathType with SingletonType with Symbolic {
@@ -1232,7 +1226,8 @@ object Types {
     def unapply(recType: RecType): Some[Type] = Some(recType.parent)
   end RecType
 
-  trait TypeBounds(val low: Type, val high: Type) {
+  abstract class TypeBounds(val low: Type, val high: Type) extends TypeMappable {
+    type ThisTypeMappableType = TypeBounds
 
     /** The non-alias type bounds type with given bounds */
     def derivedTypeBounds(low: Type, high: Type)(using Context): TypeBounds =
@@ -1242,9 +1237,7 @@ object Types {
 
   case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high)
 
-  case class TypeAlias(alias: Type) extends TypeProxy with TypeBounds(alias, alias) {
-    override def underlying(using Context): Type = alias
-
+  case class TypeAlias(alias: Type) extends TypeBounds(alias, alias) {
     def derivedTypeAlias(alias: Type): TypeAlias =
       if alias eq this.alias then this
       else TypeAlias(alias)

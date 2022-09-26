@@ -38,7 +38,7 @@ object Contexts {
   final class Context private[Contexts] (val classloader: Loader) {
     private given Context = this
 
-    private val (RootPackage @ _, EmptyPackage @ _) = PackageClassSymbolFactory.createRoots
+    private val (RootPackage @ _, EmptyPackage @ _) = PackageClassSymbol.createRoots()
 
     val defn: Definitions = Definitions(this: @unchecked, RootPackage, EmptyPackage)
 
@@ -77,7 +77,7 @@ object Contexts {
           val rootName = termName(binaryName.substring(lastSep + 1))
           (classloader.toPackageName(packageName), rootName)
       try
-        val pkg = PackageRef(packageName).resolveToSymbol
+        val pkg = PackageRef(packageName).symbol
         pkg
           .possibleRoot(rootName)
           .toRight(SymbolLookupException(rootName, s"no root $rootName exists in package $packageName"))
@@ -124,7 +124,7 @@ object Contexts {
     def createClassSymbol(name: TypeName, owner: DeclaringSymbol): ClassSymbol =
       owner.getDeclInternal(name) match
         case None =>
-          val cls = ClassSymbolFactory.createSymbol(name, owner)
+          val cls = ClassSymbol.create(name, owner)
           owner.addDecl(cls)
           cls
         case some =>
@@ -133,7 +133,7 @@ object Contexts {
     def createSymbol(name: Name, owner: DeclaringSymbol): RegularSymbol =
       owner.getDeclInternal(name) match
         case None =>
-          val sym = RegularSymbolFactory.createSymbol(name, owner)
+          val sym = RegularSymbol.create(name, owner)
           owner.addDecl(sym)
           sym
         case some =>
@@ -143,7 +143,7 @@ object Contexts {
       assert(owner != EmptyPackage, s"Trying to create a subpackage $name of $owner")
       owner.getPackageDeclInternal(name) match {
         case Some(pkg) => pkg
-        case None      => PackageClassSymbolFactory.createSymbol(name, owner)
+        case None      => PackageClassSymbol.create(name, owner)
       }
 
     def createPackageSymbolIfNew(fullyQualifiedName: FullyQualifiedName): PackageClassSymbol =

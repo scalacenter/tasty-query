@@ -187,12 +187,12 @@ class PickleReader {
     val sym = tag match {
       case TYPEsym | ALIASsym =>
         var name1 = name.toTypeName
-        val sym = RegularSymbolFactory.createSymbol(name1, owner)
+        val sym = RegularSymbol.create(name1, owner)
         storeResultInEntries(sym)
         val tpe = readSymType()
         sym.withDeclaredType(tpe)
       case CLASSsym =>
-        val cls = ClassSymbolFactory.createSymbol(name.toTypeName, owner)
+        val cls = ClassSymbol.create(name.toTypeName, owner)
         storeResultInEntries(cls)
         if name.toTypeName.wrapsObjectName then
           val module = owner
@@ -206,7 +206,7 @@ class PickleReader {
         cls.initialised = true
         cls
       case VALsym =>
-        val sym = RegularSymbolFactory.createSymbol(name.toTermName, owner)
+        val sym = RegularSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles
         val tpe = readSymType()
         sym.withDeclaredType(tpe)
@@ -214,8 +214,7 @@ class PickleReader {
         val moduleClass = owner
           .asInstanceOf[DeclaringSymbol]
           .getModuleDeclInternal(name.toTermName.withObjectSuffix.toTypeName)
-        val sym =
-          RegularSymbolFactory.createSymbol(name.toTermName, owner)
+        val sym = RegularSymbol.create(name.toTermName, owner)
         moduleClass.foreach(cls => sym.withDeclaredType(cls.asInstanceOf[ClassSymbol].typeRef))
         sym
       case _ =>

@@ -15,12 +15,12 @@ import tastyquery.reader.TastyUnpickler.NameTable
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+import scala.reflect.TypeTest
 import scala.util.NotGiven
+
 import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyReader}
 import TastyBuffer.*
 import TastyFormat.*
-import tastyquery.Definitions
-import tastyquery.reader.classfiles.Classpaths
 
 class TreeUnpicklerException(msg: String) extends RuntimeException(msg)
 
@@ -77,8 +77,10 @@ class TreeUnpickler(
         val end = reader.readEnd()
         val name = readName.toTypeName
         val tag = reader.nextByte
-        val factory = if tag == TEMPLATE then ClassSymbolFactory else RegularSymbolFactory
-        val newOwner = localCtx.createSymbol(start, name, factory, addToDecls = localCtx.owner.isClass)
+        val newOwner =
+          if tag == TEMPLATE then ClassSymbol.create(name, localCtx.owner)
+          else RegularSymbol.create(name, localCtx.owner)
+        localCtx.registerSym(start, newOwner, addToDecls = localCtx.owner.isClass)
         readSymbolModifiers(newOwner, tag, end)
         reader.until(end)(createSymbols()(using localCtx.withOwner(newOwner)))
         if tag == TEMPLATE then newOwner.asInstanceOf[ClassSymbol].initialised = true
@@ -86,15 +88,16 @@ class TreeUnpickler(
         val end = reader.readEnd()
         val name = if tag == TYPEPARAM then readName.toTypeName else readName
         val addToDecls = tag != TYPEPARAM && localCtx.owner.isClass
-        val newSymbol =
-          localCtx.createSymbol(start, name, RegularSymbolFactory, addToDecls)
+        val newSymbol = RegularSymbol.create(name, localCtx.owner)
+        localCtx.registerSym(start, newSymbol, addToDecls)
         readSymbolModifiers(newSymbol, tag, end)
         reader.until(end)(createSymbols()(using localCtx.withOwner(newSymbol)))
       case BIND =>
         val end = reader.readEnd()
         var name: Name = readName
         if (tagFollowShared == TYPEBOUNDS) name = name.toTypeName
-        localCtx.createSymbol(start, name, RegularSymbolFactory, addToDecls = false)
+        val sym = RegularSymbol.create(name, localCtx.owner)
+        localCtx.registerSym(start, sym, addToDecls = false)
         // bind is never an owner
         reader.until(end)(createSymbols())
 
@@ -355,10 +358,10 @@ class TreeUnpickler(
       val end = reader.readEnd()
       val name = readName.toTypeName
       val typedef: ClassDef | TypeMember = if (reader.nextByte == TEMPLATE) {
-        val classSymbol = localCtx.getSymbol(start, ClassSymbolFactory)
+        val classSymbol = localCtx.getSymbol[ClassSymbol](start)
         ClassDef(name, readTemplate(using localCtx.withOwner(classSymbol)), classSymbol)(spn).definesTreeOf(classSymbol)
       } else {
-        val symbol = localCtx.getSymbol(start, RegularSymbolFactory)
+        val symbol = localCtx.getSymbol[RegularSymbol](start)
         val innerCtx = localCtx.withOwner(symbol)
         val typeBounds: TypeTree | TypeBounds =
           if tagFollowShared == TYPEBOUNDS then readTypeBounds(using innerCtx)
@@ -437,7 +440,7 @@ class TreeUnpickler(
     def readTypeParam: TypeParam = {
       val spn = span
       val start = reader.currentAddr
-      val paramSymbol = localCtx.getSymbol(start, RegularSymbolFactory)
+      val paramSymbol = localCtx.getSymbol[RegularSymbol](start)
       val expectedFlags = if paramSymbol.owner.isClass then ClassTypeParam else TypeParameter
       assert(paramSymbol.flags.isAllOf(expectedFlags))
       reader.readByte()
@@ -566,7 +569,7 @@ class TreeUnpickler(
     val end = reader.readEnd()
     val name = readName
     // Only for DefDef, but reading works for empty lists
-    val symbol = localCtx.getSymbol(start, RegularSymbolFactory)
+    val symbol = localCtx.getSymbol[RegularSymbol](start)
     val insideCtx = localCtx.withOwner(symbol)
     val params = readAllParams(using insideCtx)
     val tpt = readTypeTree(using insideCtx)
@@ -737,7 +740,7 @@ class TreeUnpickler(
       val typ = readType
       val term = readTerm
       skipModifiers(end)
-      val symbol = localCtx.getSymbol(start, RegularSymbolFactory)
+      val symbol = localCtx.getSymbol[RegularSymbol](start)
       Bind(name, term, symbol)(spn).definesTreeOf(symbol)
     case ALTERNATIVE =>
       reader.readByte()
@@ -883,7 +886,7 @@ class TreeUnpickler(
   private def readSymRef(using LocalContext): Symbol = {
     val symAddr = reader.readAddr()
     assert(localCtx.hasSymbolAt(symAddr), posErrorMsg)
-    localCtx.getSymbol(symAddr)
+    localCtx.getSymbol[Symbol](symAddr)
   }
 
   private def readTypeRef()(using LocalContext): TypeRef =
@@ -912,7 +915,7 @@ class TreeUnpickler(
       TypeRef(readType, sym)
     case TYPEREFpkg =>
       reader.readByte()
-      PackageTypeRef(readFullyQualifiedName)
+      PackageRef(readFullyQualifiedName)
     case SHAREDtype =>
       reader.readByte()
       val addr = reader.readAddr()
@@ -943,7 +946,11 @@ class TreeUnpickler(
       )
     case THIS =>
       reader.readByte()
-      ThisType(readType.asInstanceOf[TypeRef])
+      readType match
+        case typeRef: TypeRef       => ThisType(typeRef)
+        case packageRef: PackageRef => packageRef
+        case tpe =>
+          throw TreeUnpicklerException(s"Unexpected underlying type of THIS: $tpe")
     case QUALTHIS =>
       reader.readByte()
       if (tagFollowShared != IDENTtpt) {
@@ -1043,7 +1050,7 @@ class TreeUnpickler(
       SingletonTypeTree(readTerm)(spn)
     case REFINEDtpt =>
       val spn = span
-      val cls = ClassSymbolFactory.createRefinedClassSymbol(localCtx.owner, spn)
+      val cls = ClassSymbol.createRefinedClassSymbol(localCtx.owner, spn)
       recursiveTypeAtAddr(reader.currentAddr) = cls.typeRef
       reader.readByte()
       val end = reader.readEnd()
@@ -1117,7 +1124,7 @@ class TreeUnpickler(
         NamedTypeBoundsTree(typeName, typ)(bodySpn)
       } else readTypeTree
       skipModifiers(end)
-      val sym = localCtx.getSymbol(start, RegularSymbolFactory)
+      val sym = localCtx.getSymbol[RegularSymbol](start)
       TypeTreeBind(name, body, sym)(spn).definesTreeOf(sym)
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree
@@ -1233,7 +1240,17 @@ object TreeUnpickler {
 
     def hasSymbolAt(addr: Addr): Boolean = localSymbols.contains(addr)
 
-    private def registerSym[T <: Symbol](addr: Addr, sym: T, addToDecls: Boolean): T =
+    /** Registers a symbol at @addr with @name.
+      *
+      * If `addToDecls` is true, the symbol is added to the owner's declarations.
+      * This requires that the owner is a `DeclaringSymbol`, or else throws.
+      *
+      * @note `addToDecls` should be `true` for ValDef and DefDef, `false` for parameters and type parameters.
+      * @note A method is added to the declarations of its class, but a nested method should not added
+      *    to declarations of the outer method.
+      */
+    def registerSym(addr: Addr, sym: Symbol, addToDecls: Boolean): sym.type =
+      if hasSymbolAt(addr) then throw ExistingDefinitionException(owner, sym.name)
       localSymbols(addr) = sym
       if addToDecls then
         owner match
@@ -1241,23 +1258,12 @@ object TreeUnpickler {
           case _ => throw IllegalArgumentException(s"can not add $sym to decls of non-declaring symbol $owner")
       sym
 
-    /** Creates a new symbol at @addr with @name. If `addToDecls` is true, the symbol is added to the owner's
-      * declarations: this requires that the owner is a `DeclaringSymbol`, or else throws.
-      *
-      * @note `addToDecls` should be `true` for ValDef and DefDef, `false` for parameters and type parameters.
-      * @note A method is added to the declarations of its class, but a nested method should not added
-      *    to declarations of the outer method.
-      */
-    def createSymbol[T <: Symbol](addr: Addr, name: Name, factory: ClosedSymbolFactory[T], addToDecls: Boolean)(
-      using Context
-    ): T =
-      if !hasSymbolAt(addr) then registerSym(addr, factory.createSymbol(name, owner), addToDecls)
-      else throw ExistingDefinitionException(owner, name)
+    def getSymbol[T <: Symbol](addr: Addr)(using TypeTest[Symbol, T], NotGiven[T =:= Nothing]): T =
+      localSymbols(addr) match
+        case sym: T => sym
+        case sym =>
+          throw AssertionError(s"Illegal kind of symbol found at address $addr; got: ${sym.getClass()}")
 
-    def getSymbol(addr: Addr): Symbol =
-      localSymbols(addr)
-    def getSymbol[T <: Symbol](addr: Addr, symbolFactory: SymbolFactory[T]): T =
-      symbolFactory.castSymbol(localSymbols(addr))
   }
 
 }

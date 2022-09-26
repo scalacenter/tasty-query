@@ -318,8 +318,8 @@ object Trees {
     override protected def calculateType(using Context): Type =
       qualifier.fold(NoType)(q =>
         q.toType match
-          case pkg: PackageTypeRef => pkg
-          case tref: TypeRef       => ThisType(tref)
+          case pkg: PackageRef => pkg
+          case tref: TypeRef   => ThisType(tref)
       )
 
     override final def withSpan(span: Span): This = This(qualifier)(span)
