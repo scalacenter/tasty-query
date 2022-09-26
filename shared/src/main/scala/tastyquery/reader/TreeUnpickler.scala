@@ -80,14 +80,13 @@ class TreeUnpickler(
         val newOwner =
           if tag == TEMPLATE then ClassSymbol.create(name, localCtx.owner)
           else RegularSymbol.create(name, localCtx.owner)
-        localCtx.registerSym(start, newOwner, addToDecls = localCtx.owner.isClass)
+        localCtx.registerSym(start, newOwner, addToDecls = localCtx.owner.isDeclaringSymbol)
         readSymbolModifiers(newOwner, tag, end)
         reader.until(end)(createSymbols()(using localCtx.withOwner(newOwner)))
-        if tag == TEMPLATE then newOwner.asInstanceOf[ClassSymbol].initialised = true
       case DEFDEF | VALDEF | PARAM | TYPEPARAM =>
         val end = reader.readEnd()
         val name = if tag == TYPEPARAM then readName.toTypeName else readName
-        val addToDecls = tag != TYPEPARAM && localCtx.owner.isClass
+        val addToDecls = tag != TYPEPARAM && localCtx.owner.isDeclaringSymbol
         val newSymbol = RegularSymbol.create(name, localCtx.owner)
         localCtx.registerSym(start, newSymbol, addToDecls)
         readSymbolModifiers(newSymbol, tag, end)

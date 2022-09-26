@@ -123,7 +123,7 @@ class PickleReader {
         case _ =>
           def defaultRef = ExternalSymbolRef(owner, name)
           owner match
-            case owner: PackageClassSymbol =>
+            case owner: PackageSymbol =>
               name match
                 case packageName: SimpleName =>
                   // lookup package, do not force anything
@@ -199,11 +199,9 @@ class PickleReader {
             .asInstanceOf[DeclaringSymbol]
             .getModuleDeclInternal(name.toTermName.stripObjectSuffix)
           module.foreach(m => m.withDeclaredType(cls.typeRef))
-        assert(!cls.initialised, s"attempting to initialize the class $cls a second time")
         val typeParams = atNoCache(infoRef)(readTypeParams())
         val bounds = typeParams.map(_ => RealTypeBounds(NothingType, AnyType)) // TODO Read bounds
         cls.withTypeParams(typeParams, bounds)
-        cls.initialised = true
         cls
       case VALsym =>
         val sym = RegularSymbol.create(name.toTermName, owner)
@@ -342,8 +340,12 @@ class PickleReader {
         NoPrefix
       case THIStpe =>
         readMaybeExternalSymbolRef() match
+          case sym: ClassSymbol =>
+            sym.accessibleThisType
+          case sym: PackageSymbol =>
+            sym.packageRef
           case sym: Symbol =>
-            sym.asClass.accessibleThisType
+            throw IllegalStateException(s"cannot construct a THIStpe for $sym")
           case external: ExternalSymbolRef =>
             external.toNamedType(NoPrefix) match
               case termRef: TermRef => termRef // necessary for package refs?

@@ -578,7 +578,7 @@ object Types {
       case Scala2ExternalSymRef(owner, path) =>
         val sym = path.foldLeft(owner) { (owner, name) =>
           val cls = if owner.isTerm then owner.declaredType.asInstanceOf[Symbolic].symbol else owner
-          cls.asClass.getDecl(name).getOrElse {
+          cls.asDeclaringSymbol.getDecl(name).getOrElse {
             throw new SymbolLookupException(name, s"cannot find symbol $owner.$name")
           }
         }
@@ -782,13 +782,13 @@ object Types {
   }
 
   final case class PackageRef(fullyQualifiedName: FullyQualifiedName) extends Type {
-    private var packageSymbol: PackageClassSymbol | Null = null
+    private var packageSymbol: PackageSymbol | Null = null
 
-    def this(packageSym: PackageClassSymbol) =
+    def this(packageSym: PackageSymbol) =
       this(packageSym.fullName)
       packageSymbol = packageSym
 
-    def symbol(using Context): PackageClassSymbol = {
+    def symbol(using Context): PackageSymbol = {
       val local = packageSymbol
       if (local == null) {
         val resolved = ctx.findPackageFromRoot(fullyQualifiedName)
@@ -804,7 +804,7 @@ object Types {
   }
 
   object PackageRef {
-    def apply(packageSym: PackageClassSymbol): PackageRef =
+    def apply(packageSym: PackageSymbol): PackageRef =
       new PackageRef(packageSym)
   }
 

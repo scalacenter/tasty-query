@@ -24,7 +24,7 @@ object Descriptors:
     superRef :: interfaces.map(classRef).toList
 
   private def classRef(binaryName: String)(using Context): TypeRef =
-    def followPackages(acc: PackageClassSymbol, parts: List[String]): TypeRef =
+    def followPackages(acc: PackageSymbol, parts: List[String]): TypeRef =
       (parts: @unchecked) match
         case className :: Nil =>
           TypeRef(PackageRef(acc), typeName(className))

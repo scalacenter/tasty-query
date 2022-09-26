@@ -135,7 +135,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
   testWithContext("empty-package-contains-no-packages", simple_trees / tname"SharedPackageReference$$package") {
     // simple_trees is not a subpackage of empty package
-    assertForallWithPrefix(EmptyPkg, s => s.name == nme.EmptyPackageName || !s.isInstanceOf[PackageClassSymbol])
+    assertForallWithPrefix(EmptyPkg, s => s.name == nme.EmptyPackageName || !s.isPackage)
   }
 
   testWithContext("class-parameter-is-a-decl", simple_trees / tname"ConstructorWithParameters") {
@@ -193,11 +193,11 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
     assert(resolve(InNestedPackage).fullName.toString == "simple_trees.nested.InNestedPackage")
 
-    val (simpleTreesPkg @ _: PackageClassSymbol) = resolve(simple_trees): @unchecked
+    val (simpleTreesPkg @ _: PackageSymbol) = resolve(simple_trees): @unchecked
 
     assert(simpleTreesPkg.fullName.toString == "simple_trees")
 
-    val (simpleTreesNestedPkg @ _: PackageClassSymbol) = simpleTreesPkg.getDecl(name"nested").get: @unchecked
+    val (simpleTreesNestedPkg @ _: PackageSymbol) = simpleTreesPkg.getDecl(name"nested").get: @unchecked
 
     assert(simpleTreesNestedPkg.fullName.toString == "simple_trees.nested")
 

@@ -128,7 +128,7 @@ object Trees {
 
   trait DefTree(val symbol: Symbol)
 
-  case class PackageDef(pid: PackageClassSymbol, stats: List[Tree])(span: Span) extends Tree(span) with DefTree(pid) {
+  case class PackageDef(pid: PackageSymbol, stats: List[Tree])(span: Span) extends Tree(span) with DefTree(pid) {
     override protected final def calculateType(using Context): Type = NoType
 
     override final def withSpan(span: Span): PackageDef = PackageDef(pid, stats)(span)

@@ -71,9 +71,9 @@ object Classpaths {
   }
 
   object Loader:
-    private[tastyquery] case class Root private[Classpaths] (pkg: PackageClassSymbol, rootName: SimpleName):
-      def packages: IterableOnce[PackageClassSymbol] =
-        (pkg #:: LazyList.from(pkg.enclosingDecls)).asInstanceOf[IterableOnce[PackageClassSymbol]]
+    private[tastyquery] case class Root private[Classpaths] (pkg: PackageSymbol, rootName: SimpleName):
+      def packages: IterableOnce[PackageSymbol] =
+        (pkg #:: LazyList.from(pkg.enclosingDecls)).asInstanceOf[IterableOnce[PackageSymbol]]
 
       def fullName: FullyQualifiedName =
         pkg.fullName.select(rootName)
@@ -86,8 +86,8 @@ object Classpaths {
       case ClassOnly(classData: ClassData)
 
     private var searched = false
-    private var packages: Map[PackageClassSymbol, PackageData] = compiletime.uninitialized
-    private val roots: mutable.Map[PackageClassSymbol, mutable.Map[SimpleName, Entry]] = mutable.HashMap.empty
+    private var packages: Map[PackageSymbol, PackageData] = compiletime.uninitialized
+    private val roots: mutable.Map[PackageSymbol, mutable.Map[SimpleName, Entry]] = mutable.HashMap.empty
     private var topLevelTastys: Map[Loader.Root, List[Tree]] = Map.empty
 
     def toPackageName(dotSeparated: String): FullyQualifiedName =
@@ -99,7 +99,7 @@ object Classpaths {
     /** If this is a root symbol, lookup possible top level tasty trees associated with it. */
     private[tastyquery] def topLevelTasty(rootSymbol: Symbol)(using Context): Option[List[Tree]] =
       rootSymbol.outer match
-        case pkg: PackageClassSymbol =>
+        case pkg: PackageSymbol =>
           val rootName = rootSymbol.name.toTermName.stripObjectSuffix.asSimpleName
           val root = Loader.Root(pkg, rootName)
           topLevelTastys.get(root)
@@ -159,14 +159,14 @@ object Classpaths {
       }
     end completeRoots
 
-    private[tastyquery] def forceRoots(pkg: PackageClassSymbol)(using Context): Unit =
+    private[tastyquery] def forceRoots(pkg: PackageSymbol)(using Context): Unit =
       for
         entries <- roots.remove(pkg)
         (rootName, entry) <- IArray.from(entries).sortBy(_(0)) // sort for determinism.
       do completeRoots(Loader.Root(pkg, rootName), entry)
 
     /** @return true if loaded the classes inner definitions */
-    private[tastyquery] def enterRoots(pkg: PackageClassSymbol, name: Name)(using Context): Option[Symbol] =
+    private[tastyquery] def enterRoots(pkg: PackageSymbol, name: Name)(using Context): Option[Symbol] =
       roots.get(pkg) match
         case Some(entries) =>
           val rootName = name.toTermName.stripObjectSuffix.asSimpleName
@@ -181,7 +181,7 @@ object Classpaths {
     /** Does not force any classes, returns a root either if root symbols are already loaded, or if there are
       * unloaded roots matching the name.
       */
-    private[tastyquery] def findRoot(pkg: PackageClassSymbol, name: SimpleName)(using Context): Option[Loader.Root] =
+    private[tastyquery] def findRoot(pkg: PackageSymbol, name: SimpleName)(using Context): Option[Loader.Root] =
       val root = Loader.Root(pkg, name)
       if Contexts.initialisedRoot(root) then Some(root)
       else // not yet forced
@@ -191,7 +191,7 @@ object Classpaths {
             else None
           case _ => None
 
-    def scanPackage(pkg: PackageClassSymbol)(using Context): Unit = {
+    def scanPackage(pkg: PackageSymbol)(using Context): Unit = {
       require(searched)
       packages.get(pkg) match {
         case Some(data) =>
@@ -226,7 +226,7 @@ object Classpaths {
           roots(pkg) = localRoots
 
         case _ => // probably a synthetic package that only has other packages as members. (i.e. `package java`)
-      } andThen { pkg.initialised = true }
+      }
     }
 
     def initPackages()(using ctx: Context): Unit =
@@ -238,7 +238,7 @@ object Classpaths {
 
           var debugPackageCount = 0
 
-          def createSubpackages(packageName: FullyQualifiedName)(using Context): PackageClassSymbol = {
+          def createSubpackages(packageName: FullyQualifiedName)(using Context): PackageSymbol = {
             var currentOwner = defn.RootPackage
             for subpackageName <- packageName.path do
               currentOwner = ctx.createPackageSymbolIfNew(subpackageName.asSimpleName, currentOwner)
