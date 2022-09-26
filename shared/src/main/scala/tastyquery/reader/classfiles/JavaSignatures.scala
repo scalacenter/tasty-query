@@ -134,7 +134,7 @@ object JavaSignatures:
 
     def classTypeSignature(env: JavaSignature): Option[Type] =
       def readSimpleClassType: TypeRef =
-        def followPackages(acc: PackageClassSymbol): TypeRef =
+        def followPackages(acc: PackageSymbol): TypeRef =
           val next = identifier
           if consume('/') then // must have '/', identifier, and terminal char.
             acc.getPackageDecl(next) match

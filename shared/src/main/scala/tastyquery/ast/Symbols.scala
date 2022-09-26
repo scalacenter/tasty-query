@@ -45,22 +45,12 @@ object Symbols {
     private var myTree: Option[DefTree] = None
     private var myPrivateWithin: Option[Symbol] = None
 
-    /** Forces the symbol to be initialized.
-      *
-      * This method should never be called from within the initialisation of
-      * this symbol.
-      *
-      * For symbols that are not root symbols, this has no effect.
-      */
-    private[tastyquery] def ensureInitialised()(using Context): Unit
-
     def withTree(t: DefTree): this.type =
       require(!isPackage, s"Multiple trees correspond to one package, a single tree cannot be assigned")
       myTree = Some(t)
       this
 
     final def tree(using Context): Option[DefTree] =
-      ensureInitialised()
       myTree
 
     /** Get the companion class for a definition, if it exists:
@@ -69,9 +59,8 @@ object Symbols {
       * - for `object val C` => `class C`
       */
     final def companionClass(using Context): Option[ClassSymbol] = maybeOuter match
-      case scope: PackageClassSymbol =>
+      case scope: PackageSymbol =>
         this match
-          case _: PackageClassSymbol => None
           case cls: ClassSymbol =>
             scope.getDecl(cls.name.toTypeName.companionName).collect { case sym: ClassSymbol =>
               sym
@@ -155,8 +144,8 @@ object Symbols {
     }
 
     def ref(using Context): Type = this match
-      case pkg: PackageClassSymbol => pkg.declaredType // should be PackageRef set in ctor
-      case cls: ClassSymbol        => cls.typeRef
+      case pkg: PackageSymbol => pkg.packageRef
+      case cls: ClassSymbol   => cls.typeRef
       case sym: RegularSymbol => // TODO: should we cache in RegularSymbol?
         val pre = sym.maybeOuter match
           case pre: ClassSymbol => pre.ref
@@ -200,11 +189,14 @@ object Symbols {
     final def isType: Boolean = name.isTypeName
     final def isTerm: Boolean = name.isTermName && !isPackage
 
+    final def isDeclaringSymbol: Boolean = this.isInstanceOf[DeclaringSymbol]
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
-    final def isPackage: Boolean = this.isInstanceOf[PackageClassSymbol]
+    final def isPackage: Boolean = this.isInstanceOf[PackageSymbol]
     final def isRoot: Boolean = isPackage && rawowner == null
 
+    final def asDeclaringSymbol: DeclaringSymbol = this.asInstanceOf[DeclaringSymbol]
     final def asClass: ClassSymbol = this.asInstanceOf[ClassSymbol]
+    final def asPackage: PackageSymbol = this.asInstanceOf[PackageSymbol]
 
     private[tastyquery] final def memberIsOverloaded(name: SignedName): Boolean = this match
       case scope: DeclaringSymbol => scope.hasOverloads(name)
@@ -223,9 +215,9 @@ object Symbols {
 
     override def toString: String = {
       val kind = this match
-        case _: PackageClassSymbol => "package "
-        case _: ClassSymbol        => if name.toTypeName.wrapsObjectName then "object class " else "class "
-        case _                     => if exists && outer.isPackage then "object " else "" // TODO: base this on flags
+        case _: PackageSymbol => "package "
+        case _: ClassSymbol   => if name.toTypeName.wrapsObjectName then "object class " else "class "
+        case _                => if isFlagsInitialized && is(Module) then "object " else ""
       s"symbol[$kind$name]"
     }
     def toDebugString = toString
@@ -237,11 +229,6 @@ object Symbols {
 
   final class RegularSymbol private (override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner) {
     private var mySignature: Option[Signature] | Null = null
-
-    private[tastyquery] override final def ensureInitialised()(using Context): Unit =
-      if owner.isPackage then // Top-level module value
-        companionClass.foreach(_.ensureInitialised()) // init the root class
-      else () // member symbol, should be initialised by owner
 
     private def isConstructor: Boolean =
       maybeOuter.isClass && is(Method) && name == nme.Constructor
@@ -266,15 +253,16 @@ object Symbols {
       RegularSymbol(nme.EmptyTermName, null)
   end RegularSymbol
 
-  sealed abstract class DeclaringSymbol protected (override val name: Name, rawowner: Symbol | Null)
-      extends Symbol(name, rawowner) {
-
+  sealed trait DeclaringSymbol extends Symbol {
     private[tastyquery] override final def signature(using Context): Option[Signature] = None
 
     /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
     private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
       mutable.HashMap[Name, mutable.HashSet[Symbol]]()
+
+    /** Ensures that the declarations of this symbol are initialized. */
+    protected[this] def ensureDeclsInitialized()(using Context): Unit
 
     private[tastyquery] final def addDecl(decl: Symbol): Unit =
       myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet) += decl
@@ -313,15 +301,15 @@ object Symbols {
 
     final def getDecls(name: Name)(using Context): List[Symbol] =
       this match
-        case pkg: PackageClassSymbol => getDecl(name).toList
+        case pkg: PackageSymbol => getDecl(name).toList
         case _ =>
-          ensureInitialised()
+          ensureDeclsInitialized()
           name match
             case name: SignedName => getDecl(name).toList
             case _                => myDeclarations.get(name).fold(Nil)(_.toList)
 
     final def getDecl(name: Name)(using Context): Option[Symbol] =
-      ensureInitialised()
+      ensureDeclsInitialized()
       name match
         case overloaded: SignedName =>
           distinguishOverloaded(overloaded)
@@ -329,8 +317,8 @@ object Symbols {
           getDeclInternal(name) match
             case None =>
               this match
-                case pkg: PackageClassSymbol => pkg.initialiseRootFor(name)
-                case _                       => None
+                case pkg: PackageSymbol => pkg.initialiseRootFor(name)
+                case _                  => None
             case res => res
 
     private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[Symbol] =
@@ -343,32 +331,26 @@ object Symbols {
 
     /** Note: this will force all trees in a package */
     final def declarations(using Context): List[Symbol] =
-      ensureInitialised()
+      ensureDeclsInitialized()
       this match
-        case pkg: PackageClassSymbol => pkg.initialiseAllRoots()
-        case _                       => ()
+        case pkg: PackageSymbol => pkg.initialiseAllRoots()
+        case _                  => ()
       declarationsInternal
 
     private[tastyquery] final def declarationsInternal: List[Symbol] =
       myDeclarations.values.toList.flatten
 
-    override def declaredType(using Context): Type =
-      ensureInitialised()
-      super.declaredType
-
     final override def toDebugString: String =
       s"${super.toString} with declarations [${myDeclarations.keys.map(_.toDebugString).mkString(", ")}]"
   }
 
-  class ClassSymbol protected (override val name: Name, rawowner: Symbol | Null)
-      extends DeclaringSymbol(name, rawowner) {
-    private[tastyquery] var initialised: Boolean = false
-
+  final class ClassSymbol protected (override val name: Name, rawowner: Symbol | Null)
+      extends Symbol(name, rawowner)
+      with DeclaringSymbol {
     // TODO: how do we associate some Symbols with TypeBounds, and some with Type?
     private var myTypeParams: List[(Symbol, TypeBounds)] | Null = null
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
-      ensureInitialised()
       def isValueClass: Boolean =
         tree.isDefined && // TODO: Remove when Scala 2 classes have a ClassInfo
           declaredType.asInstanceOf[ClassInfo].rawParents.head.classSymbol.exists(_ == defn.AnyValClass)
@@ -379,13 +361,10 @@ object Symbols {
       * - for `object class C[$]` => `object val C`
       */
     final def companionObject(using Context): Option[RegularSymbol] = maybeOuter match
-      case scope: PackageClassSymbol =>
-        this match
-          case _: PackageClassSymbol => None
-          case cls: ClassSymbol =>
-            scope.getDecl(cls.name.toTypeName.sourceObjectName).collect { case sym: RegularSymbol =>
-              sym
-            }
+      case scope: PackageSymbol =>
+        scope.getDecl(this.name.toTypeName.sourceObjectName).collect { case sym: RegularSymbol =>
+          sym
+        }
       case _ => None // not possible yet for local symbols
 
     private[tastyquery] final def withTypeParams(tparams: List[Symbol], bounds: List[TypeBounds]): this.type =
@@ -396,28 +375,16 @@ object Symbols {
         this
 
     private def typeParamsInternal(using Context): List[(Symbol, TypeBounds)] =
-      ensureInitialised()
-      typeParamsInternalNoInitialize
-
-    private def typeParamsInternalNoInitialize(using Context): List[(Symbol, TypeBounds)] =
       val local = myTypeParams
       if local == null then throw new IllegalStateException(s"expected type params for $this")
       else local
 
     private[tastyquery] final def typeParamSymsNoInitialize(using Context): List[Symbol] =
-      typeParamsInternalNoInitialize.map(_(0))
+      typeParamsInternal.map(_(0))
 
-    private[tastyquery] override final def ensureInitialised()(using Context): Unit =
-      def initialiseMembers(): Unit = this match
-        case pkg: PackageClassSymbol =>
-          ctx.classloader.scanPackage(pkg)
-          assert(initialised, s"could not initialize package $fullName")
-        case cls =>
-          assert(false, s"class ${cls.fullName} was never initialised")
-
-      if !initialised then
-        // TODO: maybe add flag and check against if we are currently initialising this symbol?
-        initialiseMembers()
+    protected[this] final def ensureDeclsInitialized()(using Context): Unit =
+      // ClassSymbols are always initialized when created
+      ()
 
     private[tastyquery] final def initParents: Boolean =
       myTypeParams != null
@@ -458,12 +425,11 @@ object Symbols {
     end findMember
 
     /** Get the self type of this class, as if viewed from an external package */
-    private[tastyquery] final def accessibleThisType: Type = this match
-      case pkg: PackageClassSymbol => PackageRef(pkg) // TODO: maybe we need this-type of package for package-private
-      case cls =>
-        maybeOuter match
-          case pre: ClassSymbol => TypeRef(pre.accessibleThisType, cls)
-          case _                => TypeRef(NoPrefix, cls)
+    private[tastyquery] final def accessibleThisType: Type =
+      maybeOuter match
+        case pre: PackageSymbol => TypeRef(pre.packageRef, this)
+        case pre: ClassSymbol   => TypeRef(pre.accessibleThisType, this)
+        case _                  => TypeRef(NoPrefix, this)
 
     private var myTypeRef: TypeRef | Null = null
 
@@ -472,8 +438,9 @@ object Symbols {
       if local != null then local
       else
         val pre = owner match
-          case owner: ClassSymbol => owner.accessibleThisType
-          case _                  => NoPrefix
+          case owner: PackageSymbol => owner.packageRef
+          case owner: ClassSymbol   => owner.accessibleThisType
+          case _                    => NoPrefix
         val typeRef = TypeRef(pre, this)
         myTypeRef = typeRef
         typeRef
@@ -488,17 +455,25 @@ object Symbols {
       cls
         .withDeclaredType(ClassInfo.direct(cls, ObjectType :: Nil))
         .withFlags(EmptyFlagSet)
-      cls.initialised = true
       cls
   end ClassSymbol
 
-  // TODO: typename or term name?
-  class PackageClassSymbol private (override val name: Name, rawowner: PackageClassSymbol | Null)
-      extends ClassSymbol(name, rawowner) {
-    this.withDeclaredType(PackageRef(this))
+  final class PackageSymbol private (override val name: Name, rawowner: PackageSymbol | Null)
+      extends Symbol(name, rawowner)
+      with DeclaringSymbol {
+
+    val packageRef: PackageRef = PackageRef(this: @unchecked)
+    (this: @unchecked).withDeclaredType(packageRef)
+
+    private var rootsInitialized: Boolean = false
+
+    protected[this] final def ensureDeclsInitialized()(using Context): Unit =
+      if !rootsInitialized then
+        ctx.classloader.scanPackage(this)
+        rootsInitialized = true
 
     private[tastyquery] def possibleRoot(rootName: SimpleName)(using Context): Option[Loader.Root] =
-      ensureInitialised()
+      ensureDeclsInitialized()
       ctx.classloader.findRoot(this, rootName)
 
     /** When no symbol exists, try to enter root symbols for the given Name, will shortcut if no root
@@ -510,33 +485,33 @@ object Symbols {
     private[tastyquery] def initialiseAllRoots()(using Context): Unit =
       ctx.classloader.forceRoots(this)
 
-    final def getPackageDecl(name: SimpleName)(using Context): Option[PackageClassSymbol] =
+    final def getPackageDecl(name: SimpleName)(using Context): Option[PackageSymbol] =
       // wrapper that ensures the Context is available, just in case we need it
       // to be side-effecting in the future.
       getPackageDeclInternal(name)
 
-    private[tastyquery] def getPackageDeclInternal(packageName: SimpleName): Option[PackageClassSymbol] =
+    private[tastyquery] def getPackageDeclInternal(packageName: SimpleName): Option[PackageSymbol] =
       /* All subpackages are created eagerly when initializing contexts,
        * so we can use getDeclInternal here.
        */
-      getDeclInternal(packageName).collect { case pkg: PackageClassSymbol =>
+      getDeclInternal(packageName).collect { case pkg: PackageSymbol =>
         pkg
       }
   }
 
-  object PackageClassSymbol:
-    private[tastyquery] def create(name: SimpleName, owner: PackageClassSymbol): PackageClassSymbol =
+  object PackageSymbol:
+    private[tastyquery] def create(name: SimpleName, owner: PackageSymbol): PackageSymbol =
       if owner.getPackageDeclInternal(name).isDefined then
         throw IllegalStateException(s"Trying to recreate package $name in $owner")
-      val pkg = PackageClassSymbol(name, owner)
+      val pkg = PackageSymbol(name, owner)
       owner.addDecl(pkg)
       pkg
 
-    private[tastyquery] def createRoots(): (PackageClassSymbol, PackageClassSymbol) =
-      val root = PackageClassSymbol(nme.RootName, null)
-      root.initialised = true
-      val empty = PackageClassSymbol(nme.EmptyPackageName, root)
+    private[tastyquery] def createRoots(): (PackageSymbol, PackageSymbol) =
+      val root = PackageSymbol(nme.RootName, null)
+      root.rootsInitialized = true
+      val empty = PackageSymbol(nme.EmptyPackageName, root)
       root.addDecl(empty)
       (root, empty)
-  end PackageClassSymbol
+  end PackageSymbol
 }

@@ -6,11 +6,7 @@ import tastyquery.ast.Names.*
 import tastyquery.ast.Symbols.*
 import tastyquery.ast.Types.*
 
-final class Definitions private[tastyquery] (
-  ctx: Context,
-  rootPackage: PackageClassSymbol,
-  emptyPackage: PackageClassSymbol
-):
+final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageSymbol, emptyPackage: PackageSymbol):
   private given Context = ctx
 
   // Core packages
@@ -29,7 +25,6 @@ final class Definitions private[tastyquery] (
     cls.withTypeParams(Nil, Nil)
     cls.withDeclaredType(ClassInfo.direct(cls, if parents.isEmpty then Nil else parents))
     cls.withFlags(flags)
-    cls.initialised = true
     cls
 
   val AnyClass = createSpecialClass(typeName("Any"), Nil, Abstract)
@@ -63,7 +58,7 @@ final class Definitions private[tastyquery] (
 
     val AnyRefAlias = ctx.createSymbol(typeName("AnyRef"), scalaPackage)
     AnyRefAlias.withFlags(EmptyFlagSet)
-    val ObjectType = TypeRef(javaLangPackage.accessibleThisType, typeName("Object"))
+    val ObjectType = TypeRef(javaLangPackage.packageRef, typeName("Object"))
     AnyRefAlias.withDeclaredType(BoundedType(TypeAlias(ObjectType), NoType))
   }
 
@@ -83,7 +78,6 @@ final class Definitions private[tastyquery] (
 
     val parents = parentConstrs(TypeRef(NoPrefix, tparam))
     cls.withDeclaredType(ClassInfo.direct(cls, parents))
-    cls.initialised = true
     cls
   end createSpecialPolyClass
 
@@ -95,7 +89,7 @@ final class Definitions private[tastyquery] (
 
   // Derived symbols, found on the classpath
 
-  extension (pkg: PackageClassSymbol)
+  extension (pkg: PackageSymbol)
     private def requiredClass(name: String): ClassSymbol = pkg.getDecl(typeName(name)).get.asClass
 
   private lazy val scalaCollectionPackage = scalaPackage.getPackageDecl(termName("collection")).get

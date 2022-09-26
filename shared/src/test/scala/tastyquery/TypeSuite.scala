@@ -780,7 +780,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("read-scala.collection.mutable.StringBuilder_after-force-scala-pkg") {
-    val scala = resolve(RootPkg / name"scala").asClass
+    val scala = resolve(RootPkg / name"scala").asPackage
     scala.declarations
 
     val StringBuilder = resolve(RootPkg / name"scala" / name"collection" / name"mutable" / tname"StringBuilder").asClass

@@ -41,7 +41,7 @@ object TypeMaps {
         || {
           val stop = stopAt
           (stop == StopAt.Static && tp.symbol.isStatic && isStaticPrefix(tp.prefix))
-          || (stop == StopAt.Package && tp.symbol.isInstanceOf[PackageClassSymbol])
+          || (stop == StopAt.Package && tp.symbol.isPackage)
         }
     end stopBecauseStaticOrLocal
   end VariantTraversal

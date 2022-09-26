@@ -121,8 +121,6 @@ object ClassfileParser {
         sigOrDesc match
           case SigOrDesc.Desc(desc) => sym.withDeclaredType(Descriptors.parseDescriptor(sym, desc))
           case SigOrDesc.Sig(sig)   => sym.withDeclaredType(JavaSignatures.parseSignature(sym, sig))
-      cls.initialised = true
-      moduleClass.initialised = true
     }
   }
 
