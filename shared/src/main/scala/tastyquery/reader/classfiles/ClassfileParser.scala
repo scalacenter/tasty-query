@@ -64,7 +64,7 @@ object ClassfileParser {
       .createClassSymbol(name.withObjectSuffix.toTypeName, classOwner)
       .withTypeParams(Nil, Nil)
       .withFlags(Flags.ModuleClassCreationFlags)
-    moduleClass.withDeclaredType(ClassInfo.direct(moduleClass, ObjectType :: Nil))
+    moduleClass.withParentsDirect(ObjectType :: Nil)
 
     val module = ctx
       .createSymbol(name.toTermName, classOwner)
@@ -108,8 +108,7 @@ object ClassfileParser {
             Descriptors.parseSupers(cls, superClass, interfaces)
           }
       end parents
-      val classType = ClassInfo.direct(cls, parents)
-      cls.withDeclaredType(classType)
+      cls.withParentsDirect(parents)
     end initParents
 
     ClassfileReader.read {
