@@ -209,7 +209,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       tree match {
         case Ident(SimpleName("BitSet")) =>
           bitSetIdentCount += 1
-          val sym = tree.tpe.asInstanceOf[Symbolic].resolveToSymbol
+          val sym = tree.tpe.asInstanceOf[TermRef].symbol
           assert(sym.name == name"BitSet", clue(sym.name.toDebugString))
           ()
         case _ =>
@@ -346,9 +346,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val boxedSym = resolve(BoxedJava / name"boxed")
 
-    val (JavaDefinedRef @ _: Symbolic) = boxedSym.declaredType: @unchecked
+    val (JavaDefinedRef @ _: TypeRef) = boxedSym.declaredType: @unchecked
 
-    assertIsSymbolWithPath(JavaDefined)(JavaDefinedRef.resolveToSymbol)
+    assertIsSymbolWithPath(JavaDefined)(JavaDefinedRef.symbol)
   }
 
   testWithContext("bag-of-java-definitions") {
@@ -524,9 +524,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val Some(DefDef(_, _, _, Apply(getXSelection, _), _)) = xMethodSym.tree: @unchecked
 
-    val (getXRef @ _: Symbolic) = getXSelection.tpe: @unchecked
+    val (getXRef @ _: TermRef) = getXSelection.tpe: @unchecked
 
-    assertIsSymbolWithPath(getX)(getXRef.resolveToSymbol)
+    assertIsSymbolWithPath(getX)(getXRef.symbol)
   }
 
   testWithContext("select-field-from-java-class") {
@@ -537,9 +537,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val Some(DefDef(_, _, _, xSelection, _)) = xFieldSym.tree: @unchecked
 
-    val (xRef @ _: Symbolic) = xSelection.tpe: @unchecked
+    val (xRef @ _: TermRef) = xSelection.tpe: @unchecked
 
-    assertIsSymbolWithPath(x)(xRef.resolveToSymbol)
+    assertIsSymbolWithPath(x)(xRef.symbol)
   }
 
   testWithContext("basic-scala-2-stdlib-class-dependency") {
@@ -586,9 +586,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val Some(DefDef(_, _, _, unitValSelection, _)) = boxedUnitValSym.tree: @unchecked
 
-    val (unitValRef @ _: Symbolic) = unitValSelection.tpe: @unchecked
+    val (unitValRef @ _: TermRef) = unitValSelection.tpe: @unchecked
 
-    assertIsSymbolWithPath(unitVal)(unitValRef.resolveToSymbol)
+    assertIsSymbolWithPath(unitVal)(unitValRef.symbol)
   }
 
   testWithContext("select-method-from-java-class-same-package-as-tasty") {
@@ -604,9 +604,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val Some(DefDef(_, _, _, Apply(getXSelection, _), _)) = xMethodSym.tree: @unchecked
 
-    val (getXRef @ _: Symbolic) = getXSelection.tpe: @unchecked
+    val (getXRef @ _: TermRef) = getXSelection.tpe: @unchecked
 
-    assertIsSymbolWithPath(getX)(getXRef.resolveToSymbol)
+    assertIsSymbolWithPath(getX)(getXRef.symbol)
   }
 
   testWithContext("select-field-from-generic-class") {

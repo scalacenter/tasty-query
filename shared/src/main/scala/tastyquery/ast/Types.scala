@@ -87,7 +87,7 @@ object Types {
             val List(targ) = targs: @unchecked
             arrayOf(targ).arrayOf()
           else arrayOf(tycon)
-        case tpe: Symbolic =>
+        case tpe: TypeRef =>
           val sym = tpe.symbol
           if sym.isClass then ClassRef(sym.asClass).arrayOf()
           else arrayOf(sym.declaredType)
@@ -106,13 +106,13 @@ object Types {
             arrayOf(targ)
           else
             tycon match
-              case tycon: Symbolic if tycon.symbol.isClass =>
+              case tycon: TypeRef if tycon.symbol.isClass =>
                 // Fast path
                 ClassRef(tycon.symbol.asClass)
               case _ =>
                 preErase(tpe.translucentSuperType)
-        case tpe: Symbolic =>
-          tpe.resolveToSymbol match
+        case tpe: TypeRef =>
+          tpe.symbol match
             case cls: ClassSymbol =>
               ClassRef(cls)
             case sym =>
@@ -164,10 +164,12 @@ object Types {
 
     /** The class symbol of this type, None if reduction is not possible */
     private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this.widen match
-      case tpe: Symbolic =>
-        val sym = tpe.resolveToSymbol
+      case tpe: TypeRef =>
+        val sym = tpe.symbol
         if sym.isClass then Some(sym.asClass)
         else sym.declaredType.classSymbol
+      case tpe: ThisType =>
+        Some(tpe.cls)
       case info: ClassInfo =>
         Some(info.cls)
       case _ => None
@@ -246,11 +248,11 @@ object Types {
       Substituters.substParams(this, from, to)
 
     final def typeSymbol(using Context): Symbol = this match
-      case tpe: TypeRef => tpe.resolveToSymbol
+      case tpe: TypeRef => tpe.symbol
       case _            => NoSymbol
 
     final def termSymbol(using Context): Symbol = this match
-      case tpe: TermRef => tpe.resolveToSymbol
+      case tpe: TermRef => tpe.symbol
       case _            => NoSymbol
 
     final def widenOverloads(using Context): Type =
@@ -363,7 +365,7 @@ object Types {
 
     final def isRef(sym: Symbol)(using Context): Boolean =
       this match {
-        case tpe: NamedType   => tpe.resolveToSymbol == sym
+        case tpe: NamedType   => tpe.symbol == sym
         case tpe: AppliedType => tpe.underlying.isRef(sym)
         case tpe: ExprType    => tpe.underlying.isRef(sym)
         case _                => false // todo: add ProxyType (need to fill in implementations of underlying)
@@ -519,19 +521,11 @@ object Types {
       else TypeRef(this, name)
   }
 
-  trait Symbolic {
-    final def symbol(using Context): Symbol =
-      resolveToSymbol
-
-    def resolveToSymbol(using Context): Symbol
-  }
-
   // ----- Type Proxies -------------------------------------------------
 
-  abstract class NamedType extends PathType with Symbolic {
+  abstract class NamedType extends PathType {
     self =>
 
-    type ThisType >: this.type <: NamedType
     type ThisName <: Name
 
     val prefix: Type
@@ -541,6 +535,7 @@ object Types {
     protected def designator_=(d: Designator): Unit
 
     private var myName: ThisName | Null = null
+    private var mySymbol: Symbol | Null = null
 
     def isType: Boolean = isInstanceOf[TypeRef]
 
@@ -568,22 +563,33 @@ object Types {
     def selectIn(name: SignedName, in: TypeRef): TermRef =
       TermRef(this, LookupIn(in, name))
 
-    // overridden in package references
-    override def resolveToSymbol(using Context): Symbol = designator match {
-      case sym: Symbol => sym
-      case LookupIn(pre, name) =>
-        val sym = TermRef(pre, name).resolveToSymbol
-        designator = sym
+    final def symbol(using Context): Symbol =
+      val local = mySymbol
+      if local != null then local
+      else
+        val computed = computeSymbol()
+        mySymbol = computed
+        designator = computed
+        computed
+
+    private def computeSymbol()(using Context): Symbol = designator match
+      case sym: Symbol =>
         sym
+      case LookupIn(pre, name) =>
+        TermRef(pre, name).symbol
       case Scala2ExternalSymRef(owner, path) =>
-        val sym = path.foldLeft(owner) { (owner, name) =>
-          val cls = if owner.isTerm then owner.declaredType.asInstanceOf[Symbolic].symbol else owner
+        path.foldLeft(owner) { (owner, name) =>
+          /* In Scala 2 external references, (term) *modules* can appear in paths.
+           * When we find one, in our system, we must follow through to their module class
+           * instead. The `declaredType` will in that case always be a `TypeRef` to the
+           * module class.
+           * Terms cannot otherwise appear in paths.
+           */
+          val cls = if owner.isTerm then owner.declaredType.asInstanceOf[TypeRef].symbol else owner
           cls.asDeclaringSymbol.getDecl(name).getOrElse {
             throw new SymbolLookupException(name, s"cannot find symbol $owner.$name")
           }
         }
-        designator = sym
-        sym
       case name: Name =>
         @tailrec
         def findPrefixSym(prefix: Type): Symbol = prefix match {
@@ -593,43 +599,41 @@ object Types {
             ref.symbol
           case t: TermRef =>
             findPrefixSym(t.underlying)
-          case other: Symbolic =>
-            other.resolveToSymbol
+          case t: TypeRef =>
+            t.symbol
+          case t: ThisType =>
+            t.cls
           case AppliedType(tycon, _) =>
             findPrefixSym(tycon)
           case prefix =>
             throw new SymbolLookupException(name, s"unexpected prefix type $prefix")
         }
         val prefixSym = findPrefixSym(prefix)
-        val sym = {
-          prefixSym match
-            case declaring: DeclaringSymbol =>
-              val candidate = declaring.getDecl(name)
-              candidate.getOrElse {
-                val msg = this match
-                  case TermRef(_, name: SignedName) if declaring.memberPossiblyOverloaded(name) =>
-                    def debugSig(sym: Symbol): String = sym.signature match {
-                      case Some(sig) => sig.toDebugString
-                      case None      => "<Not A Method>"
-                    }
-                    val debugQueried = name.sig.toDebugString
-                    val debugCandidates = declaring.memberOverloads(name).map(debugSig).mkString("\n - ", "\n - ", "")
-                    s"""could not resolve overload for `${name.underlying}`:
-                       |Queried signature:
-                       | - $debugQueried
-                       |Overloads found with signatures:$debugCandidates
-                       |Perhaps the classpath is out of date.""".stripMargin
-                  case _ =>
-                    val possible = declaring.declarations.map(_.name.toDebugString).mkString("[", ", ", "]")
-                    s"not a member of $prefixSym, found possible members: $possible."
-                throw SymbolLookupException(name, msg)
-              }
-            case _ =>
-              throw SymbolLookupException(name, s"$prefixSym is not a package or class")
-        }
-        designator = sym
-        sym
-    }
+        prefixSym match
+          case declaring: DeclaringSymbol =>
+            val candidate = declaring.getDecl(name)
+            candidate.getOrElse {
+              val msg = this match
+                case TermRef(_, name: SignedName) if declaring.memberPossiblyOverloaded(name) =>
+                  def debugSig(sym: Symbol): String = sym.signature match {
+                    case Some(sig) => sig.toDebugString
+                    case None      => "<Not A Method>"
+                  }
+                  val debugQueried = name.sig.toDebugString
+                  val debugCandidates = declaring.memberOverloads(name).map(debugSig).mkString("\n - ", "\n - ", "")
+                  s"""could not resolve overload for `${name.underlying}`:
+                     |Queried signature:
+                     | - $debugQueried
+                     |Overloads found with signatures:$debugCandidates
+                     |Perhaps the classpath is out of date.""".stripMargin
+                case _ =>
+                  val possible = declaring.declarations.map(_.name.toDebugString).mkString("[", ", ", "]")
+                  s"not a member of $prefixSym, found possible members: $possible."
+              throw SymbolLookupException(name, msg)
+            }
+          case _ =>
+            throw SymbolLookupException(name, s"$prefixSym is not a package or class")
+    end computeSymbol
 
     /** The argument corresponding to class type parameter `tparam` as seen from
       * prefix `pre`. Can produce a TypeBounds type if `widenAbstract` is true,
@@ -759,14 +763,14 @@ object Types {
     }
 
     private def computeUnderlying(using ctx: Context): Type = {
-      val termSymbol = resolveToSymbol
+      val termSymbol = symbol
       termSymbol.declaredType.asSeenFrom(prefix, termSymbol.owner)
     }
 
     override def isOverloaded(using Context): Boolean =
       myDesignator match
         case LookupIn(pre, ref) =>
-          pre.resolveToSymbol.memberIsOverloaded(ref)
+          pre.symbol.memberIsOverloaded(ref)
         case _ => false
 
     def implicitName: TermName = name
@@ -775,7 +779,7 @@ object Types {
 
     override def findMember(name: Name, pre: Type)(using Context): Symbol =
       underlying match
-        case mt: MethodType if mt.paramInfos.isEmpty /*&& resolveToSymbol.is(StableRealizable)*/ =>
+        case mt: MethodType if mt.paramInfos.isEmpty /*&& symbol.is(StableRealizable)*/ =>
           mt.resultType.findMember(name, pre)
         case tp =>
           tp.findMember(name, pre)
@@ -823,11 +827,10 @@ object Types {
     override def underlying(using Context): Type = symbol.declaredType
 
     override def findMember(name: Name, pre: Type)(using Context): Symbol =
-      val sym = resolveToSymbol
-      sym match
+      symbol match
         case sym: ClassSymbol =>
           ClassInfo.findMember(sym, name, pre)
-        case _ =>
+        case sym =>
           sym.declaredType.findMember(name, pre)
   }
 
@@ -836,13 +839,11 @@ object Types {
       throw new AssertionError(s"Cannot find member in NoPrefix")
   }
 
-  case class ThisType(tref: TypeRef) extends PathType with SingletonType with Symbolic {
+  case class ThisType(tref: TypeRef) extends PathType with SingletonType {
     override def underlying(using Context): Type =
       tref // TODO This is probably wrong
 
-    override def resolveToSymbol(using Context): Symbol = tref.resolveToSymbol
-
-    def cls(using Context): ClassSymbol = symbol.asClass
+    def cls(using Context): ClassSymbol = tref.symbol.asClass
   }
 
   /** A constant type with single `value`. */
@@ -890,7 +891,7 @@ object Types {
     override def findMember(name: Name, pre: Type)(using Context): Symbol =
       tycon match
         case tycon: TypeRef =>
-          if tycon.resolveToSymbol.isClass then tycon.findMember(name, pre)
+          if tycon.symbol.isClass then tycon.findMember(name, pre)
           else ???
         case _ =>
           ???
