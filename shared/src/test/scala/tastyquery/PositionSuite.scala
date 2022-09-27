@@ -200,12 +200,12 @@ class PositionSuite extends RestrictedUnpicklingSuite {
 
   testUnpickleWithCode("class-with-self", simple_trees / tname"ClassWithSelf") { (tree, code) =>
     // ignore because the span of Self is impossible to construct
-    assertEquals(collectCode[ValDef](tree, code), Nil)
+    assertEquals(collectCode[SelfDef](tree, code), Nil)
   }
 
   testUnpickleWithCode("trait-with-self", simple_trees / tname"TraitWithSelf") { (tree, code) =>
     // ignore because the span of Self is impossible to construct
-    assertEquals(collectCode[ValDef](tree, code), List("ClassWithSelf"))
+    assertEquals(collectCode[SelfDef](tree, code), List("ClassWithSelf"))
   }
 
   /** Import and export */

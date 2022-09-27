@@ -549,16 +549,15 @@ class TreeUnpickler(
     acc.toList
   }
 
-  private def readSelf(using LocalContext): ValDef =
+  private def readSelf(using LocalContext): SelfDef =
     if (reader.nextByte != SELFDEF) {
-      reusable.EmptyValDef
+      SelfDef.ReusableEmpty
     } else {
       val spn = span
       reader.readByte()
       val name = readName
       val tpt = readTypeTree
-      // no symbol for self, because it's never referred to by symbol
-      ValDef(name, tpt, EmptyTree, NoSymbol)(tpt.span)
+      SelfDef(name, tpt)(tpt.span)
     }
 
   private def readValOrDefDef(using LocalContext): Tree = {

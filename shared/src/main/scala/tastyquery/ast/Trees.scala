@@ -88,7 +88,8 @@ object Trees {
       case Return(expr, from)                     => expr :: from :: Nil
       case Inlined(expr, caller, bindings)        => expr :: bindings
 
-      case _: TypeMember | _: TypeParam | _: Ident | _: ReferencedPackage | _: This | _: New | _: Literal | EmptyTree =>
+      case _: TypeMember | _: TypeParam | _: Ident | _: ReferencedPackage | _: This | _: New | _: Literal | _: SelfDef |
+          EmptyTree =>
         Nil
     }
 
@@ -218,7 +219,7 @@ object Trees {
     *                       If the template defines a class, this is its only class parent.
     * @param parents        trait parents of the template and the class parent if the template defines a trait.
     */
-  case class Template(constr: DefDef, parents: List[Apply | Block | TypeTree], self: ValDef, body: List[Tree])(
+  case class Template(constr: DefDef, parents: List[Apply | Block | TypeTree], self: SelfDef, body: List[Tree])(
     span: Span
   ) extends Tree(span) {
     override final def withSpan(span: Span): Template = Template(constr, parents, self, body)(span)
@@ -232,6 +233,18 @@ object Trees {
 
     override final def withSpan(span: Span): ValDef = ValDef(name, tpt, rhs, symbol)(span)
   }
+
+  /** Self type definition `name: tpt =>`. */
+  case class SelfDef(name: TermName, tpt: TypeTree)(span: Span) extends Tree(span):
+    override protected def calculateType(using Context): Type = NoType
+
+    override def withSpan(span: Span): SelfDef = SelfDef(name, tpt)(span)
+  end SelfDef
+
+  object SelfDef:
+    private[tastyquery] val ReusableEmpty: SelfDef =
+      SelfDef(nme.Wildcard, EmptyTypeTree)(NoSpan)
+  end SelfDef
 
   type ParamsClause = Either[List[ValDef], List[TypeParam]]
 
@@ -569,10 +582,6 @@ object Trees {
       NoType
 
     override final def withSpan(span: Span): Tree = EmptyTree
-  }
-
-  object reusable {
-    val EmptyValDef: ValDef = ValDef(nme.Wildcard, EmptyTypeTree, EmptyTree, NoSymbol)(NoSpan)
   }
 
 }
