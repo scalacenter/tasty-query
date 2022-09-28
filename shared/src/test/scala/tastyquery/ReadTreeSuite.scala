@@ -110,8 +110,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                     ),
                     // a single parent -- java.lang.Object
                     List(parent: Apply),
-                    // self not specified => EmptyValDef
-                    reusable.EmptyValDef,
+                    // self not specified
+                    SelfDef(nme.Wildcard, EmptyTypeTree),
                     // empty body
                     List()
                   ),
@@ -467,11 +467,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
   testUnpickle("defaultSelfType", simple_trees / tname"ClassWithSelf") { tree =>
     val selfDefMatch: StructureCheck = {
-      case ValDef(
+      case SelfDef(
             SimpleName("self"),
-            TypeWrapper(TypeRef(SimpleTreesPackageRef(), Symbol(TypeName(SimpleName("ClassWithSelf"))))),
-            EmptyTree,
-            NoSymbol
+            TypeWrapper(TypeRef(SimpleTreesPackageRef(), Symbol(TypeName(SimpleName("ClassWithSelf")))))
           ) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
@@ -479,7 +477,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
   testUnpickle("selfType", simple_trees / tname"TraitWithSelf") { tree =>
     val selfDefMatch: StructureCheck = {
-      case ValDef(SimpleName("self"), TypeIdent(TypeName(SimpleName("ClassWithSelf"))), EmptyTree, NoSymbol) =>
+      case SelfDef(SimpleName("self"), TypeIdent(TypeName(SimpleName("ClassWithSelf")))) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
   }
@@ -499,7 +497,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
   testUnpickle("object", simple_trees / tname"ScalaObject" / obj) { tree =>
     val selfDefMatch: StructureCheck = {
-      case ValDef(nme.Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject"))), EmptyTree, NoSymbol) =>
+      case SelfDef(nme.Wildcard, SingletonTypeTree(Ident(SimpleName("ScalaObject")))) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
 
