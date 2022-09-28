@@ -474,43 +474,34 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("java-class-parents") {
-    val SubJavaDefined = name"javadefined" / tname"SubJavaDefined"
-
-    val (SubJavaDefinedTpe @ _: ClassInfo) = resolve(SubJavaDefined).declaredType: @unchecked
-
+    val SubJavaDefinedClass = resolve(name"javadefined" / tname"SubJavaDefined").asClass
     val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
     val JavaInterface1Class = resolve(name"javadefined" / tname"JavaInterface1")
     val JavaInterface2Class = resolve(name"javadefined" / tname"JavaInterface2")
 
     assert(
-      SubJavaDefinedTpe.rawParents
+      SubJavaDefinedClass.parents
         .isListOf(_.isRef(JavaDefinedClass), _.isRef(JavaInterface1Class), _.isRef(JavaInterface2Class))
     )
   }
 
   testWithContext("java-class-signatures-[RecClass]") {
-    val RecClass = name"javadefined" / tname"RecClass"
-
-    val (RecClassTpe @ _: ClassInfo) = resolve(RecClass).declaredType: @unchecked
-
+    val RecClass = resolve(name"javadefined" / tname"RecClass").asClass
     val ObjectClass = resolve(name"java" / name"lang" / tname"Object")
 
-    assert(RecClassTpe.rawParents.isListOf(_.isRef(ObjectClass)))
+    assert(RecClass.parents.isListOf(_.isRef(ObjectClass)))
   }
 
   testWithContext("java-class-signatures-[SubRecClass]") {
-    val SubRecClass = name"javadefined" / tname"SubRecClass"
-
-    val (SubRecClassTpe @ _: ClassInfo) = resolve(SubRecClass).declaredType: @unchecked
-
+    val SubRecClass = resolve(name"javadefined" / tname"SubRecClass").asClass
     val RecClass = resolve(name"javadefined" / tname"RecClass")
     val JavaInterface1 = resolve(name"javadefined" / tname"JavaInterface1")
 
-    val List(tparamT) = SubRecClassTpe.cls.typeParamSyms: @unchecked
+    val List(tparamT) = SubRecClass.typeParamSyms: @unchecked
 
     assert(
-      SubRecClassTpe.rawParents.isListOf(
-        _.isApplied(_.isRef(RecClass), List(_.isApplied(_.isRef(SubRecClassTpe.cls), List(_.isRef(tparamT))))),
+      SubRecClass.parents.isListOf(
+        _.isApplied(_.isRef(RecClass), List(_.isApplied(_.isRef(SubRecClass), List(_.isRef(tparamT))))),
         _.isRef(JavaInterface1)
       )
     )

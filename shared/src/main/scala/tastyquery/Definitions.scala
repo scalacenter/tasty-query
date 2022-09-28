@@ -23,7 +23,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   private def createSpecialClass(name: TypeName, parents: List[Type], flags: FlagSet): ClassSymbol =
     val cls = ctx.createClassSymbol(name, scalaPackage)
     cls.withTypeParams(Nil, Nil)
-    cls.withDeclaredType(ClassInfo.direct(cls, if parents.isEmpty then Nil else parents))
+    cls.withParentsDirect(parents)
     cls.withFlags(flags)
     cls
 
@@ -77,7 +77,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     cls.withFlags(EmptyFlagSet | Artifact)
 
     val parents = parentConstrs(TypeRef(NoPrefix, tparam))
-    cls.withDeclaredType(ClassInfo.direct(cls, parents))
+    cls.withParentsDirect(parents)
     cls
   end createSpecialPolyClass
 

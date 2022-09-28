@@ -349,11 +349,15 @@ object Symbols {
       with DeclaringSymbol {
     // TODO: how do we associate some Symbols with TypeBounds, and some with Type?
     private var myTypeParams: List[(Symbol, TypeBounds)] | Null = null
+    private var myParentsInit: (() => List[Type]) | Null = null
+    private var myParents: List[Type] | Null = null
+
+    (this: @unchecked).withDeclaredType(ClassInfo(this: @unchecked))
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
       def isValueClass: Boolean =
-        tree.isDefined && // TODO: Remove when Scala 2 classes have a ClassInfo
-          declaredType.asInstanceOf[ClassInfo].rawParents.head.classSymbol.exists(_ == defn.AnyValClass)
+        tree.isDefined && // TODO: Remove when Scala 2 classes have a parents
+          parents.head.classSymbol.exists(_ == defn.AnyValClass)
       isValueClass && !defn.isPrimitiveValueClass(this)
 
     /** Get the companion object of class definition, if it exists:
@@ -381,6 +385,31 @@ object Symbols {
 
     private[tastyquery] final def typeParamSymsNoInitialize(using Context): List[Symbol] =
       typeParamsInternal.map(_(0))
+
+    private[tastyquery] final def withParentsDirect(parents: List[Type]): this.type =
+      if myParentsInit != null || myParents != null then
+        throw IllegalStateException(s"reassignment of parents of $this")
+      myParents = parents
+      this
+
+    private[tastyquery] final def withParentsDelayed(parentsInit: () => List[Type]): this.type =
+      if myParentsInit != null || myParents != null then
+        throw IllegalStateException(s"reassignment of parents of $this")
+      myParentsInit = parentsInit
+      this
+
+    final def parents(using Context): List[Type] =
+      val localParents = myParents
+      if localParents != null then localParents
+      else
+        val localParentsInit = myParentsInit
+        if localParentsInit != null then
+          myParentsInit = null
+          val parents = localParentsInit()
+          myParents = parents
+          parents
+        else throw IllegalStateException(s"$this was not assigned parents")
+    end parents
 
     protected[this] final def ensureDeclsInitialized()(using Context): Unit =
       // ClassSymbols are always initialized when created
@@ -420,7 +449,7 @@ object Symbols {
 
       getDecl(name).orElse {
         if name == nme.Constructor then None
-        else lookup(declaredType.asInstanceOf[ClassInfo].rawParents)
+        else lookup(parents)
       }
     end findMember
 
@@ -453,7 +482,7 @@ object Symbols {
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, span: Span)(using Context): ClassSymbol =
       val cls = create(tpnme.RefinedClassMagic, owner)
       cls
-        .withDeclaredType(ClassInfo.direct(cls, ObjectType :: Nil))
+        .withParentsDirect(ObjectType :: Nil)
         .withFlags(EmptyFlagSet)
       cls
   end ClassSymbol

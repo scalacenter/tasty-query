@@ -1313,21 +1313,7 @@ object Types {
       else AndType(first, second)
   }
 
-  case class ClassInfo(cls: ClassSymbol)(private var mkRawParents: (() => List[Type]) | Null) extends GroundType {
-    var _rawParents: List[Type] | Null = null
-
-    def rawParents: List[Type] =
-      val localParents = _rawParents
-      if localParents != null then localParents
-      else
-        val localFactory = mkRawParents
-        if localFactory == null then throw CyclicReference(s"class info for ${cls.toDebugString}")
-        else
-          mkRawParents = null // we are evaluating the parents, avoid cycles by set to null
-          val computedParents = localFactory()
-          _rawParents = computedParents
-          computedParents
-
+  case class ClassInfo(cls: ClassSymbol) extends GroundType {
     def findMember(name: Name, pre: Type)(using Context): Symbol =
       ClassInfo.findMember(cls, name, pre)
 
@@ -1340,11 +1326,7 @@ object Types {
       cls.findMember(pre, name).getOrElse {
         throw new AssertionError(s"Cannot find member named '$name' in $pre")
       }
-
-    def direct(cls: ClassSymbol, rawParents: List[Type])(using Context): ClassInfo =
-      ClassInfo(cls)(() => rawParents)
-    def defer(cls: ClassSymbol, rawParents: => List[Type])(using Context): ClassInfo =
-      ClassInfo(cls)(() => rawParents)
+  end ClassInfo
 
   case object NoType extends GroundType {
     def findMember(name: Name, pre: Type)(using Context): Symbol =
