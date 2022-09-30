@@ -11,8 +11,8 @@ class TastyTrees(trees: List[Tree]):
       tree.walkTree {
         case ddef: DefTree =>
           def nameOf(s: Symbol): String =
-            if s.outer.isStatic then s.fullName.toDebugString
-            else s"${nameOf(s.outer)} { ${s.name.toDebugString} }"
+            if s.owner.nn.isStatic then s.fullName.toDebugString
+            else s"${nameOf(s.owner.nn)} { ${s.name.toDebugString} }"
           if ddef.symbol.exists then println(nameOf(ddef.symbol))
         case _ =>
       }

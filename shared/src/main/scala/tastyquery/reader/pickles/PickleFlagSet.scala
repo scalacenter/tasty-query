@@ -1,6 +1,6 @@
 package tastyquery.reader.pickles
 
-class PickleFlagSet(rawFlags: Long, isType: Boolean):
+class PickleFlagSet(rawFlags: Long, val isType: Boolean):
   private def hasFlag(flag: Long): Boolean = (rawFlags & flag) != 0L
 
   def isImplicit: Boolean = hasFlag(0x00000001)

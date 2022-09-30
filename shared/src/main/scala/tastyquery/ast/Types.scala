@@ -88,13 +88,16 @@ object Types {
             arrayOf(targ).arrayOf()
           else arrayOf(tycon)
         case tpe: TypeRef =>
-          val sym = tpe.symbol
-          if sym.isClass then ClassRef(sym.asClass).arrayOf()
-          else arrayOf(sym.declaredType)
-        case tpe: TypeParamRef           => arrayOfBounds(tpe.bounds)
-        case WildcardTypeBounds(bounds)  => arrayOfBounds(bounds)
-        case BoundedType(bounds, NoType) => arrayOfBounds(bounds)
-        case BoundedType(_, alias)       => arrayOf(alias)
+          tpe.symbol match
+            case cls: ClassSymbol     => ClassRef(cls).arrayOf()
+            case sym: TypeParamSymbol => arrayOfBounds(sym.bounds)
+            case sym: TypeMemberSymbol =>
+              sym.typeDef match
+                case TypeMemberDefinition.TypeAlias(alias)          => arrayOf(alias)
+                case TypeMemberDefinition.AbstractType(bounds)      => arrayOfBounds(bounds)
+                case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => arrayOf(alias)
+        case tpe: TypeParamRef          => arrayOfBounds(tpe.bounds)
+        case WildcardTypeBounds(bounds) => arrayOfBounds(bounds)
         case _ =>
           preErase(tpe).arrayOf()
       end arrayOf
@@ -115,9 +118,13 @@ object Types {
           tpe.symbol match
             case cls: ClassSymbol =>
               ClassRef(cls)
-            case sym =>
-              if sym.isAllOf(ClassTypeParam) then preErase(sym.declaredType.upperBound)
-              else preErase(sym.declaredType)
+            case sym: TypeParamSymbol =>
+              preErase(sym.upperBound)
+            case sym: TypeMemberSymbol =>
+              sym.typeDef match
+                case TypeMemberDefinition.TypeAlias(alias)          => preErase(alias)
+                case TypeMemberDefinition.AbstractType(bounds)      => preErase(bounds.high)
+                case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => preErase(alias)
         case tpe: TypeParamRef =>
           preErase(tpe.bounds.high)
         case AndType(left, right) =>
@@ -128,18 +135,14 @@ object Types {
           preErase(left)
         case WildcardTypeBounds(bounds) =>
           preErase(bounds.high)
-        case BoundedType(bounds, NoType) =>
-          preErase(bounds.high)
-        case BoundedType(_, alias) =>
-          preErase(alias)
         case tpe =>
           throw IllegalStateException(s"Cannot erase $tpe")
     end preErase
 
     private def finishErase(typeRef: ErasedTypeRef)(using Context): ErasedTypeRef =
       def valueClass(cls: ClassSymbol): ErasedTypeRef =
-        val ctor = cls.getDecl(nme.Constructor).get
-        val List(List(param)) = ctor.paramSymss.dropWhile(_.headOption.exists(_.isType)): @unchecked
+        val ctor = cls.getDecl(nme.Constructor).get.asTerm
+        val List(Left(List(param))) = ctor.paramSymss.dropWhile(_.isRight): @unchecked
         val paramType = param.declaredType
         erase(paramType)
 
@@ -165,14 +168,20 @@ object Types {
     /** The class symbol of this type, None if reduction is not possible */
     private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this.widen match
       case tpe: TypeRef =>
-        val sym = tpe.symbol
-        if sym.isClass then Some(sym.asClass)
-        else sym.declaredType.classSymbol
+        tpe.symbol match
+          case cls: ClassSymbol =>
+            Some(cls)
+          case typeSym: TypeMemberSymbol =>
+            typeSym.typeDef match
+              case TypeMemberDefinition.TypeAlias(alias) => alias.classSymbol
+              case _                                     => None
+          case _: TypeParamSymbol => None
       case tpe: ThisType =>
         Some(tpe.cls)
       case info: ClassInfo =>
         Some(info.cls)
-      case _ => None
+      case _ =>
+        None
 
     /** The type parameters of this type are:
       * For a ClassInfo type, the type parameters of its class.
@@ -185,9 +194,9 @@ object Types {
     private[Types] final def typeParams(using Context): List[ParamInfo.TypeParamInfo] =
       this match
         case self: TypeRef =>
-          val tsym = self.symbol
-          if (tsym.isClass) tsym.typeParams
-          else tsym.declaredType.typeParams
+          self.symbol match
+            case cls: ClassSymbol              => cls.typeParams
+            case typeSym: TypeSymbolWithBounds => typeSym.upperBound.typeParams
         case self: AppliedType =>
           if (self.tycon.typeSymbol.isClass) Nil
           else self.superType.typeParams
@@ -280,16 +289,14 @@ object Types {
 
     private def dealias1(keepOpaques: Boolean)(using Context): Type = this match {
       case tp: TypeRef =>
-        val tpSym = tp.symbol
-        if tpSym.isClass then tp
-        else
-          tpSym.declaredType match
-            case BoundedType(_, alias) if !keepOpaques && alias != NoType =>
-              alias.dealias1(keepOpaques)
-            case WildcardTypeBounds(TypeAlias(alias)) =>
-              alias.dealias1(keepOpaques)
-            case _ =>
-              tp
+        tp.symbol match
+          case tpSym: TypeMemberSymbol =>
+            tpSym.typeDef match
+              case TypeMemberDefinition.TypeAlias(alias)                          => alias.dealias1(keepOpaques)
+              case TypeMemberDefinition.OpaqueTypeAlias(_, alias) if !keepOpaques => alias.dealias1(keepOpaques)
+              case _                                                              => tp
+          case _ =>
+            tp
       case app @ AppliedType(tycon, _) =>
         val tycon1 = tycon.dealias1(keepOpaques)
         if (tycon1 ne tycon) app.superType.dealias1(keepOpaques)
@@ -301,14 +308,23 @@ object Types {
     }
 
     /** The normalized prefix of this type is:
-      *  For an alias type, the normalized prefix of its alias
-      *  For all other named type and class infos: the prefix.
-      *  Inherited by all other type proxies.
-      *  `NoType` for all other types.
+      *
+      * - For a type alias, the normalized prefix of its alias.
+      * - For all other named type and class infos: the prefix.
+      * - Inherited by all other type proxies.
+      * - `NoType` for all other types.
       */
     @tailrec final def normalizedPrefix(using Context): Type = this match {
-      case tp: NamedType =>
-        if (tp.symbol.declaredType.isTypeAlias) tp.symbol.declaredType.normalizedPrefix else tp.prefix
+      case tp: TypeRef =>
+        tp.symbol match
+          case sym: TypeMemberSymbol =>
+            sym.typeDef match
+              case TypeMemberDefinition.TypeAlias(alias) => alias.normalizedPrefix
+              case _                                     => tp.prefix
+          case _ =>
+            tp.prefix
+      case tp: TermRef =>
+        tp.prefix
       case tp: ClassInfo =>
         // TODO tp.prefix
         tp.cls.accessibleThisType
@@ -350,15 +366,14 @@ object Types {
       * ThisType of `sym`'s owner, or a reference to `sym`'s owner.'
       */
     def isArgPrefixOf(sym: Symbol)(using Context): Boolean =
-      sym.exists
-        && !sym.owner.isPackage // Early exit if possible because the next check would force SymbolLoaders
-        && sym.isAllOf(ClassTypeParam)
-        && {
+      sym match
+        case sym: ClassTypeParamSymbol =>
           this match
-            case tp: ThisType => tp.cls ne sym.owner
-            case tp: TypeRef  => tp.symbol ne sym.owner
+            case tp: ThisType => tp.cls != sym.owner
+            case tp: TypeRef  => tp.symbol != sym.owner
             case _            => true
-        }
+        case _ =>
+          false
 
     def asSeenFrom(pre: Type, cls: Symbol)(using Context): Type =
       TypeOps.asSeenFrom(this, pre, cls)
@@ -523,10 +538,11 @@ object Types {
 
   // ----- Type Proxies -------------------------------------------------
 
-  abstract class NamedType extends PathType {
+  sealed abstract class NamedType extends PathType {
     self =>
 
     type ThisName <: Name
+    type ThisSymbolType <: Symbol { type ThisNameType = ThisName }
 
     val prefix: Type
 
@@ -535,7 +551,7 @@ object Types {
     protected def designator_=(d: Designator): Unit
 
     private var myName: ThisName | Null = null
-    private var mySymbol: Symbol | Null = null
+    private var mySymbol: ThisSymbolType | Null = null
 
     def isType: Boolean = isInstanceOf[TypeRef]
 
@@ -563,14 +579,16 @@ object Types {
     def selectIn(name: SignedName, in: TypeRef): TermRef =
       TermRef(this, LookupIn(in, name))
 
-    final def symbol(using Context): Symbol =
+    final def symbol(using Context): ThisSymbolType =
       val local = mySymbol
       if local != null then local
       else
-        val computed = computeSymbol()
+        val computed = asThisSymbolType(computeSymbol())
         mySymbol = computed
         designator = computed
         computed
+
+    protected[this] def asThisSymbolType(sym: Symbol): ThisSymbolType
 
     private def computeSymbol()(using Context): Symbol = designator match
       case sym: Symbol =>
@@ -585,7 +603,7 @@ object Types {
            * module class.
            * Terms cannot otherwise appear in paths.
            */
-          val cls = if owner.isTerm then owner.declaredType.asInstanceOf[TypeRef].symbol else owner
+          val cls = if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].symbol else owner
           cls.asDeclaringSymbol.getDecl(name).getOrElse {
             throw new SymbolLookupException(name, s"cannot find symbol $owner.$name")
           }
@@ -615,7 +633,7 @@ object Types {
             candidate.getOrElse {
               val msg = this match
                 case TermRef(_, name: SignedName) if declaring.memberPossiblyOverloaded(name) =>
-                  def debugSig(sym: Symbol): String = sym.signature match {
+                  def debugSig(sym: TermSymbol): String = sym.signature match {
                     case Some(sig) => sig.toDebugString
                     case None      => "<Not A Method>"
                   }
@@ -642,7 +660,7 @@ object Types {
       * reference is returned.
       */
     def argForParam(pre: Type, widenAbstract: Boolean = false)(using Context): Type = {
-      val tparam = symbol
+      val tparam = symbol.asInstanceOf[ClassTypeParamSymbol]
       val cls = tparam.owner
       val base = pre.baseType(cls)
       base match {
@@ -744,12 +762,15 @@ object Types {
       with SingletonType
       with ImplicitRef {
 
-    type ThisType = TermRef
     type ThisName = TermName
+    type ThisSymbolType = TermSymbol
 
     override def designator: Designator = myDesignator
 
     override protected def designator_=(d: Designator): Unit = myDesignator = d
+
+    protected[this] def asThisSymbolType(sym: Symbol): ThisSymbolType =
+      sym.asInstanceOf[TermSymbol]
 
     private var myUnderlying: Type | Null = null
 
@@ -814,24 +835,29 @@ object Types {
 
   case class TypeRef(override val prefix: Type, private var myDesignator: Designator) extends NamedType {
 
-    type ThisType = TypeRef
     type ThisName = TypeName
+    type ThisSymbolType = TypeSymbol
 
     override def designator: Designator = myDesignator
 
     override protected def designator_=(d: Designator): Unit = myDesignator = d
 
+    protected[this] def asThisSymbolType(sym: Symbol): ThisSymbolType =
+      sym.asInstanceOf[TypeSymbol]
+
     private[tastyquery] def isLocalRef(sym: Symbol): Boolean =
       myDesignator == sym
 
-    override def underlying(using Context): Type = symbol.declaredType
+    override def underlying(using Context): Type = symbol match
+      case cls: ClassSymbol          => cls.classInfo
+      case sym: TypeSymbolWithBounds => sym.upperBound
 
     override def findMember(name: Name, pre: Type)(using Context): Symbol =
       symbol match
         case sym: ClassSymbol =>
           ClassInfo.findMember(sym, name, pre)
-        case sym =>
-          sym.declaredType.findMember(name, pre)
+        case sym: TypeSymbolWithBounds =>
+          sym.upperBound.findMember(name, pre)
   }
 
   case object NoPrefix extends Type {

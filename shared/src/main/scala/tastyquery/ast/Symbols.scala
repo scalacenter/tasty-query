@@ -18,6 +18,53 @@ import tastyquery.util.syntax.chaining.given
 import compiletime.codeOf
 import tastyquery.reader.classfiles.Classpaths.Loader
 
+/** Symbols for all kinds of definitions in Scala programs.
+  *
+  * Every definition, like `class`es, `def`s, `type`s and type parameters, is
+  * associated with a `Symbol`. `Symbol`s are organized in a hierarchy,
+  * depending on what kind of definitions they represent.
+  *
+  * ```none
+  * Symbol
+  *  |
+  *  +- NoSymbol                        singleton instance used when there is no symbol
+  *  |
+  *  +- PackageSymbol                   any package, including the root package, the empty package, and nested packages
+  *  |
+  *  +- TermSymbol                      any term definition:
+  *  |                                  `val`, `var`, `def`, term param, term capture, `object` value
+  *  |
+  *  +- TypeSymbol                      any definition for a type
+  *     +- ClassSymbol                  definition for a `class`, `trait`, or the module class of an `object`
+  *     +- TypeSymbolWithBounds         any other kind of type: `type` definitions, type params, type captures
+  *        +- TypeMemberSymbol          `type` definition, further refined through its `typeDef`
+  *        +- TypeParamSymbol
+  *           +- ClassTypeParamSymbol   type parameter of a class
+  *           +- LocalTypeParamSymbol   any other type parameter
+  * ```
+  *
+  * Additionally, `PackageSymbol` and `ClassSymbol` extend `DeclaringSymbol`.
+  * Declaring symbols are the ones that contain declarations, which can be
+  * looked up with their `name`s.
+  *
+  * `TypeMemberSymbol`s exist in 3 flavors, indicated by their `typeDef` field,
+  * of type `TypeMemberDefinition`:
+  *
+  * - `TypeAlias(alias)`: type alias of the form `type T = alias`
+  * - `AbstractType(bounds)`: abstract type member of the form `type T >: bounds.low <: bounds.high`
+  * - `OpaqueTypeAlias(bounds, alias)`: opaque type alias of the form `type T >: bounds.low <: bounds.high = alias`
+  *
+  * The main property a `TermSymbol` is its `declaredType`, which is a `Type`.
+  * All `TypeSymbolWithBounds` have `bounds` of type `TypeBounds`, which are
+  * often used as their primary characteristic. `ClassSymbol`s are entirely
+  * defined by themselves.
+  *
+  * With the exception of `NoSymbol` and the root package symbol, all symbols
+  * have an `owner` which is another `Symbol`.
+  *
+  * All symbols also have a `name`. It is a `TypeName` for `TypeSymbol`s, and a
+  * `TermName` for `TermSymbol`s, `PackageSymbol`s and `NoSymbol`.
+  */
 object Symbols {
 
   class ExistingDefinitionException(val scope: Symbol, val name: Name, explanation: String = "")
@@ -37,9 +84,11 @@ object Symbols {
       if (explanation.isEmpty) msg else s"$msg: $explanation"
   }
 
-  val NoSymbol = RegularSymbol.createNoSymbol()
+  sealed abstract class Symbol protected[this] (val owner: Symbol | Null) {
+    type ThisNameType <: Name
 
-  sealed abstract class Symbol private[Symbols] (val name: Name, rawowner: Symbol | Null) extends ParamInfo {
+    val name: ThisNameType
+
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
     private var myTree: Option[DefTree] = None
@@ -52,34 +101,6 @@ object Symbols {
 
     final def tree(using Context): Option[DefTree] =
       myTree
-
-    /** Get the companion class for a definition, if it exists:
-      * - for `class C` => `object class C[$]`
-      * - for `object class C[$]` => `class C`
-      * - for `object val C` => `class C`
-      */
-    final def companionClass(using Context): Option[ClassSymbol] = maybeOuter match
-      case scope: PackageSymbol =>
-        this match
-          case cls: ClassSymbol =>
-            scope.getDecl(cls.name.toTypeName.companionName).collect { case sym: ClassSymbol =>
-              sym
-            }
-          case obj: RegularSymbol if obj.isTerm =>
-            scope.getDecl(obj.name.toTypeName).collect { case sym: ClassSymbol =>
-              sym
-            }
-          case _ => None
-      case _ => None // not possible yet for local symbols
-
-    private var myDeclaredType: Type | Null = null
-
-    private[tastyquery] final def withDeclaredType(tpe: Type): this.type =
-      val local = myDeclaredType
-      if local != null then throw new IllegalStateException(s"reassignment of declared type to $this")
-      else
-        myDeclaredType = tpe
-        this
 
     private[tastyquery] final def withFlags(flags: FlagSet): this.type =
       if isFlagsInitialized then throw IllegalStateException(s"reassignment of flags to $this")
@@ -94,16 +115,6 @@ object Symbols {
         myPrivateWithin = Some(privateWithin)
         this
 
-    private[tastyquery] def signature(using Context): Option[Signature]
-
-    /** If this symbol has a `MethodicType`, returns a `SignedName`, otherwise a `Name`. */
-    final def signedName(using Context): Name =
-      signature.fold(name) { sig =>
-        val name = this.name.asSimpleName
-        val targetName = name // TODO We may have to take `@targetName` into account here, one day
-        SignedName(name, sig, targetName)
-      }
-
     final def flags: FlagSet =
       if isFlagsInitialized then myFlags
       else throw IllegalStateException(s"flags of $this have not been initialized")
@@ -117,60 +128,29 @@ object Symbols {
     final def isAnyOf(testFlags: FlagSet): Boolean =
       flags.isAnyOf(testFlags)
 
-    def paramVariance(using Context): Variance =
-      Variance.fromFlags(flags)
-
-    def declaredType(using Context): Type =
-      val local = myDeclaredType
-      if local != null then local
-      else throw new IllegalStateException(s"$this was not assigned a declared type")
-
-    final def owner: Symbol = outer
-
-    final def outer: Symbol = rawowner match {
-      case owner: Symbol => owner
-      case null          => assert(false, s"cannot access outer, ${this.name} was not declared within any scope")
-    }
-
-    final def enclosingDecl: DeclaringSymbol = rawowner match {
+    final def enclosingDecl: DeclaringSymbol = owner match {
       case owner: DeclaringSymbol => owner
       case _: Symbol | null =>
         assert(false, s"cannot access owner, ${this.name} is local or not declared within any scope")
     }
 
-    private[Symbols] def maybeOuter: Symbol = rawowner match {
+    private[Symbols] final def addDeclIfDeclaringSym(decl: Symbol): decl.type =
+      this match
+        case declaring: DeclaringSymbol => declaring.addDecl(decl)
+        case _                          => ()
+      decl
+
+    private[Symbols] def maybeOuter: Symbol = owner match {
       case owner: Symbol => owner
       case null          => NoSymbol
     }
-
-    def ref(using Context): Type = this match
-      case pkg: PackageSymbol => pkg.packageRef
-      case cls: ClassSymbol   => cls.typeRef
-      case sym: RegularSymbol => // TODO: should we cache in RegularSymbol?
-        val pre = sym.maybeOuter match
-          case pre: ClassSymbol => pre.ref
-          case _                => NoPrefix
-        NamedType(pre, sym)
-
-    /** The type parameters of a class symbol, Nil for all other symbols. */
-    def typeParams(using Context): List[Symbol] = Nil
-
-    final def paramSymss(using Context): List[List[Symbol]] =
-      tree match
-        case Some(ddef: DefDef) =>
-          ddef.paramLists.map {
-            case Left(params)   => params.map(_.symbol)
-            case Right(tparams) => tparams.map(_.symbol)
-          }
-        // TODO: java and scala 2 methods do not have trees
-        case _ => Nil
 
     private[tastyquery] final def enclosingDecls: Iterator[DeclaringSymbol] =
       Iterator.iterate(enclosingDecl)(_.enclosingDecl).takeWhile(s => s.maybeOuter.exists)
 
     private[tastyquery] final def isStatic: Boolean =
       Iterator
-        .iterate(this)(_.outer)
+        .iterate(this)(_.owner.nn)
         .takeWhile(s => s.maybeOuter.exists)
         .forall(s => s.isPackage || s.isClass && s.name.toTypeName.wrapsObjectName)
 
@@ -186,14 +166,16 @@ object Symbols {
 
     final def exists: Boolean = this ne NoSymbol
 
-    final def isType: Boolean = name.isTypeName
-    final def isTerm: Boolean = name.isTermName && !isPackage
+    final def isType: Boolean = this.isInstanceOf[TypeSymbol]
+    final def isTerm: Boolean = this.isInstanceOf[TermSymbol]
 
     final def isDeclaringSymbol: Boolean = this.isInstanceOf[DeclaringSymbol]
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
     final def isPackage: Boolean = this.isInstanceOf[PackageSymbol]
-    final def isRoot: Boolean = isPackage && rawowner == null
+    final def isRoot: Boolean = isPackage && owner == null
 
+    final def asType: TypeSymbol = this.asInstanceOf[TypeSymbol]
+    final def asTerm: TermSymbol = this.asInstanceOf[TermSymbol]
     final def asDeclaringSymbol: DeclaringSymbol = this.asInstanceOf[DeclaringSymbol]
     final def asClass: ClassSymbol = this.asInstanceOf[ClassSymbol]
     final def asPackage: PackageSymbol = this.asInstanceOf[PackageSymbol]
@@ -206,12 +188,9 @@ object Symbols {
       case scope: DeclaringSymbol => scope.hasPossibleOverloads(name)
       case _                      => false
 
-    private[tastyquery] final def memberOverloads(name: SignedName): List[Symbol] = this match
+    private[tastyquery] final def memberOverloads(name: SignedName): List[TermSymbol] = this match
       case scope: DeclaringSymbol => scope.allOverloads(name)
       case _                      => Nil
-
-    /** Is this symbol a user-defined opaque type alias? */
-    final def isOpaqueTypeAlias(using Context): Boolean = is(Opaque) && !isClass
 
     override def toString: String = {
       val kind = this match
@@ -227,13 +206,34 @@ object Symbols {
     def unapply(s: Symbol): Option[Name] = Some(s.name)
   }
 
-  final class RegularSymbol private (override val name: Name, rawowner: Symbol | Null) extends Symbol(name, rawowner) {
+  object NoSymbol extends Symbol(null):
+    type ThisNameType = SimpleName
+
+    val name: SimpleName = nme.EmptySimpleName
+
+    override def toString: String = "NoSymbol"
+  end NoSymbol
+
+  final class TermSymbol private (val name: TermName, override val owner: Symbol) extends Symbol(owner):
+    type ThisNameType = TermName
+
+    private var myDeclaredType: Type | Null = null
     private var mySignature: Option[Signature] | Null = null
+
+    private[tastyquery] final def withDeclaredType(tpe: Type): this.type =
+      if myDeclaredType != null then throw new IllegalStateException(s"reassignment of declared type to $this")
+      myDeclaredType = tpe
+      this
+
+    def declaredType(using Context): Type =
+      val local = myDeclaredType
+      if local != null then local
+      else throw new IllegalStateException(s"$this was not assigned a declared type")
 
     private def isConstructor: Boolean =
       maybeOuter.isClass && is(Method) && name == nme.Constructor
 
-    private[tastyquery] override final def signature(using Context): Option[Signature] =
+    private[tastyquery] final def signature(using Context): Option[Signature] =
       val local = mySignature
       if local != null then local
       else
@@ -243,18 +243,124 @@ object Symbols {
           case _ => None
         mySignature = sig
         sig
-  }
 
-  object RegularSymbol:
-    private[tastyquery] def create(name: Name, owner: Symbol): RegularSymbol =
-      RegularSymbol(name, owner)
+    /** If this symbol has a `MethodicType`, returns a `SignedName`, otherwise a `Name`. */
+    final def signedName(using Context): Name =
+      signature.fold(name) { sig =>
+        val name = this.name.asSimpleName
+        val targetName = name // TODO We may have to take `@targetName` into account here, one day
+        SignedName(name, sig, targetName)
+      }
 
-    private[Symbols] def createNoSymbol(): RegularSymbol =
-      RegularSymbol(nme.EmptyTermName, null)
-  end RegularSymbol
+    final def paramSymss(using Context): List[Either[List[TermSymbol], List[LocalTypeParamSymbol]]] =
+      tree match
+        case Some(ddef: DefDef) =>
+          ddef.paramLists.map {
+            case Left(params)   => Left(params.map(_.symbol))
+            case Right(tparams) => Right(tparams.map(_.symbol.asInstanceOf[LocalTypeParamSymbol]))
+          }
+        // TODO: java and scala 2 methods do not have trees
+        case _ => Nil
+  end TermSymbol
+
+  object TermSymbol:
+    private[tastyquery] def create(name: TermName, owner: Symbol): TermSymbol =
+      owner.addDeclIfDeclaringSym(TermSymbol(name, owner))
+  end TermSymbol
+
+  sealed abstract class TypeSymbol protected (val name: TypeName, override val owner: Symbol) extends Symbol(owner):
+    type ThisNameType = TypeName
+
+    final def isTypeAlias(using Context): Boolean = this match
+      case sym: TypeMemberSymbol => sym.typeDef.isInstanceOf[TypeMemberDefinition.TypeAlias]
+      case _                     => false
+
+    final def isOpaqueTypeAlias(using Context): Boolean = this match
+      case sym: TypeMemberSymbol => sym.typeDef.isInstanceOf[TypeMemberDefinition.OpaqueTypeAlias]
+      case _                     => false
+  end TypeSymbol
+
+  sealed abstract class TypeSymbolWithBounds protected (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner):
+    def bounds(using Context): TypeBounds
+
+    def upperBound(using Context): Type
+  end TypeSymbolWithBounds
+
+  sealed abstract class TypeParamSymbol protected (name: TypeName, owner: Symbol)
+      extends TypeSymbolWithBounds(name, owner):
+    private var myBounds: TypeBounds | Null = null
+
+    private[tastyquery] final def setBounds(bounds: TypeBounds): this.type =
+      if myBounds != null then throw IllegalStateException(s"Trying to re-set the bounds of $this")
+      myBounds = bounds
+      this
+
+    final def bounds(using Context): TypeBounds =
+      val local = myBounds
+      if local == null then throw IllegalStateException(s"$this was not assigned type bounds")
+      else local
+
+    final def upperBound(using Context): Type = bounds.high
+  end TypeParamSymbol
+
+  final class ClassTypeParamSymbol private (name: TypeName, override val owner: ClassSymbol)
+      extends TypeParamSymbol(name, owner)
+      with ParamInfo:
+    def paramVariance(using Context): Variance =
+      Variance.fromFlags(flags)
+  end ClassTypeParamSymbol
+
+  object ClassTypeParamSymbol:
+    private[tastyquery] def create(name: TypeName, owner: ClassSymbol): ClassTypeParamSymbol =
+      ClassTypeParamSymbol(name, owner)
+  end ClassTypeParamSymbol
+
+  final class LocalTypeParamSymbol private (name: TypeName, owner: Symbol) extends TypeParamSymbol(name, owner)
+
+  object LocalTypeParamSymbol:
+    private[tastyquery] def create(name: TypeName, owner: Symbol): LocalTypeParamSymbol =
+      LocalTypeParamSymbol(name, owner)
+  end LocalTypeParamSymbol
+
+  final class TypeMemberSymbol private (name: TypeName, owner: Symbol) extends TypeSymbolWithBounds(name, owner):
+    private var myDefinition: TypeMemberDefinition | Null = null
+
+    private[tastyquery] final def withDefinition(definition: TypeMemberDefinition): this.type =
+      if myDefinition != null then throw IllegalStateException(s"Reassignment of the definition of $this")
+      myDefinition = definition
+      this
+
+    final def typeDef(using Context): TypeMemberDefinition =
+      val local = myDefinition
+      if local == null then throw IllegalStateException("$this was not assigned a definition")
+      else local
+
+    final def aliasedType(using Context): Type =
+      typeDef.asInstanceOf[TypeMemberDefinition.TypeAlias].alias
+
+    final def bounds(using Context): TypeBounds = typeDef match
+      case TypeMemberDefinition.TypeAlias(alias)           => TypeAlias(alias)
+      case TypeMemberDefinition.AbstractType(bounds)       => bounds
+      case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds
+
+    final def upperBound(using Context): Type = typeDef match
+      case TypeMemberDefinition.TypeAlias(alias)           => alias
+      case TypeMemberDefinition.AbstractType(bounds)       => bounds.high
+      case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds.high
+  end TypeMemberSymbol
+
+  object TypeMemberSymbol:
+    private[tastyquery] def create(name: TypeName, owner: Symbol): TypeMemberSymbol =
+      owner.addDeclIfDeclaringSym(TypeMemberSymbol(name, owner))
+  end TypeMemberSymbol
+
+  enum TypeMemberDefinition:
+    case TypeAlias(alias: Type)
+    case AbstractType(bounds: TypeBounds)
+    case OpaqueTypeAlias(bounds: TypeBounds, alias: Type)
+  end TypeMemberDefinition
 
   sealed trait DeclaringSymbol extends Symbol {
-    private[tastyquery] override final def signature(using Context): Option[Signature] = None
 
     /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
      * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
@@ -264,8 +370,10 @@ object Symbols {
     /** Ensures that the declarations of this symbol are initialized. */
     protected[this] def ensureDeclsInitialized()(using Context): Unit
 
-    private[tastyquery] final def addDecl(decl: Symbol): Unit =
-      myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet) += decl
+    private[Symbols] final def addDecl(decl: Symbol): Unit =
+      val set = myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet)
+      if decl.isType then assert(set.isEmpty, s"trying to add a second entry $decl for type name ${decl.name} in $this")
+      set += decl
 
     /** direct lookup without requiring `Context`, can not resolve overloads */
     private[tastyquery] final def getDeclInternal(name: Name): Option[Symbol] = name match
@@ -294,9 +402,9 @@ object Symbols {
         case Some(decls) => decls.sizeIs >= 1
         case _           => false
 
-    private[Symbols] final def allOverloads(name: SignedName): List[Symbol] =
+    private[Symbols] final def allOverloads(name: SignedName): List[TermSymbol] =
       myDeclarations.get(name.underlying) match
-        case Some(decls) => decls.toList
+        case Some(decls) => decls.toList.asInstanceOf[List[TermSymbol]]
         case _           => Nil
 
     final def getDecls(name: Name)(using Context): List[Symbol] =
@@ -323,8 +431,12 @@ object Symbols {
 
     private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[Symbol] =
       myDeclarations.get(overloaded.underlying) match
-        case Some(overloads) => overloads.find(_.signature.exists(_ == overloaded.sig))
-        case None            => None
+        case Some(overloads) =>
+          overloads.find {
+            case decl: TermSymbol => decl.signature.exists(_ == overloaded.sig)
+            case _                => false
+          }
+        case None => None
 
     final def resolveOverloaded(name: SignedName)(using Context): Option[Symbol] =
       getDecl(name)
@@ -344,41 +456,51 @@ object Symbols {
       s"${super.toString} with declarations [${myDeclarations.keys.map(_.toDebugString).mkString(", ")}]"
   }
 
-  final class ClassSymbol protected (override val name: Name, rawowner: Symbol | Null)
-      extends Symbol(name, rawowner)
-      with DeclaringSymbol {
-    // TODO: how do we associate some Symbols with TypeBounds, and some with Type?
-    private var myTypeParams: List[(Symbol, TypeBounds)] | Null = null
+  final class ClassSymbol private (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner) with DeclaringSymbol {
+    private var myTypeParams: List[(ClassTypeParamSymbol, TypeBounds)] | Null = null
     private var myParentsInit: (() => List[Type]) | Null = null
     private var myParents: List[Type] | Null = null
 
-    (this: @unchecked).withDeclaredType(ClassInfo(this: @unchecked))
+    private[tastyquery] val classInfo: ClassInfo = ClassInfo(this: @unchecked)
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
       def isValueClass: Boolean =
-        tree.isDefined && // TODO: Remove when Scala 2 classes have a parents
+        tree.isDefined && // TODO: Remove when Scala 2 classes have parents
           parents.head.classSymbol.exists(_ == defn.AnyValClass)
       isValueClass && !defn.isPrimitiveValueClass(this)
 
-    /** Get the companion object of class definition, if it exists:
-      * - for `class C` => `object val C`
-      * - for `object class C[$]` => `object val C`
+    /** Get the companion class of this class, if it exists:
+      * - for `class C` => `object class C[$]`
+      * - for `object class C[$]` => `class C`
       */
-    final def companionObject(using Context): Option[RegularSymbol] = maybeOuter match
+    final def companionClass(using Context): Option[ClassSymbol] = maybeOuter match
       case scope: PackageSymbol =>
-        scope.getDecl(this.name.toTypeName.sourceObjectName).collect { case sym: RegularSymbol =>
+        scope.getDecl(this.name.companionName).collect { case sym: ClassSymbol =>
           sym
         }
       case _ => None // not possible yet for local symbols
 
-    private[tastyquery] final def withTypeParams(tparams: List[Symbol], bounds: List[TypeBounds]): this.type =
+    /** Get the module value of this module class definition, if it exists:
+      * - for `object class C[$]` => `object val C`
+      */
+    final def moduleValue(using Context): Option[TermSymbol] = maybeOuter match
+      case scope: PackageSymbol if this.is(ModuleClass) =>
+        scope.getDecl(this.name.sourceObjectName).collect { case sym: TermSymbol =>
+          sym
+        }
+      case _ => None // not possible yet for local symbols
+
+    private[tastyquery] final def withTypeParams(
+      tparams: List[ClassTypeParamSymbol],
+      bounds: List[TypeBounds]
+    ): this.type =
       val local = myTypeParams
       if local != null then throw new IllegalStateException(s"reassignment of type parameters to $this")
       else
         myTypeParams = tparams.zip(bounds)
         this
 
-    private def typeParamsInternal(using Context): List[(Symbol, TypeBounds)] =
+    private def typeParamsInternal(using Context): List[(ClassTypeParamSymbol, TypeBounds)] =
       val local = myTypeParams
       if local == null then throw new IllegalStateException(s"expected type params for $this")
       else local
@@ -430,10 +552,10 @@ object Symbols {
       tp.widen
 
     // private[tastyquery] final def hasTypeParams: List[Symbol] = typeParamsInternal.map(_(0))
-    private[tastyquery] final def typeParamSyms(using Context): List[Symbol] =
+    private[tastyquery] final def typeParamSyms(using Context): List[ClassTypeParamSymbol] =
       typeParamsInternal.map(_(0))
 
-    override def typeParams(using Context): List[Symbol] =
+    final def typeParams(using Context): List[ClassTypeParamSymbol] =
       typeParamSyms
 
     private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[Symbol] =
@@ -477,7 +599,7 @@ object Symbols {
 
   object ClassSymbol:
     private[tastyquery] def create(name: TypeName, owner: Symbol): ClassSymbol =
-      ClassSymbol(name, owner)
+      owner.addDeclIfDeclaringSym(ClassSymbol(name, owner))
 
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, span: Span)(using Context): ClassSymbol =
       val cls = create(tpnme.RefinedClassMagic, owner)
@@ -487,12 +609,12 @@ object Symbols {
       cls
   end ClassSymbol
 
-  final class PackageSymbol private (override val name: Name, rawowner: PackageSymbol | Null)
-      extends Symbol(name, rawowner)
+  final class PackageSymbol private (val name: SimpleName, override val owner: PackageSymbol | Null)
+      extends Symbol(owner)
       with DeclaringSymbol {
+    type ThisNameType = SimpleName
 
     val packageRef: PackageRef = PackageRef(this: @unchecked)
-    (this: @unchecked).withDeclaredType(packageRef)
 
     private var rootsInitialized: Boolean = false
 

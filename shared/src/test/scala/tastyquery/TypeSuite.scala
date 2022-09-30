@@ -77,7 +77,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val StringClass = resolve(name"java" / name"lang" / tname"String").asClass
     val CharClass = resolve(name"scala" / tname"Char").asClass
 
-    val charAt = StringClass.getDecl(name"charAt").get
+    val charAt = StringClass.getDecl(name"charAt").get.asTerm
     val tpe = charAt.declaredType.asInstanceOf[MethodType]
     assert(clue(tpe.resultType).isRef(CharClass))
   }
@@ -99,9 +99,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
           case app @ Apply(fooRef @ Select(_, SignedName(SimpleName("foo"), _, _)), _) =>
             callCount += 1
             assert(app.tpe.isRef(UnitClass), clue(app)) // todo: resolve overloaded
-            val fooSym = fooRef.tpe.termSymbol
-            val List(List(aSym), _*) = fooSym.paramSymss: @unchecked
-            assert(aSym.declaredType.isRef(Acls), clues(Acls.fullName, aSym.declaredType))
+            val fooSym = fooRef.tpe.termSymbol.asTerm
+            val List(Left(List(aSym)), _*) = fooSym.paramSymss: @unchecked
+            assert(aSym.asTerm.declaredType.isRef(Acls), clues(Acls.fullName, aSym.declaredType))
           case _ => ()
       }
 
@@ -120,14 +120,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   testWithContext("typeapply-recursive") {
     val RecApply = name"simple_trees" / tname"RecApply"
 
-    val evalSym = resolve(RecApply / name"eval")
+    val evalSym = resolve(RecApply / name"eval").asTerm
     val ExprClass = resolve(RecApply / tname"Expr")
     val NumClass = resolve(RecApply / tname"Num")
     val BoolClass = resolve(RecApply / tname"Bool")
 
     val evalParamss = evalSym.paramSymss
 
-    val List(List(Tsym @ _), List(eSym)) = evalParamss: @unchecked
+    val List(Right(List(Tsym @ _)), Left(List(eSym))) = evalParamss: @unchecked
 
     val Some(evalTree @ _: DefDef) = evalSym.tree: @unchecked
 
@@ -159,13 +159,13 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   testWithContext("basic-local-val") {
     val AssignPath = name"simple_trees" / tname"Assign"
 
-    val fSym = resolve(AssignPath / name"f")
+    val fSym = resolve(AssignPath / name"f").asTerm
     val fTree = fSym.tree.get.asInstanceOf[DefDef]
 
     val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
     val IntClass = resolve(name"scala" / tname"Int")
-    assert(xParamDef.symbol.declaredType.isRef(IntClass))
+    assert(xParamDef.symbol.asTerm.declaredType.isRef(IntClass))
 
     fSym.declaredType match
       case mt: MethodType =>
@@ -229,7 +229,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
     val IntClass = resolve(name"scala" / tname"Int")
-    assert(xParamDef.symbol.declaredType.isRef(IntClass))
+    assert(xParamDef.symbol.asTerm.declaredType.isRef(IntClass))
 
     var freeIdentCount = 0
 
@@ -302,23 +302,23 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val IndexedSeqClass = resolve(name"scala" / name"collection" / name"immutable" / tname"IndexedSeq")
 
     // val start: Int
-    val startSym = RangeClass.getDecl(name"start").get
+    val startSym = RangeClass.getDecl(name"start").get.asTerm
     assert(startSym.declaredType.isOfClass(IntClass), clue(startSym.declaredType))
     assert(startSym.declaredType.isInstanceOf[ExprType], clue(startSym.declaredType)) // should this be TypeRef?
 
     // val isEmpty: Boolean
-    val isEmptySym = RangeClass.getDecl(name"isEmpty").get
+    val isEmptySym = RangeClass.getDecl(name"isEmpty").get.asTerm
     assert(isEmptySym.declaredType.isOfClass(BooleanClass), clue(isEmptySym.declaredType))
     assert(isEmptySym.declaredType.isInstanceOf[ExprType], clue(isEmptySym.declaredType)) // should this be TypeRef?
 
     // def isInclusive: Boolean
-    val isInclusiveSym = RangeClass.getDecl(name"isInclusive").get
+    val isInclusiveSym = RangeClass.getDecl(name"isInclusive").get.asTerm
     assert(isInclusiveSym.declaredType.isOfClass(BooleanClass), clue(isInclusiveSym.declaredType))
     assert(isInclusiveSym.declaredType.isInstanceOf[ExprType], clue(isInclusiveSym.declaredType))
 
     // def by(step: Int): Range
     locally {
-      val bySym = RangeClass.getDecl(name"by").get
+      val bySym = RangeClass.getDecl(name"by").get.asTerm
       val mt = bySym.declaredType.asInstanceOf[MethodType]
       assertEquals(List[TermName](name"step"), mt.paramNames, clue(mt.paramNames))
       assert(mt.paramTypes.sizeIs == 1)
@@ -328,7 +328,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     // def map[B](f: Int => B): IndexedSeq[B]
     locally {
-      val mapSym = RangeClass.getDecl(name"map").get
+      val mapSym = RangeClass.getDecl(name"map").get.asTerm
       val pt = mapSym.declaredType.asInstanceOf[PolyType]
       val mt = pt.resultType.asInstanceOf[MethodType]
       assertEquals(List[TypeName](name"B".toTypeName), pt.paramNames, clue(pt.paramNames))
@@ -344,7 +344,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val BoxedJava = name"javacompat" / tname"BoxedJava"
     val JavaDefined = name"javadefined" / tname"JavaDefined"
 
-    val boxedSym = resolve(BoxedJava / name"boxed")
+    val boxedSym = resolve(BoxedJava / name"boxed").asTerm
 
     val (JavaDefinedRef @ _: TypeRef) = boxedSym.declaredType: @unchecked
 
@@ -357,8 +357,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val IntClass = resolve(name"scala" / tname"Int")
     val UnitClass = resolve(name"scala" / tname"Unit")
 
-    def testDef(path: DeclarationPath)(op: Symbol => Unit): Unit =
-      op(resolve(path))
+    def testDef(path: DeclarationPath)(op: TermSymbol => Unit): Unit =
+      op(resolve(path).asTerm)
 
     testDef(BagOfJavaDefinitions / name"x") { x =>
       assert(x.declaredType.isRef(IntClass))
@@ -406,8 +406,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val JavaInterface2 = resolve(name"javadefined" / tname"JavaInterface2")
     val ExceptionClass = resolve(name"java" / name"lang" / tname"Exception")
 
-    def testDef(path: DeclarationPath)(op: Symbol => Unit): Unit =
-      op(resolve(path))
+    def testDef(path: DeclarationPath)(op: TermSymbol => Unit): Unit =
+      op(resolve(path).asTerm)
 
     extension (tpe: Type)
       def isGenJavaClassOf(arg: Type => Boolean)(using Context): Boolean =
@@ -540,7 +540,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val ConsClass = resolve(::)
     val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
 
-    val boxedSym = resolve(BoxedCons / name"boxed")
+    val boxedSym = resolve(BoxedCons / name"boxed").asTerm
 
     val AppliedType(tycon, List(targ: Type)) = boxedSym.declaredType: @unchecked
     assert(tycon.isOfClass(ConsClass), clue(tycon))
@@ -676,12 +676,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val Console = resolve(name"scala" / tname"Console" / obj).asClass
     val DynamicVariable = resolve(name"scala" / name"util" / tname"DynamicVariable").asClass
 
-    val outVar = Console.getDecl(name"outVar").get
+    val outVar = Console.getDecl(name"outVar").get.asTerm
     assert(clue(outVar.declaredType).isApplied(_.isRef(DynamicVariable), List(_ => true)))
   }
 
   testWithContext("scala-predef-declared-type") {
-    val predef = resolve(name"scala" / name"Predef")
+    val predef = resolve(name"scala" / name"Predef").asTerm
     val Predef = resolve(name"scala" / tname"Predef" / obj)
     assert(clue(predef.declaredType).isRef(Predef))
   }
@@ -695,7 +695,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val IntOrderingClass = resolve(name"scala" / name"math" / tname"Ordering" / obj / tname"IntOrdering").asClass
     val IntClass = resolve(name"scala" / tname"Int").asClass
 
-    val compare = IntOrderingClass.getDecl(name"compare").get
+    val compare = IntOrderingClass.getDecl(name"compare").get.asTerm
     val mt = compare.declaredType.asInstanceOf[MethodType]
     assert(clue(mt.paramTypes(0)).isRef(IntClass))
     assert(clue(mt.paramTypes(1)).isRef(IntClass))
@@ -708,7 +708,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val IntClass = resolve(name"scala" / tname"Int").asClass
     val FloatClass = resolve(name"scala" / tname"Float").asClass
 
-    val compare = FloatTotalOrderingClass.getDecl(name"compare").get
+    val compare = FloatTotalOrderingClass.getDecl(name"compare").get.asTerm
     val mt = compare.declaredType.asInstanceOf[MethodType]
     assert(clue(mt.paramTypes(0)).isRef(FloatClass))
     assert(clue(mt.paramTypes(1)).isRef(FloatClass))
@@ -718,15 +718,16 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   testWithContext("read-scala2-type-ref-type") {
     val RichBoolean = resolve(name"scala" / name"runtime" / tname"RichBoolean").asClass
     val BooleanOrdering = resolve(name"scala" / name"math" / tname"Ordering" / obj / name"Boolean")
-    val ord = RichBoolean.getDecl(name"ord").get
+    val ord = RichBoolean.getDecl(name"ord").get.asTerm
     assert(clue(ord.declaredType).isRef(BooleanOrdering))
   }
 
   testWithContext("scala2-type-alias") {
-    val PredefString = resolve(name"scala" / tname"Predef" / obj / tname"String")
+    val PredefString = resolve(name"scala" / tname"Predef" / obj / tname"String").asType
     val JLString = resolve(name"java" / name"lang" / tname"String")
 
-    assert(PredefString.declaredType.isRef(JLString))
+    assert(clue(PredefString).isTypeAlias)
+    assert(clue(PredefString.asInstanceOf[TypeMemberSymbol].aliasedType).isRef(JLString))
   }
 
   testWithContext("scala2-module-and-def-with-same-name") {
@@ -742,8 +743,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         assert(sDecls(1).is(Module))
         (sDecls(1), sDecls(0))
 
-    assert(clue(sModule.declaredType).isRef(sModuleClass))
-    assert(clue(sDef.declaredType).isInstanceOf[MethodType])
+    assert(clue(sModule.asTerm.declaredType).isRef(sModuleClass))
+    assert(clue(sDef.asTerm.declaredType).isInstanceOf[MethodType])
   }
 
   testWithContext("scala2-class-type-params") {
@@ -761,7 +762,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
   testWithContext("poly-type-in-higher-kinded") {
     val HigherKindedClass = resolve(name"simple_trees" / tname"HigherKinded").asClass
-    val polyMethod = HigherKindedClass.getDecl(name"m").get
+    val polyMethod = HigherKindedClass.getDecl(name"m").get.asTerm
     println(polyMethod.declaredType.asInstanceOf[PolyType].resultType)
   }
 

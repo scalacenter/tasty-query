@@ -58,36 +58,34 @@ object ClassfileParser {
   ): Either[ReadException, Unit] = {
     import structure.{reader, given}
 
-    val cls = ctx.createClassSymbol(name.toTypeName, classOwner)
+    val cls = ClassSymbol.create(name.toTypeName, classOwner)
 
-    val moduleClass = ctx
-      .createClassSymbol(name.withObjectSuffix.toTypeName, classOwner)
+    val moduleClass = ClassSymbol
+      .create(name.withObjectSuffix.toTypeName, classOwner)
       .withTypeParams(Nil, Nil)
       .withFlags(Flags.ModuleClassCreationFlags)
     moduleClass.withParentsDirect(ObjectType :: Nil)
 
-    val module = ctx
-      .createSymbol(name.toTermName, classOwner)
+    val module = TermSymbol
+      .create(name.toTermName, classOwner)
       .withDeclaredType(moduleClass.typeRef)
       .withFlags(Flags.ModuleValCreationFlags)
 
-    def loadFields(fields: Forked[DataStream]): IndexedSeq[(Symbol, SigOrDesc)] =
+    def loadFields(fields: Forked[DataStream]): IndexedSeq[(TermSymbol, SigOrDesc)] =
       fields.use {
-        val buf = IndexedSeq.newBuilder[(Symbol, SigOrDesc)]
+        val buf = IndexedSeq.newBuilder[(TermSymbol, SigOrDesc)]
         reader.readFields { (name, sigOrDesc) =>
-          val sym = RegularSymbol.create(name, cls).withFlags(Flags.EmptyFlagSet)
-          cls.addDecl(sym)
+          val sym = TermSymbol.create(name, cls).withFlags(Flags.EmptyFlagSet)
           buf += sym -> sigOrDesc
         }
         buf.result()
       }
 
-    def loadMethods(methods: Forked[DataStream]): IndexedSeq[(Symbol, SigOrDesc)] =
+    def loadMethods(methods: Forked[DataStream]): IndexedSeq[(TermSymbol, SigOrDesc)] =
       methods.use {
-        val buf = IndexedSeq.newBuilder[(Symbol, SigOrDesc)]
+        val buf = IndexedSeq.newBuilder[(TermSymbol, SigOrDesc)]
         reader.readMethods { (name, sigOrDesc) =>
-          val sym = RegularSymbol.create(name, cls).withFlags(Flags.Method)
-          cls.addDecl(sym)
+          val sym = TermSymbol.create(name, cls).withFlags(Flags.Method)
           buf += sym -> sigOrDesc
         }
         buf.result()

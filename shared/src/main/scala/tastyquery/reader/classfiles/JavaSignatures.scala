@@ -15,10 +15,10 @@ import ClassfileReader.ReadException
 
 object JavaSignatures:
 
-  private type JavaSignature = Null | Binders | Map[TypeName, RegularSymbol] | mutable.ListBuffer[TypeName]
+  private type JavaSignature = Null | Binders | Map[TypeName, ClassTypeParamSymbol] | mutable.ListBuffer[TypeName]
 
   @throws[ReadException]
-  def parseSignature(member: Symbol, signature: String)(using Context): Type =
+  def parseSignature(member: Symbol { val owner: Symbol }, signature: String)(using Context): Type =
     var offset = 0
     var end = signature.length
     val isClass = member.isClass
@@ -35,19 +35,19 @@ object JavaSignatures:
           else if scope.isClass then
             scope.asClass.typeParamSymsNoInitialize.find(_.name == tname) match
               case Some(ref) => Some(TypeRef(NoPrefix, ref))
-              case _         => lookupTParam(scope.outer)
+              case _         => lookupTParam(scope.asClass.owner)
           else cookFailure(tname, "unexpected non-class scope")
-        if env == null then lookupTParam(member.outer)
+        if env == null then lookupTParam(member.owner)
         else
           env match
             case map: Map[t, s] =>
-              map.asInstanceOf[Map[TypeName, RegularSymbol]].get(tname) match
+              map.asInstanceOf[Map[TypeName, ClassTypeParamSymbol]].get(tname) match
                 case Some(sym) => Some(TypeRef(NoPrefix, sym))
-                case None      => lookupTParam(member.outer)
+                case None      => lookupTParam(member.owner)
             case pt: TypeBinders =>
               pt.lookupRef(tname) match
                 case ref @ Some(_) => ref
-                case _             => lookupTParam(member.outer)
+                case _             => lookupTParam(member.owner)
             case _ => someEmptyType // we are capturing type parameter names, we will throw away the result here.
 
       def withAddedParam(tname: TypeName): Boolean = env match
@@ -255,7 +255,7 @@ object JavaSignatures:
         interfaces(env, mutable.ListBuffer(superTpe))
       if consume('<') then
         val tparamNames = lookaheadTypeParamNames
-        val tparams = tparamNames.map(tname => ctx.createSymbol(tname, cls))
+        val tparams = tparamNames.map(tname => ClassTypeParamSymbol.create(tname, cls))
         val lookup = tparamNames.lazyZip(tparams).toMap
         cls.withTypeParams(tparams, typeParamsRest(lookup))
         classRest(lookup)
@@ -267,7 +267,7 @@ object JavaSignatures:
       ExprType(referenceType(null))
 
     def cookFailure(tname: TypeName, reason: String): Nothing =
-      val path = if !isClass then s"${member.outer.erasedName}#${member.name}" else member.erasedName
+      val path = if !isClass then s"${member.owner.erasedName}#${member.name}" else member.erasedName
       throw ReadException(
         s"could not resolve type parameter `$tname` in signature `$signature` of $path because $reason"
       )

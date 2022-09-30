@@ -157,7 +157,8 @@ class PickleReader {
     val storedWhileReadingOwner = entries(storeInEntriesAt)
     if storedWhileReadingOwner != null then return storedWhileReadingOwner.asInstanceOf[MaybeExternalSymbol]
 
-    val flags = readFlags(name1.isTypeName)
+    val pickleFlags = readPickleFlags(name1.isTypeName)
+    val flags = pickleFlagsToFlags(pickleFlags)
     val name =
       if flags.is(ModuleClass) then name1.toTermName.withObjectSuffix.toTypeName
       else if flags.is(Method) && name1 == Scala2Constructor then nme.Constructor
@@ -172,25 +173,35 @@ class PickleReader {
       }
     }
 
-    def enterIntoScope(sym: Symbol): Unit =
-      sym.outer match {
-        case scope: DeclaringSymbol => scope.addDecl(sym)
-        case _                      => ()
-      }
-
     def readSymType(): Type =
       try at(infoRef)(readType())
       catch
         case t: Throwable =>
           throw new IllegalStateException(s"error while unpickling the type of $owner.$name", t)
 
-    val sym = tag match {
+    val sym: Symbol = tag match {
       case TYPEsym | ALIASsym =>
         var name1 = name.toTypeName
-        val sym = RegularSymbol.create(name1, owner)
+        val sym: TypeSymbolWithBounds =
+          if pickleFlags.isParam then
+            if owner.isClass then ClassTypeParamSymbol.create(name1, owner.asClass)
+            else LocalTypeParamSymbol.create(name1, owner)
+          else TypeMemberSymbol.create(name1, owner)
         storeResultInEntries(sym)
         val tpe = readSymType()
-        sym.withDeclaredType(tpe)
+        sym match
+          case sym: TypeMemberSymbol =>
+            sym.withDefinition(tpe match
+              case WildcardTypeBounds(bounds) => TypeMemberDefinition.AbstractType(bounds)
+              case _                          => TypeMemberDefinition.TypeAlias(tpe)
+            )
+          case sym: TypeParamSymbol =>
+            tpe match
+              case WildcardTypeBounds(bounds) => sym.setBounds(bounds)
+              case tpe: PolyType => sym.setBounds(defn.NothingAnyBounds) // TODO Higher-kinded type parameters
+              case _ =>
+                throw AssertionError(s"unexpected type $tpe for $sym, owner is $owner")
+        sym
       case CLASSsym =>
         val cls = ClassSymbol.create(name.toTypeName, owner)
         storeResultInEntries(cls)
@@ -198,13 +209,13 @@ class PickleReader {
           val module = owner
             .asInstanceOf[DeclaringSymbol]
             .getModuleDeclInternal(name.toTermName.stripObjectSuffix)
-          module.foreach(m => m.withDeclaredType(cls.typeRef))
+          module.foreach(m => m.asTerm.withDeclaredType(cls.typeRef))
         val typeParams = atNoCache(infoRef)(readTypeParams())
         val bounds = typeParams.map(_ => RealTypeBounds(NothingType, AnyType)) // TODO Read bounds
         cls.withTypeParams(typeParams, bounds)
         cls
       case VALsym =>
-        val sym = RegularSymbol.create(name.toTermName, owner)
+        val sym = TermSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles
         val tpe = readSymType()
         sym.withDeclaredType(tpe)
@@ -212,20 +223,21 @@ class PickleReader {
         val moduleClass = owner
           .asInstanceOf[DeclaringSymbol]
           .getModuleDeclInternal(name.toTermName.withObjectSuffix.toTypeName)
-        val sym = RegularSymbol.create(name.toTermName, owner)
-        moduleClass.foreach(cls => sym.withDeclaredType(cls.asInstanceOf[ClassSymbol].typeRef))
+        val sym = TermSymbol.create(name.toTermName, owner)
+        moduleClass.foreach(cls => sym.withDeclaredType(cls.asClass.typeRef))
         sym
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     }
-    enterIntoScope(sym)
     sym
       .withFlags(flags)
       .withPrivateWithin(privateWithin)
   }
 
-  private def readFlags(isType: Boolean)(using PklStream): FlagSet = {
-    val pickleFlags = PickleFlagSet(pkl.readLongNat(), isType)
+  private def readPickleFlags(isType: Boolean)(using PklStream): PickleFlagSet =
+    PickleFlagSet(pkl.readLongNat(), isType)
+
+  private def pickleFlagsToFlags(pickleFlags: PickleFlagSet): FlagSet = {
     var flags: FlagSet = EmptyFlagSet
 
     if pickleFlags.isProtected then flags |= Protected
@@ -238,7 +250,7 @@ class PickleReader {
     if pickleFlags.isInterface then flags |= NoInitsInterface
     if pickleFlags.isModule then
       flags |= Module
-      if isType then flags |= ModuleClassCreationFlags
+      if pickleFlags.isType then flags |= ModuleClassCreationFlags
       else flags |= ModuleValCreationFlags
     if pickleFlags.isImplicit then flags |= Implicit
     if pickleFlags.isSealed then flags |= Sealed
@@ -427,7 +439,7 @@ class PickleReader {
         TempClassInfoType(pkl.until(end, () => readTypeRef()), symScope(clazz), clazz)*/
       case METHODtpe | IMPLICITMETHODtpe =>
         val restpe = readTypeRef()
-        val params = pkl.until(end, () => readLocalSymbolRef())
+        val params = pkl.until(end, () => readLocalSymbolRef().asTerm)
         val result = MethodType(params.map(_.name.toTermName), params.map(_.declaredType), restpe)
         /*val maker = MethodType.companion(
           isImplicit = tag == IMPLICITMETHODtpe || params.nonEmpty && params.head.is(Implicit))
@@ -449,7 +461,8 @@ class PickleReader {
         else ExprType(restpe)
       case EXISTENTIALtpe =>
         val restpe = readTypeRef()
-        val boundSyms = pkl.until(end, () => readLocalSymbolRef())
+        // TODO Should these be LocalTypeParamSymbols?
+        val boundSyms = pkl.until(end, () => readLocalSymbolRef().asInstanceOf[TypeMemberSymbol])
         elimExistentials(boundSyms, restpe)
       case ANNOTATEDtpe =>
         // TODO AnnotatedType.make(readTypeRef(), pkl.until(end, () => readAnnotationRef()))
@@ -461,12 +474,12 @@ class PickleReader {
     }
   }
 
-  private def readTypeParams()(using Context, PklStream, Entries, Index): List[Symbol] = {
+  private def readTypeParams()(using Context, PklStream, Entries, Index): List[ClassTypeParamSymbol] = {
     val tag = pkl.readByte()
     val end = pkl.readEnd()
     if (tag == POLYtpe) {
       val unusedRestperef = pkl.readNat()
-      pkl.until(end, () => readLocalSymbolRef())
+      pkl.until(end, () => readLocalSymbolRef().asInstanceOf[ClassTypeParamSymbol])
     } else Nil
   }
 
@@ -516,19 +529,19 @@ class PickleReader {
     * to
     *   tp { name: T }
     */
-  private def elimExistentials(boundSyms: List[Symbol], tp: Type)(using Context): Type =
+  private def elimExistentials(boundSyms: List[TypeMemberSymbol], tp: Type)(using Context): Type =
     // Need to be careful not to run into cyclic references here (observed when
     // compiling t247.scala). That's why we avoid taking `symbol` of a TypeRef
     // unless names match up.
-    val isBound = { (tp: Type) =>
-      def refersTo(tp: Type, sym: Symbol): Boolean = tp match {
+    def boundSymOf(tp: Type): Option[TypeMemberSymbol] =
+      def refersTo(tp: Type, sym: TypeMemberSymbol): Boolean = tp match {
         case tp: TypeRef => tp.isLocalRef(sym)
         /*case tp: TypeVar => refersTo(tp.underlying, sym)
         case tp : LazyRef => refersTo(tp.ref, sym)*/
         case _ => false
       }
-      boundSyms.exists(refersTo(tp, _))
-    }
+      boundSyms.find(refersTo(tp, _))
+    end boundSymOf
     // Cannot use standard `existsPart` method because it calls `lookupRefined`
     // which can cause CyclicReference errors.
     /*val isBoundAccumulator = new ExistsAccumulator(isBound, StopAt.Static, forceLazy = true):
@@ -539,8 +552,12 @@ class PickleReader {
     /*def removeSingleton(tp: Type): Type =
       if (tp isRef defn.SingletonClass) defn.AnyType else tp*/
     def mapArg(arg: Type) = arg match {
-      case arg: TypeRef if isBound(arg) => arg.symbol.declaredType
-      case _                            => arg
+      case arg: TypeRef =>
+        boundSymOf(arg) match
+          case Some(sym) => WildcardTypeBounds(sym.bounds)
+          case None      => arg
+      case _ =>
+        arg
     }
     def elim(tp: Type): Type = tp match {
       /*case tp @ RefinedType(parent, name, rinfo) =>

@@ -243,27 +243,27 @@ object TypeMaps {
       * The possible cases are listed inline in the code.
       */
     def tryWiden(tp: NamedType, pre: Type): Type =
-      val memberSym = pre.member(tp.name)
-      if memberSym.exists then
-        val tp1 = memberSym.declaredType.dealias
-        tp1 match
-          case WildcardTypeBounds(bounds) =>
-            bounds match
-              case TypeAlias(alias) =>
-                // if H#T = U, then for any x in L..H, x.T =:= U,
-                // hence we can replace with U under all variances
-                reapply(alias)
-              case _ =>
-                // If H#T = ? >: S <: U, then for any x in L..H, S <: x.T <: U,
-                // hence we can replace with S..U under all variances
-                expandBounds(bounds)
-          case info: SingletonType =>
-            // if H#x: y.type, then for any x in L..H, x.type =:= y.type,
-            // hence we can replace with y.type under all variances
-            reapply(info)
-          case _ =>
-            NoType
-      else NoType
+      pre.member(tp.name) match
+        case memberSym: TypeMemberSymbol =>
+          memberSym.typeDef match
+            case TypeMemberDefinition.TypeAlias(alias) =>
+              // if H#T = U, then for any x in L..H, x.T =:= U,
+              // hence we can replace with U under all variances
+              reapply(alias)
+            case _ =>
+              // If H#T = ? >: S <: U, then for any x in L..H, S <: x.T <: U,
+              // hence we can replace with S..U under all variances
+              expandBounds(memberSym.bounds)
+        case memberSym: TermSymbol =>
+          memberSym.declaredType.dealias match
+            case tpe: SingletonType =>
+              // if H#x: y.type, then for any x in L..H, x.type =:= y.type,
+              // hence we can replace with y.type under all variances
+              reapply(tpe)
+            case _ =>
+              NoType
+        case _ =>
+          NoType
     end tryWiden
 
     /** Expand parameter reference corresponding to prefix `pre`;
@@ -273,10 +273,7 @@ object TypeMaps {
     def expandParam(tp: NamedType, pre: Type): Type =
       tp.argForParam(pre) match {
         case arg @ TypeRef(pre, _) if pre.isArgPrefixOf(arg.symbol) =>
-          arg.symbol.declaredType match {
-            case WildcardTypeBounds(bounds) => expandBounds(bounds)
-            case argInfo                    => reapply(arg)
-          }
+          expandBounds(arg.symbol.asInstanceOf[ClassTypeParamSymbol].bounds)
         case WildcardTypeBounds(arg) => expandBounds(arg)
         case arg                     => reapply(arg)
       }
