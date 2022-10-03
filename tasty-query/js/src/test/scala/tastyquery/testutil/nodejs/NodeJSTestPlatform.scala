@@ -6,7 +6,7 @@ import scala.scalajs.js.annotation.*
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-import tastyquery.reader.classfiles.Classpaths.Classpath
+import tastyquery.Classpaths.*
 
 object NodeJSTestPlatform:
   private val TestClassPathEnvVar = "TASTY_TEST_CLASSPATH"

@@ -2,13 +2,13 @@ package examples
 
 import java.nio.file.*
 
+import tastyquery.Classpaths.*
 import tastyquery.Contexts
 import tastyquery.Contexts.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.jdk.ClasspathLoaders
-import tastyquery.reader.classfiles.Classpaths.Classpath
 
 object TastyPrint:
   private val TestClassPathEnvVar = "TASTY_TEST_CLASSPATH"

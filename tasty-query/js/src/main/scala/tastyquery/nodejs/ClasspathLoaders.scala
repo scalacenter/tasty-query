@@ -8,7 +8,7 @@ import scala.collection.mutable
 import scala.concurrent.*
 import scala.util.*
 
-import tastyquery.reader.classfiles.Classpaths.*
+import tastyquery.Classpaths.*
 
 object ClasspathLoaders:
   import NodeFS.*

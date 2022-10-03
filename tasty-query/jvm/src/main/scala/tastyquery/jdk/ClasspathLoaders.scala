@@ -10,7 +10,7 @@ import scala.util.Using
 
 import org.apache.commons.io.IOUtils
 
-import tastyquery.reader.classfiles.Classpaths.{Classpath, PackageData, ClassData, TastyData}
+import tastyquery.Classpaths.*
 
 object ClasspathLoaders {
 

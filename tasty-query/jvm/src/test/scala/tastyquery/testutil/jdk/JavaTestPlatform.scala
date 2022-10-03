@@ -5,9 +5,9 @@ import java.nio.file.*
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
+import tastyquery.Classpaths.*
+
 import tastyquery.jdk.ClasspathLoaders
-import tastyquery.reader.classfiles.Classpaths.Classpath
-import tastyquery.testutil.TestPlatform
 
 object JavaTestPlatform {
   private val TestClassPathEnvVar = "TASTY_TEST_CLASSPATH"

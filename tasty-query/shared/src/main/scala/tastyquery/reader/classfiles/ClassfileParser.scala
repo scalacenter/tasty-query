@@ -1,5 +1,6 @@
 package tastyquery.reader.classfiles
 
+import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
 import tastyquery.Flags
 import tastyquery.Names.*
@@ -12,7 +13,6 @@ import tastyquery.util.Forked
 import tastyquery.util.syntax.chaining.given
 
 import ClassfileReader.*
-import Classpaths.ClassData
 
 object ClassfileParser {
 

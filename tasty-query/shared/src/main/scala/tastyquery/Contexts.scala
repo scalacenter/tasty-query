@@ -2,12 +2,13 @@ package tastyquery
 
 import scala.annotation.tailrec
 
+import tastyquery.Classpaths.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Types.*
 
-import tastyquery.reader.classfiles.Classpaths.{Classpath, Loader}
+import tastyquery.reader.classfiles.Classpaths.Loader
 
 import tastyquery.util.syntax.chaining.given
 
