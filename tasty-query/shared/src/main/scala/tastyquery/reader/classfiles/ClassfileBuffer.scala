@@ -2,7 +2,6 @@ package tastyquery.reader.classfiles
 
 import tastyquery.reader.UTF8Utils
 
-import tastyquery.util.Forked
 import tastyquery.util.syntax.chaining.given
 
 import ClassfileReader.DataStream

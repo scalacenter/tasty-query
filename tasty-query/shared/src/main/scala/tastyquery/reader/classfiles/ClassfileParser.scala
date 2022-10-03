@@ -9,7 +9,6 @@ import tastyquery.Types.*
 
 import tastyquery.reader.pickles.{Unpickler, PickleReader}
 
-import tastyquery.util.Forked
 import tastyquery.util.syntax.chaining.given
 
 import ClassfileReader.*
