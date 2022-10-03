@@ -1,11 +1,12 @@
 package tastyquery.reader.classfiles
 
+import java.nio.charset.StandardCharsets
+
 import tastyquery.util.Forked
 import tastyquery.util.syntax.chaining.given
 import tastyquery.unsafe
 
 import ClassfileReader.DataStream
-import java.nio.charset.StandardCharsets
 
 object ClassfileBuffer {
   final class Root(bytes: IArray[Byte], offset: Int) extends Forked[DataStream] {

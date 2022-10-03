@@ -4,8 +4,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
 import tastyquery.Contexts.Context
-import tastyquery.ast.Trees.Tree
-import tastyquery.ast.Types.SymResolutionProblem
+import tastyquery.Trees.Tree
+import tastyquery.Types.SymResolutionProblem
 
 import Paths.*
 

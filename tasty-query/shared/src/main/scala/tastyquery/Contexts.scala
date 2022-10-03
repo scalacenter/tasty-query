@@ -2,13 +2,10 @@ package tastyquery
 
 import scala.annotation.tailrec
 
-import dotty.tools.tasty.TastyBuffer.Addr
-import dotty.tools.tasty.TastyFormat.NameTags
-
-import tastyquery.ast.Flags.*
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Types.*
+import tastyquery.Flags.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
+import tastyquery.Types.*
 
 import tastyquery.reader.classfiles.Classpaths.{Classpath, Loader}
 

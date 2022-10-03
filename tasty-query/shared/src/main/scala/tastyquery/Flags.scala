@@ -1,4 +1,4 @@
-package tastyquery.ast
+package tastyquery
 
 import tastyquery.util.syntax.chaining.given
 

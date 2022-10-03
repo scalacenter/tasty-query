@@ -1,21 +1,23 @@
 package tastyquery.reader.classfiles
 
-import tastyquery.ast.Names.{SimpleName, termName, annot, attr}
-import tastyquery.ast.Symbols.Symbol
-import tastyquery.ast.Flags
+import scala.annotation.switch
+
+import tastyquery.Contexts.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
+import tastyquery.Flags.*
+import tastyquery.Types.*
+
+import tastyquery.reader.classfiles.Classpaths.ClassData
+import tastyquery.reader.pickles.ByteCodecs
+
+import tastyquery.unsafe
+
 import tastyquery.util.{Forked, loop, accumulate}
 import tastyquery.util.syntax.chaining.given
-import tastyquery.reader.classfiles.Classpaths.ClassData
-import tastyquery.unsafe
+
 import ClassfileReader.*
 import ClassfileReader.Access.*
-import tastyquery.reader.pickles.ByteCodecs
-import tastyquery.ast.Types.Type
-import tastyquery.ast.Types
-import tastyquery.Contexts.Context
-import scala.annotation.switch
-import tastyquery.ast.Types.MethodType
-import tastyquery.ast.Types.ExprType
 
 final class ClassfileReader private () {
 

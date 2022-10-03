@@ -1,10 +1,10 @@
 package tastyquery
 
 import tastyquery.Contexts.*
-import tastyquery.ast.Flags.*
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Types.*
+import tastyquery.Flags.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
+import tastyquery.Types.*
 
 final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageSymbol, emptyPackage: PackageSymbol):
   private given Context = ctx

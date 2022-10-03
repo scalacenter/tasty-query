@@ -4,16 +4,15 @@ import scala.collection.mutable
 
 import tastyquery.Contexts
 import tastyquery.Contexts.*
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Trees.Tree
-import tastyquery.reader.TastyUnpickler
+import tastyquery.Names.*
+import tastyquery.Symbols.*
+import tastyquery.Trees.*
 
-import ClassfileParser.ClassKind
+import tastyquery.reader.TastyUnpickler
 
 import tastyquery.util.syntax.chaining.given
 
-import compiletime.asMatchable
+import ClassfileParser.ClassKind
 
 object Classpaths {
 

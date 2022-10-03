@@ -1,14 +1,14 @@
-package tastyquery.ast
+package tastyquery
 
-import tastyquery.ast.Constants.Constant
-import tastyquery.ast.Names.*
-import tastyquery.ast.Types.*
-import tastyquery.ast.TypeTrees.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Spans.{Span, NoSpan}
+import tastyquery.Constants.*
+import tastyquery.Contexts.*
+import tastyquery.Names.*
+import tastyquery.Spans.*
+import tastyquery.Symbols.*
+import tastyquery.Types.*
+import tastyquery.TypeTrees.*
+
 import tastyquery.util.syntax.chaining.given
-import tastyquery.Contexts.Context
-import tastyquery.reader.PositionUnpickler
 
 object Trees {
   class TypeComputationError(val tree: Tree) extends RuntimeException(s"Could not compute type of $tree")

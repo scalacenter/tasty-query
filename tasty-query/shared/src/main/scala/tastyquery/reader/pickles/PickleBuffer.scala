@@ -1,7 +1,5 @@
 package tastyquery.reader.pickles
 
-import scala.annotation.tailrec
-
 /** Fixed length byte array, with methods for basic unpickling.
   *
   *  @param bytes The pickle bytes.

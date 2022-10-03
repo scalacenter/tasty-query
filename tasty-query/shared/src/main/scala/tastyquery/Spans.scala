@@ -1,6 +1,6 @@
 /** Modified from dotty.tools.dotc.util.Spans */
 
-package tastyquery.ast
+package tastyquery
 
 import language.implicitConversions
 

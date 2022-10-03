@@ -1,7 +1,8 @@
-package tastyquery.ast
+package tastyquery
 
-import tastyquery.ast.Types.Type
-import compiletime.asMatchable
+import scala.compiletime.asMatchable
+
+import tastyquery.Types.Type
 
 object Constants {
   final val NoTag = 0

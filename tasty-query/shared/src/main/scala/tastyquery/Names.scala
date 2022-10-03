@@ -1,4 +1,4 @@
-package tastyquery.ast
+package tastyquery
 
 import tastyquery.unsafe
 import tastyquery.util.syntax.chaining.given
@@ -16,13 +16,13 @@ import scala.jdk.CollectionConverters.*
 
 import Names.SimpleName
 
-private[ast] object NameCache {
+private[tastyquery] object NameCache {
 
   // A map from the name to itself. Used to keep only one instance of SimpleName by underlying String
   private val nameTable: scala.collection.concurrent.Map[SimpleName, SimpleName] =
     new ConcurrentHashMap[SimpleName, SimpleName]().asScala
 
-  private[ast] def cache(newName: SimpleName): SimpleName = {
+  private[tastyquery] def cache(newName: SimpleName): SimpleName = {
     val oldName = nameTable.putIfAbsent(newName, newName)
     oldName.getOrElse(newName)
   }

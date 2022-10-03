@@ -5,8 +5,8 @@ import scala.annotation.targetName
 import dotty.tools.tasty.TastyFormat.NameTags
 
 import tastyquery.Contexts.*
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
 
 /** Utilities to work with top-level paths to symbols. */
 object Paths:

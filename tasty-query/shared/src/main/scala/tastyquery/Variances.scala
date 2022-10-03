@@ -1,6 +1,6 @@
-package tastyquery.ast
+package tastyquery
 
-import tastyquery.ast.Flags.*
+import tastyquery.Flags.*
 
 object Variances:
   opaque type Variance = FlagSet

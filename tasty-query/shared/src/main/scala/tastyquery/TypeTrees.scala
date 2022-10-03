@@ -1,12 +1,13 @@
-package tastyquery.ast
+package tastyquery
 
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Trees.{DefTree, Tree, TypeParam}
-import tastyquery.ast.Types.*
-import tastyquery.ast.Spans.{Span, NoSpan}
+import tastyquery.Contexts.*
+import tastyquery.Names.*
+import tastyquery.Spans.*
+import tastyquery.Symbols.*
+import tastyquery.Trees.*
+import tastyquery.Types.*
+
 import tastyquery.util.syntax.chaining.given
-import tastyquery.Contexts.Context
 
 object TypeTrees {
   class TypeTreeToTypeError(val typeTree: TypeTree) extends RuntimeException(s"Could not convert $typeTree to type")

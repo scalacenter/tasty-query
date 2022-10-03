@@ -3,11 +3,11 @@ package tastyquery
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import tastyquery.Contexts.Context
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
 
 import Paths.*
-import tastyquery.ast.Trees.{ClassDef, ValDef}
+import tastyquery.Trees.{ClassDef, ValDef}
 
 class SymbolSuite extends RestrictedUnpicklingSuite {
   val empty_class = RootPkg / name"empty_class"
@@ -187,7 +187,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   }
 
   testWithContext("nested-package-lookup", `simple_trees.nested` / tname"InNestedPackage") {
-    import tastyquery.ast.Types.*
+    import tastyquery.Types.*
 
     val InNestedPackage = `simple_trees.nested` / tname"InNestedPackage"
 

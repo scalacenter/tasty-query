@@ -3,10 +3,10 @@ package tastyquery
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.TypeTest
 
-import tastyquery.ast.Trees.*
-import tastyquery.ast.TypeTrees.*
-import tastyquery.ast.Types.*
-import tastyquery.ast.Spans.*
+import tastyquery.Trees.*
+import tastyquery.TypeTrees.*
+import tastyquery.Types.*
+import tastyquery.Spans.*
 
 import Paths.*
 

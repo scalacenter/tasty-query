@@ -1,9 +1,9 @@
-package tastyquery.ast
+package tastyquery
 
-import tastyquery.ast.Names.*
-import tastyquery.ast.Types.*
-import tastyquery.Contexts.Context
-import tastyquery.ast.Symbols.ClassSymbol
+import tastyquery.Contexts.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
+import tastyquery.Types.*
 
 abstract class ParamSig
 

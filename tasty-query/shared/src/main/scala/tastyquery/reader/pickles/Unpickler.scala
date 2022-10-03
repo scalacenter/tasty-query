@@ -3,7 +3,7 @@ package tastyquery.reader.pickles
 import PickleReader.{PklStream, index, pkl}
 
 import tastyquery.Contexts.Context
-import tastyquery.ast.Symbols.Symbol
+import tastyquery.Symbols.Symbol
 
 object Unpickler {
   def loadInfo(sigBytes: IArray[Byte])(using Context): Either[PickleReader.BadSignature, Unit] = {

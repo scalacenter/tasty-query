@@ -8,14 +8,14 @@ import munit.{Location, TestOptions}
 
 import tastyquery.Contexts
 import tastyquery.Contexts.Context
-import tastyquery.ast.Constants.{ClazzTag, Constant, IntTag, NullTag}
-import tastyquery.ast.Flags
-import tastyquery.ast.Flags.*
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Trees.*
-import tastyquery.ast.TypeTrees.*
-import tastyquery.ast.Types.*
+import tastyquery.Constants.{ClazzTag, Constant, IntTag, NullTag}
+import tastyquery.Flags
+import tastyquery.Flags.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
+import tastyquery.Trees.*
+import tastyquery.TypeTrees.*
+import tastyquery.Types.*
 
 import Paths.*
 

@@ -1,16 +1,17 @@
 package tastyquery.reader
 
+import scala.collection.mutable
+
+import dotty.tools.tasty.TastyBuffer.{Addr, NameRef}
+import dotty.tools.tasty.TastyFormat.NameTags
+import dotty.tools.tasty.{TastyHeaderUnpickler, TastyReader}
+
 import tastyquery.Contexts.*
-import tastyquery.ast.Names.{nme, *}
-import tastyquery.ast.{ParamSig, Signature, TermSig, TypeLenSig}
+import tastyquery.Names.*
+import tastyquery.{ParamSig, Signature, TermSig, TypeLenSig}
+
 import tastyquery.reader.TreeUnpickler
 import tastyquery.unsafe
-
-import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyHeaderUnpickler, TastyReader}
-import TastyBuffer.{Addr, NameRef}
-import TastyFormat.NameTags
-
-import scala.collection.mutable
 
 object TastyUnpickler {
 

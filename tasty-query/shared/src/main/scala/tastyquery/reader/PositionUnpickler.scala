@@ -2,14 +2,14 @@
 
 package tastyquery.reader
 
-/** Uses the TermName defined in tastyquery */
-import tastyquery.ast.Names.TermName
-import tastyquery.ast.Spans.{Span, NoSpan}
 import scala.collection.mutable.HashMap
 
-import dotty.tools.tasty.{TastyFormat, TastyBuffer, TastyReader}
-import TastyFormat.SOURCE
-import TastyBuffer.{Addr, NameRef}
+import dotty.tools.tasty.TastyBuffer.{Addr, NameRef}
+import dotty.tools.tasty.TastyFormat.SOURCE
+import dotty.tools.tasty.TastyReader
+
+import tastyquery.Names.*
+import tastyquery.Spans.*
 
 /** Unpickler for tree positions */
 class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnpickler.NameTable) {

@@ -1,7 +1,7 @@
-package tastyquery.ast
+package tastyquery
 
 import tastyquery.Contexts.*
-import tastyquery.ast.Variances.*
+import tastyquery.Variances.*
 
 /** A common super trait of Symbol and LambdaParam.
   * Used to capture the attributes of type parameters which can be implemented as either.

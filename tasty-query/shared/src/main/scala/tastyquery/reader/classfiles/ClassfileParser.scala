@@ -1,18 +1,18 @@
 package tastyquery.reader.classfiles
 
 import tastyquery.Contexts.*
-import tastyquery.ast.Flags
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Types.{ClassInfo, ObjectType}
+import tastyquery.Flags
+import tastyquery.Names.*
+import tastyquery.Symbols.*
+import tastyquery.Types.*
+
 import tastyquery.reader.pickles.{Unpickler, PickleReader}
+
 import tastyquery.util.Forked
+import tastyquery.util.syntax.chaining.given
 
 import ClassfileReader.*
 import Classpaths.ClassData
-
-import tastyquery.util.syntax.chaining.given
-import tastyquery.ast.Types.AndType
 
 object ClassfileParser {
 

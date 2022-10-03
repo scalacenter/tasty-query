@@ -11,7 +11,7 @@ import scala.util.Using
 
 import org.apache.commons.io.IOUtils
 
-import tastyquery.ast.Names.{SimpleName, termName, nme}
+import tastyquery.Names.{SimpleName, termName, nme}
 import tastyquery.reader.classfiles.Classpaths.{Classpath, PackageData, ClassData, TastyData}
 
 object ClasspathLoaders {

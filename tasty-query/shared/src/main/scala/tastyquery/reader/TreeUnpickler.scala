@@ -1,26 +1,27 @@
 package tastyquery.reader
 
-import tastyquery.Contexts.*
-import tastyquery.ast.Constants.Constant
-import tastyquery.ast.Flags
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Trees.*
-import tastyquery.ast.TypeTrees.*
-import tastyquery.ast.Types.*
-import tastyquery.ast.Flags.*
-import tastyquery.ast.Spans.{Span, NoSpan}
-import tastyquery.reader.TastyUnpickler.NameTable
-
 import scala.annotation.tailrec
+
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.reflect.TypeTest
 import scala.util.NotGiven
 
-import dotty.tools.tasty.{TastyBuffer, TastyFormat, TastyReader}
-import TastyBuffer.*
-import TastyFormat.*
+import dotty.tools.tasty.TastyReader
+import dotty.tools.tasty.TastyBuffer.*
+import dotty.tools.tasty.TastyFormat.*
+
+import tastyquery.Constants.*
+import tastyquery.Contexts.*
+import tastyquery.Flags.*
+import tastyquery.Names.*
+import tastyquery.Spans.*
+import tastyquery.Symbols.*
+import tastyquery.Trees.*
+import tastyquery.Types.*
+import tastyquery.TypeTrees.*
+
+import tastyquery.reader.TastyUnpickler.NameTable
 
 class TreeUnpicklerException(msg: String) extends RuntimeException(msg)
 

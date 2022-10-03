@@ -3,8 +3,8 @@ package tastyquery
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import tastyquery.Contexts.*
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
 
 import Paths.*
 import RestrictedUnpicklingSuite.MissingTopLevelDecl

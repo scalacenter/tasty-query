@@ -9,7 +9,7 @@ import scala.concurrent.*
 import scala.reflect.NameTransformer
 import scala.util.*
 
-import tastyquery.ast.Names.*
+import tastyquery.Names.*
 import tastyquery.reader.classfiles.Classpaths.*
 
 object ClasspathLoaders:

@@ -1,21 +1,17 @@
-package tastyquery.ast
+package tastyquery
 
 import scala.collection.mutable
 
-import dotty.tools.tasty.TastyFormat.NameTags
-
-import tastyquery.ast.Names.*
-import tastyquery.ast.Trees.{DefTree, Tree, DefDef}
-import tastyquery.ast.Flags.*
-import tastyquery.ast.Spans.*
-import tastyquery.ast.Types.*
-import tastyquery.ast.Variances.*
-import tastyquery.Contexts
-import tastyquery.Contexts.{Context, ctx, defn}
+import tastyquery.Contexts.*
+import tastyquery.Flags.*
+import tastyquery.Names.*
+import tastyquery.Spans.*
+import tastyquery.Trees.*
+import tastyquery.Types.*
+import tastyquery.Variances.*
 
 import tastyquery.util.syntax.chaining.given
 
-import compiletime.codeOf
 import tastyquery.reader.classfiles.Classpaths.Loader
 
 /** Symbols for all kinds of definitions in Scala programs.

@@ -1,15 +1,16 @@
 package tastyquery.reader.classfiles
 
-import tastyquery.Contexts.*
-import tastyquery.ast.Flags
-import tastyquery.ast.Names.*
-import tastyquery.ast.Types
-import tastyquery.ast.Types.*
-import tastyquery.ast.Symbols.*
-import tastyquery.util.syntax.chaining.given
-
 import scala.annotation.switch
+
 import scala.collection.mutable
+
+import tastyquery.Contexts.*
+import tastyquery.Flags.*
+import tastyquery.Names.*
+import tastyquery.Types.*
+import tastyquery.Symbols.*
+
+import tastyquery.util.syntax.chaining.given
 
 import ClassfileReader.ReadException
 
@@ -22,7 +23,7 @@ object JavaSignatures:
     var offset = 0
     var end = signature.length
     val isClass = member.isClass
-    val isMethod = member.flags.is(Flags.Method)
+    val isMethod = member.flags.is(Method)
 
     lazy val someEmptyType = Some(NoType)
     lazy val emptyTypeBounds = RealTypeBounds(NoType, NoType)
@@ -114,14 +115,14 @@ object JavaSignatures:
     def baseType: Option[Type] =
       if available >= 1 then
         (peek: @switch) match
-          case 'B' => commitSimple(1, Some(Types.ByteType))
-          case 'C' => commitSimple(1, Some(Types.CharType))
-          case 'D' => commitSimple(1, Some(Types.DoubleType))
-          case 'F' => commitSimple(1, Some(Types.FloatType))
-          case 'I' => commitSimple(1, Some(Types.IntType))
-          case 'J' => commitSimple(1, Some(Types.LongType))
-          case 'S' => commitSimple(1, Some(Types.ShortType))
-          case 'Z' => commitSimple(1, Some(Types.BooleanType))
+          case 'B' => commitSimple(1, Some(ByteType))
+          case 'C' => commitSimple(1, Some(CharType))
+          case 'D' => commitSimple(1, Some(DoubleType))
+          case 'F' => commitSimple(1, Some(FloatType))
+          case 'I' => commitSimple(1, Some(IntType))
+          case 'J' => commitSimple(1, Some(LongType))
+          case 'S' => commitSimple(1, Some(ShortType))
+          case 'Z' => commitSimple(1, Some(BooleanType))
           case _   => None
       else None
 
@@ -205,11 +206,11 @@ object JavaSignatures:
     def arrayType(env: JavaSignature): Option[Type] =
       if consume('[') then
         val tpe = javaTypeSignature(env)
-        Some(Types.ArrayTypeOf(tpe))
+        Some(ArrayTypeOf(tpe))
       else None
 
     def result(env: JavaSignature): Type =
-      if consume('V') then Types.UnitType
+      if consume('V') then UnitType
       else javaTypeSignature(env)
 
     def referenceType(env: JavaSignature): Type =

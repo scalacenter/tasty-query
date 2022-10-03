@@ -1,9 +1,9 @@
-package tastyquery.ast
+package tastyquery
 
 import tastyquery.Contexts.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Types.*
-import tastyquery.ast.TypeMaps.*
+import tastyquery.Symbols.*
+import tastyquery.Types.*
+import tastyquery.TypeMaps.*
 
 object Substituters:
 

@@ -2,12 +2,12 @@ package tastyquery.reader.pickles
 
 import scala.annotation.switch
 
+import tastyquery.Constants.*
 import tastyquery.Contexts.*
-import tastyquery.ast.Constants.*
-import tastyquery.ast.Flags.*
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Types.*
+import tastyquery.Flags.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
+import tastyquery.Types.*
 
 import PickleReader.*
 import PickleFormat.*

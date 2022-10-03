@@ -3,11 +3,11 @@ package tastyquery
 import scala.collection.mutable
 
 import tastyquery.Contexts.Context
-import tastyquery.ast.Flags.*
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Trees.*
-import tastyquery.ast.Types.*
+import tastyquery.Flags.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
+import tastyquery.Trees.*
+import tastyquery.Types.*
 
 import Paths.*
 

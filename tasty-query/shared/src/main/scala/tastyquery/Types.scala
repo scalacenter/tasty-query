@@ -1,16 +1,17 @@
-package tastyquery.ast
+package tastyquery
 
-import scala.annotation.{constructorOnly, tailrec}
+import scala.annotation.tailrec
+
 import scala.collection.mutable
 
 import dotty.tools.tasty.TastyFormat.NameTags
+
+import tastyquery.Constants.*
 import tastyquery.Contexts.*
-import tastyquery.ast.Constants.Constant
-import tastyquery.ast.Flags.*
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Trees.{EmptyTree, Tree, TypeParam}
-import tastyquery.ast.Names.*
+import tastyquery.Flags.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
+import tastyquery.Trees.*
 
 import tastyquery.util.syntax.chaining.given
 
