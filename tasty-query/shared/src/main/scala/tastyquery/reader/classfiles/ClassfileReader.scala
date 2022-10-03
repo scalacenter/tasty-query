@@ -72,10 +72,10 @@ final class ClassfileReader private () {
     }
 
     def sigbytes(idx: Idx): IArray[Byte] =
-      unsafeDecodeSigBytes(encodedSigbytes(idx))
+      decodeSigBytes(encodedSigbytes(idx))
 
     def sigbytes(idxs: IArray[Idx]): IArray[Byte] =
-      unsafeDecodeSigBytes(idxs.flatMap(encodedSigbytes))
+      decodeSigBytes(idxs.flatMap(encodedSigbytes))
 
     private def encodedSigbytes(idx: Idx): IArray[Byte] = this.apply(idx) match {
       case ConstantInfo.Utf8(forked: Forked[DataStream]) =>
@@ -84,14 +84,11 @@ final class ClassfileReader private () {
         throw ReadException(s"Expected unforced UTF8 constant at index $idx")
     }
 
-    /** returns a new IArray with the decoded bytes, mutates `bytes` in-place, so `bytes` should not be shared
-      * after passing to this method.
-      */
-    private def unsafeDecodeSigBytes(bytes: IArray[Byte]): IArray[Byte] =
-      // Ok to allow mutation of `bytes`, we will not share it.
-      val mutableView = unsafe.asByteArray(bytes)
-      val decodedLength = ByteCodecs.decode(mutableView)
-      bytes.slice(0, decodedLength) // `bytes` underlying array was mutated by `ByteCodecs.decode`
+    /** Returns a new IArray with the decoded bytes. */
+    private def decodeSigBytes(bytes: IArray[Byte]): IArray[Byte] =
+      val buffer = Array.from(bytes)
+      val decodedLength = ByteCodecs.decode(buffer)
+      IArray.unsafeFromArray(buffer).take(decodedLength)
 
     private[ClassfileReader] def idx(i: Int): Idx = Indexing.idx(this, i)
 
