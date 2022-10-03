@@ -10,9 +10,27 @@ import scala.util.*
 
 import tastyquery.Classpaths.*
 
+/** Classpath loaders using the Node.js API.
+  *
+  * This API is specific to Scala.js when used with Node.js. It is not
+  * available on the JVM nor on other Scala.js environments.
+  */
 object ClasspathLoaders:
   import NodeFS.*
 
+  /** Reads the contents of a classpath.
+    *
+    * Entries can be directories or jar files. Non-existing entries are
+    * ignored.
+    *
+    * This method will asynchronously read the contents of all `.class` and
+    * `.tasty` files on the classpath. It returns a `Future` that will be
+    * completed when all has been read into memory.
+    *
+    * The resulting [[Classpaths.Classpath]] can be given to [[Contexts.init]]
+    * to create a [[Contexts.Context]]. The latter gives semantic access to all
+    * the definitions on the classpath.
+    */
   def read(classpath: List[String])(using ExecutionContext): Future[Classpath] =
     val allFilesFuture = Future
       .traverse(classpath) { entry =>

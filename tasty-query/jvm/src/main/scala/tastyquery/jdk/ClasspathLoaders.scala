@@ -10,9 +10,13 @@ import scala.util.Using
 
 import tastyquery.Classpaths.*
 
+/** Classpath loaders using the JDK API.
+  *
+  * This API is specific to the JVM. It is not available in Scala.js.
+  */
 object ClasspathLoaders {
 
-  enum FileKind(val ext: String):
+  private enum FileKind(val ext: String):
     case Class extends FileKind("class")
     case Tasty extends FileKind("tasty")
 
@@ -20,19 +24,26 @@ object ClasspathLoaders {
       path.getFileName().nn.toString().nn.endsWith("." + ext)
   end FileKind
 
-  object FileKind:
+  private object FileKind:
     lazy val All: Set[FileKind] = Set(Class, Tasty)
   end FileKind
 
-  def splitClasspath(raw: String): List[Path] = {
-    import scala.language.unsafeNulls
-    raw.split(java.io.File.pathSeparator).toList.map(Paths.get(_))
-  }
-
+  /** Reads the contents of a classpath.
+    *
+    * Entries can be directories or jar files. Non-existing entries are
+    * ignored.
+    *
+    * This method will synchronously read the contents of all `.class` and
+    * `.tasty` files on the classpath.
+    *
+    * The resulting [[Classpaths.Classpath]] can be given to [[Contexts.init]]
+    * to create a [[Contexts.Context]]. The latter gives semantic access to all
+    * the definitions on the classpath.
+    */
   def read(classpath: List[Path]): Classpath =
     read(classpath, FileKind.All)
 
-  def read(classpath: List[Path], kinds: Set[FileKind]): Classpath = {
+  private def read(classpath: List[Path], kinds: Set[FileKind]): Classpath = {
     def load(): IArray[PackageData] = {
 
       def classAndPackage(binaryName: String): (String, String) = {
@@ -114,7 +125,7 @@ object ClasspathLoaders {
       }
     )
 
-  enum ClasspathEntry {
+  private enum ClasspathEntry {
     case Jar(path: Path)
     case Directory(path: Path)
 
