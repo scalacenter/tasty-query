@@ -92,7 +92,7 @@ class TastyUnpickler(reader: TastyReader) {
     val result: nameAtRef.EitherName = tag match {
       case NameTags.UTF8 =>
         reader.goto(end)
-        termName(bytes, start.index, length)
+        termName(UTF8Utils.decode(bytes, start.index, length))
       case NameTags.QUALIFIED =>
         val qual = readFullyQualifiedName()
         val item = readName()

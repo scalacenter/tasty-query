@@ -11,8 +11,6 @@ import tastyquery.Types.*
 
 import tastyquery.reader.pickles.ByteCodecs
 
-import tastyquery.unsafe
-
 import tastyquery.util.{Forked, loop, accumulate}
 import tastyquery.util.syntax.chaining.given
 
