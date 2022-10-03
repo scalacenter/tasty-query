@@ -11,7 +11,7 @@ import tastyquery.Types.*
 
 import tastyquery.reader.pickles.ByteCodecs
 
-import tastyquery.util.{Forked, loop, accumulate}
+import tastyquery.util.Forked
 import tastyquery.util.syntax.chaining.given
 
 import ClassfileReader.*
@@ -285,7 +285,7 @@ final class ClassfileReader private () {
           AnnotationValue.Unknown()
         case Tags.Array =>
           val count = data.readU2()
-          val values = accumulate(count) {
+          val values = accumulateAnnotValues(count) {
             readAnnotationArgument()
           }
           AnnotationValue.Arr(values)
@@ -296,7 +296,7 @@ final class ClassfileReader private () {
 
     def readAnnotationArgs(tpe: SimpleName): Annotation[pool.type] = {
       val numPairs = data.readU2()
-      val args = accumulate(numPairs) {
+      val args = accumulateAnnotValues(numPairs) {
         data.skip(2) // name index
         readAnnotationArgument()
       }
@@ -351,6 +351,26 @@ object ClassfileReader {
   inline val JavaMajorVersion = 45
   inline val JavaMinorVersion = 4
   inline val JavaMagicNumber = 0xcafebabe
+
+  private inline def loop(times: Int)(inline op: => Unit): Unit = {
+    var i = 0
+    while (i < times) {
+      op
+      i += 1
+    }
+  }
+
+  private inline def accumulateAnnotValues[P <: ClassfileReader.ConstantPool](
+    size: Int
+  )(inline op: => AnnotationValue[P]): IArray[AnnotationValue[P]] = {
+    val arr = new Array[AnnotationValue[P]](size)
+    var i = 0
+    while (i < size) {
+      arr(i) = op
+      i += 1
+    }
+    IArray.unsafeFromArray(arr)
+  }
 
   enum SigOrDesc:
     case Sig(str: String)
