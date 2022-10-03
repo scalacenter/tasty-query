@@ -11,7 +11,6 @@ import tastyquery.Names.*
 import tastyquery.{ParamSig, Signature, TermSig, TypeLenSig}
 
 import tastyquery.reader.TreeUnpickler
-import tastyquery.unsafe
 
 object TastyUnpickler {
 
@@ -62,9 +61,9 @@ class TastyUnpickler(reader: TastyReader) {
 
   import reader.*
 
-  def this(bytes: IArray[Byte]) =
+  def this(bytes: Array[Byte]) =
     // ok to use as Array because TastyReader is readOnly
-    this(new TastyReader(unsafe.asByteArray(bytes)))
+    this(new TastyReader(bytes))
 
   private val sectionReader = new mutable.HashMap[String, TastyReader]
   val nameAtRef: NameTable = new NameTable
