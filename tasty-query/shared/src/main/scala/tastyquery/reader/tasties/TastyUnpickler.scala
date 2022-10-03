@@ -1,4 +1,4 @@
-package tastyquery.reader
+package tastyquery.reader.tasties
 
 import scala.collection.mutable
 
@@ -10,9 +10,9 @@ import tastyquery.Contexts.*
 import tastyquery.Names.*
 import tastyquery.{ParamSig, Signature, TermSig, TypeLenSig}
 
-import tastyquery.reader.TreeUnpickler
+import tastyquery.reader.UTF8Utils
 
-object TastyUnpickler {
+private[reader] object TastyUnpickler {
 
   abstract class SectionUnpickler[R](val name: String) {
     def unpickle(reader: TastyReader, nameAtRef: NameTable)(using Context): R
@@ -55,9 +55,8 @@ object TastyUnpickler {
 
 }
 
-import tastyquery.reader.TastyUnpickler.*
-
-class TastyUnpickler(reader: TastyReader) {
+private[reader] class TastyUnpickler(reader: TastyReader) {
+  import TastyUnpickler.*
 
   import reader.*
 

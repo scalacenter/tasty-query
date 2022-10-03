@@ -10,7 +10,7 @@ import tastyquery.Trees.*
 import tastyquery.Types.*
 import tastyquery.Variances.*
 
-import tastyquery.reader.classfiles.Classpaths.Loader
+import tastyquery.reader.Loaders.Loader
 
 /** Symbols for all kinds of definitions in Scala programs.
   *

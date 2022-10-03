@@ -14,7 +14,7 @@ import tastyquery.reader.pickles.ByteCodecs
 import ClassfileReader.*
 import ClassfileReader.Access.*
 
-final class ClassfileReader private () {
+private[classfiles] final class ClassfileReader private () {
 
   transparent inline def pool(using pool: ConstantPool): pool.type = pool
 
@@ -341,7 +341,7 @@ final class ClassfileReader private () {
   }
 }
 
-object ClassfileReader {
+private[classfiles] object ClassfileReader {
   import Indexing.*
   import Access.*
 

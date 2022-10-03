@@ -17,7 +17,7 @@ import PickleFormat.*
 
 import tastyquery.Substituters
 
-class PickleReader {
+private[pickles] class PickleReader {
   opaque type Entries = Array[AnyRef | Null]
   opaque type Index = IArray[Int]
 
@@ -628,7 +628,7 @@ class PickleReader {
   end elimExistentials
 }
 
-object PickleReader {
+private[reader] object PickleReader {
 
   def pkl(using pkl: PklStream): pkl.type = pkl
   def index[I <: PickleReader#Index & Singleton](using index: I): index.type = index

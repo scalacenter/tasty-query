@@ -1,4 +1,4 @@
-package tastyquery.reader.classfiles
+package tastyquery.reader
 
 import scala.collection.mutable
 import scala.reflect.NameTransformer
@@ -10,16 +10,16 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 
-import tastyquery.reader.TastyUnpickler
+import tastyquery.reader.classfiles.ClassfileParser
+import tastyquery.reader.classfiles.ClassfileParser.ClassKind
+import tastyquery.reader.tasties.TastyUnpickler
 
-import ClassfileParser.ClassKind
-
-object Classpaths {
+private[tastyquery] object Loaders {
 
   class MissingTopLevelTasty(root: Loader.Root) extends Exception(s"Missing TASTy for ${root.fullName}")
 
   object Loader:
-    private[tastyquery] case class Root private[Classpaths] (pkg: PackageSymbol, rootName: SimpleName):
+    private[tastyquery] case class Root private[Loaders] (pkg: PackageSymbol, rootName: SimpleName):
       def packages: IterableOnce[PackageSymbol] =
         (pkg #:: LazyList.from(pkg.enclosingDecls)).asInstanceOf[IterableOnce[PackageSymbol]]
 

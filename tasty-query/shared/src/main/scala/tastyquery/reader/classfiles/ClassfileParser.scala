@@ -11,7 +11,7 @@ import tastyquery.reader.pickles.{Unpickler, PickleReader}
 
 import ClassfileReader.*
 
-object ClassfileParser {
+private[reader] object ClassfileParser {
 
   enum ClassKind:
     case Scala2(structure: Structure, runtimeAnnotStart: Forked[DataStream])

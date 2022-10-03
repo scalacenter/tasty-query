@@ -12,7 +12,7 @@ import tastyquery.Symbols.*
 
 import ClassfileReader.ReadException
 
-object JavaSignatures:
+private[classfiles] object JavaSignatures:
 
   private type JavaSignature = Null | Binders | Map[TypeName, ClassTypeParamSymbol] | mutable.ListBuffer[TypeName]
 

@@ -14,7 +14,7 @@ package tastyquery.reader.pickles
   * The +1 increment should reduce the number of (overlong) zeros in the resulting string, as
   * 0x7f is (hoped to be) more common than 0x00.
   */
-object ByteCodecs {
+private[reader] object ByteCodecs {
 
   /** Map 0xC0 0x80 to 0x00, then subtract 1 from each element. In-place. */
   def regenerateZero(src: Array[Byte]): Int = {

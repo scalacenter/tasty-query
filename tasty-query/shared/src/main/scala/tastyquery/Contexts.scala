@@ -8,14 +8,21 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Types.*
 
-import tastyquery.reader.classfiles.Classpaths.Loader
+import tastyquery.reader.Loaders.Loader
 
+/** Container for top-level definitions related to contexts.
+  *
+  * See [[Contexts.Context]] for more details.
+  */
 object Contexts {
 
-  /** The current context */
+  /** The implicitly available context. */
   transparent inline def ctx(using ctx: Context): Context = ctx
+
+  /** Standard definitions of symbols and types. */
   transparent inline def defn(using ctx: Context): ctx.defn.type = ctx.defn
 
+  /** Creates a new [[Context]] for the given [[Classpaths.Classpath]]. */
   def init(classpath: Classpath): Context =
     val classloader = Loader(classpath)
     val ctx = new Context(classloader)
@@ -28,7 +35,28 @@ object Contexts {
     root.pkg.getDeclInternal(root.rootName).isDefined // module value
       || root.pkg.getDeclInternal(root.rootName.toTypeName).isDefined // class value
 
-  /** Context is used throughout unpickling an entire project. */
+  /** A semantic universe for a given [[Classpaths.Classpath]].
+    *
+    * A [[Context]] gathers all the semantic information about symbols, types
+    * and trees that can be found in a given classpath. It represents a
+    * "universe" in which all definitions are related to each other.
+    *
+    * It is common practice to carry a `(using Context)` in every method that
+    * manipulates a given universe. Virtually all methods of the tasty-query
+    * API require a given `Context`. The current given `Context` can be
+    * accessed with [[ctx]].
+    *
+    * The main entry point is the method [[findSymbolFromRoot]], which gives
+    * access to a top-level symbol from its fully-qualified name path.
+    *
+    * Another likely entry point is to use [[Definitions.RootPackage defn.RootPackage]] to obtain the
+    * root package package symbol, and explore everything from there using
+    * [[Symbols.DeclaringSymbol.getDecl]] and/or
+    * [[Symbols.DeclaringSymbol.declarations]].
+    *
+    * The same instance of [[Classpaths.Classpath]] can be reused to create
+    * several [[Context]]s, if necessary.
+    */
   final class Context private[Contexts] (private[tastyquery] val classloader: Loader) {
     private given Context = this
 
