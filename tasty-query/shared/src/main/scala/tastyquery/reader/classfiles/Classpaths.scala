@@ -27,13 +27,6 @@ object Classpaths {
   /** Contains tasty bytes. `simpleName` is a Scala identifier */
   case class TastyData(simpleName: SimpleName, debugPath: String, bytes: IArray[Byte])
 
-  object permissions {
-
-    /** sentinel value, it proves that `ctx.withRoot` can only be called from `scanClass` */
-    opaque type LoadRoot = Unit
-    private[Classpaths] inline def withLoadRootPrivelege[T](inline op: LoadRoot ?=> T): T = op(using ())
-  }
-
   sealed abstract class Classpath protected (val packages: IArray[PackageData]) {
 
     def loader[T](op: Loader => T): T = op(Loader(this))
@@ -107,10 +100,7 @@ object Classpaths {
     /** Lookup definitions in the entry, returns true if some roots were entered matching the `rootName`. */
     private def completeRoots(root: Loader.Root, entry: Entry)(using Context): Boolean =
 
-      def inspectClass(root: Loader.Root, classData: ClassData, entry: Entry)(
-        using Context,
-        permissions.LoadRoot
-      ): Boolean =
+      def inspectClass(root: Loader.Root, classData: ClassData, entry: Entry): Boolean =
         ClassfileParser.readKind(classData).toTry.get match
           case ClassKind.Scala2(structure, runtimeAnnotStart) =>
             ClassfileParser.loadScala2Class(structure, runtimeAnnotStart).toTry.get
@@ -128,7 +118,7 @@ object Classpaths {
             false // no initialisation step to take
       end inspectClass
 
-      def enterTasty(root: Loader.Root, tastyData: TastyData)(using permissions.LoadRoot): Boolean =
+      def enterTasty(root: Loader.Root, tastyData: TastyData): Boolean =
         // TODO: test reading tree from dependency not directly queried??
         val unpickler = TastyUnpickler(tastyData.bytes)
         val trees = unpickler
@@ -143,19 +133,17 @@ object Classpaths {
         else false
       end enterTasty
 
-      permissions.withLoadRootPrivelege {
-        entry match
-          case entry: Entry.ClassOnly =>
-            // Tested in `TypeSuite` - aka Java and Scala 2 dependencies
-            inspectClass(root, entry.classData, entry)
-          case entry: Entry.ClassAndTasty =>
-            // Tested in `TypeSuite` - read Tasty file that may reference Java and Scala 2 dependencies
-            // maybe we do not need to parse the class, however the classfile could be missing the TASTY attribute.
-            inspectClass(root, entry.classData, entry)
-          case entry: Entry.TastyOnly =>
-            // Tested in `SymbolSuite`, `ReadTreeSuite`, these do not need to see class files.
-            enterTasty(root, entry.tastyData)
-      }
+      entry match
+        case entry: Entry.ClassOnly =>
+          // Tested in `TypeSuite` - aka Java and Scala 2 dependencies
+          inspectClass(root, entry.classData, entry)
+        case entry: Entry.ClassAndTasty =>
+          // Tested in `TypeSuite` - read Tasty file that may reference Java and Scala 2 dependencies
+          // maybe we do not need to parse the class, however the classfile could be missing the TASTY attribute.
+          inspectClass(root, entry.classData, entry)
+        case entry: Entry.TastyOnly =>
+          // Tested in `SymbolSuite`, `ReadTreeSuite`, these do not need to see class files.
+          enterTasty(root, entry.tastyData)
     end completeRoots
 
     private[tastyquery] def forceRoots(pkg: PackageSymbol)(using Context): Unit =
