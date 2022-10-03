@@ -100,8 +100,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
             callCount += 1
             assert(app.tpe.isRef(UnitClass), clue(app)) // todo: resolve overloaded
             val fooSym = fooRef.tpe.termSymbol.asTerm
-            val List(Left(List(aSym)), _*) = fooSym.paramSymss: @unchecked
-            assert(aSym.asTerm.declaredType.isRef(Acls), clues(Acls.fullName, aSym.declaredType))
+            val List(Left(List(aRef)), _*) = fooSym.paramRefss: @unchecked
+            assert(aRef.isRef(Acls), clues(Acls.fullName, aRef))
           case _ => ()
       }
 
@@ -125,9 +125,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val NumClass = resolve(RecApply / tname"Num")
     val BoolClass = resolve(RecApply / tname"Bool")
 
-    val evalParamss = evalSym.paramSymss
+    val evalParamRefss = evalSym.paramRefss
 
-    val List(Right(List(Tsym @ _)), Left(List(eSym))) = evalParamss: @unchecked
+    val List(Right(List(TRef @ _)), Left(List(eRef))) = evalParamRefss: @unchecked
 
     val Some(evalTree @ _: DefDef) = evalSym.tree: @unchecked
 

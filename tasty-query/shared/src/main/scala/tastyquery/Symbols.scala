@@ -213,6 +213,7 @@ object Symbols {
 
     private var myDeclaredType: Type | Null = null
     private var mySignature: Option[Signature] | Null = null
+    private var myParamRefss: List[Either[List[TermParamRef], List[TypeParamRef]]] | Null = null
 
     private[tastyquery] final def withDeclaredType(tpe: Type): this.type =
       if myDeclaredType != null then throw new IllegalStateException(s"reassignment of declared type to $this")
@@ -246,15 +247,17 @@ object Symbols {
         SignedName(name, sig, targetName)
       }
 
-    final def paramSymss(using Context): List[Either[List[TermSymbol], List[LocalTypeParamSymbol]]] =
-      tree match
-        case Some(ddef: DefDef) =>
-          ddef.paramLists.map {
-            case Left(params)   => Left(params.map(_.symbol))
-            case Right(tparams) => Right(tparams.map(_.symbol.asInstanceOf[LocalTypeParamSymbol]))
-          }
-        // TODO: java and scala 2 methods do not have trees
-        case _ => Nil
+    final def paramRefss(using Context): List[Either[List[TermParamRef], List[TypeParamRef]]] =
+      def paramssOfType(tp: Type): List[Either[List[TermParamRef], List[TypeParamRef]]] = tp match
+        case mt: PolyType   => Right(mt.paramRefs) :: paramssOfType(mt.resType)
+        case mt: MethodType => Left(mt.paramRefs) :: paramssOfType(mt.resType)
+        case _              => Nil
+      val local = myParamRefss
+      if local != null then local
+      else
+        val refs = paramssOfType(declaredType)
+        myParamRefss = refs
+        refs
   end TermSymbol
 
   object TermSymbol:
@@ -458,9 +461,8 @@ object Symbols {
     private[tastyquery] val classInfo: ClassInfo = ClassInfo(this: @unchecked)
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
-      def isValueClass: Boolean =
-        tree.isDefined && // TODO: Remove when Scala 2 classes have parents
-          parents.head.classSymbol.exists(_ == defn.AnyValClass)
+      val isValueClass =
+        parents.head.classSymbol.exists(_ == defn.AnyValClass)
       isValueClass && !defn.isPrimitiveValueClass(this)
 
     /** Get the companion class of this class, if it exists:
