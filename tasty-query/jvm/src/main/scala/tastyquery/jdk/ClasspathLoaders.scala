@@ -6,12 +6,10 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.util.jar.{JarEntry, JarFile}
 
 import scala.collection.mutable
-import scala.reflect.NameTransformer
 import scala.util.Using
 
 import org.apache.commons.io.IOUtils
 
-import tastyquery.Names.{SimpleName, termName, nme}
 import tastyquery.reader.classfiles.Classpaths.{Classpath, PackageData, ClassData, TastyData}
 
 object ClasspathLoaders {
@@ -39,27 +37,23 @@ object ClasspathLoaders {
   def read(classpath: List[Path], kinds: Set[FileKind]): Classpath = {
     def load(): IArray[PackageData] = {
 
-      def classAndPackage(binaryName: SimpleName): (SimpleName, SimpleName) = {
-        val name = binaryName.name
-        val lastSep = name.lastIndexOf('.')
-        if (lastSep == -1) (nme.EmptyPackageName, termName(NameTransformer.decode(name)))
+      def classAndPackage(binaryName: String): (String, String) = {
+        val lastSep = binaryName.lastIndexOf('.')
+        if (lastSep == -1) ("", binaryName)
         else
           import scala.language.unsafeNulls
-          val packageName = name.substring(0, lastSep) // Do not decode package names
-          val simpleName = NameTransformer.decode(name.substring(lastSep + 1))
-          (termName(packageName), termName(simpleName))
+          val packageName = binaryName.substring(0, lastSep)
+          val simpleName = binaryName.substring(lastSep + 1)
+          (packageName, simpleName)
       }
 
-      def binaryName(classFile: String): SimpleName = {
+      def binaryName(classFile: String): String =
         /* Replace *both* slashes and backslashes, because the Java file APIs
          * are permissive in what they manipulate, so it's possible to get,
          * especially on Windows.
          */
-        import scala.language.unsafeNulls
-        val path1 = classFile.replace('/', '.')
-        val path2 = path1.replace('\\', '.')
-        termName(path2)
-      }
+        classFile.replace('/', '.').nn.replace('\\', '.').nn
+      end binaryName
 
       def streamPackages() =
         classpathToEntries(classpath).flatMap { entry =>
@@ -79,10 +73,10 @@ object ClasspathLoaders {
           map.get(FileKind.Class).getOrElse(Nil) ++ map.get(FileKind.Tasty).getOrElse(Nil)
         }
 
-      def compress(packages: List[(SimpleName, ClassData | TastyData)]) = {
-        given Ordering[ClassData] = Ordering.by(_.simpleName)
-        given Ordering[TastyData] = Ordering.by(_.simpleName)
-        given Ordering[PackageData] = Ordering.by(_.name)
+      def compress(packages: List[(String, ClassData | TastyData)]) = {
+        given Ordering[ClassData] = Ordering.by(_.binaryName)
+        given Ordering[TastyData] = Ordering.by(_.binaryName)
+        given Ordering[PackageData] = Ordering.by(_.dotSeparatedName)
         val groupedPackages = IArray.from(packages).groupMap((pkg, _) => pkg)((_, data) => data)
         val pkgs = groupedPackages.map { (pkg, classAndTastys) =>
           val (classes, tastys) = classAndTastys.partitionMap {
