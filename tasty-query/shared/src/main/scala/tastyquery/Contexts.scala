@@ -18,11 +18,9 @@ object Contexts {
   transparent inline def defn(using ctx: Context): ctx.defn.type = ctx.defn
 
   def init(classpath: Classpath): Context =
-    val ctx = classpath.loader { classloader =>
-      val ctx = new Context(classloader)
-      ctx.classloader.initPackages()(using ctx)
-      ctx
-    }
+    val classloader = Loader(classpath)
+    val ctx = new Context(classloader)
+    classloader.initPackages()(using ctx)
     ctx.initializeFundamentalClasses()
     ctx
 
@@ -32,7 +30,7 @@ object Contexts {
       || root.pkg.getDeclInternal(root.rootName.toTypeName).isDefined // class value
 
   /** Context is used throughout unpickling an entire project. */
-  final class Context private[Contexts] (val classloader: Loader) {
+  final class Context private[Contexts] (private[tastyquery] val classloader: Loader) {
     private given Context = this
 
     private val (RootPackage @ _, EmptyPackage @ _) = PackageSymbol.createRoots()

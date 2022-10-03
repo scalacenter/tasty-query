@@ -38,9 +38,6 @@ object Classpaths {
     override def toString(): String = s"TastyData($binaryName, $debugPath)"
 
   final class Classpath private (val packages: IArray[PackageData]) {
-
-    def loader[T](op: Loader => T): T = op(Loader(this))
-
     def withFilter(binaryNames: List[String]): Classpath =
       def packageAndClass(binaryName: String): (String, String) = {
         val lastSep = binaryName.lastIndexOf('.')
