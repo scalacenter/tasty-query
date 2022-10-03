@@ -67,7 +67,6 @@ lazy val tastyQuery =
     .jvmSettings(
       fork := true,
       libraryDependencies += "org.scala-lang" %% "tasty-core" % usedTastyRelease,
-      libraryDependencies += "commons-io" % "commons-io" % "2.11.0",
       Test / javalibEntry := (Test / rtJarOpt).value.getOrElse("jrt:/modules/java.base/"),
     )
     .jsSettings(
