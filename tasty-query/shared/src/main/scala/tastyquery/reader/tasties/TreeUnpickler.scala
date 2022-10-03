@@ -1,4 +1,4 @@
-package tastyquery.reader
+package tastyquery.reader.tasties
 
 import scala.annotation.tailrec
 
@@ -21,15 +21,15 @@ import tastyquery.Trees.*
 import tastyquery.Types.*
 import tastyquery.TypeTrees.*
 
-import tastyquery.reader.TastyUnpickler.NameTable
+import TastyUnpickler.NameTable
 
-class TreeUnpicklerException(msg: String) extends RuntimeException(msg)
+private[tasties] class TreeUnpicklerException(msg: String) extends RuntimeException(msg)
 
-sealed trait AbstractCaseDefFactory[CaseDefType]
-case object CaseDefFactory extends AbstractCaseDefFactory[CaseDef]
-case object TypeCaseDefFactory extends AbstractCaseDefFactory[TypeCaseDef]
+private[tasties] sealed trait AbstractCaseDefFactory[CaseDefType]
+private[tasties] case object CaseDefFactory extends AbstractCaseDefFactory[CaseDef]
+private[tasties] case object TypeCaseDefFactory extends AbstractCaseDefFactory[TypeCaseDef]
 
-class TreeUnpickler(
+private[tasties] class TreeUnpickler(
   protected val reader: TastyReader,
   nameAtRef: NameTable,
   posUnpicklerOpt: Option[PositionUnpickler]
@@ -1215,7 +1215,7 @@ class TreeUnpickler(
     }
 }
 
-object TreeUnpickler {
+private[tasties] object TreeUnpickler {
 
   private inline def localCtx(using ctx: LocalContext): LocalContext = ctx
 

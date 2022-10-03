@@ -6,7 +6,7 @@ package tastyquery.reader.pickles
   *  @param from The first index where defined data are found
   *  @param to   The first index where new data can be written
   */
-class PickleBuffer(val bytes: IArray[Byte], from: Int) {
+private[pickles] class PickleBuffer(val bytes: IArray[Byte], from: Int) {
 
   var readIndex = from
 

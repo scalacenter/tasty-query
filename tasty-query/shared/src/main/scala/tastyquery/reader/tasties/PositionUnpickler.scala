@@ -1,6 +1,6 @@
 /** Modified from dotty.tools.dotc.core.tasty.PositionUnpickler */
 
-package tastyquery.reader
+package tastyquery.reader.tasties
 
 import scala.collection.mutable.HashMap
 
@@ -12,7 +12,7 @@ import tastyquery.Names.*
 import tastyquery.Spans.*
 
 /** Unpickler for tree positions */
-class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnpickler.NameTable) {
+private[reader] class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnpickler.NameTable) {
   import reader.*
 
   private var myLineSizes: Array[Int] = _

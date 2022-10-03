@@ -4,7 +4,7 @@ import tastyquery.reader.UTF8Utils
 
 import ClassfileReader.DataStream
 
-object ClassfileBuffer {
+private[classfiles] object ClassfileBuffer {
   final class Root(bytes: IArray[Byte], offset: Int) extends Forked[DataStream] {
     override def use[T](op: DataStream ?=> T): T = op(using Child(bytes, offset))
   }

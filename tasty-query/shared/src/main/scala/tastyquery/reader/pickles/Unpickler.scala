@@ -5,7 +5,7 @@ import PickleReader.{PklStream, index, pkl}
 import tastyquery.Contexts.Context
 import tastyquery.Symbols.Symbol
 
-object Unpickler {
+private[reader] object Unpickler {
   def loadInfo(sigBytes: IArray[Byte])(using Context): Either[PickleReader.BadSignature, Unit] = {
 
     def run(reader: PickleReader, structure: reader.Structure)(using PklStream): Unit = {

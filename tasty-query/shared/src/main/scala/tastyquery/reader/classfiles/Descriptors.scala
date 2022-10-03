@@ -10,7 +10,7 @@ import tastyquery.Flags
 
 import tastyquery.reader.classfiles.ClassfileReader.ReadException
 
-object Descriptors:
+private[classfiles] object Descriptors:
 
   def parseSupers(cls: ClassSymbol, superClass: Option[String], interfaces: IArray[String])(using Context): List[Type] =
     cls.withTypeParams(Nil, Nil)

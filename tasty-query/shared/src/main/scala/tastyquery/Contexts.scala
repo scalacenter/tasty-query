@@ -8,7 +8,7 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Types.*
 
-import tastyquery.reader.classfiles.Classpaths.Loader
+import tastyquery.reader.Loaders.Loader
 
 object Contexts {
 

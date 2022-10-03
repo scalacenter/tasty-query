@@ -4,7 +4,7 @@ import scala.annotation.targetName
 
 import java.nio.charset.StandardCharsets
 
-object UTF8Utils:
+private[reader] object UTF8Utils:
   def decode(bytes: Array[Byte], offset: Int, len: Int): String =
     new String(bytes, offset, len, StandardCharsets.UTF_8)
 

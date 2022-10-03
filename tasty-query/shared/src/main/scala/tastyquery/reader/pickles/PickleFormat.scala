@@ -7,7 +7,7 @@ package tastyquery.reader.pickles
   *
   *  This was adapted from https://github.com/scala/scala/blob/2.11.x/src/reflect/scala/reflect/internal/pickling/PickleFormat.scala
   */
-object PickleFormat {
+private[pickles] object PickleFormat {
 
   /** *************************************************
     * Symbol table attribute format:
