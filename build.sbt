@@ -28,7 +28,7 @@ lazy val testSources = project.in(file("test-sources"))
   .settings(commonSettings)
 
 lazy val tastyQuery =
-  crossProject(JSPlatform, JVMPlatform).in(file("."))
+  crossProject(JSPlatform, JVMPlatform).in(file("tasty-query"))
     .settings(commonSettings)
     .settings(strictCompileSettings)
     .settings(name := "tasty-query", version := "0.1-SNAPSHOT")

@@ -4,9 +4,9 @@ import java.nio.file.*
 
 import tastyquery.Contexts
 import tastyquery.Contexts.*
-import tastyquery.ast.Names.*
-import tastyquery.ast.Symbols.*
-import tastyquery.ast.Trees.*
+import tastyquery.Names.*
+import tastyquery.Symbols.*
+import tastyquery.Trees.*
 import tastyquery.jdk.ClasspathLoaders
 import tastyquery.reader.classfiles.Classpaths.Classpath
 
