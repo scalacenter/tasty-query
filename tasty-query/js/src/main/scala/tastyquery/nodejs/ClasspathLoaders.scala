@@ -6,11 +6,9 @@ import scala.scalajs.js.typedarray.*
 
 import scala.collection.mutable
 import scala.concurrent.*
-import scala.reflect.NameTransformer
 import scala.util.*
 
-import tastyquery.Names.*
-import tastyquery.reader.classfiles.Classpaths.*
+import tastyquery.Classpaths.*
 
 object ClasspathLoaders:
   import NodeFS.*
@@ -42,25 +40,22 @@ object ClasspathLoaders:
         allFiles
           .groupMap[String, ClassData | TastyData](_.packagePath) { fileContent =>
             val isClassFile = fileContent.name.endsWith(".class")
-            val encodedName =
+            val binaryName =
               if isClassFile then fileContent.name.stripSuffix(".class")
               else fileContent.name.stripSuffix(".tasty")
-            val binaryName = SimpleName(NameTransformer.decode(encodedName))
             if isClassFile then ClassData(binaryName, fileContent.debugPath, fileContent.content)
             else TastyData(binaryName, fileContent.debugPath, fileContent.content)
           }
           .map { (packagePath, classAndTastys) =>
-            val packageName =
-              if packagePath == "" then nme.EmptyPackageName
-              else SimpleName(packagePath.replace('/', '.').nn)
+            val packageName = packagePath.replace('/', '.').nn
             val (classes, tastys) = classAndTastys.partitionMap {
               case classData: ClassData => Left(classData)
               case tastyData: TastyData => Right(tastyData)
             }
             PackageData(
               packageName,
-              IArray.from(classes.sortBy(_.simpleName)),
-              IArray.from(tastys.sortBy(_.simpleName))
+              IArray.from(classes.sortBy(_.binaryName)),
+              IArray.from(tastys.sortBy(_.binaryName))
             )
           }
       end allPackageDatas

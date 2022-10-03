@@ -2,13 +2,13 @@ package tastyquery.reader.classfiles
 
 import scala.annotation.switch
 
+import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Flags.*
 import tastyquery.Types.*
 
-import tastyquery.reader.classfiles.Classpaths.ClassData
 import tastyquery.reader.pickles.ByteCodecs
 
 import tastyquery.unsafe

@@ -2,6 +2,8 @@ package tastyquery
 
 import scala.annotation.targetName
 
+import scala.reflect.NameTransformer
+
 import dotty.tools.tasty.TastyFormat.NameTags
 
 import tastyquery.Contexts.*
@@ -42,7 +44,8 @@ object Paths:
 
   extension (cls: TopLevelDeclPath)
     /** the binary name of the class root for this declaration */
-    def rootClassName: String = cls.show
+    def rootClassName: String =
+      cls.toNameList.dropWhile(_ == nme.EmptyPackageName).map(n => NameTransformer.encode(n.toString())).mkString(".")
 
   extension (cls: TopLevelClassDeclPath)
     // currently we have not set up member selection from object values, only the object class itself

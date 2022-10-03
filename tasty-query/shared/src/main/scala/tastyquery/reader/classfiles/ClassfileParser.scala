@@ -1,5 +1,6 @@
 package tastyquery.reader.classfiles
 
+import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
 import tastyquery.Flags
 import tastyquery.Names.*
@@ -12,7 +13,6 @@ import tastyquery.util.Forked
 import tastyquery.util.syntax.chaining.given
 
 import ClassfileReader.*
-import Classpaths.ClassData
 
 object ClassfileParser {
 
@@ -155,7 +155,7 @@ object ClassfileParser {
       if isScala then
         val annots = runtimeAnnotStart
         if annots != null then ClassKind.Scala2(structure, annots)
-        else throw ReadException(s"class file for ${classRoot.simpleName} is a scala 2 class, but has no annotations")
+        else throw ReadException(s"class file for ${classRoot.binaryName} is a scala 2 class, but has no annotations")
       else if isTASTY then ClassKind.TASTy
       else if isScalaRaw then ClassKind.Artifact
       else
