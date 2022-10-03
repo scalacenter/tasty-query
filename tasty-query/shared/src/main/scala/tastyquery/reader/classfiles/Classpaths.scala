@@ -12,8 +12,6 @@ import tastyquery.Trees.*
 
 import tastyquery.reader.TastyUnpickler
 
-import tastyquery.util.syntax.chaining.given
-
 import ClassfileParser.ClassKind
 
 object Classpaths {
@@ -78,7 +76,7 @@ object Classpaths {
 
       def enterTasty(root: Loader.Root, tastyData: TastyData): Boolean =
         // TODO: test reading tree from dependency not directly queried??
-        val unpickler = TastyUnpickler(tastyData.bytes)
+        val unpickler = TastyUnpickler(Array.from(tastyData.bytes))
         val trees = unpickler
           .unpickle(
             TastyUnpickler.TreeSectionUnpickler(unpickler.unpickle(new TastyUnpickler.PositionSectionUnpickler))

@@ -9,10 +9,10 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Types.*
 
+import tastyquery.reader.UTF8Utils
+
 import PickleReader.*
 import PickleFormat.*
-
-import tastyquery.util.syntax.chaining.given
 
 class PickleReader {
   opaque type Entries = Array[AnyRef | Null]
@@ -625,10 +625,10 @@ object PickleReader {
     def atOffset(offset: Int): Boolean = in.readIndex == offset
 
     def readTermName(length: Int): TermName =
-      termName(in.bytes, in.readIndex, length)
+      termName(UTF8Utils.decode(in.bytes, in.readIndex, length))
 
     def readTypeName(length: Int): TypeName =
-      typeName(in.bytes, in.readIndex, length)
+      typeName(UTF8Utils.decode(in.bytes, in.readIndex, length))
 
     final inline def unsafeFork[T](offset: Int)(inline op: PklStream ?=> T): T = {
       val saved = in.readIndex

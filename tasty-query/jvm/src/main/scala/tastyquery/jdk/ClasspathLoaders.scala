@@ -8,8 +8,6 @@ import java.util.jar.{JarEntry, JarFile}
 import scala.collection.mutable
 import scala.util.Using
 
-import org.apache.commons.io.IOUtils
-
 import tastyquery.Classpaths.*
 
 object ClasspathLoaders {
@@ -95,11 +93,14 @@ object ClasspathLoaders {
   }
 
   private def loadBytes(fileStream: InputStream): IArray[Byte] = {
-    val bytes = {
-      import scala.language.unsafeNulls
-      IOUtils.toByteArray(fileStream)
-    }
-    IArray.from(bytes)
+    val bytes = new java.io.ByteArrayOutputStream()
+    val buffer = new Array[Byte](1024)
+    while
+      val read = fileStream.read(buffer)
+      if read >= 0 then bytes.write(buffer, 0, read)
+      read >= 0
+    do ()
+    IArray.from(bytes.toByteArray().nn)
   }
 
   private def classpathToEntries(classpath: List[Path]): List[ClasspathEntry] =

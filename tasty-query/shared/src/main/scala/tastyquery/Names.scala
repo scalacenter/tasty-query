@@ -1,15 +1,11 @@
 package tastyquery
 
-import tastyquery.unsafe
-import tastyquery.util.syntax.chaining.given
-
 import java.util.concurrent.ConcurrentHashMap
 
 import dotty.tools.tasty.TastyFormat.NameTags
 
 import scala.reflect.NameTransformer
 
-import scala.io.Codec
 import scala.annotation.targetName
 
 import scala.jdk.CollectionConverters.*
@@ -99,22 +95,6 @@ object Names {
     val RepeatedParamClassMagic: TypeName = typeName("<repeated>")
   }
 
-  /** Create a type name from the characters in cs[offset..offset+len-1].
-    * Assume they are already encoded.
-    */
-  def typeName(cs: Array[Char], offset: Int, len: Int): TypeName =
-    termName(cs, offset, len).toTypeName
-
-  /** Create a type name from the UTF8 encoded bytes in bs[offset..offset+len-1].
-    * Assume they are already encoded.
-    */
-  def typeName(bs: Array[Byte], offset: Int, len: Int): TypeName =
-    termName(bs, offset, len).toTypeName
-
-  @targetName("typeNameFromImmutableBytes")
-  def typeName(bs: IArray[Byte], offset: Int, len: Int): TypeName =
-    termName(bs, offset, len).toTypeName
-
   /** Create a type name from a string */
   def typeName(s: String): TypeName =
     termName(s).toTypeName
@@ -125,24 +105,6 @@ object Names {
     */
   def termName(s: String): SimpleName =
     NameCache.cache(SimpleName(s))
-
-  /** Create a term name from the characters in cs[offset..offset+len-1].
-    * Assume they are already encoded.
-    */
-  def termName(cs: Array[Char], offset: Int, len: Int): SimpleName =
-    NameCache.cache(SimpleName(cs.slice(offset, offset + len).mkString))
-
-  /** Create a term name from the UTF8 encoded bytes in bs[offset..offset+len-1].
-    * Assume they are already encoded.
-    */
-  def termName(bs: Array[Byte], offset: Int, len: Int): SimpleName = {
-    val chars = Codec.fromUTF8(bs, offset, len)
-    termName(chars, 0, chars.length)
-  }
-
-  @targetName("termNameFromImmutableBytes")
-  def termName(bs: IArray[Byte], offset: Int, len: Int): SimpleName =
-    termName(unsafe.asByteArray(bs), offset, len)
 
   sealed abstract class Name derives CanEqual {
 
@@ -174,20 +136,7 @@ object Names {
 
     override def toTermName: TermName = this
 
-    private var myTypeName: TypeName | Null = null
-
-    override def toTypeName: TypeName = {
-      val local1 = myTypeName
-      if local1 == null then {
-        synchronized {
-          val local2 = myTypeName
-          if local2 == null then TypeName(this).useWith { myTypeName = _ }
-          else local2
-        }
-      } else {
-        local1
-      }
-    }
+    override lazy val toTypeName: TypeName = TypeName(this)
 
     def withObjectSuffix: SuffixedName = SuffixedName(NameTags.OBJECTCLASS, this)
     def stripObjectSuffix: TermName = this match

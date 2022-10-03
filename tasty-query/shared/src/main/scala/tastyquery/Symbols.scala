@@ -10,8 +10,6 @@ import tastyquery.Trees.*
 import tastyquery.Types.*
 import tastyquery.Variances.*
 
-import tastyquery.util.syntax.chaining.given
-
 import tastyquery.reader.classfiles.Classpaths.Loader
 
 /** Symbols for all kinds of definitions in Scala programs.

@@ -11,11 +11,6 @@ import tastyquery.Types.*
 
 import tastyquery.reader.pickles.ByteCodecs
 
-import tastyquery.unsafe
-
-import tastyquery.util.{Forked, loop, accumulate}
-import tastyquery.util.syntax.chaining.given
-
 import ClassfileReader.*
 import ClassfileReader.Access.*
 
@@ -72,10 +67,10 @@ final class ClassfileReader private () {
     }
 
     def sigbytes(idx: Idx): IArray[Byte] =
-      unsafeDecodeSigBytes(encodedSigbytes(idx))
+      decodeSigBytes(encodedSigbytes(idx))
 
     def sigbytes(idxs: IArray[Idx]): IArray[Byte] =
-      unsafeDecodeSigBytes(idxs.flatMap(encodedSigbytes))
+      decodeSigBytes(idxs.flatMap(encodedSigbytes))
 
     private def encodedSigbytes(idx: Idx): IArray[Byte] = this.apply(idx) match {
       case ConstantInfo.Utf8(forked: Forked[DataStream]) =>
@@ -84,14 +79,11 @@ final class ClassfileReader private () {
         throw ReadException(s"Expected unforced UTF8 constant at index $idx")
     }
 
-    /** returns a new IArray with the decoded bytes, mutates `bytes` in-place, so `bytes` should not be shared
-      * after passing to this method.
-      */
-    private def unsafeDecodeSigBytes(bytes: IArray[Byte]): IArray[Byte] =
-      // Ok to allow mutation of `bytes`, we will not share it.
-      val mutableView = unsafe.asByteArray(bytes)
-      val decodedLength = ByteCodecs.decode(mutableView)
-      bytes.slice(0, decodedLength) // `bytes` underlying array was mutated by `ByteCodecs.decode`
+    /** Returns a new IArray with the decoded bytes. */
+    private def decodeSigBytes(bytes: IArray[Byte]): IArray[Byte] =
+      val buffer = Array.from(bytes)
+      val decodedLength = ByteCodecs.decode(buffer)
+      IArray.unsafeFromArray(buffer).take(decodedLength)
 
     private[ClassfileReader] def idx(i: Int): Idx = Indexing.idx(this, i)
 
@@ -168,7 +160,7 @@ final class ClassfileReader private () {
   def skipFields()(using DataStream): Forked[DataStream] = skipMembers()
 
   def skipAttributes()(using DataStream): Forked[DataStream] =
-    data.fork andThen skipAttributesInternal()
+    data.forkAndSkip(skipAttributesInternal())
 
   private def skipAttributesInternal()(using DataStream): Unit = {
     val count = data.readU2()
@@ -290,7 +282,7 @@ final class ClassfileReader private () {
           AnnotationValue.Unknown()
         case Tags.Array =>
           val count = data.readU2()
-          val values = accumulate(count) {
+          val values = accumulateAnnotValues(count) {
             readAnnotationArgument()
           }
           AnnotationValue.Arr(values)
@@ -301,7 +293,7 @@ final class ClassfileReader private () {
 
     def readAnnotationArgs(tpe: SimpleName): Annotation[pool.type] = {
       val numPairs = data.readU2()
-      val args = accumulate(numPairs) {
+      val args = accumulateAnnotValues(numPairs) {
         data.skip(2) // name index
         readAnnotationArgument()
       }
@@ -336,7 +328,7 @@ final class ClassfileReader private () {
       case c.Tags.Long               => c.Long(data.readU8())
       case c.Tags.Double             => c.Double(data.readU8f())
       case c.Tags.NameAndType        => c.NameAndType(idx(data.readU2()), idx(data.readU2()))
-      case c.Tags.Utf8               => c.Utf8(data.fork) andThen { data.skip(data.readU2()) }
+      case c.Tags.Utf8               => c.Utf8(data.forkAndSkip(data.skip(data.readU2())))
       case c.Tags.MethodHandle       => c.MethodHandle(idx(data.readU1()), idx(data.readU2()))
       case c.Tags.MethodType         => c.MethodType(idx(data.readU2()))
       case c.Tags.Dynamic            => c.Dynamic(idx(data.readU2()), idx(data.readU2()))
@@ -356,6 +348,26 @@ object ClassfileReader {
   inline val JavaMajorVersion = 45
   inline val JavaMinorVersion = 4
   inline val JavaMagicNumber = 0xcafebabe
+
+  private inline def loop(times: Int)(inline op: => Unit): Unit = {
+    var i = 0
+    while (i < times) {
+      op
+      i += 1
+    }
+  }
+
+  private inline def accumulateAnnotValues[P <: ClassfileReader.ConstantPool](
+    size: Int
+  )(inline op: => AnnotationValue[P]): IArray[AnnotationValue[P]] = {
+    val arr = new Array[AnnotationValue[P]](size)
+    var i = 0
+    while (i < size) {
+      arr(i) = op
+      i += 1
+    }
+    IArray.unsafeFromArray(arr)
+  }
 
   enum SigOrDesc:
     case Sig(str: String)
@@ -462,6 +474,11 @@ object ClassfileReader {
     def readSlice(length: Int): IArray[Byte]
     def skip(bytes: Int): Unit
     def fork: Forked[DataStream]
+
+    inline def forkAndSkip(skipOp: => Unit): Forked[DataStream] =
+      val forked = fork
+      skipOp
+      forked
   }
 
   def read[T](op: => T): Either[ReadException, T] =

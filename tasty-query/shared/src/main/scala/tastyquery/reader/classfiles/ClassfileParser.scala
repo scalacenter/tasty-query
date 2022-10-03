@@ -9,9 +9,6 @@ import tastyquery.Types.*
 
 import tastyquery.reader.pickles.{Unpickler, PickleReader}
 
-import tastyquery.util.Forked
-import tastyquery.util.syntax.chaining.given
-
 import ClassfileReader.*
 
 object ClassfileParser {
@@ -170,7 +167,7 @@ object ClassfileParser {
   private def structure(reader: ClassfileReader)(using reader.ConstantPool)(using DataStream): Structure = {
     val access = reader.readAccessFlags()
     val thisClass = reader.readThisClass()
-    val supers = data.fork andThen {
+    val supers = data.forkAndSkip {
       data.skip(2) // superclass
       data.skip(2 * data.readU2()) // interfaces
     }

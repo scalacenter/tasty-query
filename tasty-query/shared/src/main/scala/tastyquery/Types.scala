@@ -13,8 +13,6 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 
-import tastyquery.util.syntax.chaining.given
-
 object Types {
   type Designator = Symbol | Name | LookupIn | Scala2ExternalSymRef
 

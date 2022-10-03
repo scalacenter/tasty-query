@@ -1,10 +1,6 @@
 package tastyquery.reader.classfiles
 
-import java.nio.charset.StandardCharsets
-
-import tastyquery.util.Forked
-import tastyquery.util.syntax.chaining.given
-import tastyquery.unsafe
+import tastyquery.reader.UTF8Utils
 
 import ClassfileReader.DataStream
 
@@ -17,7 +13,10 @@ object ClassfileBuffer {
 
     private var bp: Int = init
 
-    def readU1(): Int = (bytes(bp) & 0xff) andThen { bp += 1 }
+    def readU1(): Int =
+      val r = (bytes(bp) & 0xff)
+      bp += 1
+      r
 
     def readU2(): Int = (readU1() << 8) | readU1()
 
@@ -32,13 +31,16 @@ object ClassfileBuffer {
     def readUTF8(): String = {
       val size = readU2()
       val start = bp
-      val arr = unsafe.asByteArray(bytes)
-      String(arr, start, size, StandardCharsets.UTF_8) andThen { bp += size }
+      bp += size
+      UTF8Utils.decode(bytes, start, size)
     }
 
     def fork: Root = Root(bytes, bp)
 
-    def readSlice(length: Int): IArray[Byte] = bytes.slice(bp, bp + length) andThen { bp += length }
+    def readSlice(length: Int): IArray[Byte] =
+      val start = bp
+      bp += length
+      bytes.slice(start, start + length)
 
     final def skip(bytes: Int): Unit = bp += bytes
 
