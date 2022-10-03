@@ -10,8 +10,6 @@ import tastyquery.Flags
 
 import tastyquery.reader.classfiles.ClassfileReader.ReadException
 
-import tastyquery.util.syntax.chaining.given
-
 object Descriptors:
 
   def parseSupers(cls: ClassSymbol, superClass: Option[String], interfaces: IArray[String])(using Context): List[Type] =
@@ -54,14 +52,19 @@ object Descriptors:
     def peek = desc.charAt(offset)
 
     def consume(char: Char): Boolean =
-      if available >= 1 && peek == char then true andThen { offset += 1 }
+      if available >= 1 && peek == char then
+        offset += 1
+        true
       else false
 
     def charsUntil(char: Char): String =
       val old = offset
       while available > 0 && peek != char do offset += 1
       if available == 0 then abort
-      else desc.slice(old, offset) andThen { offset += 1 } // skip char
+      else
+        val result = desc.slice(old, offset)
+        offset += 1 // skip char
+        result
 
     def commitSimple[T](len: Int, t: T): T =
       offset += len
@@ -121,7 +124,12 @@ object Descriptors:
         else s"Unexpected characted '$peek' in descriptor"
       throw ReadException(s"$msg of $member, original: `$desc` [is method? $isMethod]")
 
-    (if isMethod then methodDescriptor else ExprType(fieldDescriptor)) andThen { if available > 0 then unconsumed }
+    val parsedDescriptor =
+      if isMethod then methodDescriptor
+      else ExprType(fieldDescriptor)
 
+    if available > 0 then unconsumed
+
+    parsedDescriptor
   end parseDescriptor
 end Descriptors

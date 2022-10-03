@@ -10,8 +10,6 @@ import tastyquery.Types.*
 
 import tastyquery.reader.classfiles.Classpaths.Loader
 
-import tastyquery.util.syntax.chaining.given
-
 object Contexts {
 
   /** The current context */

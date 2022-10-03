@@ -10,8 +10,6 @@ import tastyquery.Names.*
 import tastyquery.Types.*
 import tastyquery.Symbols.*
 
-import tastyquery.util.syntax.chaining.given
-
 import ClassfileReader.ReadException
 
 object JavaSignatures:
@@ -72,7 +70,9 @@ object JavaSignatures:
     def peek = signature.charAt(offset)
 
     def consume(char: Char): Boolean =
-      if available >= 1 && peek == char then true andThen { offset += 1 }
+      if available >= 1 && peek == char then
+        offset += 1
+        true
       else false
 
     def expect(char: Char): Unit =
@@ -284,8 +284,13 @@ object JavaSignatures:
         else s"Unexpected character '$peek' at $offset in descriptor (remaining: `${signature.slice(offset, end)}`)"
       throw ReadException(s"$msg of $member, original: `$signature` [is method? $isMethod]")
 
-    (if isMethod then methodSignature
-     else if isClass then classSignature(member.asClass)
-     else fieldSignature) andThen { if available > 0 then unconsumed }
+    val parsedSignature =
+      if isMethod then methodSignature
+      else if isClass then classSignature(member.asClass)
+      else fieldSignature
+
+    if available > 0 then unconsumed
+
+    parsedSignature
   end parseSignature
 end JavaSignatures

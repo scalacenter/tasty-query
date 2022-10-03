@@ -12,8 +12,6 @@ import tastyquery.Trees.*
 
 import tastyquery.reader.TastyUnpickler
 
-import tastyquery.util.syntax.chaining.given
-
 import ClassfileParser.ClassKind
 
 object Classpaths {

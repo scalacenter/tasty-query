@@ -1,7 +1,5 @@
 package tastyquery
 
-import tastyquery.util.syntax.chaining.given
-
 import java.util.concurrent.ConcurrentHashMap
 
 import dotty.tools.tasty.TastyFormat.NameTags
@@ -138,20 +136,7 @@ object Names {
 
     override def toTermName: TermName = this
 
-    private var myTypeName: TypeName | Null = null
-
-    override def toTypeName: TypeName = {
-      val local1 = myTypeName
-      if local1 == null then {
-        synchronized {
-          val local2 = myTypeName
-          if local2 == null then TypeName(this).useWith { myTypeName = _ }
-          else local2
-        }
-      } else {
-        local1
-      }
-    }
+    override lazy val toTypeName: TypeName = TypeName(this)
 
     def withObjectSuffix: SuffixedName = SuffixedName(NameTags.OBJECTCLASS, this)
     def stripObjectSuffix: TermName = this match

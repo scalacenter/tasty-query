@@ -8,8 +8,6 @@ import tastyquery.Symbols.*
 import tastyquery.Types.*
 import tastyquery.TypeTrees.*
 
-import tastyquery.util.syntax.chaining.given
-
 object Trees {
   class TypeComputationError(val tree: Tree) extends RuntimeException(s"Could not compute type of $tree")
 
@@ -51,7 +49,10 @@ object Trees {
     final def tpe(using Context): Type = {
       val local = myType
       if local != null then local
-      else calculateType.useWith { myType = _ }
+      else
+        val computed = calculateType
+        myType = computed
+        computed
     }
 
     def withSpan(span: Span): Tree

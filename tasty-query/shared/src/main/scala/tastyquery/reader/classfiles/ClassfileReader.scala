@@ -11,8 +11,6 @@ import tastyquery.Types.*
 
 import tastyquery.reader.pickles.ByteCodecs
 
-import tastyquery.util.syntax.chaining.given
-
 import ClassfileReader.*
 import ClassfileReader.Access.*
 
@@ -162,7 +160,7 @@ final class ClassfileReader private () {
   def skipFields()(using DataStream): Forked[DataStream] = skipMembers()
 
   def skipAttributes()(using DataStream): Forked[DataStream] =
-    data.fork andThen skipAttributesInternal()
+    data.forkAndSkip(skipAttributesInternal())
 
   private def skipAttributesInternal()(using DataStream): Unit = {
     val count = data.readU2()
@@ -330,7 +328,7 @@ final class ClassfileReader private () {
       case c.Tags.Long               => c.Long(data.readU8())
       case c.Tags.Double             => c.Double(data.readU8f())
       case c.Tags.NameAndType        => c.NameAndType(idx(data.readU2()), idx(data.readU2()))
-      case c.Tags.Utf8               => c.Utf8(data.fork) andThen { data.skip(data.readU2()) }
+      case c.Tags.Utf8               => c.Utf8(data.forkAndSkip(data.skip(data.readU2())))
       case c.Tags.MethodHandle       => c.MethodHandle(idx(data.readU1()), idx(data.readU2()))
       case c.Tags.MethodType         => c.MethodType(idx(data.readU2()))
       case c.Tags.Dynamic            => c.Dynamic(idx(data.readU2()), idx(data.readU2()))
@@ -476,6 +474,11 @@ object ClassfileReader {
     def readSlice(length: Int): IArray[Byte]
     def skip(bytes: Int): Unit
     def fork: Forked[DataStream]
+
+    inline def forkAndSkip(skipOp: => Unit): Forked[DataStream] =
+      val forked = fork
+      skipOp
+      forked
   }
 
   def read[T](op: => T): Either[ReadException, T] =

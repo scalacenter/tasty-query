@@ -14,8 +14,6 @@ import tastyquery.reader.UTF8Utils
 import PickleReader.*
 import PickleFormat.*
 
-import tastyquery.util.syntax.chaining.given
-
 class PickleReader {
   opaque type Entries = Array[AnyRef | Null]
   opaque type Index = IArray[Int]

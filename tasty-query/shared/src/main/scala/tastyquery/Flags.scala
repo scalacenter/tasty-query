@@ -1,7 +1,5 @@
 package tastyquery
 
-import tastyquery.util.syntax.chaining.given
-
 object Flags:
 
   opaque type FlagSet = Long
@@ -20,10 +18,11 @@ object Flags:
     def &(otherFlags: FlagSet): FlagSet = bits & otherFlags.bits
   end extension
 
-  private var flagIdx = 0
+  private var lastFlagIdx = 0
   private def newFlag(): Flag = {
-    assert(flagIdx <= 63)
-    1.toLong << flagIdx andThen { flagIdx += 1 }
+    lastFlagIdx += 1
+    assert(lastFlagIdx <= 63)
+    1.toLong << lastFlagIdx
   }
 
   val EmptyFlagSet: FlagSet = 0L
