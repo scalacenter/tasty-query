@@ -18,6 +18,43 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   private val javaPackage = ctx.createPackageSymbolIfNew(nme.javaPackageName, RootPackage)
   val javaLangPackage = ctx.createPackageSymbolIfNew(nme.langPackageName, javaPackage)
 
+  private val scalaCollectionPackage =
+    ctx.createPackageSymbolIfNew(termName("collection"), scalaPackage)
+  private val scalaCollectionImmutablePackage =
+    ctx.createPackageSymbolIfNew(termName("immutable"), scalaCollectionPackage)
+
+  // Cached TypeRef's for core types
+
+  val AnyType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Any"))
+  val AnyRefType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("AnyRef"))
+  val AnyValType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("AnyVal"))
+
+  val NullType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Null"))
+  val NothingType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Nothing"))
+
+  val ObjectType: TypeRef = TypeRef(javaLangPackage.packageRef, typeName("Object"))
+
+  val ArrayTypeUnapplied: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Array"))
+  def ArrayTypeOf(tpe: Type): AppliedType = AppliedType(ArrayTypeUnapplied, List(tpe))
+
+  val SeqTypeUnapplied: TypeRef = TypeRef(scalaCollectionImmutablePackage.packageRef, typeName("Seq"))
+  def SeqTypeOf(tpe: Type): AppliedType = AppliedType(SeqTypeUnapplied, List(tpe))
+
+  val IntType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Int"))
+  val LongType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Long"))
+  val FloatType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Float"))
+  val DoubleType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Double"))
+  val BooleanType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Boolean"))
+  val ByteType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Byte"))
+  val ShortType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Short"))
+  val CharType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Char"))
+  val UnitType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Unit"))
+
+  val StringType: TypeRef = TypeRef(javaLangPackage.packageRef, typeName("String"))
+
+  val UnappliedClassType: TypeRef = TypeRef(javaLangPackage.packageRef, typeName("Class"))
+  def ClassTypeOf(tpe: Type): AppliedType = AppliedType(UnappliedClassType, List(tpe))
+
   // Magic symbols that are not found on the classpath, but rather created by hand
 
   private def createSpecialClass(name: TypeName, parents: List[Type], flags: FlagSet): ClassSymbol =
@@ -62,7 +99,6 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
     val AnyRefAlias = TypeMemberSymbol.create(typeName("AnyRef"), scalaPackage)
     AnyRefAlias.withFlags(EmptyFlagSet)
-    val ObjectType = TypeRef(javaLangPackage.packageRef, typeName("Object"))
     AnyRefAlias.withDefinition(TypeMemberDefinition.TypeAlias(ObjectType))
   }
 
@@ -95,10 +131,6 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   extension (pkg: PackageSymbol)
     private def requiredClass(name: String): ClassSymbol = pkg.getDecl(typeName(name)).get.asClass
-
-  private lazy val scalaCollectionPackage = scalaPackage.getPackageDecl(termName("collection")).get
-  private lazy val scalaCollectionImmutablePackage =
-    scalaCollectionPackage.getPackageDecl(termName("immutable")).get
 
   lazy val ObjectClass = javaLangPackage.requiredClass("Object")
 

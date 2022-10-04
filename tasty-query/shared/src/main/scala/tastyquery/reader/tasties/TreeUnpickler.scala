@@ -464,7 +464,7 @@ private[tasties] class TreeUnpickler(
       val typeBounds = bounds match
         case bounds: TypeBounds     => bounds
         case bounds: TypeBoundsTree => bounds.toTypeBounds
-        case bounds: TypeLambdaTree => RealTypeBounds(NothingType, AnyType)
+        case bounds: TypeLambdaTree => defn.NothingAnyBounds
       paramSymbol.setBounds(typeBounds)
       skipModifiers(end)
       TypeParam(name, bounds, paramSymbol)(spn).definesTreeOf(paramSymbol)

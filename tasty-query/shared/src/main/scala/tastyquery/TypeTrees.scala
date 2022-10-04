@@ -110,7 +110,7 @@ object TypeTrees {
   case class MatchTypeTree(bound: TypeTree, selector: TypeTree, cases: List[TypeCaseDef])(span: Span)
       extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
-      NothingType // TODO
+      defn.NothingType // TODO
 
     override final def withSpan(span: Span): MatchTypeTree = MatchTypeTree(bound, selector, cases)(span)
   }

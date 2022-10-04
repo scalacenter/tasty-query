@@ -61,7 +61,7 @@ private[reader] object ClassfileParser {
       .create(name.withObjectSuffix.toTypeName, classOwner)
       .withTypeParams(Nil, Nil)
       .withFlags(Flags.ModuleClassCreationFlags)
-    moduleClass.withParentsDirect(ObjectType :: Nil)
+    moduleClass.withParentsDirect(defn.ObjectType :: Nil)
 
     val module = TermSymbol
       .create(name.toTermName, classOwner)

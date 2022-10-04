@@ -115,14 +115,14 @@ private[classfiles] object JavaSignatures:
     def baseType: Option[Type] =
       if available >= 1 then
         (peek: @switch) match
-          case 'B' => commitSimple(1, Some(ByteType))
-          case 'C' => commitSimple(1, Some(CharType))
-          case 'D' => commitSimple(1, Some(DoubleType))
-          case 'F' => commitSimple(1, Some(FloatType))
-          case 'I' => commitSimple(1, Some(IntType))
-          case 'J' => commitSimple(1, Some(LongType))
-          case 'S' => commitSimple(1, Some(ShortType))
-          case 'Z' => commitSimple(1, Some(BooleanType))
+          case 'B' => commitSimple(1, Some(defn.ByteType))
+          case 'C' => commitSimple(1, Some(defn.CharType))
+          case 'D' => commitSimple(1, Some(defn.DoubleType))
+          case 'F' => commitSimple(1, Some(defn.FloatType))
+          case 'I' => commitSimple(1, Some(defn.IntType))
+          case 'J' => commitSimple(1, Some(defn.LongType))
+          case 'S' => commitSimple(1, Some(defn.ShortType))
+          case 'Z' => commitSimple(1, Some(defn.BooleanType))
           case _   => None
       else None
 
@@ -172,11 +172,11 @@ private[classfiles] object JavaSignatures:
       if available >= 1 then
         (peek: @switch) match
           case '*' =>
-            commitSimple(1, WildcardTypeBounds(RealTypeBounds(NothingType, AnyType)))
+            commitSimple(1, WildcardTypeBounds(defn.NothingAnyBounds))
           case '+' =>
-            commit(1) { val upper = referenceType(env); WildcardTypeBounds(RealTypeBounds(NothingType, upper)) }
+            commit(1) { val upper = referenceType(env); WildcardTypeBounds(RealTypeBounds(defn.NothingType, upper)) }
           case '-' =>
-            commit(1) { val lower = referenceType(env); WildcardTypeBounds(RealTypeBounds(lower, AnyType)) }
+            commit(1) { val lower = referenceType(env); WildcardTypeBounds(RealTypeBounds(lower, defn.AnyType)) }
           case _ =>
             referenceType(env)
       else abort
@@ -190,10 +190,10 @@ private[classfiles] object JavaSignatures:
         expect(':')
         referenceTypeSignature(env) match
           case Some(tpe) => tpe
-          case _         => AnyType
+          case _         => defn.AnyType
       val interfaceBounds = readWhile(':', referenceType(env))
       if env.withAddedParam(tname) then emptyTypeBounds // shortcut as we will throw away the bounds
-      else RealTypeBounds(NothingType, interfaceBounds.foldLeft(classBound)(AndType(_, _)))
+      else RealTypeBounds(defn.NothingType, interfaceBounds.foldLeft(classBound)(AndType(_, _)))
 
     def typeParamsRest(env: JavaSignature): List[TypeBounds] =
       readUntil('>', typeParameter(env))
@@ -206,11 +206,11 @@ private[classfiles] object JavaSignatures:
     def arrayType(env: JavaSignature): Option[Type] =
       if consume('[') then
         val tpe = javaTypeSignature(env)
-        Some(ArrayTypeOf(tpe))
+        Some(defn.ArrayTypeOf(tpe))
       else None
 
     def result(env: JavaSignature): Type =
-      if consume('V') then UnitType
+      if consume('V') then defn.UnitType
       else javaTypeSignature(env)
 
     def referenceType(env: JavaSignature): Type =

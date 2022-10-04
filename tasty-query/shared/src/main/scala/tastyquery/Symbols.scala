@@ -600,7 +600,7 @@ object Symbols {
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, span: Span)(using Context): ClassSymbol =
       val cls = create(tpnme.RefinedClassMagic, owner)
       cls
-        .withParentsDirect(ObjectType :: Nil)
+        .withParentsDirect(defn.ObjectType :: Nil)
         .withFlags(EmptyFlagSet)
       cls
   end ClassSymbol

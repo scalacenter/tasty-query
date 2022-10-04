@@ -225,7 +225,7 @@ private[pickles] class PickleReader {
             case tpe =>
               throw AssertionError(s"unexpected type $tpe for $cls, owner is $owner")
           cls.withParentsDirect(parentTypes)
-        val bounds = typeParams.map(_ => RealTypeBounds(NothingType, AnyType)) // TODO Read bounds
+        val bounds = typeParams.map(_ => defn.NothingAnyBounds) // TODO Read bounds
         cls.withTypeParams(typeParams, bounds)
         cls
       case VALsym =>
@@ -453,7 +453,7 @@ private[pickles] class PickleReader {
           val refined = decls.toList.foldLeft(parent)(addRefinement)
           RecType.closeOver(rt => refined.substThis(clazz, rt.recThis))
         }*/
-        AnyType
+        defn.AnyType
       case CLASSINFOtpe =>
         val clazz = readLocalSymbolRef()
         TempClassInfoType(pkl.until(end, () => readTypeRef()))
