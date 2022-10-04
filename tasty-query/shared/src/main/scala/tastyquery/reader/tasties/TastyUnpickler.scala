@@ -78,9 +78,9 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
   private def readParamSig(): ParamSig = {
     val ref = readInt()
     if (ref < 0)
-      TypeLenSig(ref.abs)
+      ParamSig.TypeLen(ref.abs)
     else
-      TermSig(nameAtRef.fullyQualified(new NameRef(ref)).mapLast(_.toTypeName))
+      ParamSig.Term(nameAtRef.fullyQualified(new NameRef(ref)).mapLast(_.toTypeName))
   }
 
   private def readNameContents(): nameAtRef.EitherName = {

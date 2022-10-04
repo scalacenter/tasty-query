@@ -6,32 +6,34 @@ import tastyquery.Symbols.*
 import tastyquery.Types.*
 
 object Signatures:
-  abstract class ParamSig
+  enum ParamSig:
+    case Term(typ: FullyQualifiedName)
+    case TypeLen(len: Int)
+  end ParamSig
 
-  case class TermSig(typ: FullyQualifiedName) extends ParamSig
-
-  case class TypeLenSig(len: Int) extends ParamSig
-
-  case class Signature(paramsSig: List[ParamSig], resSig: FullyQualifiedName) derives CanEqual:
+  final case class Signature(paramsSig: List[ParamSig], resSig: FullyQualifiedName) derives CanEqual:
     def toDebugString = paramsSig.map {
-      case TermSig(typ)    => typ.toDebugString
-      case TypeLenSig(len) => len.toString
+      case ParamSig.Term(typ)    => typ.toDebugString
+      case ParamSig.TypeLen(len) => len.toString
     }.mkString("(", ",", ")") + ":" + resSig.toDebugString
 
     override def toString = paramsSig.map {
-      case TermSig(typ)    => typ.toString
-      case TypeLenSig(len) => len.toString
+      case ParamSig.Term(typ)    => typ.toString
+      case ParamSig.TypeLen(len) => len.toString
     }.mkString("(", ",", ")") + ":" + resSig.toString
+  end Signature
 
   object Signature {
-    def fromMethodic(info: MethodicType, optCtorReturn: Option[ClassSymbol])(using Context): Signature =
+    private[tastyquery] def fromMethodic(info: MethodicType, optCtorReturn: Option[ClassSymbol])(
+      using Context
+    ): Signature =
       def rec(info: Type, acc: List[ParamSig]): Signature =
         info match {
           case info: MethodType =>
-            val erased = info.paramTypes.map(tpe => TermSig(ErasedTypeRef.erase(tpe).toSigFullName))
+            val erased = info.paramTypes.map(tpe => ParamSig.Term(ErasedTypeRef.erase(tpe).toSigFullName))
             rec(info.resultType, acc ::: erased)
           case PolyType(_, tbounds, res) =>
-            rec(res, acc ::: TypeLenSig(tbounds.length) :: Nil)
+            rec(res, acc ::: ParamSig.TypeLen(tbounds.length) :: Nil)
           case tpe =>
             val retType = optCtorReturn.map(_.typeRef).getOrElse(tpe)
             Signature(acc, ErasedTypeRef.erase(retType).toSigFullName)
