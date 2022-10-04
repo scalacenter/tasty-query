@@ -8,7 +8,7 @@ import dotty.tools.tasty.{TastyHeaderUnpickler, TastyReader}
 
 import tastyquery.Contexts.*
 import tastyquery.Names.*
-import tastyquery.{ParamSig, Signature, TermSig, TypeLenSig}
+import tastyquery.Signatures.*
 
 import tastyquery.reader.UTF8Utils
 

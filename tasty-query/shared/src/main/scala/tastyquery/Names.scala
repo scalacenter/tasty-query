@@ -10,6 +10,8 @@ import scala.annotation.targetName
 
 import scala.jdk.CollectionConverters.*
 
+import tastyquery.Signatures.Signature
+
 import Names.SimpleName
 
 private[tastyquery] object NameCache {

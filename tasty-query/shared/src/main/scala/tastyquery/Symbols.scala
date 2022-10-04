@@ -5,6 +5,7 @@ import scala.collection.mutable
 import tastyquery.Contexts.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
+import tastyquery.Signatures.*
 import tastyquery.Spans.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
