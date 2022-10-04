@@ -27,7 +27,6 @@ object Contexts {
     val classloader = Loader(classpath)
     val ctx = new Context(classloader)
     classloader.initPackages()(using ctx)
-    ctx.initializeFundamentalClasses()
     ctx
 
   /** Has the root been initialised already? Does not force, but returns true if at least one root was entered */
@@ -154,25 +153,5 @@ object Contexts {
       fullyQualifiedName.path.foldLeft(RootPackage) { (owner, name) =>
         createPackageSymbolIfNew(name.asSimpleName, owner)
       }
-
-    private[Contexts] def initializeFundamentalClasses(): Unit = {
-      // TODO Assign superclasses and create members
-
-      def fakeJavaLangClassIfNotFound(name: String): ClassSymbol =
-        val tname = typeName(name)
-        defn.javaLangPackage.getDecl(tname) match
-          case Some(sym: ClassSymbol) =>
-            sym
-          case _ =>
-            ClassSymbol.create(tname, defn.javaLangPackage)
-
-      fakeJavaLangClassIfNotFound("Object")
-      fakeJavaLangClassIfNotFound("Comparable")
-      fakeJavaLangClassIfNotFound("Serializable")
-      fakeJavaLangClassIfNotFound("String")
-      fakeJavaLangClassIfNotFound("Throwable")
-      fakeJavaLangClassIfNotFound("Error")
-      fakeJavaLangClassIfNotFound("Exception")
-    }
   }
 }
