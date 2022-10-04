@@ -17,7 +17,8 @@ private[classfiles] object Descriptors:
     val superRef = superClass.map(classRef).getOrElse {
       // More efficient would be to only do this check once in Definitions,
       // but parents are immutable currently.
-      if cls == defn.ObjectClass then AnyType
+      // !!! Cannot access `defn.ObjectClass` here, because that's a cycle when initializing defn.ObjectClass itself
+      if cls.owner == defn.javaLangPackage && cls.name == tpnme.Object then AnyType
       else ObjectType
     }
     superRef :: interfaces.map(classRef).toList
