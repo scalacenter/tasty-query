@@ -793,7 +793,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val trtSpan = spn
-      val from = readSymRef
+      val from = readSymRef.asTerm
       val expr = reader.ifBefore(end)(readTerm, EmptyTree)
       // TODO: always just taking the name?
       // return always returns from a method, i.e. something with a TermName
@@ -840,17 +840,15 @@ private[tasties] class TreeUnpickler(
     case TERMREFdirect =>
       val spn = span
       reader.readByte()
-      val sym = readSymRef
-      assert(sym.name.isInstanceOf[TermName], posErrorMsg)
+      val sym = readSymRef.asTerm
       val tpe = TermRef(NoPrefix, sym)
-      TermRefTree(sym.name.asInstanceOf[TermName], tpe)(spn)
+      TermRefTree(sym.name, tpe)(spn)
     case TERMREFsymbol =>
       val spn = span
       reader.readByte()
-      val sym = readSymRef
+      val sym = readSymRef.asTerm
       val pre = readType
-      assert(sym.name.isInstanceOf[TermName], posErrorMsg)
-      TermRefTree(sym.name.asInstanceOf[TermName], TermRef(pre, sym))(spn)
+      TermRefTree(sym.name, TermRef(pre, sym))(spn)
     case SHAREDtype =>
       val spn = span
       reader.readByte()
@@ -924,11 +922,11 @@ private[tasties] class TreeUnpickler(
       TypeRef(prefix, name)
     case TYPEREFdirect =>
       reader.readByte()
-      val sym = readSymRef
+      val sym = readSymRef.asType
       TypeRef(NoPrefix, sym)
     case TYPEREFsymbol =>
       reader.readByte()
-      val sym = readSymRef
+      val sym = readSymRef.asType
       TypeRef(readType, sym)
     case TYPEREFpkg =>
       reader.readByte()
@@ -939,11 +937,11 @@ private[tasties] class TreeUnpickler(
       recursiveTypeAtAddr.getOrElse(addr, sharedTypesCache.getOrElseUpdate(addr, forkAt(addr).readType))
     case TERMREFdirect =>
       reader.readByte()
-      val sym = readSymRef
+      val sym = readSymRef.asTerm
       TermRef(NoPrefix, sym)
     case TERMREFsymbol =>
       reader.readByte()
-      val sym = readSymRef
+      val sym = readSymRef.asTerm
       TermRef(readType, sym)
     case TERMREFpkg =>
       reader.readByte()

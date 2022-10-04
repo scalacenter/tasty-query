@@ -16,11 +16,9 @@ import tastyquery.Trees.*
 import scala.annotation.targetName
 
 object Types {
-  type Designator = Symbol | Name | LookupIn | Scala2ExternalSymRef
+  private[tastyquery] final case class LookupIn(pre: TypeRef, sel: SignedName)
 
-  case class LookupIn(pre: TypeRef, sel: SignedName)
-
-  case class Scala2ExternalSymRef(owner: Symbol, path: List[Name]) {
+  private[tastyquery] final case class Scala2ExternalSymRef(owner: Symbol, path: List[Name]) {
     val name = path.last
   }
 
@@ -542,9 +540,9 @@ object Types {
   }
 
   trait PathType extends TypeProxy with ValueType {
-    final def select(name: Name): NamedType =
-      if name.isTermName then TermRef(this, name)
-      else TypeRef(this, name)
+    final def select(name: Name): NamedType = name match
+      case name: TermName => TermRef(this, name)
+      case name: TypeName => TypeRef(this, name)
   }
 
   // ----- Type Proxies -------------------------------------------------
@@ -554,12 +552,17 @@ object Types {
 
     type ThisName <: Name
     type ThisSymbolType <: Symbol { type ThisNameType = ThisName }
+    protected[this] type ThisDesignatorType >: ThisSymbolType <: Symbol | Name | LookupIn | Scala2ExternalSymRef
 
     val prefix: Type
 
-    def designator: Designator
+    protected[this] def designator: ThisDesignatorType
 
-    protected def designator_=(d: Designator): Unit
+    protected[this] def storeComputedSymbol(sym: ThisSymbolType): Unit
+
+    // For tests
+    private[tastyquery] final def designatorInternal: Symbol | Name | LookupIn | Scala2ExternalSymRef =
+      designator
 
     private var myName: ThisName | Null = null
     private var mySymbol: ThisSymbolType | Null = null
@@ -596,7 +599,7 @@ object Types {
       else
         val computed = asThisSymbolType(computeSymbol())
         mySymbol = computed
-        designator = computed
+        storeComputedSymbol(computed)
         computed
 
     protected[this] def asThisSymbolType(sym: Symbol): ThisSymbolType
@@ -642,8 +645,8 @@ object Types {
           case declaring: DeclaringSymbol =>
             val candidate = declaring.getDecl(name)
             candidate.getOrElse {
-              val msg = this match
-                case TermRef(_, name: SignedName) if declaring.memberPossiblyOverloaded(name) =>
+              val msg = this.name match
+                case name: SignedName if declaring.memberPossiblyOverloaded(name) =>
                   def debugSig(sym: TermSymbol): String = sym.signature match {
                     case Some(sig) => sig.toDebugString
                     case None      => "<Not A Method>"
@@ -726,31 +729,34 @@ object Types {
         }
         /*if (prefix.isInstanceOf[WildcardType]) WildcardType
         else*/
-        withPrefix(prefix)
+        withPrefix(prefix, cachedSymbol = mySymbol)
       }
 
-    private def withPrefix(prefix: Type)(using Context): Type =
-      NamedType(prefix, designator)
+    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null)(using Context): Type
+
+    // Equality, required for (Scala 2 only?) unpickling. We should investigate why this is needed.
+
+    override def equals(that: Any): Boolean = that.asInstanceOf[Matchable] match
+      case that: NamedType => this.prefix == that.prefix && this.designator == that.designator
+      case _               => false
   }
 
   object NamedType {
-    private def isType(designator: Designator): Boolean = designator match
-      case designator: Symbol               => designator.isType
-      case designator: Name                 => designator.isTypeName
-      case designator: LookupIn             => false // always a SignedName, which is a TermName by construction
-      case designator: Scala2ExternalSymRef => designator.name.isTypeName
-
-    def apply(prefix: Type, designator: Designator)(using Context): NamedType =
-      if (isType(designator)) TypeRef(prefix, designator)
-      else TermRef(prefix, designator)
-
     def apply(prefix: Type, sym: Symbol)(using Context): NamedType =
-      if (sym.isType) TypeRef(prefix, sym)
-      else TermRef(prefix, sym)
+      sym match
+        case sym: TypeSymbol => TypeRef(prefix, sym)
+        case sym: TermSymbol => TermRef(prefix, sym)
+        case _               => throw IllegalArgumentException(s"Invalid symbol $sym for NamedType")
 
     def apply(prefix: Type, name: Name)(using Context): NamedType =
-      if (name.isTypeName) TypeRef(prefix, name)
-      else TermRef(prefix, name)
+      name match
+        case name: TypeName => TypeRef(prefix, name)
+        case name: TermName => TermRef(prefix, name)
+
+    private[tastyquery] def apply(prefix: Type, external: Scala2ExternalSymRef)(using Context): NamedType =
+      external.name match
+        case _: TypeName => TypeRef(prefix, external)
+        case _: TermName => TermRef(prefix, external)
   }
 
   /** A reference to an implicit definition. This can be either a TermRef or a
@@ -768,17 +774,24 @@ object Types {
   class NonMethodReference(val kind: String) extends Exception(s"reference to non method type in $kind")
 
   /** The singleton type for path prefix#myDesignator. */
-  case class TermRef(override val prefix: Type, var myDesignator: Designator)
-      extends NamedType
+  final class TermRef private (
+    val prefix: Type,
+    private var myDesignator: TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
+  ) extends NamedType
       with SingletonType
       with ImplicitRef {
 
     type ThisName = TermName
     type ThisSymbolType = TermSymbol
+    protected[this] type ThisDesignatorType = TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
 
-    override def designator: Designator = myDesignator
+    protected[this] def designator: ThisDesignatorType = myDesignator
 
-    override protected def designator_=(d: Designator): Unit = myDesignator = d
+    protected[this] def storeComputedSymbol(sym: ThisSymbolType): Unit =
+      myDesignator = sym
+
+    override def toString(): String =
+      s"TermRef($prefix, $myDesignator)"
 
     protected[this] def asThisSymbolType(sym: Symbol): ThisSymbolType =
       sym.asInstanceOf[TermSymbol]
@@ -815,7 +828,17 @@ object Types {
           mt.resultType.findMember(name, pre)
         case tp =>
           tp.findMember(name, pre)
+
+    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null)(using Context): Type =
+      new TermRef(prefix, if cachedSymbol != null then cachedSymbol else designator)
   }
+
+  object TermRef:
+    def apply(prefix: Type, name: TermName): TermRef = new TermRef(prefix, name)
+    def apply(prefix: Type, symbol: TermSymbol): TermRef = new TermRef(prefix, symbol)
+    private[tastyquery] def apply(prefix: Type, designator: LookupIn): TermRef = new TermRef(prefix, designator)
+    private[tastyquery] def apply(prefix: Type, external: Scala2ExternalSymRef): TermRef = new TermRef(prefix, external)
+  end TermRef
 
   final case class PackageRef(fullyQualifiedName: FullyQualifiedName) extends Type {
     private var packageSymbol: PackageSymbol | Null = null
@@ -844,14 +867,20 @@ object Types {
       new PackageRef(packageSym)
   }
 
-  case class TypeRef(override val prefix: Type, private var myDesignator: Designator) extends NamedType {
+  final class TypeRef private (val prefix: Type, private var myDesignator: TypeName | TypeSymbol | Scala2ExternalSymRef)
+      extends NamedType {
 
     type ThisName = TypeName
     type ThisSymbolType = TypeSymbol
+    type ThisDesignatorType = TypeName | TypeSymbol | Scala2ExternalSymRef
 
-    override def designator: Designator = myDesignator
+    protected[this] def designator: ThisDesignatorType = myDesignator
 
-    override protected def designator_=(d: Designator): Unit = myDesignator = d
+    protected[this] def storeComputedSymbol(sym: ThisSymbolType): Unit =
+      myDesignator = sym
+
+    override def toString(): String =
+      s"TypeRef($prefix, $myDesignator)"
 
     protected[this] def asThisSymbolType(sym: Symbol): ThisSymbolType =
       sym.asInstanceOf[TypeSymbol]
@@ -869,7 +898,16 @@ object Types {
           ClassInfo.findMember(sym, name, pre)
         case sym: TypeSymbolWithBounds =>
           sym.upperBound.findMember(name, pre)
+
+    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null)(using Context): Type =
+      new TypeRef(prefix, if cachedSymbol != null then cachedSymbol else designator)
   }
+
+  object TypeRef:
+    def apply(prefix: Type, name: TypeName): TypeRef = new TypeRef(prefix, name)
+    def apply(prefix: Type, symbol: TypeSymbol): TypeRef = new TypeRef(prefix, symbol)
+    private[tastyquery] def apply(prefix: Type, external: Scala2ExternalSymRef): TypeRef = new TypeRef(prefix, external)
+  end TypeRef
 
   case object NoPrefix extends Type {
     def findMember(name: Name, pre: Type)(using Context): Symbol =

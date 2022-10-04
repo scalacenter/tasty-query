@@ -501,7 +501,7 @@ object Symbols {
       if local == null then throw new IllegalStateException(s"expected type params for $this")
       else local
 
-    private[tastyquery] final def typeParamSymsNoInitialize(using Context): List[Symbol] =
+    private[tastyquery] final def typeParamSymsNoInitialize(using Context): List[ClassTypeParamSymbol] =
       typeParamsInternal.map(_(0))
 
     private[tastyquery] final def withParentsDirect(parents: List[Type]): this.type =
