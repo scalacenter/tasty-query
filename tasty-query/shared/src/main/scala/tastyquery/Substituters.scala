@@ -5,7 +5,7 @@ import tastyquery.Symbols.*
 import tastyquery.Types.*
 import tastyquery.TypeMaps.*
 
-object Substituters:
+private[tastyquery] object Substituters:
 
   def subst(tp: TypeMappable, from: Binders, to: Binders)(using Context): tp.ThisTypeMappableType =
     new SubstBindingMap(from, to).apply(tp)
