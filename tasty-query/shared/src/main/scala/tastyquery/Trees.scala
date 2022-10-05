@@ -2,6 +2,7 @@ package tastyquery
 
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Names.*
 import tastyquery.Spans.*
 import tastyquery.Symbols.*
@@ -359,7 +360,7 @@ object Trees {
           // TODO: substitute parameters when dependent
           funTpe.resultType
         case tpe =>
-          throw NonMethodReference(s"application of args ${args.mkString} to $tpe")
+          throw NonMethodReferenceException(s"application of args ${args.mkString} to $tpe")
 
     protected final def calculateType(using Context): Type =
       val original = resolveMethodType(fun.tpe, args.map(_.tpe))
@@ -385,7 +386,7 @@ object Trees {
         case funTpe: PolyType =>
           funTpe.instantiate(args)
         case tpe =>
-          throw NonMethodReference(s"type application of args ${args.mkString} to $tpe")
+          throw NonMethodReferenceException(s"type application of args ${args.mkString} to $tpe")
 
     protected final def calculateType(using Context): Type =
       resolvePolyType(fun.tpe, args.map(_.toType))

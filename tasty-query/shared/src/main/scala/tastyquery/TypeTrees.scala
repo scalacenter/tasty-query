@@ -8,12 +8,6 @@ import tastyquery.Trees.*
 import tastyquery.Types.*
 
 object TypeTrees {
-  class TypeTreeToTypeError(val typeTree: TypeTree) extends RuntimeException(s"Could not convert $typeTree to type")
-
-  object TypeTreeToTypeError {
-    def unapply(e: TypeTreeToTypeError): Option[TypeTree] = Some(e.typeTree)
-  }
-
   abstract class TypeTree(val span: Span) {
     private var myType: Type | Null = null
 

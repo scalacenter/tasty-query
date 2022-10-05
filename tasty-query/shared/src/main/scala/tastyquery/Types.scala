@@ -8,6 +8,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
@@ -586,14 +587,14 @@ object Types {
            */
           val cls = if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].symbol else owner
           cls.asDeclaringSymbol.getDecl(name).getOrElse {
-            throw new SymbolLookupException(name, s"cannot find symbol $owner.$name")
+            throw new MemberNotFoundException(owner, name)
           }
         }
       case name: Name =>
         @tailrec
         def findPrefixSym(prefix: Type): Symbol = prefix match {
           case NoPrefix =>
-            throw new SymbolLookupException(name, "reference by name to a local symbol")
+            throw new MemberNotFoundException(prefix, name, "reference by name to a local symbol")
           case ref: PackageRef =>
             ref.symbol
           case t: TermRef =>
@@ -605,7 +606,7 @@ object Types {
           case AppliedType(tycon, _) =>
             findPrefixSym(tycon)
           case prefix =>
-            throw new SymbolLookupException(name, s"unexpected prefix type $prefix")
+            throw new MemberNotFoundException(prefix, name, s"unexpected prefix type $prefix")
         }
         val prefixSym = findPrefixSym(prefix)
         prefixSym match
@@ -628,10 +629,10 @@ object Types {
                 case _ =>
                   val possible = declaring.declarations.map(_.name.toDebugString).mkString("[", ", ", "]")
                   s"not a member of $prefixSym, found possible members: $possible."
-              throw SymbolLookupException(name, msg)
+              throw MemberNotFoundException(prefixSym, name, msg)
             }
           case _ =>
-            throw SymbolLookupException(name, s"$prefixSym is not a package or class")
+            throw MemberNotFoundException(prefixSym, name, s"$prefixSym is not a package or class")
     end computeSymbol
 
     /** The argument corresponding to class type parameter `tparam` as seen from
@@ -734,12 +735,6 @@ object Types {
     def underlyingRef: TermRef
   }
 
-  abstract class SymResolutionProblem(msg: String, cause: Throwable | Null) extends Exception(msg, cause):
-    def this(msg: String) = this(msg, null)
-
-  class CyclicReference(val kind: String) extends Exception(s"cyclic evaluation of $kind")
-  class NonMethodReference(val kind: String) extends Exception(s"reference to non method type in $kind")
-
   /** The singleton type for path prefix#myDesignator. */
   final class TermRef private (
     val prefix: Type,
@@ -825,7 +820,7 @@ object Types {
 
     def findMember(name: Name, pre: Type)(using Context): Symbol =
       symbol.getDecl(name).getOrElse {
-        throw SymbolLookupException(name, s"Cannot find a member $name in $symbol")
+        throw MemberNotFoundException(symbol, name)
       }
   }
 
@@ -1061,7 +1056,7 @@ object Types {
     private var myRes: Type | Null = null
 
     private def initialize(): Unit =
-      if evaluating then throw CyclicReference(s"method [$paramNames]=>???")
+      if evaluating then throw CyclicReferenceException(s"method [$paramNames]=>???")
       else
         evaluating = true
         myParamTypes = paramTypesExp(this)
@@ -1135,7 +1130,7 @@ object Types {
     private var myRes: Type | Null = null
 
     private def initialize(): Unit =
-      if evaluating then throw CyclicReference(s"polymorphic method [$paramNames]=>???")
+      if evaluating then throw CyclicReferenceException(s"polymorphic method [$paramNames]=>???")
       else
         evaluating = true
         myBounds = boundsRest(this)
@@ -1220,7 +1215,7 @@ object Types {
     private var myRes: Type | Null = null
 
     private def initialize(): Unit =
-      if evaluating then throw CyclicReference(s"polymorphic method [$paramNames]=>???")
+      if evaluating then throw CyclicReferenceException(s"type lambda [$paramNames]=>???")
       else
         evaluating = true
         myBounds = paramTypeBoundsExp(this)

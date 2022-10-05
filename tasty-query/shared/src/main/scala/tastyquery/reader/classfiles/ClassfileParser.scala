@@ -2,6 +2,7 @@ package tastyquery.reader.classfiles
 
 import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags
 import tastyquery.Names.*
 import tastyquery.Symbols.*
@@ -30,7 +31,7 @@ private[reader] object ClassfileParser {
 
   def loadScala2Class(structure: Structure, runtimeAnnotStart: Forked[DataStream])(
     using Context
-  ): Either[PickleReader.BadSignature, Unit] = {
+  ): Either[Scala2PickleFormatException, Unit] = {
     import structure.{reader, given}
 
     val Some(Annotation(tpe, args)) = runtimeAnnotStart.use {
@@ -52,7 +53,7 @@ private[reader] object ClassfileParser {
 
   def loadJavaClass(classOwner: DeclaringSymbol, name: SimpleName, structure: Structure, classSig: SigOrSupers)(
     using Context
-  ): Either[ReadException, Unit] = {
+  ): Either[ClassfileFormatException, Unit] = {
     import structure.{reader, given}
 
     val cls = ClassSymbol.create(name.toTypeName, classOwner)
@@ -152,7 +153,10 @@ private[reader] object ClassfileParser {
       if isScala then
         val annots = runtimeAnnotStart
         if annots != null then ClassKind.Scala2(structure, annots)
-        else throw ReadException(s"class file for ${classRoot.binaryName} is a scala 2 class, but has no annotations")
+        else
+          throw Scala2PickleFormatException(
+            s"class file for ${classRoot.binaryName} is a scala 2 class, but has no annotations"
+          )
       else if isTASTY then ClassKind.TASTy
       else if isScalaRaw then ClassKind.Artifact
       else
@@ -190,7 +194,7 @@ private[reader] object ClassfileParser {
     ClassfileReader.unpickle(classRoot)(headerAndStructure)
   }
 
-  def readKind(classRoot: ClassData)(using Context): Either[ReadException, ClassKind] =
+  def readKind(classRoot: ClassData)(using Context): Either[ClassfileFormatException, ClassKind] =
     ClassfileReader.read(parse(classRoot, toplevel(classRoot)))
 
 }

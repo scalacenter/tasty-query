@@ -13,6 +13,7 @@ import dotty.tools.tasty.TastyFormat.*
 
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Spans.*
@@ -22,8 +23,6 @@ import tastyquery.Types.*
 import tastyquery.TypeTrees.*
 
 import TastyUnpickler.NameTable
-
-private[tasties] class TreeUnpicklerException(msg: String) extends RuntimeException(msg)
 
 private[tasties] sealed trait AbstractCaseDefFactory[CaseDefType]
 private[tasties] case object CaseDefFactory extends AbstractCaseDefFactory[CaseDef]
@@ -857,7 +856,7 @@ private[tasties] class TreeUnpickler(
       val spn = span
       Literal(readConstant)(spn)
     case tag =>
-      throw TreeUnpicklerException(s"Unexpected term tag ${astTagToString(tag)} $posErrorMsg")
+      throw TastyFormatException(s"Unexpected term tag ${astTagToString(tag)} $posErrorMsg")
   }
 
   /** The next tag, following through SHARED tags */
@@ -965,11 +964,11 @@ private[tasties] class TreeUnpickler(
         case typeRef: TypeRef       => ThisType(typeRef)
         case packageRef: PackageRef => packageRef
         case tpe =>
-          throw TreeUnpicklerException(s"Unexpected underlying type of THIS: $tpe")
+          throw TastyFormatException(s"Unexpected underlying type of THIS: $tpe")
     case QUALTHIS =>
       reader.readByte()
       if (tagFollowShared != IDENTtpt) {
-        throw TreeUnpicklerException(s"Unexpected tag after QUALTHIS: ${astTagToString(tagFollowShared)} $posErrorMsg")
+        throw TastyFormatException(s"Unexpected tag after QUALTHIS: ${astTagToString(tagFollowShared)} $posErrorMsg")
       }
       // Skip IDENTtpt tag and name
       reader.readByte()
@@ -1049,7 +1048,7 @@ private[tasties] class TreeUnpickler(
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
     case tag =>
-      throw TreeUnpicklerException(s"Unexpected type tag ${astTagToString(tag)} $posErrorMsg")
+      throw TastyFormatException(s"Unexpected type tag ${astTagToString(tag)} $posErrorMsg")
   }
 
   private def readTypeTree(using LocalContext): TypeTree = reader.nextByte match {
@@ -1152,7 +1151,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       forkAt(reader.readAddr()).readTypeTree.withSpan(spn)
     case tag if isTypeTreeTag(tag) =>
-      throw TreeUnpicklerException(s"Unexpected type tree tag ${astTagToString(tag)} $posErrorMsg")
+      throw TastyFormatException(s"Unexpected type tree tag ${astTagToString(tag)} $posErrorMsg")
     case _ => TypeWrapper(readType)(span)
   }
 
@@ -1257,7 +1256,7 @@ private[tasties] object TreeUnpickler {
 
     /** Registers a symbol at @addr with @name. */
     def registerSym(addr: Addr, sym: Symbol): sym.type =
-      if hasSymbolAt(addr) then throw ExistingDefinitionException(owner, sym.name)
+      if hasSymbolAt(addr) then throw AssertionError(s"Duplicate symbol $sym for address $addr")
       localSymbols(addr) = sym
       sym
 

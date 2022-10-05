@@ -3,6 +3,7 @@ package tastyquery
 import scala.collection.mutable
 
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Signatures.*
@@ -61,23 +62,6 @@ import tastyquery.reader.Loaders.Loader
   * `TermName` for `TermSymbol`s, `PackageSymbol`s and `NoSymbol`.
   */
 object Symbols {
-
-  class ExistingDefinitionException(val scope: Symbol, val name: Name, explanation: String = "")
-      extends Exception(
-        SymbolLookupException.addExplanation(s"$scope has already defined ${name.toDebugString}", explanation)
-      )
-
-  class SymbolLookupException(val name: Name, explanation: String = "")
-      extends SymResolutionProblem(
-        SymbolLookupException.addExplanation(s"Could not find symbol for name ${name.toDebugString}", explanation)
-      )
-
-  object SymbolLookupException {
-    def unapply(e: SymbolLookupException): Option[Name] = Some(e.name)
-
-    def addExplanation(msg: String, explanation: String): String =
-      if (explanation.isEmpty) msg else s"$msg: $explanation"
-  }
 
   sealed abstract class Symbol protected[this] (val owner: Symbol | Null) {
     type ThisNameType <: Name
@@ -381,7 +365,7 @@ object Symbols {
           case Some(decls) =>
             if decls.sizeIs == 1 then Some(decls.head)
             else if decls.sizeIs > 1 then
-              throw SymbolLookupException(name, s"unexpected overloads: ${decls.mkString(", ")}")
+              throw MemberNotFoundException(this, name, s"unexpected overloads in $this: ${decls.mkString(", ")}")
             else None // TODO: this should be an error
           case _ => None
 
