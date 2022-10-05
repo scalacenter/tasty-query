@@ -3,10 +3,11 @@ package tastyquery.reader.pickles
 import PickleReader.{PklStream, index, pkl}
 
 import tastyquery.Contexts.Context
+import tastyquery.Exceptions.*
 import tastyquery.Symbols.Symbol
 
 private[reader] object Unpickler {
-  def loadInfo(sigBytes: IArray[Byte])(using Context): Either[PickleReader.BadSignature, Unit] = {
+  def loadInfo(sigBytes: IArray[Byte])(using Context): Either[Scala2PickleFormatException, Unit] = {
 
     def run(reader: PickleReader, structure: reader.Structure)(using PklStream): Unit = {
       import structure.given
@@ -40,7 +41,7 @@ private[reader] object Unpickler {
     PklStream.read(sigBytes) {
       val reader = PickleReader()
       try Right(run(reader, reader.readStructure()))
-      catch case e: PickleReader.BadSignature => Left(e)
+      catch case e: Scala2PickleFormatException => Left(e)
     }
   }
 

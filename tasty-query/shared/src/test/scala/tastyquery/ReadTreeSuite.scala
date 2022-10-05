@@ -31,6 +31,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   def containsSubtree(p: StructureCheck)(t: Tree): Boolean =
     t.walkTree(p.isDefinedAt)(_ || _, false)
 
+  private object SymbolWithName:
+    def unapply(sym: Symbol): Some[sym.ThisNameType] = Some(sym.name)
+
   private object SymbolWithFullName:
     def unapplySeq(sym: Symbol): Option[List[Name]] = Some(sym.fullName.path)
 
@@ -103,7 +106,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert({
       {
         case PackageDef(
-              s @ Symbol(SimpleName("empty_class")),
+              s @ SymbolWithName(SimpleName("empty_class")),
               List(
                 ClassDef(
                   TypeName(SimpleName("EmptyClass")),
@@ -136,7 +139,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   testUnpickleTopLevel("nested-packages", `simple_trees.nested` / tname"InNestedPackage") { tree =>
     val nestedPackages: StructureCheck = {
       case PackageDef(
-            Symbol(SimpleName("simple_trees")),
+            SymbolWithName(SimpleName("simple_trees")),
             List(PackageDef(SymbolWithFullName(SimpleName("simple_trees"), SimpleName("nested")), _))
           ) =>
     }
@@ -477,7 +480,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val selfDefMatch: StructureCheck = {
       case SelfDef(
             SimpleName("self"),
-            TypeWrapper(TypeRefInternal(SimpleTreesPackageRef(), Symbol(TypeName(SimpleName("ClassWithSelf")))))
+            TypeWrapper(TypeRefInternal(SimpleTreesPackageRef(), SymbolWithName(TypeName(SimpleName("ClassWithSelf")))))
           ) =>
     }
     assert(containsSubtree(selfDefMatch)(clue(tree)))
@@ -566,8 +569,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             // "Inner" inside THIS
             TypeWrapper(
               TypeRefInternal(
-                ThisType(TypeRefInternal(SimpleTreesPackageRef(), Symbol(TypeName(SimpleName("InnerClass"))))),
-                Symbol(TypeName(SimpleName("Inner")))
+                ThisType(TypeRefInternal(SimpleTreesPackageRef(), SymbolWithName(TypeName(SimpleName("InnerClass"))))),
+                SymbolWithName(TypeName(SimpleName("Inner")))
               )
             ),
             Apply(Select(New(TypeIdent(TypeName(SimpleName("Inner")))), _), Nil),
@@ -857,7 +860,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 Ident(SimpleName("x$1")),
                 TypeWrapper(
                   AnnotatedType(
-                    TermRefInternal(NoPrefix, Symbol(SimpleName("x$1"))),
+                    TermRefInternal(NoPrefix, SymbolWithName(SimpleName("x$1"))),
                     New(TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("unchecked")))))
                   )
                 )
@@ -1350,7 +1353,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             ),
             TypeWrapper(
               AndType(
-                TypeRefInternal(SimpleTreesPackageRef(), Symbol(TypeName(SimpleName("IntersectionType")))),
+                TypeRefInternal(SimpleTreesPackageRef(), SymbolWithName(TypeName(SimpleName("IntersectionType")))),
                 TypeRefInternal(SimpleTreesPackageRef(), TypeName(SimpleName("UnionType")))
               )
             ),
@@ -1722,7 +1725,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case New(
             SelectTypeTree(
               TypeWrapper(
-                ThisType(TypeRefInternal(SimpleTreesPackageRef(), Symbol(TypeName(SimpleName("QualThisType")))))
+                ThisType(TypeRefInternal(SimpleTreesPackageRef(), SymbolWithName(TypeName(SimpleName("QualThisType")))))
               ),
               TypeName(SimpleName("Inner"))
             )
@@ -1741,7 +1744,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             Select(qualifier, SignedName(SimpleName("withArray"), _, _)),
             // TODO: check the namespace ("in") once its taken into account
             TypeWrapper(
-              TypeRefInternal(TermRefInternal(NoPrefix, Symbol(SimpleName("arr"))), TypeName(SimpleName("T")))
+              TypeRefInternal(TermRefInternal(NoPrefix, SymbolWithName(SimpleName("arr"))), TypeName(SimpleName("T")))
             ) :: Nil
           ) =>
     }

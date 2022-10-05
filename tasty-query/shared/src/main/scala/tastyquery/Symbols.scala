@@ -3,6 +3,7 @@ package tastyquery
 import scala.collection.mutable
 
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Signatures.*
@@ -62,23 +63,6 @@ import tastyquery.reader.Loaders.Loader
   */
 object Symbols {
 
-  class ExistingDefinitionException(val scope: Symbol, val name: Name, explanation: String = "")
-      extends Exception(
-        SymbolLookupException.addExplanation(s"$scope has already defined ${name.toDebugString}", explanation)
-      )
-
-  class SymbolLookupException(val name: Name, explanation: String = "")
-      extends SymResolutionProblem(
-        SymbolLookupException.addExplanation(s"Could not find symbol for name ${name.toDebugString}", explanation)
-      )
-
-  object SymbolLookupException {
-    def unapply(e: SymbolLookupException): Option[Name] = Some(e.name)
-
-    def addExplanation(msg: String, explanation: String): String =
-      if (explanation.isEmpty) msg else s"$msg: $explanation"
-  }
-
   sealed abstract class Symbol protected[this] (val owner: Symbol | Null) {
     type ThisNameType <: Name
 
@@ -89,7 +73,7 @@ object Symbols {
     private var myTree: Option[DefTree] = None
     private var myPrivateWithin: Option[Symbol] = None
 
-    def withTree(t: DefTree): this.type =
+    private[tastyquery] def withTree(t: DefTree): this.type =
       require(!isPackage, s"Multiple trees correspond to one package, a single tree cannot be assigned")
       myTree = Some(t)
       this
@@ -197,10 +181,6 @@ object Symbols {
     def toDebugString = toString
   }
 
-  object Symbol {
-    def unapply(s: Symbol): Option[Name] = Some(s.name)
-  }
-
   object NoSymbol extends Symbol(null):
     type ThisNameType = SimpleName
 
@@ -250,8 +230,8 @@ object Symbols {
 
     final def paramRefss(using Context): List[Either[List[TermParamRef], List[TypeParamRef]]] =
       def paramssOfType(tp: Type): List[Either[List[TermParamRef], List[TypeParamRef]]] = tp match
-        case mt: PolyType   => Right(mt.paramRefs) :: paramssOfType(mt.resType)
-        case mt: MethodType => Left(mt.paramRefs) :: paramssOfType(mt.resType)
+        case mt: PolyType   => Right(mt.paramRefs) :: paramssOfType(mt.resultType)
+        case mt: MethodType => Left(mt.paramRefs) :: paramssOfType(mt.resultType)
         case _              => Nil
       val local = myParamRefss
       if local != null then local
@@ -381,7 +361,7 @@ object Symbols {
           case Some(decls) =>
             if decls.sizeIs == 1 then Some(decls.head)
             else if decls.sizeIs > 1 then
-              throw SymbolLookupException(name, s"unexpected overloads: ${decls.mkString(", ")}")
+              throw MemberNotFoundException(this, name, s"unexpected overloads in $this: ${decls.mkString(", ")}")
             else None // TODO: this should be an error
           case _ => None
 
@@ -435,9 +415,6 @@ object Symbols {
             case _                => false
           }
         case None => None
-
-    final def resolveOverloaded(name: SignedName)(using Context): Option[Symbol] =
-      getDecl(name)
 
     /** Note: this will force all trees in a package */
     final def declarations(using Context): List[Symbol] =
@@ -544,7 +521,7 @@ object Symbols {
         )
 
     /** Compute tp.baseType(this) */
-    final def baseTypeOf(tp: Type)(using Context): Type =
+    private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Type =
       // TODO
       tp.widen
 

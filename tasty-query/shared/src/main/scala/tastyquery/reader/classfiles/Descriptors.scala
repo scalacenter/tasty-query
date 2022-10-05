@@ -3,12 +3,11 @@ package tastyquery.reader.classfiles
 import scala.annotation.switch
 
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Names.*
 import tastyquery.Types.*
 import tastyquery.Symbols.*
 import tastyquery.Flags
-
-import tastyquery.reader.classfiles.ClassfileReader.ReadException
 
 private[classfiles] object Descriptors:
 
@@ -41,7 +40,7 @@ private[classfiles] object Descriptors:
     followPackages(initPackage, parts)
   end classRef
 
-  @throws[ReadException]
+  @throws[ClassfileFormatException]
   def parseDescriptor(member: Symbol, desc: String)(using Context): Type =
     // TODO: once we support inner classes, decide if we merge with parseSignature
     var offset = 0
@@ -115,7 +114,7 @@ private[classfiles] object Descriptors:
       else abort
 
     def unconsumed: Nothing =
-      throw ReadException(
+      throw ClassfileFormatException(
         s"Expected end of descriptor but found $"${desc.slice(offset, end)}$", [is method? $isMethod]"
       )
 
@@ -123,7 +122,7 @@ private[classfiles] object Descriptors:
       val msg =
         if available == 0 then "Unexpected end of descriptor"
         else s"Unexpected characted '$peek' in descriptor"
-      throw ReadException(s"$msg of $member, original: `$desc` [is method? $isMethod]")
+      throw ClassfileFormatException(s"$msg of $member, original: `$desc` [is method? $isMethod]")
 
     val parsedDescriptor =
       if isMethod then methodDescriptor

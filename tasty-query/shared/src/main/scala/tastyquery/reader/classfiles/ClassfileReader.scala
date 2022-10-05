@@ -4,6 +4,7 @@ import scala.annotation.switch
 
 import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Flags.*
@@ -26,7 +27,9 @@ private[classfiles] final class ClassfileReader private () {
   private def acceptMagicNumber()(using DataStream): Unit = {
     val magic = data.readU4()
     if magic != JavaMagicNumber then
-      throw ReadException(s"Invalid magic number ${magic.toHexString}, should be ${JavaMagicNumber.toHexString}")
+      throw ClassfileFormatException(
+        s"Invalid magic number ${magic.toHexString}, should be ${JavaMagicNumber.toHexString}"
+      )
   }
 
   private def acceptVersion()(using DataStream): Unit = {
@@ -34,7 +37,7 @@ private[classfiles] final class ClassfileReader private () {
     val major = data.readU2()
     if (major < JavaMajorVersion)
       || (major == JavaMajorVersion && minor < JavaMinorVersion)
-    then throw ReadException(s"Invalid class file version $major.$minor, should be at least 45.4")
+    then throw ClassfileFormatException(s"Invalid class file version $major.$minor, should be at least 45.4")
   }
 
   def readConstantPool()(using DataStream): ConstantPool = {
@@ -63,7 +66,7 @@ private[classfiles] final class ClassfileReader private () {
         infos(idx) = ConstantInfo.Utf8(name)
         name
       case _ =>
-        throw ReadException(s"Expected UTF8 at index $idx")
+        throw ClassfileFormatException(s"Expected UTF8 at index $idx")
     }
 
     def sigbytes(idx: Idx): IArray[Byte] =
@@ -76,7 +79,7 @@ private[classfiles] final class ClassfileReader private () {
       case ConstantInfo.Utf8(forked: Forked[DataStream]) =>
         forked.use(data.readSlice(data.readU2()))
       case _ =>
-        throw ReadException(s"Expected unforced UTF8 constant at index $idx")
+        throw ClassfileFormatException(s"Expected unforced UTF8 constant at index $idx")
     }
 
     /** Returns a new IArray with the decoded bytes. */
@@ -118,7 +121,7 @@ private[classfiles] final class ClassfileReader private () {
 
     def apply(index: Idx): ConstantInfo[this.type] = {
       if (index < 1 || index >= infos.length)
-        throw ReadException(s"Invalid constant pool index $index")
+        throw ClassfileFormatException(s"Invalid constant pool index $index")
       infos(index)
     }
 
@@ -246,7 +249,7 @@ private[classfiles] final class ClassfileReader private () {
             skipAnnotationArgument()
           }
         case _ =>
-          throw ReadException(s"Invalid annotation argument tag $tag")
+          throw ClassfileFormatException(s"Invalid annotation argument tag $tag")
       }
     }
 
@@ -287,7 +290,7 @@ private[classfiles] final class ClassfileReader private () {
           }
           AnnotationValue.Arr(values)
         case _ =>
-          throw ReadException(s"Invalid annotation argument tag $tag")
+          throw ClassfileFormatException(s"Invalid annotation argument tag $tag")
       }
     }
 
@@ -336,7 +339,7 @@ private[classfiles] final class ClassfileReader private () {
       case c.Tags.Module             => c.Module(idx(data.readU2()))
       case c.Tags.Package            => c.Package(idx(data.readU2()))
       case _ =>
-        throw ReadException(s"Invalid constant tag $tag")
+        throw ClassfileFormatException(s"Invalid constant tag $tag")
     }
   }
 }
@@ -461,8 +464,6 @@ private[classfiles] object ClassfileReader {
 
   transparent inline def data(using data: DataStream): data.type = data
 
-  final class ReadException(message: String) extends Exception(message)
-
   trait DataStream {
     def readU1(): Int
     def readU2(): Int
@@ -481,9 +482,9 @@ private[classfiles] object ClassfileReader {
       forked
   }
 
-  def read[T](op: => T): Either[ReadException, T] =
+  def read[T](op: => T): Either[ClassfileFormatException, T] =
     try Right(op)
-    catch { case e: ReadException => Left(e) }
+    catch { case e: ClassfileFormatException => Left(e) }
 
   def unpickle[T](classRoot: ClassData)(op: ClassfileReader => DataStream ?=> T): T =
     ClassfileBuffer.Root(classRoot.bytes, 0).use { s ?=>

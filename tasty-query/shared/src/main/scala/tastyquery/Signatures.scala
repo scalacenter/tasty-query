@@ -32,8 +32,8 @@ object Signatures:
           case info: MethodType =>
             val erased = info.paramTypes.map(tpe => ParamSig.Term(ErasedTypeRef.erase(tpe).toSigFullName))
             rec(info.resultType, acc ::: erased)
-          case PolyType(_, tbounds, res) =>
-            rec(res, acc ::: ParamSig.TypeLen(tbounds.length) :: Nil)
+          case info: PolyType =>
+            rec(info.resultType, acc ::: ParamSig.TypeLen(info.paramTypeBounds.length) :: Nil)
           case tpe =>
             val retType = optCtorReturn.map(_.typeRef).getOrElse(tpe)
             Signature(acc, ErasedTypeRef.erase(retType).toSigFullName)

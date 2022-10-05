@@ -5,18 +5,17 @@ import scala.annotation.switch
 import scala.collection.mutable
 
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Types.*
 import tastyquery.Symbols.*
 
-import ClassfileReader.ReadException
-
 private[classfiles] object JavaSignatures:
 
   private type JavaSignature = Null | Binders | Map[TypeName, ClassTypeParamSymbol] | mutable.ListBuffer[TypeName]
 
-  @throws[ReadException]
+  @throws[ClassfileFormatException]
   def parseSignature(member: Symbol { val owner: Symbol }, signature: String)(using Context): Type =
     var offset = 0
     var end = signature.length
@@ -269,12 +268,12 @@ private[classfiles] object JavaSignatures:
 
     def cookFailure(tname: TypeName, reason: String): Nothing =
       val path = if !isClass then s"${member.owner.erasedName}#${member.name}" else member.erasedName
-      throw ReadException(
+      throw ClassfileFormatException(
         s"could not resolve type parameter `$tname` in signature `$signature` of $path because $reason"
       )
 
     def unconsumed: Nothing =
-      throw ReadException(
+      throw ClassfileFormatException(
         s"Expected end of descriptor but found $"${signature.slice(offset, end)}$", [is method? $isMethod]"
       )
 
@@ -282,7 +281,7 @@ private[classfiles] object JavaSignatures:
       val msg =
         if available == 0 then "Unexpected end of descriptor"
         else s"Unexpected character '$peek' at $offset in descriptor (remaining: `${signature.slice(offset, end)}`)"
-      throw ReadException(s"$msg of $member, original: `$signature` [is method? $isMethod]")
+      throw ClassfileFormatException(s"$msg of $member, original: `$signature` [is method? $isMethod]")
 
     val parsedSignature =
       if isMethod then methodSignature

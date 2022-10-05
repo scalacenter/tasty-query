@@ -5,6 +5,7 @@ import scala.collection.mutable
 
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
@@ -14,8 +15,6 @@ import tastyquery.reader.UTF8Utils
 
 import PickleReader.*
 import PickleFormat.*
-
-import tastyquery.Substituters
 
 private[pickles] class PickleReader {
   opaque type Entries = Array[AnyRef | Null]
@@ -48,11 +47,13 @@ private[pickles] class PickleReader {
     val major = pkl.readNat()
     val minor = pkl.readNat()
     if (major != MajorVersion || minor > MinorVersion)
-      throw java.io.IOException(s"Bad pickles version, expected: $MajorVersion.$MinorVersion, found: $major.$minor")
+      throw Scala2PickleFormatException(
+        s"Bad pickles version, expected: $MajorVersion.$MinorVersion, found: $major.$minor"
+      )
   }
 
   def errorBadSignature(msg: String): Nothing =
-    throw PickleReader.BadSignature(msg)
+    throw Scala2PickleFormatException(msg)
 
   private def at[T <: AnyRef](i: Int)(op: PklStream ?=> T)(using PklStream, Entries, Index): T = {
     val tOpt = entries(i).asInstanceOf[T | Null]
@@ -180,7 +181,7 @@ private[pickles] class PickleReader {
       try at(infoRef)(readType())
       catch
         case t: Throwable =>
-          throw new IllegalStateException(s"error while unpickling the type of $owner.$name", t)
+          throw new Scala2PickleFormatException(s"error while unpickling the type of $owner.$name", t)
 
     val sym: Symbol = tag match {
       case TYPEsym | ALIASsym =>
@@ -375,7 +376,7 @@ private[pickles] class PickleReader {
           case sym: PackageSymbol =>
             sym.packageRef
           case sym: Symbol =>
-            throw IllegalStateException(s"cannot construct a THIStpe for $sym")
+            throw Scala2PickleFormatException(s"cannot construct a THIStpe for $sym")
           case external: ExternalSymbolRef =>
             external.toNamedType(NoPrefix) match
               case termRef: TermRef => termRef // necessary for package refs?
@@ -638,8 +639,6 @@ private[reader] object PickleReader {
   def entries[E <: PickleReader#Entries & Singleton](using entries: E): entries.type = entries
 
   private val alwaysTrue: Any => Boolean = _ => true
-
-  final class BadSignature(message: String) extends Exception(message)
 
   object PklStream {
     def read[T](bytes: IArray[Byte])(op: PklStream ?=> T): T =

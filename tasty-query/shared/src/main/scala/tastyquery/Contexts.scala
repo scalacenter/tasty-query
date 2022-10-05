@@ -3,6 +3,7 @@ package tastyquery
 import scala.annotation.tailrec
 
 import tastyquery.Classpaths.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
@@ -64,12 +65,18 @@ object Contexts {
     val defn: Definitions = Definitions(this: @unchecked, RootPackage, EmptyPackage)
 
     /** basically an internal method for loading Java classes embedded in Java descriptors */
-    private[tastyquery] def getClassFromBinaryName(binaryName: String): Either[SymResolutionProblem, ClassSymbol] =
+    private[tastyquery] def getClassFromBinaryName(binaryName: String): Either[MemberNotFoundException, ClassSymbol] =
       getRootIfDefined(binaryName).flatMap { root =>
         root.pkg
           .getDecl(root.rootName.toTypeName)
           .collect { case cls: ClassSymbol => cls }
-          .toRight(SymbolLookupException(root.rootName, s"in ${root.pkg.fullName}; perhaps it is not on the classpath"))
+          .toRight(
+            MemberNotFoundException(
+              root.pkg,
+              root.rootName,
+              s"no root ${root.rootName} in ${root.pkg.fullName}; perhaps it is not on the classpath"
+            )
+          )
       }
 
     /** Does there possibly exist a root for the given binary name. Does not force any classes covered by the name */
@@ -86,7 +93,7 @@ object Contexts {
         case Left(_) => Nil
 
     /** Returns a root if there exists one on the classpath, does not force the underlying root symbols */
-    private def getRootIfDefined(binaryName: String): Either[SymResolutionProblem, Loader.Root] =
+    private def getRootIfDefined(binaryName: String): Either[MemberNotFoundException, Loader.Root] =
       val (packageName, rootName) =
         val lastSep = binaryName.lastIndexOf('.')
         if lastSep == -1 then
@@ -101,10 +108,10 @@ object Contexts {
         val pkg = PackageRef(packageName).symbol
         pkg
           .possibleRoot(rootName)
-          .toRight(SymbolLookupException(rootName, s"no root $rootName exists in package $packageName"))
+          .toRight(MemberNotFoundException(pkg, rootName, s"no root $rootName exists in package $packageName"))
       catch
-        case e: SymResolutionProblem =>
-          Left(SymbolLookupException(rootName, s"unknown package $packageName"))
+        case e: MemberNotFoundException =>
+          Left(MemberNotFoundException(e.prefix, e.name, s"unknown package $packageName"))
 
     def findPackageFromRoot(fullyQualifiedName: FullyQualifiedName): PackageSymbol =
       @tailrec
@@ -114,11 +121,11 @@ object Contexts {
             owner
           case (name: SimpleName) :: pathRest =>
             val next = owner.getPackageDecl(name).getOrElse {
-              throw SymbolLookupException(name, s"cannot find package member $name of $owner")
+              throw MemberNotFoundException(owner, name, s"cannot find package member $name of $owner")
             }
             rec(next, pathRest)
           case name :: pathRest =>
-            throw SymbolLookupException(name, s"cannot find package member $name of $owner")
+            throw MemberNotFoundException(owner, name, s"cannot find package member $name of $owner")
       rec(RootPackage, fullyQualifiedName.path)
     end findPackageFromRoot
 

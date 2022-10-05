@@ -7,6 +7,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 import dotty.tools.tasty.{TastyHeaderUnpickler, TastyReader}
 
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Names.*
 import tastyquery.Signatures.*
 
@@ -43,7 +44,7 @@ private[reader] object TastyUnpickler {
         case name: TermName =>
           name
         case name: FullyQualifiedName =>
-          throw IllegalArgumentException(s"Expected TermName but got ${name.toDebugString}")
+          throw TastyFormatException(s"Expected TermName but got ${name.toDebugString}")
 
     def fullyQualified(ref: NameRef): FullyQualifiedName =
       apply(ref) match
@@ -121,7 +122,7 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
         readEitherName() match
           case simple: TermName              => simple.withObjectSuffix
           case qualified: FullyQualifiedName => qualified.mapLast(_.asSimpleName.withObjectSuffix)
-      case _ => throw new UnsupportedOperationException(s"unexpected tag: $tag")
+      case _ => throw TastyFormatException(s"unexpected tag: $tag")
     }
     assert(reader.currentAddr == end, s"bad name $result $start ${reader.currentAddr} $end")
     result

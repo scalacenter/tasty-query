@@ -7,7 +7,6 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 
 import Paths.*
-import RestrictedUnpicklingSuite.MissingTopLevelDecl
 
 /** The lazy-loading suite explicitly tests that some operations do, and do
   * not, trigger loading of particular information.
@@ -88,9 +87,8 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
   test("demo-symbolic-package-leaks".ignore) {
     // ignore because this passes only on clean builds
 
-    def failingGetTopLevelClass(path: TopLevelDeclPath)(using Context): Nothing =
-      if ctx.existsRoot(path.rootClassName) then fail(s"expected no class, but got ${path.rootClassName}")
-      else throw MissingTopLevelDecl(path, SymbolLookupException(path.name))
+    def assertNoTopLevelClass(path: TopLevelDeclPath)(using Context): Unit =
+      assert(!ctx.existsRoot(path.rootClassName), s"expected no class, but got ${path.rootClassName}")
 
     def forceTopLevel(path: TopLevelDeclPath)(using Context): Unit =
       try
@@ -105,9 +103,7 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
       val `symbolic_--.#::` = name"symbolic_--" / tname"#::"
       val `symbolic_$minus$minus.#::` = name"symbolic_$$minus$$minus" / tname"#::"
 
-      intercept[MissingTopLevelDecl] {
-        failingGetTopLevelClass(`symbolic_--.#::`) // this will fail, we can't find a symbolic package
-      }
+      assertNoTopLevelClass(`symbolic_--.#::`) // we can't find a symbolic package
       assertSymbolNotExistsOrNotLoadedYet(`symbolic_--.#::`) // still does not exist
       assertSymbolNotExistsOrNotLoadedYet(`symbolic_$minus$minus.#::`) // not existant yet
 

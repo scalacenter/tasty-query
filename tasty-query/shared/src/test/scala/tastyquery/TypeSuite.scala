@@ -645,7 +645,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case mt @ MethodType(List(paramName)) =>
         assertEquals(paramName, name"x")
         assert(clue(mt.paramTypes.head).isOfClass(IntClass))
-        assert(clue(mt.resType).isOfClass(IntClass))
+        assert(clue(mt.resultType).isOfClass(IntClass))
     }
     assert(clue(body.tpe).isOfClass(IntClass))
   }
@@ -667,7 +667,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case mt @ MethodType(List(paramName)) =>
         assertEquals(paramName, name"x")
         assert(clue(mt.paramTypes.head).isOfClass(IntClass))
-        assert(clue(mt.resType).isOfClass(IntClass))
+        assert(clue(mt.resultType).isOfClass(IntClass))
     }
     assert(clue(body.tpe).isOfClass(IntClass))
   }
