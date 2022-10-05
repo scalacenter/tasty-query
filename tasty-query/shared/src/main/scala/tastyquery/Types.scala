@@ -699,6 +699,15 @@ object Types {
   }
 
   object NamedType {
+
+    private[tastyquery] def possibleSelFromPackage(prefix: Type, name: TermName)(using Context): Type = prefix match
+      case prefix: PackageRef if name.isInstanceOf[SimpleName] =>
+        prefix.symbol.getPackageDeclInternal(name.asSimpleName) match
+          case Some(nested) => PackageRef(nested)
+          case _            => apply(prefix, name)
+      case prefix =>
+        apply(prefix, name)
+
     def apply(prefix: Type, sym: Symbol)(using Context): NamedType =
       sym match
         case sym: TypeSymbol => TypeRef(prefix, sym)
