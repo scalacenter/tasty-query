@@ -248,39 +248,40 @@ object Types {
         }
     }
 
-    final def applyIfParameterized(args: List[Type])(using Context): Type =
+    private[tastyquery] final def applyIfParameterized(args: List[Type])(using Context): Type =
       if (args.nonEmpty /*typeParams.nonEmpty*/ ) appliedTo(args) else this
 
     /** Substitute all types of the form `TypeParamRef(from, N)` by `TypeParamRef(to, N)`. */
-    final def subst(from: Binders, to: Binders)(using Context): Type =
+    private[tastyquery] final def subst(from: Binders, to: Binders)(using Context): Type =
       Substituters.subst(this, from, to)
 
     /** Substitute bound types by some other types */
-    final def substParams(from: Binders, to: List[Type])(using Context): Type =
+    private[tastyquery] final def substParams(from: Binders, to: List[Type])(using Context): Type =
       Substituters.substParams(this, from, to)
 
-    final def typeSymbol(using Context): Symbol = this match
+    private[tastyquery] final def typeSymbol(using Context): Symbol = this match
       case tpe: TypeRef => tpe.symbol
       case _            => NoSymbol
 
-    final def termSymbol(using Context): Symbol = this match
+    private[tastyquery] final def termSymbol(using Context): Symbol = this match
       case tpe: TermRef => tpe.symbol
       case _            => NoSymbol
 
-    final def widenOverloads(using Context): Type =
+    private[tastyquery] final def widenOverloads(using Context): Type =
       this.widen match
         case tp: TermRef => tp.underlying.widenOverloads
         case tp          => tp
 
     /** Widen from ExprType type to its result type.
-      *  (Note: no stripTypeVar needed because TypeVar's can't refer to ExprTypes.)
+      *
+      * For all other types, return `this`.
       */
     final def widenExpr: Type = this match {
       case tp: ExprType => tp.resType
       case _            => this
     }
 
-    /** remove singleton types, ExprTypes and AnnotatedTypes */
+    /** Widen singleton types, ExprTypes, AnnotatedTypes and RefinedTypes. */
     final def widen(using Context): Type = this match
       case _: TypeRef | _: MethodType | _: PolyType => this // fast path for most frequent cases
       case tp: TermRef => // fast path for next most frequent case
@@ -291,12 +292,12 @@ object Types {
       case tp: RefinedType   => tp.parent.widen
       case tp                => tp
 
-    final def widenIfUnstable(using Context): Type = this match
+    private[tastyquery] final def widenIfUnstable(using Context): Type = this match
       // TODO Handle unstable term refs like method calls or values
       case tp: TermRef => tp
       case tp          => tp.widen
 
-    def dealias(using Context): Type = dealias1(keepOpaques = false)
+    final def dealias(using Context): Type = dealias1(keepOpaques = false)
 
     private def dealias1(keepOpaques: Boolean)(using Context): Type = this match {
       case tp: TypeRef =>
@@ -345,17 +346,13 @@ object Types {
         NoType
     }
 
-    final def isTypeAlias: Boolean = this match
-      case WildcardTypeBounds(bounds) => bounds.isInstanceOf[TypeAlias]
-      case _                          => false
-
     /** The basetype of this type with given class symbol, NoType if `base` is not a class. */
     final def baseType(base: Symbol)(using Context): Type =
       base match
         case base: ClassSymbol => base.baseTypeOf(this)
         case _                 => NoType
 
-    /** The member with given `name` and required and/or excluded flags */
+    /** The member with the given `name`. */
     final def member(name: Name)(using Context): Symbol =
       // We need a valid prefix for `asSeenFrom`
       val pre = this match
@@ -363,11 +360,8 @@ object Types {
         case _             => widenIfUnstable
       findMember(name, pre)
 
-    /** Find member of this type with given `name`, all `required`
-      * flags and no `excluded` flag and produce a denotation that contains
-      * the type of the member as seen from given prefix `pre`.
-      */
-    def findMember(name: Name, pre: Type)(using Context): Symbol
+    /** Find the member of this type with the given `name` when prefix `pre`. */
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol
 
     private[Types] def lookupRefined(name: Name)(using Context): Type =
       NoType
@@ -376,7 +370,7 @@ object Types {
       * `<pre> . <sym>` is an actual argument reference, i.e., `pre` is not the
       * ThisType of `sym`'s owner, or a reference to `sym`'s owner.'
       */
-    def isArgPrefixOf(sym: Symbol)(using Context): Boolean =
+    private[tastyquery] final def isArgPrefixOf(sym: Symbol)(using Context): Boolean =
       sym match
         case sym: ClassTypeParamSymbol =>
           this match
@@ -386,7 +380,7 @@ object Types {
         case _ =>
           false
 
-    def asSeenFrom(pre: Type, cls: Symbol)(using Context): Type =
+    final def asSeenFrom(pre: Type, cls: Symbol)(using Context): Type =
       TypeOps.asSeenFrom(this, pre, cls)
 
     final def isRef(sym: Symbol)(using Context): Boolean =
@@ -400,9 +394,9 @@ object Types {
       }
 
     /** Is this type exactly Nothing (no vars, aliases, refinements etc allowed)? */
-    def isExactlyNothing(using Context): Boolean = this match
+    final def isExactlyNothing(using Context): Boolean = this match
       case tp: TypeRef =>
-        tp.name == tpnme.Nothing && (tp.symbol eq ctx.findSymbolFromRoot(nme.scalaPackageName :: tpnme.Nothing :: Nil))
+        tp.name == tpnme.Nothing && (tp.symbol eq defn.NothingClass)
       case _ =>
         false
 
@@ -417,25 +411,25 @@ object Types {
       }
 
     /** The lower bound of a TypeBounds type, the type itself otherwise */
-    def lowerBound: Type = this match {
+    private[tastyquery] final def lowerBound: Type = this match {
       case WildcardTypeBounds(bounds) => bounds.low
       case _                          => this
     }
 
     /** The upper bound of a TypeBounds type, the type itself otherwise */
-    def upperBound: Type = this match {
+    private[tastyquery] final def upperBound: Type = this match {
       case WildcardTypeBounds(bounds) => bounds.high
       case _                          => this
     }
 
     /** Is self type bounded by a type lambda or AnyKind? */
-    def isLambdaSub(using Context): Boolean = false // TODO hkResult.exists
+    private[tastyquery] final def isLambdaSub(using Context): Boolean = false // TODO hkResult.exists
 
-    def &(that: Type)(using Context): Type =
+    final def &(that: Type)(using Context): Type =
       // TypeComparer.glb(this, that)
       AndType.make(this, that)
 
-    def |(that: Type)(using Context): Type =
+    final def |(that: Type)(using Context): Type =
       // TypeCompare.lub(this, that)
       OrType.make(this, that)
 
@@ -478,7 +472,7 @@ object Types {
       */
     def translucentSuperType(using Context): Type = superType
 
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       underlying.findMember(name, pre)
   }
 
@@ -494,18 +488,13 @@ object Types {
 
   trait MethodicType extends TermType
 
-  /** A marker trait for types that can be types of values or prototypes of value types */
-  trait ValueTypeOrProto extends TermType
-
   /** A marker trait for types that can be types of values or that are higher-kinded */
-  trait ValueType extends ValueTypeOrProto
+  trait ValueType extends TermType
 
   /** A marker trait for types that are guaranteed to contain only a
     * single non-null value (they might contain null in addition).
     */
-  trait SingletonType extends TypeProxy with ValueType {
-    def isOverloaded(using Context): Boolean = false
-  }
+  trait SingletonType extends TypeProxy with ValueType
 
   trait PathType extends TypeProxy with ValueType {
     final def select(name: Name): NamedType = name match
@@ -535,9 +524,9 @@ object Types {
     private var myName: ThisName | Null = null
     private var mySymbol: ThisSymbolType | Null = null
 
-    def isType: Boolean = isInstanceOf[TypeRef]
+    final def isType: Boolean = isInstanceOf[TypeRef]
 
-    def isTerm: Boolean = isInstanceOf[TermRef]
+    final def isTerm: Boolean = isInstanceOf[TermRef]
 
     /** If designator is a name, this name. Otherwise, the original name
       * of the designator symbol.
@@ -558,7 +547,7 @@ object Types {
       case designator: Scala2ExternalSymRef => designator.name
     }).asInstanceOf[ThisName]
 
-    def selectIn(name: SignedName, in: TypeRef): TermRef =
+    final def selectIn(name: SignedName, in: TypeRef): TermRef =
       TermRef(this, LookupIn(in, name))
 
     final def symbol(using Context): ThisSymbolType =
@@ -641,7 +630,7 @@ object Types {
       * Otherwise, a typebounds argument is dropped and the original type parameter
       * reference is returned.
       */
-    def argForParam(pre: Type, widenAbstract: Boolean = false)(using Context): Type = {
+    private[tastyquery] final def argForParam(pre: Type, widenAbstract: Boolean = false)(using Context): Type = {
       val tparam = symbol.asInstanceOf[ClassTypeParamSymbol]
       val cls = tparam.owner
       val base = pre.baseType(cls)
@@ -684,7 +673,7 @@ object Types {
       *
       *    T#A --> B    if A is bound to an alias `= B` in T
       */
-    def derivedSelect(prefix: Type)(using Context): Type =
+    private[tastyquery] final def derivedSelect(prefix: Type)(using Context): Type =
       if (prefix eq this.prefix) this
       else if (prefix.isExactlyNothing) prefix
       else {
@@ -727,21 +716,12 @@ object Types {
         case _: TermName => TermRef(prefix, external)
   }
 
-  /** A reference to an implicit definition. This can be either a TermRef or a
-    * Implicits.RenamedImplicitRef.
-    */
-  trait ImplicitRef {
-    def implicitName: TermName
-    def underlyingRef: TermRef
-  }
-
   /** The singleton type for path prefix#myDesignator. */
   final class TermRef private (
     val prefix: Type,
     private var myDesignator: TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
   ) extends NamedType
-      with SingletonType
-      with ImplicitRef {
+      with SingletonType {
 
     type ThisName = TermName
     type ThisSymbolType = TermSymbol
@@ -774,17 +754,13 @@ object Types {
       termSymbol.declaredType.asSeenFrom(prefix, termSymbol.owner)
     }
 
-    override def isOverloaded(using Context): Boolean =
+    final def isOverloaded(using Context): Boolean =
       myDesignator match
         case LookupIn(pre, ref) =>
           pre.symbol.memberIsOverloaded(ref)
         case _ => false
 
-    def implicitName: TermName = name
-
-    def underlyingRef: TermRef = this
-
-    override def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Symbol =
       underlying match
         case mt: MethodType if mt.paramInfos.isEmpty /*&& symbol.is(StableRealizable)*/ =>
           mt.resultType.findMember(name, pre)
@@ -818,7 +794,7 @@ object Types {
       } else local
     }
 
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       symbol.getDecl(name).getOrElse {
         throw MemberNotFoundException(symbol, name)
       }
@@ -854,7 +830,7 @@ object Types {
       case cls: ClassSymbol          => cls.classInfo
       case sym: TypeSymbolWithBounds => sym.upperBound
 
-    override def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Symbol =
       symbol match
         case sym: ClassSymbol =>
           ClassInfo.findMember(sym, name, pre)
@@ -872,7 +848,7 @@ object Types {
   end TypeRef
 
   case object NoPrefix extends Type {
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       throw new AssertionError(s"Cannot find member in NoPrefix")
   }
 
@@ -880,7 +856,7 @@ object Types {
     override def underlying(using Context): Type =
       tref // TODO This is probably wrong
 
-    def cls(using Context): ClassSymbol = tref.symbol.asClass
+    final def cls(using Context): ClassSymbol = tref.symbol.asClass
   }
 
   /** A constant type with single `value`. */
@@ -921,11 +897,11 @@ object Types {
       * Applications of higher-kinded type constructors to wildcard arguments
       * are equivalent to existential types, which are not supported.
       */
-    def isUnreducibleWild(using Context): Boolean =
+    private[tastyquery] final def isUnreducibleWild(using Context): Boolean =
       // TODO tycon.isLambdaSub && hasWildcardArg && !isMatchAlias
       false
 
-    override def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Symbol =
       tycon match
         case tycon: TypeRef =>
           if tycon.symbol.isClass then tycon.findMember(name, pre)
@@ -933,11 +909,11 @@ object Types {
         case _ =>
           ???
 
-    def derivedAppliedType(tycon: Type, args: List[Type])(using Context): AppliedType =
+    private[tastyquery] final def derivedAppliedType(tycon: Type, args: List[Type])(using Context): AppliedType =
       if ((tycon eq this.tycon) && (args eq this.args)) this
       else AppliedType(tycon, args)
 
-    def map(op: Type => Type)(using Context): AppliedType =
+    private[tastyquery] final def map(op: Type => Type)(using Context): AppliedType =
       derivedAppliedType(op(tycon), args.mapConserve(op))
   }
 
@@ -947,7 +923,7 @@ object Types {
 
     override def underlying(using Context): Type = resType
 
-    def derivedExprType(resType: Type)(using Context): ExprType =
+    private[tastyquery] final def derivedExprType(resType: Type)(using Context): ExprType =
       if (resType eq this.resType) this else ExprType(resType)
   }
 
@@ -959,16 +935,14 @@ object Types {
 
     def paramNames: List[ThisName]
     def paramInfos: List[PInfo]
-    def resType: Type
+    def resultType: Type
 
     protected def newParamRef(n: Int): ParamRefType
-
-    def resultType: Type = resType
 
     val paramRefs: List[ParamRefType] =
       List.tabulate(paramNames.size)(newParamRef(_): @unchecked)
 
-    def lookupRef(name: ThisName): Option[ParamRefType] =
+    final def lookupRef(name: ThisName): Option[ParamRefType] =
       paramNames.indexOf(name) match
         case -1    => None
         case index => Some(paramRefs(index))
@@ -981,16 +955,16 @@ object Types {
     private[tastyquery] def integrate(params: List[Symbol], tp: Type)(using Context): Type =
       Substituters.subst(tp, params, paramRefs)
 
-    final def derivedLambdaType(
+    private[tastyquery] final def derivedLambdaType(
       paramNames: List[ThisName] = this.paramNames,
       paramInfos: List[PInfo] = this.paramInfos,
-      resType: Type = this.resType
+      resType: Type = this.resultType
     )(using Context): This =
-      if (paramNames eq this.paramNames) && (paramInfos eq this.paramInfos) && (resType eq this.resType) then
+      if (paramNames eq this.paramNames) && (paramInfos eq this.paramInfos) && (resType eq this.resultType) then
         this.asInstanceOf[This]
       else newLikeThis(paramNames, paramInfos, resType)
 
-    def newLikeThis(paramNames: List[ThisName], paramInfos: List[PInfo], resType: Type)(using Context): This =
+    private def newLikeThis(paramNames: List[ThisName], paramInfos: List[PInfo], resType: Type)(using Context): This =
       companion(paramNames)(
         x => paramInfos.mapConserve(Substituters.subst(_, this, x).asInstanceOf[PInfo]),
         x => resType.subst(this, x)
@@ -1037,7 +1011,7 @@ object Types {
     protected def newParamRef(n: Int): ParamRefType = TypeParamRef(this, n)
 
     def instantiate(args: List[Type])(using Context): Type =
-      Substituters.substParams(resType, this, args)
+      Substituters.substParams(resultType, this, args)
 
     /** The type-bounds `[tparams := this.paramRefs] bounds`, where `tparams` is a list of type parameter symbols */
     private[tastyquery] def integrate(tparams: List[TypeParamSymbol], bounds: TypeBounds)(using Context): TypeBounds =
@@ -1067,7 +1041,7 @@ object Types {
       if myParamTypes == null then initialize()
       myParamTypes.nn
 
-    def resType: Type =
+    def resultType: Type =
       if myRes == null then initialize()
       myRes.nn
 
@@ -1076,12 +1050,12 @@ object Types {
 
     def companion: LambdaTypeCompanion[TermName, Type, MethodType] = MethodType
 
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
       if evaluating then s"MethodType($paramNames)(<evaluating>...)"
-      else s"MethodType($paramNames)($paramTypes, $resType)"
+      else s"MethodType($paramNames)($paramTypes, $resultType)"
   end MethodType
 
   object MethodType extends LambdaTypeCompanion[TermName, Type, MethodType]:
@@ -1141,7 +1115,7 @@ object Types {
       if myBounds == null then initialize()
       myBounds.nn
 
-    def resType: Type =
+    def resultType: Type =
       if myRes == null then initialize()
       myRes.nn
 
@@ -1150,7 +1124,7 @@ object Types {
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, PolyType] =
       PolyType
 
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
@@ -1169,11 +1143,8 @@ object Types {
       paramNames: List[TypeName]
     )(boundsRest: Binders => List[TypeBounds], resultRest: Binders => Type): PolyType =
       val tpe = new PolyType(paramNames)(boundsRest, resultRest)
-      tpe.resType // initialize now
+      tpe.resultType // initialize now
       tpe
-
-    def unapply(tpe: PolyType): (List[TypeName], List[TypeBounds], Type) =
-      (tpe.paramNames, tpe.paramTypeBounds, tpe.resultType)
 
     private[tastyquery] def fromParams(params: List[TypeParam], resultType: Type)(using Context): Type =
       if params.isEmpty then resultType
@@ -1197,7 +1168,7 @@ object Types {
   sealed trait BoundType extends Type:
     type BindersType <: Binders
     def binders: BindersType
-    def copyBoundType(newBinders: BindersType): Type
+    private[tastyquery] def copyBoundType(newBinders: BindersType): Type
 
   sealed trait ParamRef extends BoundType:
     def paramNum: Int
@@ -1226,7 +1197,7 @@ object Types {
       if myBounds == null then initialize()
       myBounds.nn
 
-    def resType: Type =
+    def resultType: Type =
       if myRes == null then initialize()
       myRes.nn
 
@@ -1251,7 +1222,7 @@ object Types {
       paramNames: List[TypeName]
     )(paramTypeBoundsExp: Binders => List[TypeBounds], resultTypeExp: Binders => Type): TypeLambda =
       val tpe = new TypeLambda(paramNames)(paramTypeBoundsExp, resultTypeExp)
-      tpe.resType // initialize now
+      tpe.resultType // initialize now
       tpe
 
     private[tastyquery] def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type)(
@@ -1263,7 +1234,7 @@ object Types {
   case class TypeParamRef(binders: TypeLambdaType, paramNum: Int) extends TypeProxy with ValueType with ParamRef {
     type BindersType = TypeLambdaType
 
-    def copyBoundType(newBinders: BindersType): Type =
+    private[tastyquery] def copyBoundType(newBinders: BindersType): Type =
       newBinders.paramRefs(paramNum)
 
     override def underlying(using Context): Type = bounds.high
@@ -1278,7 +1249,7 @@ object Types {
   case class TermParamRef(binders: TermLambdaType, paramNum: Int) extends ParamRef with SingletonType {
     type BindersType = TermLambdaType
 
-    def copyBoundType(newBinders: BindersType): Type =
+    private[tastyquery] def copyBoundType(newBinders: BindersType): Type =
       newBinders.paramRefs(paramNum)
 
     def underlying(using Context): Type = binders.paramInfos(paramNum)
@@ -1288,7 +1259,7 @@ object Types {
   case class AnnotatedType(typ: Type, annotation: Tree) extends TypeProxy with ValueType {
     override def underlying(using Context): Type = typ
 
-    def derivedAnnotatedType(typ: Type, annotation: Tree)(using Context): AnnotatedType =
+    private[tastyquery] final def derivedAnnotatedType(typ: Type, annotation: Tree)(using Context): AnnotatedType =
       if ((typ eq this.typ) && (annotation eq this.annotation)) this
       else AnnotatedType(typ, annotation)
   }
@@ -1305,7 +1276,9 @@ object Types {
       with ValueType {
     override def underlying(using Context): Type = parent
 
-    def derivedRefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds)(using Context): Type =
+    private[tastyquery] final def derivedRefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds)(
+      using Context
+    ): Type =
       if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedInfo eq this.refinedInfo)) this
       else RefinedType(parent, refinedName, refinedInfo)
   }
@@ -1319,15 +1292,13 @@ object Types {
   object RecType:
     def apply(parentExp: RecType => Type): RecType =
       new RecType(parentExp) // TODO? Perform normalization like dotc?
-
-    def unapply(recType: RecType): Some[Type] = Some(recType.parent)
   end RecType
 
   abstract class TypeBounds(val low: Type, val high: Type) extends TypeMappable {
     type ThisTypeMappableType = TypeBounds
 
     /** The non-alias type bounds type with given bounds */
-    def derivedTypeBounds(low: Type, high: Type)(using Context): TypeBounds =
+    private[tastyquery] def derivedTypeBounds(low: Type, high: Type)(using Context): TypeBounds =
       if ((low eq this.low) && (high eq this.high)) this
       else RealTypeBounds(low, high)
   }
@@ -1335,25 +1306,25 @@ object Types {
   case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high)
 
   case class TypeAlias(alias: Type) extends TypeBounds(alias, alias) {
-    def derivedTypeAlias(alias: Type): TypeAlias =
+    private[tastyquery] def derivedTypeAlias(alias: Type): TypeAlias =
       if alias eq this.alias then this
       else TypeAlias(alias)
   }
 
   case class BoundedType(bounds: TypeBounds, alias: Type) extends Type {
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       bounds.high.findMember(name, pre)
   }
 
   case class NamedTypeBounds(name: TypeName, bounds: TypeBounds) extends Type {
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       bounds.high.findMember(name, pre)
   }
 
   case class WildcardTypeBounds(bounds: TypeBounds) extends TypeProxy {
     override def underlying(using Context): Type = bounds.high
 
-    def derivedWildcardTypeBounds(bounds: TypeBounds)(using Context): WildcardTypeBounds =
+    private[tastyquery] def derivedWildcardTypeBounds(bounds: TypeBounds)(using Context): WildcardTypeBounds =
       if bounds eq this.bounds then this
       else WildcardTypeBounds(bounds)
   }
@@ -1373,29 +1344,29 @@ object Types {
         computedJoin
     }
 
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       join.findMember(name, pre)
 
-    def derivedOrType(first: Type, second: Type)(using Context): Type =
+    private[tastyquery] def derivedOrType(first: Type, second: Type)(using Context): Type =
       if (first eq this.first) && (second eq this.second) then this
       else OrType.make(first, second)
   }
 
   object OrType {
-    def make(first: Type, second: Type)(using Context): Type =
+    private[tastyquery] def make(first: Type, second: Type)(using Context): Type =
       if (first eq second) first
       else OrType(first, second)
   }
 
   case class AndType(first: Type, second: Type) extends GroundType with ValueType {
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       first.findMember(name, pre) // TODO 'meet' with second.findMember(name, pre)
 
-    def derivedAndType(first: Type, second: Type)(using Context): Type =
+    private[tastyquery] def derivedAndType(first: Type, second: Type)(using Context): Type =
       if ((first eq this.first) && (second eq this.second)) this
       else AndType.make(first, second)
 
-    def parts: List[Type] =
+    private[tastyquery] def parts: List[Type] =
       def rec(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
         case AndType(tp1, tp2) => rec(tp2, rec(tp1, acc))
         case tpe: Type         => acc += tpe
@@ -1403,17 +1374,17 @@ object Types {
   }
 
   object AndType {
-    def make(first: Type, second: Type)(using Context): Type =
+    private[tastyquery] def make(first: Type, second: Type)(using Context): Type =
       // TODO Avoid &'ing with Any
       if first eq second then first
       else AndType(first, second)
   }
 
   case class ClassInfo(cls: ClassSymbol) extends GroundType {
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       ClassInfo.findMember(cls, name, pre)
 
-    def derivedClassInfo(pre: Type)(using Context): ClassInfo =
+    private[tastyquery] def derivedClassInfo(pre: Type)(using Context): ClassInfo =
       this // so far do not store pre in ClassInfo
   }
 
@@ -1425,7 +1396,7 @@ object Types {
   end ClassInfo
 
   case object NoType extends GroundType {
-    def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       throw new AssertionError(s"Cannot find member in NoType")
   }
 }
