@@ -77,7 +77,7 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     val RefinedTypeTree = resolve(name"simple_trees" / tname"RefinedTypeTree").asClass
 
     val andType = RefinedTypeTree.getDecl(name"andType").get.asTerm
-    assertIsSignedName(andType.signedName, "andType", "():simple_trees.RefinedTypeTree.AndTypeA")
+    intercept[UnsupportedOperationException](andType.signedName)
   }
 
   testWithContext("array types") {

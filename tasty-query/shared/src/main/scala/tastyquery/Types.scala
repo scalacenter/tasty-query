@@ -126,16 +126,10 @@ object Types {
                 case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => preErase(alias)
         case tpe: TypeParamRef =>
           preErase(tpe.bounds.high)
-        case AndType(left, right) =>
-          // TODO Take `right` into account. Currently we just try not to crash.
-          preErase(left)
-        case OrType(left, right) =>
-          // TODO Take `right` into account. Currently we just try not to crash.
-          preErase(left)
         case WildcardTypeBounds(bounds) =>
           preErase(bounds.high)
         case tpe =>
-          throw IllegalStateException(s"Cannot erase $tpe")
+          throw UnsupportedOperationException(s"Cannot erase $tpe")
     end preErase
 
     private def finishErase(typeRef: ErasedTypeRef)(using Context): ErasedTypeRef =
