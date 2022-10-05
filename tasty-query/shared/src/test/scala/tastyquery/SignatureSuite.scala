@@ -210,4 +210,10 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(arrayOfIntArrayOps.signedName, "arrayOfIntArrayOps", "(scala.Int[][]):inheritance.MyArrayOps[]")
   }
 
+  testWithContext("package-ref-from-tasty") {
+    val LazyVals = resolve(name"javacompat" / tname"LazyVals" / obj).asClass
+    val getOffsetStatic = LazyVals.getDecl(name"getOffsetStatic").get.asTerm
+    assertIsSignedName(getOffsetStatic.signedName, "getOffsetStatic", "(java.lang.reflect.Field):scala.Long")
+  }
+
 end SignatureSuite

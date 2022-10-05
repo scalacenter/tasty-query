@@ -87,7 +87,7 @@ object TypeTrees {
   /** qualifier.name */
   case class TermRefTypeTree(qualifier: Tree, name: TermName)(span: Span) extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
-      TermRef(qualifier.tpe, name)
+      NamedType.possibleSelFromPackage(qualifier.tpe, name)
 
     override final def withSpan(span: Span): TermRefTypeTree = TermRefTypeTree(qualifier, name)(span)
   }

@@ -314,7 +314,7 @@ object Trees {
   case class Select(qualifier: Tree, name: TermName)(span: Span) extends Tree(span) {
     // not final because it is overridden in SelectIn
     protected def calculateType(using Context): Type =
-      NamedType(qualifier.tpe, name)
+      NamedType.possibleSelFromPackage(qualifier.tpe, name)
 
     override def withSpan(span: Span): Select = Select(qualifier, name)(span)
   }
