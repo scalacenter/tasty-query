@@ -59,9 +59,14 @@ private[pickles] class PickleReader {
     val tOpt = entries(i).asInstanceOf[T | Null]
     if tOpt == null then {
       val res = pkl.unsafeFork(index(i))(op)
-      assert(entries(i) == null || (entries(i) == res), s"$res != ${entries(i)}")
-      entries(i) = res
-      res
+      val existingEntry = entries(i).asInstanceOf[T | Null]
+      if existingEntry == null then
+        entries(i) = res
+        res
+      else
+        // Sometimes, Types get recomputed; I don't know why. We return the existing one.
+        assert((existingEntry eq res) || res.isInstanceOf[Type], s"$res != $existingEntry")
+        existingEntry
     } else tOpt.asInstanceOf[T] // temp hack for expression evaluator
   }
 
@@ -197,13 +202,13 @@ private[pickles] class PickleReader {
         sym match
           case sym: TypeMemberSymbol =>
             sym.withDefinition(tpe match
-              case WildcardTypeBounds(bounds) => TypeMemberDefinition.AbstractType(bounds)
-              case _                          => TypeMemberDefinition.TypeAlias(tpe)
+              case tpe: WildcardTypeBounds => TypeMemberDefinition.AbstractType(tpe.bounds)
+              case _                       => TypeMemberDefinition.TypeAlias(tpe)
             )
           case sym: TypeParamSymbol =>
             tpe match
-              case WildcardTypeBounds(bounds) => sym.setBounds(bounds)
-              case tpe: TypeLambda            => sym.setBounds(TypeAlias(tpe)) // TODO Higher-kinded type parameters
+              case tpe: WildcardTypeBounds => sym.setBounds(tpe.bounds)
+              case tpe: TypeLambda         => sym.setBounds(TypeAlias(tpe)) // TODO Higher-kinded type parameters
               case _ =>
                 throw AssertionError(s"unexpected type $tpe for $sym, owner is $owner")
         sym
@@ -506,8 +511,10 @@ private[pickles] class PickleReader {
 
   /** Convert temp poly type to poly type and leave other types alone. */
   private def translateTempPoly(tp: Type, isMethod: Boolean)(using Context): Type = tp match
-    case WildcardTypeBounds(RealTypeBounds(lo, hi)) =>
-      WildcardTypeBounds(RealTypeBounds(translateTempPoly(lo, isMethod), translateTempPoly(hi, isMethod)))
+    case tp: WildcardTypeBounds =>
+      WildcardTypeBounds(
+        RealTypeBounds(translateTempPoly(tp.bounds.low, isMethod), translateTempPoly(tp.bounds.high, isMethod))
+      )
     case TempPolyType(tparams, restpe) =>
       // This check used to read `owner.isTerm` but that wasn't always correct,
       // I'm not sure `owner.is(Method)` is 100% correct either but it seems to
@@ -608,11 +615,11 @@ private[pickles] class PickleReader {
           case info =>
             tp.derivedRefinedType(parent1, name, info)
         }*/
-      case tp @ AppliedType(tycon, args) =>
+      case tp: AppliedType =>
         /*val tycon1 = tycon tycon.safeDealias
         if (tycon1 ne tycon) elim(tycon1.appliedTo(args))
         else*/
-        tp.derivedAppliedType(tycon, args.map(mapArg))
+        tp.derivedAppliedType(tp.tycon, tp.args.map(mapArg))
       /*case tp: AndOrType =>
         // scalajs.js.|.UnionOps has a type parameter upper-bounded by `_ | _`
         tp.derivedAndOrType(mapArg(tp.tp1).bounds.hi, mapArg(tp.tp2).bounds.hi)*/

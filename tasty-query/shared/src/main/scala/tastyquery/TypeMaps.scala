@@ -134,15 +134,15 @@ private[tastyquery] object TypeMaps {
         case tp: LambdaType =>
           mapOverLambda(tp)
 
-        case tp @ WildcardTypeBounds(bounds) =>
-          derivedWildcardTypeBounds(tp, this(bounds))
+        case tp: WildcardTypeBounds =>
+          derivedWildcardTypeBounds(tp, this(tp.bounds))
 
         case tp: ExprType =>
           derivedExprType(tp, this(tp.resultType))
 
-        case tp @ AnnotatedType(underlying, annot) =>
-          val underlying1 = this(underlying)
-          /*val annot1 = annot //.mapWith(this)
+        case tp: AnnotatedType =>
+          val underlying1 = this(tp.underlying)
+          /*val annot1 = tp.annot //.mapWith(this)
           if annot1 eq EmptyAnnotation then underlying1
           else derivedAnnotatedType(tp, underlying1, annot1)*/
           underlying1
@@ -274,7 +274,7 @@ private[tastyquery] object TypeMaps {
       tp.argForParam(pre) match {
         case arg: TypeRef if arg.prefix.isArgPrefixOf(arg.symbol) =>
           expandBounds(arg.symbol.asInstanceOf[ClassTypeParamSymbol].bounds)
-        case WildcardTypeBounds(arg) => expandBounds(arg)
+        case arg: WildcardTypeBounds => expandBounds(arg.bounds)
         case arg                     => reapply(arg)
       }
 
@@ -293,8 +293,8 @@ private[tastyquery] object TypeMaps {
             else range(super.derivedSelect(tp, preLo).lowerBound, super.derivedSelect(tp, preHi).upperBound)
           case _ =>
             super.derivedSelect(tp, pre) match {
-              case WildcardTypeBounds(bounds) => range(bounds.low, bounds.high)
-              case tp                         => tp
+              case tp: WildcardTypeBounds => range(tp.bounds.low, tp.bounds.high)
+              case tp                     => tp
             }
         }
 

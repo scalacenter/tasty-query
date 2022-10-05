@@ -40,8 +40,8 @@ object Signatures:
         }
 
       info match
-        case ExprType(resType) => Signature(Nil, ErasedTypeRef.erase(resType).toSigFullName)
-        case _                 => rec(info, Nil)
+        case info: ExprType => Signature(Nil, ErasedTypeRef.erase(info.resultType).toSigFullName)
+        case _              => rec(info, Nil)
     end fromMethodic
   }
 end Signatures
