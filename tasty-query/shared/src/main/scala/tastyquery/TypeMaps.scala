@@ -471,7 +471,7 @@ private[tastyquery] object TypeMaps {
   /** A range of possible types between lower bound `lo` and upper bound `hi`.
     * Only used internally in `ApproximatingTypeMap`.
     */
-  final case class Range(lo: Type, hi: Type) extends GroundType {
+  final case class Range(lo: Type, hi: Type) extends CustomTransientGroundType {
     assert(!lo.isInstanceOf[Range])
     assert(!hi.isInstanceOf[Range])
 

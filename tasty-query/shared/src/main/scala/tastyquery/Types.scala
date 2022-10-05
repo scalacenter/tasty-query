@@ -444,7 +444,7 @@ object Types {
   /** Type proxies.
     * Each implementation is expected to redefine the `underlying` method.
     */
-  abstract class TypeProxy extends Type {
+  sealed abstract class TypeProxy extends Type {
 
     /** The type to which this proxy forwards operations. */
     def underlying(using Context): Type
@@ -477,26 +477,53 @@ object Types {
   }
 
   /** Non-proxy types */
-  abstract class GroundType extends Type {}
+  sealed abstract class GroundType extends Type
+
+  /** Superclass for custom transient ground types used by custom algorithms.
+    *
+    * When writing algorithms that manipulate `Type`s, it is sometimes useful
+    * to temporarily store custom data in place of `Type`s. This can be done
+    * by defining a subclass of `CustomTransientGroundType`. At the end of the
+    * day, all `CustomTransientGroundType`s should have been replaced by proper
+    * `Type`s.
+    *
+    * The methods of `tasty-query` never expose instances of
+    * `CustomTransientGroundType`, but you may use it for your own purposes.
+    *
+    * When permorming an exhaustive `match` on all possible `Type`s, you should
+    * cover `CustomTransientGroundType` in a `case` that always throws (unless
+    * you are actually using it for some purposes):
+    *
+    * ```scala
+    * val tpe: Type = ...
+    * tpe match
+    *   case tpe: TypeRef => ...
+    *   ...
+    *   case tpe: CustomTransientGroundType =>
+    *     throw AssertionError(s"Unexpected custom transient ground type $tpe")
+    * end match
+    * ```
+    */
+  abstract class CustomTransientGroundType extends GroundType
 
   // ----- Marker traits ------------------------------------------------
 
   /** A marker trait for types that apply only to term symbols or that
     * represent higher-kinded types.
     */
-  trait TermType extends Type
+  sealed trait TermType extends Type
 
-  trait MethodicType extends TermType
+  sealed trait MethodicType extends TermType
 
   /** A marker trait for types that can be types of values or that are higher-kinded */
-  trait ValueType extends TermType
+  sealed trait ValueType extends TermType
 
   /** A marker trait for types that are guaranteed to contain only a
     * single non-null value (they might contain null in addition).
     */
-  trait SingletonType extends TypeProxy with ValueType
+  sealed trait SingletonType extends TypeProxy with ValueType
 
-  trait PathType extends TypeProxy with ValueType {
+  sealed trait PathType extends TypeProxy with ValueType {
     final def select(name: Name): NamedType = name match
       case name: TermName => TermRef(this, name)
       case name: TypeName => TypeRef(this, name)
@@ -935,7 +962,7 @@ object Types {
     override def toString(): String = s"ExprType($resultType)"
   }
 
-  trait LambdaType extends Binders with TermType {
+  sealed trait LambdaType extends Binders with TermType {
     type ThisName <: Name
     type PInfo <: Type | TypeBounds
     type This <: LambdaType { type PInfo = LambdaType.this.PInfo }
@@ -979,14 +1006,15 @@ object Types {
       )
   }
 
-  abstract class LambdaTypeCompanion[N <: Name, PInfo <: Type | TypeBounds, LT <: LambdaType] {
+  sealed abstract class LambdaTypeCompanion[N <: Name, PInfo <: Type | TypeBounds, LT <: LambdaType] {
     def apply(paramNames: List[N])(paramInfosExp: LT => List[PInfo], resultTypeExp: LT => Type)(using Context): LT
 
     def apply(paramNames: List[N], paramInfos: List[PInfo], resultType: Type)(using Context): LT =
       apply(paramNames)(_ => paramInfos, _ => resultType)
   }
 
-  abstract class TypeLambdaTypeCompanion[LT <: TypeLambdaType] extends LambdaTypeCompanion[TypeName, TypeBounds, LT] {
+  sealed abstract class TypeLambdaTypeCompanion[LT <: TypeLambdaType]
+      extends LambdaTypeCompanion[TypeName, TypeBounds, LT] {
     @targetName("fromParamsSymbols")
     private[tastyquery] final def fromParams(params: List[LocalTypeParamSymbol], resultType: Type)(
       using Context
@@ -1001,7 +1029,7 @@ object Types {
         )(using ctx)
   }
 
-  trait TermLambdaType extends LambdaType:
+  sealed trait TermLambdaType extends LambdaType:
     type ThisName = TermName
     type PInfo = Type
     type This <: TermLambdaType
@@ -1010,7 +1038,7 @@ object Types {
     protected def newParamRef(n: Int): ParamRefType = TermParamRef(this, n)
   end TermLambdaType
 
-  trait TypeLambdaType extends LambdaType with TypeBinders:
+  sealed trait TypeLambdaType extends LambdaType with TypeBinders:
     type ThisName = TypeName
     type PInfo = TypeBounds
     type This <: TypeLambdaType
@@ -1281,7 +1309,7 @@ object Types {
     override def toString(): String = s"AnnotatedType($typ, $annotation)"
   }
 
-  abstract class RefinedOrRecType extends TypeProxy
+  sealed abstract class RefinedOrRecType extends TypeProxy
 
   /** A refined type `parent { type refinedName <:> refinedInfo }`
     * @param parent      The type being refined
