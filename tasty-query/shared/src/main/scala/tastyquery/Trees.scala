@@ -207,7 +207,7 @@ object Trees {
       case bounds: TypeBounds  => bounds
       case tlt: TypeLambdaTree =>
         // TODO See the <init> in HigherKinded and HigherKindedWithParam
-        RealTypeBounds(NothingType, AnyType)
+        defn.NothingAnyBounds
 
     override final def withSpan(span: Span): TypeParam = TypeParam(name, bounds, symbol)(span)
   }
@@ -406,7 +406,7 @@ object Trees {
   /** name = arg, outside a parameter list */
   case class Assign(lhs: Tree, rhs: Tree)(span: Span) extends Tree(span) {
     override def calculateType(using Context): Type =
-      UnitType
+      defn.UnitType
 
     override final def withSpan(span: Span): Assign = Assign(lhs, rhs)(span)
   }
@@ -522,7 +522,7 @@ object Trees {
   /** while (cond) { body } */
   case class While(cond: Tree, body: Tree)(span: Span) extends Tree(span) {
     override def calculateType(using Context): Type =
-      UnitType
+      defn.UnitType
 
     override final def withSpan(span: Span): While = While(cond, body)(span)
   }
@@ -530,7 +530,7 @@ object Trees {
   /** throw expr */
   case class Throw(expr: Tree)(span: Span) extends Tree(span) {
     override def calculateType(using Context): Type =
-      NothingType
+      defn.NothingType
 
     override final def withSpan(span: Span): Throw = Throw(expr)(span)
   }
@@ -552,7 +552,7 @@ object Trees {
 
   case class Return(expr: Tree, from: Tree)(span: Span) extends Tree(span) {
     override def calculateType(using Context): Type =
-      NothingType
+      defn.NothingType
 
     override final def withSpan(span: Span): Return = Return(expr, from)(span)
   }

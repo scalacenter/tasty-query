@@ -2,6 +2,7 @@ package tastyquery
 
 import scala.compiletime.asMatchable
 
+import tastyquery.Contexts.*
 import tastyquery.Types.Type
 
 object Constants {
@@ -20,19 +21,19 @@ object Constants {
   final val ClazzTag = 12
 
   class Constant(val value: Matchable, val tag: Int) {
-    def wideType: Type = tag match
-      case UnitTag    => Types.UnitType
-      case BooleanTag => Types.BooleanType
-      case CharTag    => Types.CharType
-      case ByteTag    => Types.ByteType
-      case ShortTag   => Types.ShortType
-      case IntTag     => Types.IntType
-      case LongTag    => Types.LongType
-      case FloatTag   => Types.FloatType
-      case DoubleTag  => Types.DoubleType
-      case StringTag  => Types.StringType
-      case NullTag    => Types.NullType
-      case ClazzTag   => Types.ClassTypeOf(typeValue)
+    def wideType(using Context): Type = tag match
+      case UnitTag    => defn.UnitType
+      case BooleanTag => defn.BooleanType
+      case CharTag    => defn.CharType
+      case ByteTag    => defn.ByteType
+      case ShortTag   => defn.ShortType
+      case IntTag     => defn.IntType
+      case LongTag    => defn.LongType
+      case FloatTag   => defn.FloatType
+      case DoubleTag  => defn.DoubleType
+      case StringTag  => defn.StringType
+      case NullTag    => defn.NullType
+      case ClazzTag   => defn.ClassTypeOf(typeValue)
 
     def isByteRange: Boolean = isIntRange && Byte.MinValue <= intValue && intValue <= Byte.MaxValue
     def isShortRange: Boolean = isIntRange && Short.MinValue <= intValue && intValue <= Short.MaxValue

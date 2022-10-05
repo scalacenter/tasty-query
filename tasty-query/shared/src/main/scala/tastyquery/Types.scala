@@ -433,42 +433,6 @@ object Types {
       NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
   }
 
-  private def scalaPackage: PackageRef = PackageRef(FullyQualifiedName.scalaPackageName)
-
-  private def javalangPackage: PackageRef = PackageRef(FullyQualifiedName.javaLangPackageName)
-
-  private def scalaDot(name: TypeName): TypeRef =
-    TypeRef(scalaPackage, name)
-
-  private def javalangDot(name: TypeName): Type =
-    TypeRef(javalangPackage, name)
-
-  def AnyType: Type = scalaDot(tpnme.Any)
-  def NothingType: Type = scalaDot(tpnme.Nothing)
-  def NullType: Type = scalaDot(tpnme.Null)
-
-  def ArrayTypeUnapplied: TypeRef = scalaDot(tpnme.Array)
-  def ArrayTypeOf(tpe: Type): AppliedType = AppliedType(ArrayTypeUnapplied, List(tpe))
-
-  def SeqTypeUnapplied: TypeRef = scalaDot(tpnme.Seq)
-  def SeqTypeOf(tpe: Type): AppliedType = AppliedType(SeqTypeUnapplied, List(tpe))
-
-  def UnitType: Type = scalaDot(tpnme.Unit)
-  def BooleanType: Type = scalaDot(tpnme.Boolean)
-  def CharType: Type = scalaDot(tpnme.Char)
-  def ByteType: Type = scalaDot(tpnme.Byte)
-  def ShortType: Type = scalaDot(tpnme.Short)
-  def IntType: Type = scalaDot(tpnme.Int)
-  def LongType: Type = scalaDot(tpnme.Long)
-  def FloatType: Type = scalaDot(tpnme.Float)
-  def DoubleType: Type = scalaDot(tpnme.Double)
-
-  def StringType: Type = javalangDot(tpnme.String)
-  def ObjectType: Type = javalangDot(tpnme.Object)
-  def ClassTypeOf(cls: Type): Type = AppliedType(javalangDot(tpnme.Class), List(cls))
-
-  def UnconstrainedTypeBounds: TypeBounds = RealTypeBounds(NothingType, AnyType)
-
   // ----- Type categories ----------------------------------------------
 
   // Every type is expected to inherit either TypeProxy or GroundType.
@@ -932,7 +896,7 @@ object Types {
         //case tycon: HKTypeLambda => defn.AnyType
         case tycon: TypeRef if tycon.symbol.isClass => tycon
         case tycon: TypeProxy                       => tycon.superType.applyIfParameterized(args)
-        case _                                      => AnyType
+        case _                                      => defn.AnyType
 
     override def translucentSuperType(using Context): Type = tycon match
       case tycon: TypeRef if tycon.symbol.isOpaqueTypeAlias =>
@@ -1266,7 +1230,7 @@ object Types {
 
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, TypeLambda] = TypeLambda
 
-    override def underlying(using Context): Type = AnyType
+    override def underlying(using Context): Type = defn.AnyType
 
     override def toString: String =
       if evaluating then s"TypeLambda($paramNames)(<evaluating>)"
@@ -1400,7 +1364,7 @@ object Types {
       val myJoin = this.myJoin
       if (myJoin != null) then myJoin
       else
-        val computedJoin = ObjectType // TypeOps.orDominator(this)
+        val computedJoin = defn.ObjectType // TypeOps.orDominator(this)
         this.myJoin = computedJoin
         computedJoin
     }

@@ -18,8 +18,8 @@ private[classfiles] object Descriptors:
       // More efficient would be to only do this check once in Definitions,
       // but parents are immutable currently.
       // !!! Cannot access `defn.ObjectClass` here, because that's a cycle when initializing defn.ObjectClass itself
-      if cls.owner == defn.javaLangPackage && cls.name == tpnme.Object then AnyType
-      else ObjectType
+      if cls.owner == defn.javaLangPackage && cls.name == tpnme.Object then defn.AnyType
+      else defn.ObjectType
     }
     superRef :: interfaces.map(classRef).toList
 
@@ -74,14 +74,14 @@ private[classfiles] object Descriptors:
     def baseType: Option[Type] =
       if available >= 1 then
         (peek: @switch) match
-          case 'B' => commitSimple(1, Some(ByteType))
-          case 'C' => commitSimple(1, Some(CharType))
-          case 'D' => commitSimple(1, Some(DoubleType))
-          case 'F' => commitSimple(1, Some(FloatType))
-          case 'I' => commitSimple(1, Some(IntType))
-          case 'J' => commitSimple(1, Some(LongType))
-          case 'S' => commitSimple(1, Some(ShortType))
-          case 'Z' => commitSimple(1, Some(BooleanType))
+          case 'B' => commitSimple(1, Some(defn.ByteType))
+          case 'C' => commitSimple(1, Some(defn.CharType))
+          case 'D' => commitSimple(1, Some(defn.DoubleType))
+          case 'F' => commitSimple(1, Some(defn.FloatType))
+          case 'I' => commitSimple(1, Some(defn.IntType))
+          case 'J' => commitSimple(1, Some(defn.LongType))
+          case 'S' => commitSimple(1, Some(defn.ShortType))
+          case 'Z' => commitSimple(1, Some(defn.BooleanType))
           case _   => None
       else None
 
@@ -94,14 +94,14 @@ private[classfiles] object Descriptors:
     def arrayType: Option[Type] =
       if consume('[') then
         val tpe = fieldDescriptor
-        Some(ArrayTypeOf(tpe))
+        Some(defn.ArrayTypeOf(tpe))
       else None
 
     def fieldDescriptor: Type =
       baseType.orElse(objectType).orElse(arrayType).getOrElse(abort)
 
     def returnDescriptor: Type =
-      if consume('V') then UnitType
+      if consume('V') then defn.UnitType
       else fieldDescriptor
 
     def methodDescriptor: Type =

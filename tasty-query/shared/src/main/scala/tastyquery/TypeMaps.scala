@@ -207,7 +207,7 @@ object TypeMaps {
       else if (lo `eq` hi) lo
       else Range(lower(lo), upper(hi))
 
-    protected def emptyRange: Type = range(NothingType, AnyType)
+    protected def emptyRange: Type = range(defn.NothingType, defn.AnyType)
 
     protected def lower(tp: Type): Type = tp match {
       case tp: Range => tp.lo
@@ -391,10 +391,10 @@ object TypeMaps {
             }
             if (distributeArgs(args, tp.tyconTypeParams))
               range(tp.derivedAppliedType(tycon, loBuf.toList), tp.derivedAppliedType(tycon, hiBuf.toList))
-            else if tycon.isLambdaSub || args.exists(isRangeOfNonTermTypes) then range(Types.NothingType, Types.AnyType)
+            else if tycon.isLambdaSub || args.exists(isRangeOfNonTermTypes) then range(defn.NothingType, defn.AnyType)
             else
               // See lampepfl/dotty#14152
-              range(Types.NothingType, tp.derivedAppliedType(tycon, args.map(rangeToBounds)))
+              range(defn.NothingType, tp.derivedAppliedType(tycon, args.map(rangeToBounds)))
           else tp.derivedAppliedType(tycon, args)
       }
 
