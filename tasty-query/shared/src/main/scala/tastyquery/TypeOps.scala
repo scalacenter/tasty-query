@@ -5,7 +5,7 @@ import tastyquery.Symbols.*
 import tastyquery.Types.*
 import tastyquery.TypeMaps.*
 
-object TypeOps:
+private[tastyquery] object TypeOps:
   def asSeenFrom(tp: Type, pre: Type, cls: Symbol)(using Context): Type =
     new AsSeenFromMap(pre, cls).apply(tp)
 

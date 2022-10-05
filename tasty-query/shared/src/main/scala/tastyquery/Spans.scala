@@ -22,12 +22,12 @@ object Spans {
   private inline val SyntheticPointDelta = (1 << (64 - StartEndBits * 2)) - 1
 
   /** The maximal representable offset in a span */
-  final val MaxOffset = StartEndMask.toInt
+  private final val MaxOffset = StartEndMask.toInt
 
   /** Convert offset `x` to an integer by sign extending the original
     *  field of `StartEndBits` width.
     */
-  def offsetToInt(x: Int): Int =
+  private def offsetToInt(x: Int): Int =
     x << (32 - StartEndBits) >> (32 - StartEndBits)
 
   /** A span indicates a range between a start offset and an end offset.
@@ -36,7 +36,7 @@ object Spans {
     *  is roughly where the `^` would go if an error was diagnosed at that position.
     *  All quantities are encoded opaquely in a Long.
     */
-  class Span(val coords: Long) extends AnyVal {
+  class Span private[Spans] (private val coords: Long) extends AnyVal {
 
     /** Is this span different from NoSpan? */
     def exists: Boolean = this != NoSpan
@@ -173,7 +173,7 @@ object Spans {
   /** The coordinate of a symbol. This is either an index or
     *  a zero-range span.
     */
-  class Coord(val encoding: Int) extends AnyVal {
+  class Coord private[Spans] (private val encoding: Int) extends AnyVal {
     def isIndex: Boolean = encoding > 0
     def isSpan: Boolean = encoding <= 0
     def toIndex: Int = {
@@ -187,8 +187,8 @@ object Spans {
   }
 
   /** An index coordinate */
-  implicit def indexCoord(n: Int): Coord = new Coord(n + 1)
-  implicit def spanCoord(span: Span): Coord =
+  private implicit def indexCoord(n: Int): Coord = new Coord(n + 1)
+  private implicit def spanCoord(span: Span): Coord =
     if (span.exists) new Coord(-(span.point + 1))
     else NoCoord
 

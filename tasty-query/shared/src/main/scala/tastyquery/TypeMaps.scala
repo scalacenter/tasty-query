@@ -9,7 +9,7 @@ import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
 
-object TypeMaps {
+private[tastyquery] object TypeMaps {
 
   /** Where a traversal should stop */
   enum StopAt:
@@ -90,7 +90,7 @@ object TypeMaps {
     protected def derivedTypeBounds(bounds: TypeBounds, low: Type, high: Type): TypeBounds =
       bounds.derivedTypeBounds(low, high)
 
-    protected def mapArgs(args: List[Type], tparams: List[ParamInfo]): List[Type] = args match
+    protected def mapArgs(args: List[Type], tparams: List[TypeParamInfo]): List[Type] = args match
       case arg :: otherArgs if tparams.nonEmpty =>
         val arg1 = arg match
           case arg: WildcardTypeBounds => this(arg)
@@ -374,7 +374,7 @@ object TypeMaps {
             // Fail for non-variant argument ranges (see use-site else branch below).
             // If successful, the L-arguments are in loBut, the H-arguments in hiBuf.
             // @return  operation succeeded for all arguments.
-            def distributeArgs(args: List[Type], tparams: List[ParamInfo]): Boolean = args match {
+            def distributeArgs(args: List[Type], tparams: List[TypeParamInfo]): Boolean = args match {
               case Range(lo, hi) :: args1 =>
                 val v = tparams.head.paramVariance.sign
                 if (v == 0) false

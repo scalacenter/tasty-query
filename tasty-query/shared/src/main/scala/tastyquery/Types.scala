@@ -12,6 +12,7 @@ import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
+import tastyquery.Variances.*
 
 import scala.annotation.targetName
 
@@ -151,6 +152,14 @@ object Types {
     end finishErase
   }
 
+  /** A common super trait of Symbol and LambdaParam.
+    * Used to capture the attributes of type parameters which can be implemented as either.
+    */
+  private[tastyquery] trait TypeParamInfo:
+    /** The variance of the type parameter */
+    private[tastyquery] def paramVariance(using Context): Variance
+  end TypeParamInfo
+
   sealed trait TypeMappable:
     type ThisTypeMappableType >: this.type <: TypeMappable
   end TypeMappable
@@ -184,7 +193,7 @@ object Types {
       *
       * For any *-kinded type, returns `Nil`.
       */
-    private[Types] final def typeParams(using Context): List[ParamInfo.TypeParamInfo] =
+    private[Types] final def typeParams(using Context): List[TypeParamInfo] =
       this match
         case self: TypeRef =>
           self.symbol match
@@ -905,7 +914,7 @@ object Types {
         // tryNormalize.orElse(superType) // TODO for match types
         superType
 
-    def tyconTypeParams(using Context): List[ParamInfo] =
+    private[tastyquery] def tyconTypeParams(using Context): List[TypeParamInfo] =
       val tparams = tycon.typeParams
       /*if (tparams.isEmpty) HKTypeLambda.any(args.length).typeParams else*/
       tparams

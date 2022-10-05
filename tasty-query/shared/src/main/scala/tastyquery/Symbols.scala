@@ -5,6 +5,7 @@ import scala.collection.mutable
 import tastyquery.Contexts.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
+import tastyquery.Signatures.*
 import tastyquery.Spans.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
@@ -302,8 +303,8 @@ object Symbols {
 
   final class ClassTypeParamSymbol private (name: TypeName, override val owner: ClassSymbol)
       extends TypeParamSymbol(name, owner)
-      with ParamInfo:
-    def paramVariance(using Context): Variance =
+      with TypeParamInfo:
+    private[tastyquery] def paramVariance(using Context): Variance =
       Variance.fromFlags(flags)
   end ClassTypeParamSymbol
 

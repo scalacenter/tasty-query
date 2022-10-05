@@ -1,16 +1,15 @@
 package tastyquery
 
+import munit.Location
+
 import tastyquery.Contexts.Context
 import tastyquery.Names.*
+import tastyquery.Signatures.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
 
 import Paths.*
-import tastyquery.Signature
-import munit.Location
-import tastyquery.ParamSig
-import tastyquery.TermSig
 
 class SignatureSuite extends UnrestrictedUnpicklingSuite:
 

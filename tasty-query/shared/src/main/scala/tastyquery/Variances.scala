@@ -2,7 +2,7 @@ package tastyquery
 
 import tastyquery.Flags.*
 
-object Variances:
+private[tastyquery] object Variances:
   opaque type Variance = FlagSet
 
   object Variance:
