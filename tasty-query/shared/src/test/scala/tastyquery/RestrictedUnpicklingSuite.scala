@@ -5,13 +5,10 @@ import scala.concurrent.Future
 
 import tastyquery.Contexts.Context
 import tastyquery.Trees.Tree
-import tastyquery.Types.SymResolutionProblem
 
 import Paths.*
 
 abstract class RestrictedUnpicklingSuite extends BaseUnpicklingSuite {
-  import RestrictedUnpicklingSuite.*
-
   def getUnpicklingContext(path: TopLevelDeclPath, extraClasspath: TopLevelDeclPath*): Future[Context] =
     initRestrictedContext(path, extraClasspath)
 
@@ -31,12 +28,4 @@ abstract class RestrictedUnpicklingSuite extends BaseUnpicklingSuite {
     for classpath <- testClasspath yield
       val filtered = classpath.withFilter((path :: extras.toList).map(_.rootClassName))
       Contexts.init(filtered)
-}
-
-object RestrictedUnpicklingSuite {
-  class MissingTopLevelDecl(path: TopLevelDeclPath, cause: SymResolutionProblem)
-      extends Exception(
-        s"Missing top-level declaration ${path.rootClassName}, perhaps it is not on the classpath?",
-        cause
-      )
 }
