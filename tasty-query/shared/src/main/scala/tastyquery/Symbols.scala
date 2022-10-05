@@ -181,10 +181,6 @@ object Symbols {
     def toDebugString = toString
   }
 
-  object Symbol {
-    def unapply(s: Symbol): Option[Name] = Some(s.name)
-  }
-
   object NoSymbol extends Symbol(null):
     type ThisNameType = SimpleName
 
