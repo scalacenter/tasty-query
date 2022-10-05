@@ -272,7 +272,7 @@ object TypeMaps {
       */
     def expandParam(tp: NamedType, pre: Type): Type =
       tp.argForParam(pre) match {
-        case arg @ TypeRef(pre, _) if pre.isArgPrefixOf(arg.symbol) =>
+        case arg: TypeRef if arg.prefix.isArgPrefixOf(arg.symbol) =>
           expandBounds(arg.symbol.asInstanceOf[ClassTypeParamSymbol].bounds)
         case WildcardTypeBounds(arg) => expandBounds(arg)
         case arg                     => reapply(arg)

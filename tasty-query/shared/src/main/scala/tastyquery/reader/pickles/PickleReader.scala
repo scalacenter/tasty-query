@@ -58,7 +58,7 @@ private[pickles] class PickleReader {
     val tOpt = entries(i).asInstanceOf[T | Null]
     if tOpt == null then {
       val res = pkl.unsafeFork(index(i))(op)
-      assert(entries(i) == null || (entries(i) == res), entries(i))
+      assert(entries(i) == null || (entries(i) == res), s"$res != ${entries(i)}")
       entries(i) = res
       res
     } else tOpt.asInstanceOf[T] // temp hack for expression evaluator
@@ -384,6 +384,7 @@ private[pickles] class PickleReader {
         val pre = readPrefix()
         val designator = readMaybeExternalSymbolRef()
         designator match
+          case sym: PackageSymbol          => sym.packageRef
           case sym: Symbol                 => NamedType(pre, sym)
           case external: ExternalSymbolRef => external.toNamedType(pre)
       /*case SUPERtpe =>
@@ -418,6 +419,7 @@ private[pickles] class PickleReader {
         }*/
         //val tycon = select(pre, sym)
         val tycon = designator match
+          case sym: PackageSymbol          => sym.packageRef
           case sym: Symbol                 => select(pre, sym)
           case external: ExternalSymbolRef => external.toNamedType(pre)
         val args = pkl.until(end, () => readTypeRef())
@@ -543,7 +545,8 @@ private[pickles] class PickleReader {
       case LITERALclass   => Constant(readTypeRef())
       case LITERALenum =>
         readMaybeExternalSymbolRef() match
-          case sym: Symbol                 => TermRef(NoPrefix, sym)
+          case sym: TermSymbol             => TermRef(NoPrefix, sym)
+          case sym: Symbol                 => errorBadSignature(s"unexpected literal enum reference $sym")
           case external: ExternalSymbolRef => external.toTermRef(NoPrefix)
       case _ => noSuchConstantTag(tag, len)
     }
