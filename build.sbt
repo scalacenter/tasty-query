@@ -4,7 +4,6 @@ import sbt.internal.util.ManagedLogger
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
 val usedScalaCompiler = "3.1.0"
-val usedScala2StdLib = "2.13.7"
 val usedTastyRelease = usedScalaCompiler
 
 val SourceDeps = config("sourcedeps").hide
@@ -13,6 +12,9 @@ val rtJarOpt = taskKey[Option[String]]("Path to rt.jar if it exists")
 val javalibEntry = taskKey[String]("Path to rt.jar or \"jrt:/\"")
 
 inThisBuild(Def.settings(
+  crossScalaVersions := Seq(usedScalaCompiler),
+  scalaVersion := usedScalaCompiler,
+
   scmInfo := Some(
     ScmInfo(
       url("https://github.com/scalacenter/tasty-query"),
@@ -31,7 +33,6 @@ inThisBuild(Def.settings(
 ))
 
 val commonSettings = Seq(
-  scalaVersion := usedScalaCompiler,
   Test / parallelExecution := false
 )
 
