@@ -605,48 +605,9 @@ object Types {
           }
         }
       case name: Name =>
-        @tailrec
-        def findPrefixSym(prefix: Type): Symbol = prefix match {
-          case NoPrefix =>
-            throw new MemberNotFoundException(prefix, name, "reference by name to a local symbol")
-          case ref: PackageRef =>
-            ref.symbol
-          case t: TermRef =>
-            findPrefixSym(t.underlying)
-          case t: TypeRef =>
-            t.symbol
-          case t: ThisType =>
-            t.cls
-          case t: AppliedType =>
-            findPrefixSym(t.tycon)
-          case prefix =>
-            throw new MemberNotFoundException(prefix, name, s"unexpected prefix type $prefix")
-        }
-        val prefixSym = findPrefixSym(prefix)
-        prefixSym match
-          case declaring: DeclaringSymbol =>
-            val candidate = declaring.getDecl(name)
-            candidate.getOrElse {
-              val msg = this.name match
-                case name: SignedName if declaring.memberPossiblyOverloaded(name) =>
-                  def debugSig(sym: TermSymbol): String = sym.signature match {
-                    case Some(sig) => sig.toDebugString
-                    case None      => "<Not A Method>"
-                  }
-                  val debugQueried = name.sig.toDebugString
-                  val debugCandidates = declaring.memberOverloads(name).map(debugSig).mkString("\n - ", "\n - ", "")
-                  s"""could not resolve overload for `${name.underlying}`:
-                     |Queried signature:
-                     | - $debugQueried
-                     |Overloads found with signatures:$debugCandidates
-                     |Perhaps the classpath is out of date.""".stripMargin
-                case _ =>
-                  val possible = declaring.declarations.map(_.name.toDebugString).mkString("[", ", ", "]")
-                  s"$name is not a member of $prefixSym, found possible members: $possible."
-              throw MemberNotFoundException(prefixSym, name, msg)
-            }
-          case _ =>
-            throw MemberNotFoundException(prefixSym, name, s"$prefixSym is not a package or class")
+        if prefix == NoPrefix then
+          throw new MemberNotFoundException(prefix, name, s"reference by name $name to a local symbol")
+        prefix.member(name)
     end computeSymbol
 
     /** The argument corresponding to class type parameter `tparam` as seen from
