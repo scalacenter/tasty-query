@@ -615,7 +615,7 @@ object Types {
                      |Perhaps the classpath is out of date.""".stripMargin
                 case _ =>
                   val possible = declaring.declarations.map(_.name.toDebugString).mkString("[", ", ", "]")
-                  s"not a member of $prefixSym, found possible members: $possible."
+                  s"$name is not a member of $prefixSym, found possible members: $possible."
               throw MemberNotFoundException(prefixSym, name, msg)
             }
           case _ =>

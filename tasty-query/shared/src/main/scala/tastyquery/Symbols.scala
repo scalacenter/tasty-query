@@ -286,6 +286,8 @@ object Symbols {
       with TypeParamInfo:
     private[tastyquery] def paramVariance(using Context): Variance =
       Variance.fromFlags(flags)
+
+    final def typeRef(using Context): TypeRef = TypeRef(ThisType(owner.typeRef), this)
   end ClassTypeParamSymbol
 
   object ClassTypeParamSymbol:
