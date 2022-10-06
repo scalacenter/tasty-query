@@ -12,6 +12,24 @@ val SourceDeps = config("sourcedeps").hide
 val rtJarOpt = taskKey[Option[String]]("Path to rt.jar if it exists")
 val javalibEntry = taskKey[String]("Path to rt.jar or \"jrt:/\"")
 
+inThisBuild(Def.settings(
+  scmInfo := Some(
+    ScmInfo(
+      url("https://github.com/scalacenter/tasty-query"),
+      "scm:git@github.com:scalacenter/tasty-query.git",
+      Some("scm:git:git@github.com:scalacenter/tasty-query.git")
+    )
+  ),
+  organization := "ch.epfl.scala",
+  homepage := Some(url(s"https://github.com/scalacenter/tasty-query")),
+  licenses += (("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0"))),
+  developers := List(
+    Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd/")),
+    Developer("bishabosha", "Jamie Thompson", "bishbashboshjt@gmail.com", url("https://github.com/bishabosha")),
+  ),
+  versionScheme := Some("semver-spec"),
+))
+
 val commonSettings = Seq(
   scalaVersion := usedScalaCompiler,
   Test / parallelExecution := false
@@ -22,10 +40,15 @@ val strictCompileSettings = Seq(
 )
 
 lazy val root = project.in(file("."))
-  .aggregate(tastyQuery.js, tastyQuery.jvm).settings(publish := {}, publishLocal := {})
+  .aggregate(tastyQuery.js, tastyQuery.jvm).settings(
+    publish / skip := true,
+  )
 
 lazy val testSources = project.in(file("test-sources"))
   .settings(commonSettings)
+  .settings(
+    publish / skip := true,
+  )
 
 lazy val tastyQuery =
   crossProject(JSPlatform, JVMPlatform).in(file("tasty-query"))
@@ -126,7 +149,7 @@ lazy val examples = project
   .dependsOn(tastyQuery.jvm)
   .settings(
     commonSettings,
-    Compile / publishArtifact := false,
+    publish / skip := true,
     fork := true,
     envVars ++= (tastyQuery.jvm / Test / envVars).value,
   )
