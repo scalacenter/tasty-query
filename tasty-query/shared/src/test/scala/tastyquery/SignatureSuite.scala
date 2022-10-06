@@ -222,4 +222,24 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(contextFunction.signedName, "contextFunction", "(scala.Function1):scala.Unit")
   }
 
+  testWithContext("inherited type member, same tasty") {
+    val SubClass = resolve(name"inheritance" / tname"SameTasty" / obj / tname"Sub").asClass
+    val foo3 = SubClass.getDecl(name"foo3").get.asTerm
+    assertIsSignedName(foo3.signedName, "foo3", "():scala.Int")
+
+    val SubWithMixinClass = resolve(name"inheritance" / tname"SameTasty" / obj / tname"SubWithMixin").asClass
+    val bar3 = SubWithMixinClass.getDecl(name"bar3").get.asTerm
+    assertIsSignedName(bar3.signedName, "bar3", "():scala.Int")
+  }
+
+  testWithContext("inherited type member, cross tasty") {
+    val SubClass = resolve(name"inheritance" / name"crosstasty" / tname"Sub").asClass
+    val foo3 = SubClass.getDecl(name"foo3").get.asTerm
+    assertIsSignedName(foo3.signedName, "foo3", "():scala.Int")
+
+    val SubWithMixinClass = resolve(name"inheritance" / name"crosstasty" / tname"SubWithMixin").asClass
+    val bar3 = SubWithMixinClass.getDecl(name"bar3").get.asTerm
+    assertIsSignedName(bar3.signedName, "bar3", "():scala.Int")
+  }
+
 end SignatureSuite

@@ -12,8 +12,9 @@ import tastyquery.Trees.{ClassDef, ValDef}
 class SymbolSuite extends RestrictedUnpicklingSuite {
   val empty_class = RootPkg / name"empty_class"
   val simple_trees = RootPkg / name"simple_trees"
-  val inheritance = RootPkg / name"inheritance"
   val `simple_trees.nested` = simple_trees / name"nested"
+  val inheritance = RootPkg / name"inheritance"
+  val inheritanceCrossTasty = inheritance / name"crosstasty"
 
   val jlObject = RootPkg / name"java" / name"lang" / tname"Object"
   val scUnit = RootPkg / name"scala" / tname"Unit"
@@ -205,39 +206,68 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   }
 
   testWithContext("basic-inheritance-same-root", inheritance / tname"SameTasty" / obj, fundamentalClasses*) {
-    val Sub = inheritance / tname"SameTasty" / obj / tname"Sub"
+    val SameTasty = inheritance / tname"SameTasty" / obj
 
-    val SubClass = resolve(Sub).asClass
+    val ParentClass = resolve(SameTasty / tname"Parent").asClass
+    val ChildClass = resolve(SameTasty / tname"Child").asClass
+    val SubClass = resolve(SameTasty / tname"Sub").asClass
 
     val fooMethod = SubClass.typeRef.member(name"foo")
+    assert(clue(fooMethod.owner) == ChildClass)
+
+    val getFooMethod = SubClass.typeRef.member(name"getFoo")
+    assert(clue(getFooMethod.owner) == ParentClass)
+
+    val FooTypeSym = SubClass.typeRef.member(tname"FooType")
+    assert(FooTypeSym.isInstanceOf[TypeMemberSymbol])
+    assert(clue(FooTypeSym.owner) == ChildClass)
   }
 
   testWithContext("complex-inheritance-same-root", inheritance / tname"SameTasty" / obj, fundamentalClasses*) {
-    //    Any     Mixin { def bar: Int }
+    //    Any     Mixin { type BarType; def bar: BarType; def getBar(): BarType = bar }
     //     │               │
-    //  AnyRef         SubMixin
+    //  AnyRef         SubMixin { type BarType = Int; def bar: BarType = 29 }
     //     │               │
     //     └───────┬───────┘
     //             │
     //          WithMixin
     //             │
     //         SubWithMixin
-    val SubWithMixin = inheritance / tname"SameTasty" / obj / tname"SubWithMixin"
 
-    val SubWithMixinClass = resolve(SubWithMixin).asClass
+    val SameTasty = inheritance / tname"SameTasty" / obj
+
+    val SubWithMixinClass = resolve(SameTasty / tname"SubWithMixin").asClass
+    val MixinClass = resolve(SameTasty / tname"Mixin").asClass
+    val SubMixinClass = resolve(SameTasty / tname"SubMixin").asClass
 
     val barMethod = SubWithMixinClass.typeRef.member(name"bar")
+    assert(clue(barMethod.owner) == SubMixinClass)
+
+    val getBarMethod = SubWithMixinClass.typeRef.member(name"getBar")
+    assert(clue(getBarMethod.owner) == MixinClass)
+
+    val BarTypeSym = SubWithMixinClass.typeRef.member(tname"BarType")
+    assert(BarTypeSym.isInstanceOf[TypeMemberSymbol])
+    assert(clue(BarTypeSym.owner) == SubMixinClass)
   }
 
   testWithContext(
     "basic-inheritance-different-root",
-    inheritance / tname"CrossTasty",
-    (inheritance / tname"SubCrossTasty" +: fundamentalClasses)*
+    inheritanceCrossTasty / tname"Parent",
+    (Seq(inheritanceCrossTasty / tname"Child", inheritanceCrossTasty / tname"Sub") ++ fundamentalClasses)*
   ) {
-    val SubCrossTasty = inheritance / tname"SubCrossTasty"
+    val ParentClass = resolve(inheritanceCrossTasty / tname"Parent").asClass
+    val ChildClass = resolve(inheritanceCrossTasty / tname"Child").asClass
+    val SubClass = resolve(inheritanceCrossTasty / tname"Sub").asClass
 
-    val SubCrossTastyClass = resolve(SubCrossTasty).asClass
+    val fooMethod = SubClass.typeRef.member(name"foo")
+    assert(clue(fooMethod.owner) == ChildClass)
 
-    val fooMethod = SubCrossTastyClass.typeRef.member(name"foo")
+    val getFooMethod = SubClass.typeRef.member(name"getFoo")
+    assert(clue(getFooMethod.owner) == ParentClass)
+
+    val FooTypeSym = SubClass.typeRef.member(tname"FooType")
+    assert(FooTypeSym.isInstanceOf[TypeMemberSymbol])
+    assert(clue(FooTypeSym.owner) == ChildClass)
   }
 }
