@@ -262,6 +262,10 @@ object Names {
     def mapLast(op: Name => Name): FullyQualifiedName =
       FullyQualifiedName(path.init :+ op(path.last))
 
+    private[tastyquery] def sourceName: Name = path match
+      case Nil  => nme.RootPackageName
+      case path => path.last
+
     def mapLastOption(op: Name => Name): FullyQualifiedName =
       if path.isEmpty then this
       else mapLast(op)
