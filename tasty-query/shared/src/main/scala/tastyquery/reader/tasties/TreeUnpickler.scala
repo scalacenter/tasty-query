@@ -1045,6 +1045,23 @@ private[tasties] class TreeUnpickler(
             recursiveTypeAtAddr(start) = rt
             readType
           }
+    case MATCHtype =>
+      val start = reader.currentAddr
+      reader.readByte() // tag
+      val end = reader.readEnd()
+      val upperBound = readType
+      val scrutinee = readType
+      val cases: List[MatchTypeCase | TypeLambda] = reader.until(end)(readType match
+        case tpe: (MatchTypeCase | TypeLambda) => tpe
+        case tpe => throw TastyFormatException(s"Unexpected type in MATCHtype: $tpe $posErrorMsg")
+      )
+      MatchType(upperBound, scrutinee, cases)
+    case MATCHCASEtype =>
+      reader.readByte() // tag
+      reader.readEnd() // end
+      val pattern = readType
+      val body = readType
+      MatchTypeCase(pattern, body)
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
     case tag =>
