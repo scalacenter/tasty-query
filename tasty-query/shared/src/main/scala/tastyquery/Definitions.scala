@@ -65,6 +65,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     cls
 
   val AnyClass = createSpecialClass(typeName("Any"), Nil, Abstract)
+    .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
 
   val NullClass = createSpecialClass(typeName("Null"), AnyClass.typeRef :: Nil, Abstract | Final)
 
@@ -123,9 +124,11 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   val ByNameParamClass2x: ClassSymbol =
     createSpecialPolyClass(tpnme.ByNameParamClassMagic, Covariant, _ => List(AnyType))
+      .withSpecialErasure(() => ErasedTypeRef.ClassRef(Function0Class))
 
   val RepeatedParamClass: ClassSymbol =
     createSpecialPolyClass(tpnme.RepeatedParamClassMagic, Covariant, tp => List(ObjectType, SeqTypeOf(tp)))
+      .withSpecialErasure(() => ErasedTypeRef.ClassRef(SeqClass))
 
   // Derived symbols, found on the classpath
 

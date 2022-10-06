@@ -143,11 +143,9 @@ object Types {
 
       typeRef match
         case ClassRef(cls) =>
-          if cls == defn.AnyClass || cls == defn.AnyValClass then ClassRef(defn.ObjectClass)
-          else if cls == defn.RepeatedParamClass then ClassRef(defn.SeqClass)
-          else if cls == defn.ByNameParamClass2x then ClassRef(defn.Function0Class)
+          if cls == defn.AnyValClass then ClassRef(defn.ObjectClass)
           else if cls.isDerivedValueClass then valueClass(cls)
-          else typeRef
+          else cls.specialErasure.fold(typeRef)(f => f())
         case ArrayTypeRef(_, _) =>
           typeRef
     end finishErase
