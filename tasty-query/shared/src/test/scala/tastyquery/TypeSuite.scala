@@ -30,8 +30,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       isBounded(_.isNothing, _.isAny)
 
     def isBounded(lo: Type => Boolean, hi: Type => Boolean)(using Context): Boolean = tpe match
-      case WildcardTypeBounds(bounds) => lo(bounds.low) && hi(bounds.high)
-      case _                          => false
+      case tpe: WildcardTypeBounds => lo(tpe.bounds.low) && hi(tpe.bounds.high)
+      case _                       => false
 
     def isIntersectionOf(tpes: (Type => Boolean)*)(using Context): Boolean =
       def parts(tpe: Type): List[Type] = tpe match
@@ -41,8 +41,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     def isApplied(cls: Type => Boolean, argRefs: Seq[Type => Boolean])(using Context): Boolean =
       tpe.widen match
-        case AppliedType(tycon, args) if cls(tycon) =>
-          args.corresponds(argRefs)((arg, argRef) => argRef(arg))
+        case app: AppliedType if cls(app.tycon) =>
+          app.args.corresponds(argRefs)((arg, argRef) => argRef(arg))
         case _ => false
 
     def isArrayOf(arg: Type => Boolean)(using Context): Boolean =
@@ -542,9 +542,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val boxedSym = resolve(BoxedCons / name"boxed").asTerm
 
-    val AppliedType(tycon, List(targ: Type)) = boxedSym.declaredType: @unchecked
-    assert(tycon.isOfClass(ConsClass), clue(tycon))
-    assert(targ.isOfClass(JavaDefinedClass), clue(targ))
+    val app = boxedSym.declaredType.asInstanceOf[AppliedType]
+    assert(clue(app.tycon).isOfClass(ConsClass))
+    assert(clue(app.args).isListOf(_.isOfClass(JavaDefinedClass)))
   }
 
   testWithContext("select-method-from-scala-2-stdlib-class") {
@@ -642,8 +642,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"method")
     }
     fun.tpe.widen match {
-      case mt @ MethodType(List(paramName)) =>
-        assertEquals(paramName, name"x")
+      case mt: MethodType =>
+        assert(clue(mt.paramNames) == List(name"x"))
         assert(clue(mt.paramTypes.head).isOfClass(IntClass))
         assert(clue(mt.resultType).isOfClass(IntClass))
     }
@@ -664,8 +664,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"identity")
     }
     tapp.tpe.widen match {
-      case mt @ MethodType(List(paramName)) =>
-        assertEquals(paramName, name"x")
+      case mt: MethodType =>
+        assert(clue(mt.paramNames) == List(name"x"))
         assert(clue(mt.paramTypes.head).isOfClass(IntClass))
         assert(clue(mt.resultType).isOfClass(IntClass))
     }

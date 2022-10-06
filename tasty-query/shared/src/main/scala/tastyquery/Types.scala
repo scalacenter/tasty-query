@@ -83,11 +83,11 @@ object Types {
             typeRef.arrayOf()
 
       def arrayOf(tpe: Type): ErasedTypeRef = tpe match
-        case tpe @ AppliedType(tycon, targs) =>
-          if tycon.isRef(defn.ArrayClass) then
-            val List(targ) = targs: @unchecked
+        case tpe: AppliedType =>
+          if tpe.tycon.isRef(defn.ArrayClass) then
+            val List(targ) = tpe.args: @unchecked
             arrayOf(targ).arrayOf()
-          else arrayOf(tycon)
+          else arrayOf(tpe.tycon)
         case tpe: TypeRef =>
           tpe.symbol match
             case cls: ClassSymbol     => ClassRef(cls).arrayOf()
@@ -97,19 +97,19 @@ object Types {
                 case TypeMemberDefinition.TypeAlias(alias)          => arrayOf(alias)
                 case TypeMemberDefinition.AbstractType(bounds)      => arrayOfBounds(bounds)
                 case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => arrayOf(alias)
-        case tpe: TypeParamRef          => arrayOfBounds(tpe.bounds)
-        case WildcardTypeBounds(bounds) => arrayOfBounds(bounds)
+        case tpe: TypeParamRef       => arrayOfBounds(tpe.bounds)
+        case tpe: WildcardTypeBounds => arrayOfBounds(tpe.bounds)
         case _ =>
           preErase(tpe).arrayOf()
       end arrayOf
 
       tpe.widen match
-        case tpe @ AppliedType(tycon, targs) =>
-          if tycon.isRef(defn.ArrayClass) then
-            val List(targ) = targs: @unchecked
+        case tpe: AppliedType =>
+          if tpe.tycon.isRef(defn.ArrayClass) then
+            val List(targ) = tpe.args: @unchecked
             arrayOf(targ)
           else
-            tycon match
+            tpe.tycon match
               case tycon: TypeRef if tycon.symbol.isClass =>
                 // Fast path
                 ClassRef(tycon.symbol.asClass)
@@ -128,8 +128,8 @@ object Types {
                 case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => preErase(alias)
         case tpe: TypeParamRef =>
           preErase(tpe.bounds.high)
-        case WildcardTypeBounds(bounds) =>
-          preErase(bounds.high)
+        case tpe: WildcardTypeBounds =>
+          preErase(tpe.bounds.high)
         case tpe =>
           throw UnsupportedOperationException(s"Cannot erase $tpe")
     end preErase
@@ -207,8 +207,8 @@ object Types {
           self.cls.typeParams
         case _: SingletonType | _: RefinedType =>
           Nil
-        case WildcardTypeBounds(bounds) =>
-          bounds.high.typeParams
+        case self: WildcardTypeBounds =>
+          self.bounds.high.typeParams
         case self: TypeProxy =>
           self.superType.typeParams
         case _ =>
@@ -236,12 +236,12 @@ object Types {
             dealiased.derivedAndType(dealiased.first.appliedTo(args), dealiased.second.appliedTo(args))
           case dealiased: OrType =>
             dealiased.derivedOrType(dealiased.first.appliedTo(args), dealiased.second.appliedTo(args))
-          case dealiased @ WildcardTypeBounds(bounds) =>
-            val newBounds = bounds match
+          case dealiased: WildcardTypeBounds =>
+            val newBounds = dealiased.bounds match
               case bounds @ TypeAlias(alias) =>
                 bounds.derivedTypeAlias(alias.appliedTo(args))
-              case _ =>
-                bounds.derivedTypeBounds(bounds.low.appliedTo(args), bounds.high.appliedTo(args))
+              case bounds @ RealTypeBounds(low, high) =>
+                bounds.derivedTypeBounds(low.appliedTo(args), high.appliedTo(args))
             dealiased.derivedWildcardTypeBounds(newBounds)
           case dealiased =>
             AppliedType(this, args)
@@ -277,7 +277,7 @@ object Types {
       * For all other types, return `this`.
       */
     final def widenExpr: Type = this match {
-      case tp: ExprType => tp.resType
+      case tp: ExprType => tp.resultType
       case _            => this
     }
 
@@ -287,7 +287,7 @@ object Types {
       case tp: TermRef => // fast path for next most frequent case
         if tp.isOverloaded then tp else tp.underlying.widen
       case tp: SingletonType => tp.underlying.widen
-      case tp: ExprType      => tp.resType.widen
+      case tp: ExprType      => tp.resultType.widen
       case tp: AnnotatedType => tp.typ.widen
       case tp: RefinedType   => tp.parent.widen
       case tp                => tp
@@ -309,9 +309,9 @@ object Types {
               case _                                                              => tp
           case _ =>
             tp
-      case app @ AppliedType(tycon, _) =>
-        val tycon1 = tycon.dealias1(keepOpaques)
-        if (tycon1 ne tycon) app.superType.dealias1(keepOpaques)
+      case tp: AppliedType =>
+        val tycon1 = tp.tycon.dealias1(keepOpaques)
+        if (tycon1 ne tp.tycon) tp.superType.dealias1(keepOpaques)
         else this
       case tp: AnnotatedType =>
         tp.typ.dealias1(keepOpaques)
@@ -412,14 +412,14 @@ object Types {
 
     /** The lower bound of a TypeBounds type, the type itself otherwise */
     private[tastyquery] final def lowerBound: Type = this match {
-      case WildcardTypeBounds(bounds) => bounds.low
-      case _                          => this
+      case self: WildcardTypeBounds => self.bounds.low
+      case _                        => this
     }
 
     /** The upper bound of a TypeBounds type, the type itself otherwise */
     private[tastyquery] final def upperBound: Type = this match {
-      case WildcardTypeBounds(bounds) => bounds.high
-      case _                          => this
+      case self: WildcardTypeBounds => self.bounds.high
+      case _                        => this
     }
 
     /** Is self type bounded by a type lambda or AnyKind? */
@@ -444,7 +444,7 @@ object Types {
   /** Type proxies.
     * Each implementation is expected to redefine the `underlying` method.
     */
-  abstract class TypeProxy extends Type {
+  sealed abstract class TypeProxy extends Type {
 
     /** The type to which this proxy forwards operations. */
     def underlying(using Context): Type
@@ -456,8 +456,8 @@ object Types {
       *   - for applied types it returns the upper bound of the constructor re-applied to the arguments.
       */
     def superType(using Context): Type = underlying match {
-      case WildcardTypeBounds(bounds) => bounds.high
-      case st                         => st
+      case wildcard: WildcardTypeBounds => wildcard.bounds.high
+      case st                           => st
     }
 
     /** Same as superType, except for two differences:
@@ -477,26 +477,53 @@ object Types {
   }
 
   /** Non-proxy types */
-  abstract class GroundType extends Type {}
+  sealed abstract class GroundType extends Type
+
+  /** Superclass for custom transient ground types used by custom algorithms.
+    *
+    * When writing algorithms that manipulate `Type`s, it is sometimes useful
+    * to temporarily store custom data in place of `Type`s. This can be done
+    * by defining a subclass of `CustomTransientGroundType`. At the end of the
+    * day, all `CustomTransientGroundType`s should have been replaced by proper
+    * `Type`s.
+    *
+    * The methods of `tasty-query` never expose instances of
+    * `CustomTransientGroundType`, but you may use it for your own purposes.
+    *
+    * When permorming an exhaustive `match` on all possible `Type`s, you should
+    * cover `CustomTransientGroundType` in a `case` that always throws (unless
+    * you are actually using it for some purposes):
+    *
+    * ```scala
+    * val tpe: Type = ...
+    * tpe match
+    *   case tpe: TypeRef => ...
+    *   ...
+    *   case tpe: CustomTransientGroundType =>
+    *     throw AssertionError(s"Unexpected custom transient ground type $tpe")
+    * end match
+    * ```
+    */
+  abstract class CustomTransientGroundType extends GroundType
 
   // ----- Marker traits ------------------------------------------------
 
   /** A marker trait for types that apply only to term symbols or that
     * represent higher-kinded types.
     */
-  trait TermType extends Type
+  sealed trait TermType extends Type
 
-  trait MethodicType extends TermType
+  sealed trait MethodicType extends TermType
 
   /** A marker trait for types that can be types of values or that are higher-kinded */
-  trait ValueType extends TermType
+  sealed trait ValueType extends TermType
 
   /** A marker trait for types that are guaranteed to contain only a
     * single non-null value (they might contain null in addition).
     */
-  trait SingletonType extends TypeProxy with ValueType
+  sealed trait SingletonType extends TypeProxy with ValueType
 
-  trait PathType extends TypeProxy with ValueType {
+  sealed trait PathType extends TypeProxy with ValueType {
     final def select(name: Name): NamedType = name match
       case name: TermName => TermRef(this, name)
       case name: TypeName => TypeRef(this, name)
@@ -592,8 +619,8 @@ object Types {
             t.symbol
           case t: ThisType =>
             t.cls
-          case AppliedType(tycon, _) =>
-            findPrefixSym(tycon)
+          case t: AppliedType =>
+            findPrefixSym(t.tycon)
           case prefix =>
             throw new MemberNotFoundException(prefix, name, s"unexpected prefix type $prefix")
         }
@@ -635,9 +662,9 @@ object Types {
       val cls = tparam.owner
       val base = pre.baseType(cls)
       base match {
-        case AppliedType(_, allArgs) =>
+        case base: AppliedType =>
           var tparams = cls.typeParams
-          var args = allArgs
+          var args = base.args
           var idx = 0
           while (tparams.nonEmpty && args.nonEmpty) {
             if (tparams.head.eq(tparam))
@@ -690,12 +717,6 @@ object Types {
       }
 
     protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null)(using Context): Type
-
-    // Equality, required for (Scala 2 only?) unpickling. We should investigate why this is needed.
-
-    override def equals(that: Any): Boolean = that.asInstanceOf[Matchable] match
-      case that: NamedType => this.prefix == that.prefix && this.designator == that.designator
-      case _               => false
   }
 
   object NamedType {
@@ -787,7 +808,7 @@ object Types {
     private[tastyquery] def apply(prefix: Type, external: Scala2ExternalSymRef): TermRef = new TermRef(prefix, external)
   end TermRef
 
-  final case class PackageRef(fullyQualifiedName: FullyQualifiedName) extends Type {
+  final class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends Type {
     private var packageSymbol: PackageSymbol | Null = null
 
     def this(packageSym: PackageSymbol) =
@@ -807,11 +828,8 @@ object Types {
       symbol.getDecl(name).getOrElse {
         throw MemberNotFoundException(symbol, name)
       }
-  }
 
-  object PackageRef {
-    def apply(packageSym: PackageSymbol): PackageRef =
-      new PackageRef(packageSym)
+    override def toString(): String = s"PackageRef($fullyQualifiedName)"
   }
 
   final class TypeRef private (val prefix: Type, private var myDesignator: TypeName | TypeSymbol | Scala2ExternalSymRef)
@@ -856,28 +874,34 @@ object Types {
     private[tastyquery] def apply(prefix: Type, external: Scala2ExternalSymRef): TypeRef = new TypeRef(prefix, external)
   end TypeRef
 
-  case object NoPrefix extends Type {
+  object NoPrefix extends Type {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       throw new AssertionError(s"Cannot find member in NoPrefix")
+
+    override def toString(): String = "NoPrefix"
   }
 
-  case class ThisType(tref: TypeRef) extends PathType with SingletonType {
+  final class ThisType(val tref: TypeRef) extends PathType with SingletonType {
     override def underlying(using Context): Type =
       tref // TODO This is probably wrong
 
     final def cls(using Context): ClassSymbol = tref.symbol.asClass
+
+    override def toString(): String = s"ThisType($tref)"
   }
 
   /** A constant type with single `value`. */
-  case class ConstantType(value: Constant) extends TypeProxy with SingletonType {
+  final class ConstantType(val value: Constant) extends TypeProxy with SingletonType {
     override def underlying(using Context): Type =
       value.wideType
+
+    override def toString(): String = s"ConstantType($value)"
   }
 
   /** A type application `C[T_1, ..., T_n]`
     * Typebounds for wildcard application: C[_], C[?]
     */
-  case class AppliedType(tycon: Type, args: List[Type]) extends TypeProxy with ValueType {
+  final class AppliedType(val tycon: Type, val args: List[Type]) extends TypeProxy with ValueType {
     override def underlying(using Context): Type = tycon
 
     override def superType(using Context): Type =
@@ -924,19 +948,21 @@ object Types {
 
     private[tastyquery] final def map(op: Type => Type)(using Context): AppliedType =
       derivedAppliedType(op(tycon), args.mapConserve(op))
+
+    override def toString(): String = s"AppliedType($tycon, $args)"
   }
 
   /** A by-name parameter type of the form `=> T`, or the type of a method with no parameter list. */
-  case class ExprType(resType: Type) extends TypeProxy with MethodicType {
-    def resultType: Type = resType
+  final class ExprType(val resultType: Type) extends TypeProxy with MethodicType {
+    override def underlying(using Context): Type = resultType
 
-    override def underlying(using Context): Type = resType
+    private[tastyquery] final def derivedExprType(resultType: Type)(using Context): ExprType =
+      if (resultType eq this.resultType) this else ExprType(resultType)
 
-    private[tastyquery] final def derivedExprType(resType: Type)(using Context): ExprType =
-      if (resType eq this.resType) this else ExprType(resType)
+    override def toString(): String = s"ExprType($resultType)"
   }
 
-  trait LambdaType extends Binders with TermType {
+  sealed trait LambdaType extends Binders with TermType {
     type ThisName <: Name
     type PInfo <: Type | TypeBounds
     type This <: LambdaType { type PInfo = LambdaType.this.PInfo }
@@ -980,14 +1006,15 @@ object Types {
       )
   }
 
-  abstract class LambdaTypeCompanion[N <: Name, PInfo <: Type | TypeBounds, LT <: LambdaType] {
+  sealed abstract class LambdaTypeCompanion[N <: Name, PInfo <: Type | TypeBounds, LT <: LambdaType] {
     def apply(paramNames: List[N])(paramInfosExp: LT => List[PInfo], resultTypeExp: LT => Type)(using Context): LT
 
     def apply(paramNames: List[N], paramInfos: List[PInfo], resultType: Type)(using Context): LT =
       apply(paramNames)(_ => paramInfos, _ => resultType)
   }
 
-  abstract class TypeLambdaTypeCompanion[LT <: TypeLambdaType] extends LambdaTypeCompanion[TypeName, TypeBounds, LT] {
+  sealed abstract class TypeLambdaTypeCompanion[LT <: TypeLambdaType]
+      extends LambdaTypeCompanion[TypeName, TypeBounds, LT] {
     @targetName("fromParamsSymbols")
     private[tastyquery] final def fromParams(params: List[LocalTypeParamSymbol], resultType: Type)(
       using Context
@@ -1002,7 +1029,7 @@ object Types {
         )(using ctx)
   }
 
-  trait TermLambdaType extends LambdaType:
+  sealed trait TermLambdaType extends LambdaType:
     type ThisName = TermName
     type PInfo = Type
     type This <: TermLambdaType
@@ -1011,7 +1038,7 @@ object Types {
     protected def newParamRef(n: Int): ParamRefType = TermParamRef(this, n)
   end TermLambdaType
 
-  trait TypeLambdaType extends LambdaType with TypeBinders:
+  sealed trait TypeLambdaType extends LambdaType with TypeBinders:
     type ThisName = TypeName
     type PInfo = TypeBounds
     type This <: TypeLambdaType
@@ -1027,7 +1054,7 @@ object Types {
       Substituters.subst(bounds, tparams, paramRefs)
   end TypeLambdaType
 
-  case class MethodType(paramNames: List[TermName])(
+  final class MethodType(val paramNames: List[TermName])(
     paramTypesExp: MethodType => List[Type],
     resultTypeExp: MethodType => Type
   ) extends MethodicType
@@ -1182,7 +1209,7 @@ object Types {
   sealed trait ParamRef extends BoundType:
     def paramNum: Int
 
-  case class TypeLambda(paramNames: List[TypeName])(
+  final class TypeLambda(val paramNames: List[TypeName])(
     paramTypeBoundsExp: TypeLambda => List[TypeBounds],
     resultTypeExp: TypeLambda => Type
   ) extends TypeProxy
@@ -1240,7 +1267,10 @@ object Types {
       apply(params.map(_.name))(_ => params.map(_.computeDeclarationTypeBounds()), resultTypeExp)(using ctx)
   end TypeLambda
 
-  case class TypeParamRef(binders: TypeLambdaType, paramNum: Int) extends TypeProxy with ValueType with ParamRef {
+  final class TypeParamRef(val binders: TypeLambdaType, val paramNum: Int)
+      extends TypeProxy
+      with ValueType
+      with ParamRef {
     type BindersType = TypeLambdaType
 
     private[tastyquery] def copyBoundType(newBinders: BindersType): Type =
@@ -1255,32 +1285,38 @@ object Types {
     override def toString: String = paramName.toString
   }
 
-  case class TermParamRef(binders: TermLambdaType, paramNum: Int) extends ParamRef with SingletonType {
+  final class TermParamRef(val binders: TermLambdaType, val paramNum: Int) extends ParamRef with SingletonType {
     type BindersType = TermLambdaType
 
     private[tastyquery] def copyBoundType(newBinders: BindersType): Type =
       newBinders.paramRefs(paramNum)
 
     def underlying(using Context): Type = binders.paramInfos(paramNum)
+
+    final def paramName: TermName = binders.paramNames(paramNum)
+
+    override def toString(): String = paramName.toString
   }
 
   /** typ @ annot */
-  case class AnnotatedType(typ: Type, annotation: Tree) extends TypeProxy with ValueType {
+  final class AnnotatedType(val typ: Type, val annotation: Tree) extends TypeProxy with ValueType {
     override def underlying(using Context): Type = typ
 
     private[tastyquery] final def derivedAnnotatedType(typ: Type, annotation: Tree)(using Context): AnnotatedType =
       if ((typ eq this.typ) && (annotation eq this.annotation)) this
       else AnnotatedType(typ, annotation)
+
+    override def toString(): String = s"AnnotatedType($typ, $annotation)"
   }
 
-  abstract class RefinedOrRecType extends TypeProxy
+  sealed abstract class RefinedOrRecType extends TypeProxy
 
   /** A refined type `parent { type refinedName <:> refinedInfo }`
     * @param parent      The type being refined
     * @param refinedName The name of the refinement declaration
     * @param refinedInfo The info of the refinement declaration
     */
-  case class RefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds)
+  final class RefinedType(val parent: Type, val refinedName: Name, val refinedInfo: TypeBounds)
       extends RefinedOrRecType
       with ValueType {
     override def underlying(using Context): Type = parent
@@ -1290,9 +1326,11 @@ object Types {
     ): Type =
       if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedInfo eq this.refinedInfo)) this
       else RefinedType(parent, refinedName, refinedInfo)
+
+    override def toString(): String = s"RefinedType($parent, $refinedName, $refinedInfo)"
   }
 
-  final class RecType(parentExp: RecType => Type) extends RefinedOrRecType with Binders:
+  final class RecType private (parentExp: RecType => Type) extends RefinedOrRecType with Binders:
     val parent: Type = parentExp(this: @unchecked)
 
     def underlying(using Context): Type = parent
@@ -1303,7 +1341,7 @@ object Types {
       new RecType(parentExp) // TODO? Perform normalization like dotc?
   end RecType
 
-  abstract class TypeBounds(val low: Type, val high: Type) extends TypeMappable {
+  sealed abstract class TypeBounds(val low: Type, val high: Type) extends TypeMappable {
     type ThisTypeMappableType = TypeBounds
 
     /** The non-alias type bounds type with given bounds */
@@ -1312,35 +1350,45 @@ object Types {
       else RealTypeBounds(low, high)
   }
 
-  case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high)
+  final case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high):
+    override def toString(): String = s"TypeBounds($low, $high)"
+  end RealTypeBounds
 
-  case class TypeAlias(alias: Type) extends TypeBounds(alias, alias) {
+  final case class TypeAlias(alias: Type) extends TypeBounds(alias, alias) {
     private[tastyquery] def derivedTypeAlias(alias: Type): TypeAlias =
       if alias eq this.alias then this
       else TypeAlias(alias)
+
+    override def toString(): String = s"TypeAlias($alias)"
   }
 
-  case class BoundedType(bounds: TypeBounds, alias: Type) extends Type {
+  final class BoundedType(val bounds: TypeBounds, val alias: Type) extends Type {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       bounds.high.findMember(name, pre)
+
+    override def toString(): String = s"BoundedType($bounds, $alias)"
   }
 
-  case class NamedTypeBounds(name: TypeName, bounds: TypeBounds) extends Type {
+  final class NamedTypeBounds(val name: TypeName, val bounds: TypeBounds) extends Type {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       bounds.high.findMember(name, pre)
+
+    override def toString(): String = s"NamedTypeBounds($name, $bounds)"
   }
 
-  case class WildcardTypeBounds(bounds: TypeBounds) extends TypeProxy {
+  final class WildcardTypeBounds(val bounds: TypeBounds) extends TypeProxy {
     override def underlying(using Context): Type = bounds.high
 
     private[tastyquery] def derivedWildcardTypeBounds(bounds: TypeBounds)(using Context): WildcardTypeBounds =
       if bounds eq this.bounds then this
       else WildcardTypeBounds(bounds)
+
+    override def toString(): String = s"WildcardTypeBounds($bounds)"
   }
 
   // ----- Ground Types -------------------------------------------------
 
-  case class OrType(first: Type, second: Type) extends GroundType with ValueType {
+  final class OrType(val first: Type, val second: Type) extends GroundType with ValueType {
     private var myJoin: Type | Null = _
 
     /** Returns the closest non-OrType type above this one. */
@@ -1359,6 +1407,8 @@ object Types {
     private[tastyquery] def derivedOrType(first: Type, second: Type)(using Context): Type =
       if (first eq this.first) && (second eq this.second) then this
       else OrType.make(first, second)
+
+    override def toString(): String = s"OrType($first, $second)"
   }
 
   object OrType {
@@ -1367,7 +1417,7 @@ object Types {
       else OrType(first, second)
   }
 
-  case class AndType(first: Type, second: Type) extends GroundType with ValueType {
+  final class AndType(val first: Type, val second: Type) extends GroundType with ValueType {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       first.findMember(name, pre) // TODO 'meet' with second.findMember(name, pre)
 
@@ -1377,9 +1427,11 @@ object Types {
 
     private[tastyquery] def parts: List[Type] =
       def rec(tpe: Type, acc: mutable.ListBuffer[Type]): acc.type = tpe match
-        case AndType(tp1, tp2) => rec(tp2, rec(tp1, acc))
-        case tpe: Type         => acc += tpe
+        case tpe: AndType => rec(tpe.second, rec(tpe.first, acc))
+        case tpe: Type    => acc += tpe
       rec(this, mutable.ListBuffer.empty).toList
+
+    override def toString(): String = s"AndType($first, $second)"
   }
 
   object AndType {
@@ -1389,12 +1441,14 @@ object Types {
       else AndType(first, second)
   }
 
-  case class ClassInfo(cls: ClassSymbol) extends GroundType {
+  final class ClassInfo(val cls: ClassSymbol) extends GroundType {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       ClassInfo.findMember(cls, name, pre)
 
     private[tastyquery] def derivedClassInfo(pre: Type)(using Context): ClassInfo =
       this // so far do not store pre in ClassInfo
+
+    override def toString(): String = s"ClassInfo($cls)"
   }
 
   object ClassInfo:
@@ -1404,8 +1458,10 @@ object Types {
       }
   end ClassInfo
 
-  case object NoType extends GroundType {
+  object NoType extends GroundType {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       throw new AssertionError(s"Cannot find member in NoType")
+
+    override def toString(): String = "NoType"
   }
 }

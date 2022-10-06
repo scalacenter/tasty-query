@@ -377,9 +377,9 @@ private[tasties] class TreeUnpickler(
         val typeDef = typeBounds match
           case tpt: TypeTree =>
             tpt.toType match
-              case BoundedType(bounds, NoType) => TypeMemberDefinition.AbstractType(bounds)
-              case BoundedType(bounds, alias)  => TypeMemberDefinition.OpaqueTypeAlias(bounds, alias)
-              case alias                       => TypeMemberDefinition.TypeAlias(alias)
+              case bt: BoundedType if bt.alias == NoType => TypeMemberDefinition.AbstractType(bt.bounds)
+              case bt: BoundedType                       => TypeMemberDefinition.OpaqueTypeAlias(bt.bounds, bt.alias)
+              case alias                                 => TypeMemberDefinition.TypeAlias(alias)
           case bounds: TypeBounds =>
             TypeMemberDefinition.AbstractType(bounds)
         symbol.withDefinition(typeDef)
