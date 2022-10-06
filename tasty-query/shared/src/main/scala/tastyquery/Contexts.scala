@@ -126,7 +126,11 @@ object Contexts {
             rec(next, pathRest)
           case name :: pathRest =>
             throw MemberNotFoundException(owner, name, s"cannot find package member $name of $owner")
-      rec(RootPackage, fullyQualifiedName.path)
+      // strip initial `_root_` if present, which is how user signals qualified from root names.
+      val path0 = fullyQualifiedName.path match
+        case nme.RootPackageName :: path => path
+        case path                        => path
+      rec(RootPackage, path0)
     end findPackageFromRoot
 
     def findSymbolFromRoot(path: List[Name]): Symbol =
