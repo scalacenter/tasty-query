@@ -49,7 +49,13 @@ private[reader] object TastyUnpickler {
     def fullyQualified(ref: NameRef): FullyQualifiedName =
       apply(ref) match
         case name: FullyQualifiedName =>
-          name
+          name.path match
+            case nme.RootPackageName :: Nil =>
+              FullyQualifiedName.rootPackageName
+            case _ =>
+              name
+        case nme.RootPackageName =>
+          FullyQualifiedName.rootPackageName
         case name: TermName =>
           FullyQualifiedName(name :: Nil)
   }

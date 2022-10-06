@@ -297,7 +297,7 @@ object Trees {
 
   /** reference to a package, seen as a term */
   final class ReferencedPackage(val fullyQualifiedName: FullyQualifiedName)(span: Span)
-      extends Ident(fullyQualifiedName.path.last.asSimpleName)(span) {
+      extends Ident(fullyQualifiedName.sourceName.asSimpleName)(span) {
     protected final def calculateType(using Context): Type =
       PackageRef(fullyQualifiedName)
 
