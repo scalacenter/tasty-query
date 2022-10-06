@@ -242,4 +242,10 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(bar3.signedName, "bar3", "():scala.Int")
   }
 
+  testWithContext("case class copy method") {
+    val CaseClass = resolve(name"synthetics" / tname"CaseClass").asClass
+    val copy = CaseClass.getDecl(name"copy").get.asTerm
+    assertIsSignedName(copy.signedName, "copy", "(java.lang.String):synthetics.CaseClass")
+  }
+
 end SignatureSuite
