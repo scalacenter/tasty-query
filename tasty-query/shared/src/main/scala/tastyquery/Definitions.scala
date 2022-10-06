@@ -65,6 +65,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     cls
 
   val AnyClass = createSpecialClass(typeName("Any"), Nil, Abstract)
+    .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
 
   val NullClass = createSpecialClass(typeName("Null"), AnyClass.typeRef :: Nil, Abstract | Final)
 
@@ -123,9 +124,64 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   val ByNameParamClass2x: ClassSymbol =
     createSpecialPolyClass(tpnme.ByNameParamClassMagic, Covariant, _ => List(AnyType))
+      .withSpecialErasure(() => ErasedTypeRef.ClassRef(Function0Class))
 
   val RepeatedParamClass: ClassSymbol =
     createSpecialPolyClass(tpnme.RepeatedParamClassMagic, Covariant, tp => List(ObjectType, SeqTypeOf(tp)))
+      .withSpecialErasure(() => ErasedTypeRef.ClassRef(SeqClass))
+
+  /** Creates one of the `ContextFunctionNClass` classes.
+    *
+    * There are of the form:
+    *
+    * ```scala
+    * trait ContextFunctionN[-T0,...,-T{N-1}, +R] extends Object {
+    *   def apply(using $x0: T0, ..., $x{N_1}: T{N-1}): R
+    * }
+    * ```
+    */
+  private def createContextFunctionNClass(n: Int): ClassSymbol =
+    val name = typeName("ContextFunction" + n)
+    val cls = ClassSymbol.create(name, scalaPackage)
+
+    cls.withFlags(Trait | NoInitsInterface)
+    cls.withParentsDirect(ObjectType :: Nil)
+
+    cls.withSpecialErasure { () =>
+      ErasedTypeRef.ClassRef(scalaPackage.requiredClass("Function" + n))
+    }
+
+    val inputTypeParams = List.tabulate(n) { i =>
+      ClassTypeParamSymbol
+        .create(typeName("T" + i), cls)
+        .withFlags(ClassTypeParam | Contravariant)
+        .setBounds(NothingAnyBounds)
+    }
+    val resultTypeParam =
+      ClassTypeParamSymbol
+        .create(typeName("R"), cls)
+        .withFlags(ClassTypeParam | Covariant)
+        .setBounds(NothingAnyBounds)
+
+    val allTypeParams = inputTypeParams :+ resultTypeParam
+    cls.withTypeParams(allTypeParams, allTypeParams.map(_.bounds))
+
+    val applyMethod = TermSymbol.create(termName("apply"), cls)
+    applyMethod.withFlags(Method | Deferred)
+    applyMethod.withDeclaredType(
+      MethodType(List.tabulate(n)(i => termName("x" + i)))(
+        mt => inputTypeParams.map(_.typeRef),
+        mt => resultTypeParam.typeRef
+      )(using ctx)
+    )
+
+    cls
+  end createContextFunctionNClass
+
+  locally {
+    for (n <- 0 to 22)
+      createContextFunctionNClass(n)
+  }
 
   // Derived symbols, found on the classpath
 

@@ -216,4 +216,10 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(getOffsetStatic.signedName, "getOffsetStatic", "(java.lang.reflect.Field):scala.Long")
   }
 
+  testWithContext("Scala 3 special function types") {
+    val SpecialFunctionTypes = resolve(name"simple_trees" / tname"SpecialFunctionTypes").asClass
+    val contextFunction = SpecialFunctionTypes.getDecl(name"contextFunction").get.asTerm
+    assertIsSignedName(contextFunction.signedName, "contextFunction", "(scala.Function1):scala.Unit")
+  }
+
 end SignatureSuite

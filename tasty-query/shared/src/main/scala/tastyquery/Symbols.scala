@@ -286,6 +286,8 @@ object Symbols {
       with TypeParamInfo:
     private[tastyquery] def paramVariance(using Context): Variance =
       Variance.fromFlags(flags)
+
+    final def typeRef(using Context): TypeRef = TypeRef(ThisType(owner.typeRef), this)
   end ClassTypeParamSymbol
 
   object ClassTypeParamSymbol:
@@ -435,12 +437,13 @@ object Symbols {
     private var myTypeParams: List[(ClassTypeParamSymbol, TypeBounds)] | Null = null
     private var myParentsInit: (() => List[Type]) | Null = null
     private var myParents: List[Type] | Null = null
+    private var mySpecialErasure: Option[() => ErasedTypeRef] = None
 
     private[tastyquery] val classInfo: ClassInfo = ClassInfo(this: @unchecked)
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
       val isValueClass =
-        parents.head.classSymbol.exists(_ == defn.AnyValClass)
+        parents.nonEmpty && parents.head.classSymbol.exists(_ == defn.AnyValClass)
       isValueClass && !defn.isPrimitiveValueClass(this)
 
     /** Get the companion class of this class, if it exists:
@@ -506,6 +509,14 @@ object Symbols {
           parents
         else throw IllegalStateException(s"$this was not assigned parents")
     end parents
+
+    private[tastyquery] final def withSpecialErasure(specialErasure: () => ErasedTypeRef): this.type =
+      if mySpecialErasure.isDefined then throw IllegalStateException(s"reassignment of the special erasure of $this")
+      mySpecialErasure = Some(specialErasure)
+      this
+
+    private[tastyquery] final def specialErasure(using Context): Option[() => ErasedTypeRef] =
+      mySpecialErasure
 
     protected[this] final def ensureDeclsInitialized()(using Context): Unit =
       // ClassSymbols are always initialized when created
