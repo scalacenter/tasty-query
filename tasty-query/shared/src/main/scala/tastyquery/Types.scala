@@ -1300,6 +1300,20 @@ object Types {
       new RecType(parentExp) // TODO? Perform normalization like dotc?
   end RecType
 
+  /** case `pattern` => `result` */
+  final class MatchTypeCase(val pattern: Type, val result: Type) extends GroundType:
+    def findMember(name: Name, pre: Type)(using Context): Symbol = NoSymbol
+    override def toString(): String = s"MatchTypeCase($pattern, $result)"
+  end MatchTypeCase
+
+  /** selector match { cases } */
+  final class MatchType(val bound: Type, val scrutinee: Type, val cases: List[MatchTypeCase | TypeLambda])
+      extends TypeProxy
+      with ValueType:
+    def underlying(using Context): Type = bound
+    override def toString(): String = s"MatchType($bound, $scrutinee, $cases)"
+  end MatchType
+
   sealed abstract class TypeBounds(val low: Type, val high: Type) extends TypeMappable {
     type ThisTypeMappableType = TypeBounds
 

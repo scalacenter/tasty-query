@@ -40,6 +40,10 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   private object ScalaPackageRef:
     def unapply(tree: PackageRef): Boolean = tree.fullyQualifiedName.path == List(SimpleName("scala"))
 
+  private object ScalaCollImmutablePackageRef:
+    def unapply(tree: PackageRef): Boolean =
+      tree.fullyQualifiedName.path == List(name"scala", name"collection", name"immutable")
+
   private object SimpleTreesPackageRef:
     def unapply(tree: PackageRef): Boolean = tree.fullyQualifiedName.path == List(SimpleName("simple_trees"))
 
@@ -87,6 +91,15 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
     object WildcardTypeBounds:
       def unapply(tpe: Types.WildcardTypeBounds): Some[TypeBounds] = Some(tpe.bounds)
+
+    object MatchType:
+      def unapply(tpe: Types.MatchType): (Type, Type, List[Type]) = (tpe.bound, tpe.scrutinee, tpe.cases)
+
+    object MatchTypeCase:
+      def unapply(tpe: Types.MatchTypeCase): (Type, Type) = (tpe.pattern, tpe.result)
+
+    object TypeLambda:
+      def unapply(tpe: Types.TypeLambda): (List[Type], Type) = (tpe.paramRefs, tpe.resultType)
   end ty
 
   val isJavaLangObject: StructureCheck = {
@@ -1679,6 +1692,65 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
           ) =>
     }
     assert(containsSubtree(matchWithBind)(clue(tree)))
+
+    val castMatchResult: StructureCheck = {
+      case DefDef(
+            SimpleName("castMatchResult"),
+            List(Right(List(X @ _)), _),
+            _,
+            TypeApply(
+              Select(rhs, SignedName(SimpleName("$asInstanceOf$"), _, _)),
+              TypeWrapper(
+                ty.MatchType(
+                  TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Any"))),
+                  TypeRefInternal(_, xRef),
+                  List(
+                    ty.MatchTypeCase(
+                      TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Int"))),
+                      TypeRefInternal(
+                        TermRefInternal(ScalaPackageRef(), SimpleName("Predef")),
+                        TypeName(SimpleName("String"))
+                      )
+                    )
+                  )
+                )
+              ) :: Nil
+            ),
+            _
+          ) if xRef == X.symbol =>
+    }
+    assert(containsSubtree(castMatchResult)(clue(tree)))
+
+    val castMatchResultWithBind: StructureCheck = {
+      case DefDef(
+            SimpleName("castMatchResultWithBind"),
+            List(Right(List(X @ _)), _),
+            _,
+            TypeApply(
+              Select(rhs, SignedName(SimpleName("$asInstanceOf$"), _, _)),
+              TypeWrapper(
+                ty.MatchType(
+                  TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Any"))),
+                  TypeRefInternal(_, xRef),
+                  List(
+                    ty.TypeLambda(
+                      List(tRef),
+                      ty.MatchTypeCase(
+                        ty.AppliedType(
+                          TypeRefInternal(ScalaCollImmutablePackageRef(), TypeName(SimpleName("List"))),
+                          tRef2 :: Nil
+                        ),
+                        tRef3
+                      )
+                    )
+                  )
+                )
+              ) :: Nil
+            ),
+            _
+          ) if xRef == X.symbol && tRef == tRef2 && tRef == tRef3 =>
+    }
+    assert(containsSubtree(castMatchResultWithBind)(clue(tree)))
   }
 
   testUnpickle("package-type-ref", EmptyPkg / name"toplevelEmptyPackage$$package" / obj) { tree =>
