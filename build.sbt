@@ -55,7 +55,7 @@ lazy val tastyQuery =
   crossProject(JSPlatform, JVMPlatform).in(file("tasty-query"))
     .settings(commonSettings)
     .settings(strictCompileSettings)
-    .settings(name := "tasty-query", version := "0.1-SNAPSHOT")
+    .settings(name := "tasty-query")
     .settings(
       libraryDependencies += "org.scalameta" %%% "munit" % "0.7.29" % Test,
       testFrameworks += new TestFramework("munit.Framework")
