@@ -1009,7 +1009,7 @@ private[tasties] class TreeUnpickler(
           paramTypeBoundsUnpickler.reader.readNat() // skip name
           bounds
         }
-      TypeLambda.rec(paramNames)(
+      TypeLambda(paramNames)(
         tl => readParamTypeBounds()(using localCtx.withEnclosingBinders(lambdaAddr, tl)),
         tl => resultUnpickler.readType(using localCtx.withEnclosingBinders(lambdaAddr, tl))
       )

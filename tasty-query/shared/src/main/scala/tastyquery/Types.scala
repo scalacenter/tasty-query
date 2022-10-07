@@ -1,6 +1,6 @@
 package tastyquery
 
-import scala.annotation.tailrec
+import scala.annotation.{constructorOnly, tailrec, targetName}
 
 import scala.collection.mutable
 
@@ -14,8 +14,6 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Variances.*
-
-import scala.annotation.targetName
 
 object Types {
   private[tastyquery] final case class LookupIn(pre: TypeRef, sel: SignedName)
@@ -974,7 +972,7 @@ object Types {
   sealed abstract class LambdaTypeCompanion[N <: Name, PInfo <: Type | TypeBounds, LT <: LambdaType] {
     def apply(paramNames: List[N])(paramInfosExp: LT => List[PInfo], resultTypeExp: LT => Type): LT
 
-    def apply(paramNames: List[N], paramInfos: List[PInfo], resultType: Type): LT =
+    final def apply(paramNames: List[N], paramInfos: List[PInfo], resultType: Type): LT =
       apply(paramNames)(_ => paramInfos, _ => resultType)
   }
 
@@ -1020,30 +1018,23 @@ object Types {
   end TypeLambdaType
 
   final class MethodType(val paramNames: List[TermName])(
-    paramTypesExp: MethodType => List[Type],
-    resultTypeExp: MethodType => Type
+    @constructorOnly paramTypesExp: MethodType => List[Type],
+    @constructorOnly resultTypeExp: MethodType => Type
   ) extends MethodicType
       with TermLambdaType:
     type This = MethodType
 
-    private var evaluating: Boolean = false
-    private var myParamTypes: List[Type] | Null = null
-    private var myRes: Type | Null = null
-
-    private def initialize(): Unit =
-      if evaluating then throw CyclicReferenceException(s"method [$paramNames]=>???")
-      else
-        evaluating = true
-        myParamTypes = paramTypesExp(this)
-        myRes = resultTypeExp(this)
-        evaluating = false
+    private var initialized: Boolean = false
+    private var myParamTypes: List[Type] = paramTypesExp(this: @unchecked)
+    private var myRes: Type = resultTypeExp(this: @unchecked)
+    initialized = true
 
     def paramTypes: List[Type] =
-      if myParamTypes == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
       myParamTypes.nn
 
     def resultType: Type =
-      if myRes == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
       myRes.nn
 
     def paramInfos: List[PInfo] =
@@ -1055,7 +1046,7 @@ object Types {
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
-      if evaluating then s"MethodType($paramNames)(<evaluating>...)"
+      if !initialized then s"MethodType($paramNames)(<evaluating>...)"
       else s"MethodType($paramNames)($paramTypes, $resultType)"
   end MethodType
 
@@ -1086,38 +1077,31 @@ object Types {
         paramType
       }
 
-      MethodType.apply(params.map(_.name.toTermName))(
+      MethodType(params.map(_.name.toTermName))(
         tl => params.map(p => tl.integrate(params, paramInfo(p))),
         tl => tl.integrate(params, resultType)
       )
     }
 
   final class PolyType private (val paramNames: List[TypeName])(
-    boundsRest: PolyType => List[TypeBounds],
-    resultRest: PolyType => Type
+    @constructorOnly paramTypeBoundsExp: PolyType => List[TypeBounds],
+    @constructorOnly resultTypeExp: PolyType => Type
   ) extends MethodicType
       with Binders
       with TypeLambdaType {
     type This = PolyType
 
-    private var evaluating: Boolean = false
-    private var myBounds: List[TypeBounds] | Null = null
-    private var myRes: Type | Null = null
-
-    private def initialize(): Unit =
-      if evaluating then throw CyclicReferenceException(s"polymorphic method [$paramNames]=>???")
-      else
-        evaluating = true
-        myBounds = boundsRest(this)
-        myRes = resultRest(this)
-        evaluating = false
+    private var initialized: Boolean = false
+    private var myBounds: List[TypeBounds] = paramTypeBoundsExp(this: @unchecked)
+    private var myRes: Type = resultTypeExp(this: @unchecked)
+    initialized = true
 
     def paramTypeBounds: List[TypeBounds] =
-      if myBounds == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"polymorphic method [$paramNames]=>???")
       myBounds.nn
 
     def resultType: Type =
-      if myRes == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"polymorphic method [$paramNames]=>???")
       myRes.nn
 
     def paramInfos: List[PInfo] = paramTypeBounds
@@ -1129,23 +1113,15 @@ object Types {
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
-      if evaluating then s"PolyType($paramNames)(<evaluating>...)"
+      if !initialized then s"PolyType($paramNames)(<evaluating>...)"
       else s"PolyType($paramNames)($myBounds, $myRes)"
   }
 
   object PolyType extends TypeLambdaTypeCompanion[PolyType]:
-
     def apply(
       paramNames: List[TypeName]
     )(paramTypeBoundsExp: PolyType => List[TypeBounds], resultTypeExp: PolyType => Type): PolyType =
       new PolyType(paramNames)(paramTypeBoundsExp, resultTypeExp)
-
-    def rec(
-      paramNames: List[TypeName]
-    )(boundsRest: Binders => List[TypeBounds], resultRest: Binders => Type): PolyType =
-      val tpe = new PolyType(paramNames)(boundsRest, resultRest)
-      tpe.resultType // initialize now
-      tpe
 
     private[tastyquery] def fromParams(params: List[TypeParam], resultType: Type)(using Context): Type =
       if params.isEmpty then resultType
@@ -1175,31 +1151,24 @@ object Types {
     def paramNum: Int
 
   final class TypeLambda(val paramNames: List[TypeName])(
-    paramTypeBoundsExp: TypeLambda => List[TypeBounds],
-    resultTypeExp: TypeLambda => Type
+    @constructorOnly paramTypeBoundsExp: TypeLambda => List[TypeBounds],
+    @constructorOnly resultTypeExp: TypeLambda => Type
   ) extends TypeProxy
       with TermType
       with TypeLambdaType {
     type This = TypeLambda
 
-    private var evaluating: Boolean = false
-    private var myBounds: List[TypeBounds] | Null = null
-    private var myRes: Type | Null = null
-
-    private def initialize(): Unit =
-      if evaluating then throw CyclicReferenceException(s"type lambda [$paramNames]=>???")
-      else
-        evaluating = true
-        myBounds = paramTypeBoundsExp(this)
-        myRes = resultTypeExp(this)
-        evaluating = false
+    private var initialized: Boolean = false
+    private var myBounds: List[TypeBounds] = paramTypeBoundsExp(this: @unchecked)
+    private var myRes: Type = resultTypeExp(this: @unchecked)
+    initialized = true
 
     def paramTypeBounds: List[TypeBounds] =
-      if myBounds == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"type lambda [$paramNames]=>???")
       myBounds.nn
 
     def resultType: Type =
-      if myRes == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"type lambda [$paramNames]=>???")
       myRes.nn
 
     def paramInfos: List[PInfo] = paramTypeBounds
@@ -1209,8 +1178,8 @@ object Types {
     override def underlying(using Context): Type = defn.AnyType
 
     override def toString: String =
-      if evaluating then s"TypeLambda($paramNames)(<evaluating>)"
-      else s"TypeLambda($paramNames)($myRes)"
+      if !initialized then s"TypeLambda($paramNames)(<evaluating>)"
+      else s"TypeLambda($paramNames)($myBounds, $myRes)"
   }
 
   object TypeLambda extends TypeLambdaTypeCompanion[TypeLambda]:
@@ -1218,13 +1187,6 @@ object Types {
       paramNames: List[TypeName]
     )(paramInfosExp: TypeLambda => List[TypeBounds], resultTypeExp: TypeLambda => Type): TypeLambda =
       new TypeLambda(paramNames)(paramInfosExp, resultTypeExp)
-
-    def rec(
-      paramNames: List[TypeName]
-    )(paramTypeBoundsExp: Binders => List[TypeBounds], resultTypeExp: Binders => Type): TypeLambda =
-      val tpe = new TypeLambda(paramNames)(paramTypeBoundsExp, resultTypeExp)
-      tpe.resultType // initialize now
-      tpe
 
     private[tastyquery] def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type)(
       using Context
