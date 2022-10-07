@@ -11,12 +11,6 @@ import tastyquery.Types.*
 
 private[tastyquery] object TypeMaps {
 
-  /** Where a traversal should stop */
-  enum StopAt:
-    case None // traverse everything
-    case Package // stop at package references
-    case Static // stop at static references
-
   /** Common base class of TypeMap and TypeAccumulator */
   abstract class VariantTraversal:
     protected var variance: Int = 1
@@ -28,22 +22,6 @@ private[tastyquery] object TypeMaps {
       variance = saved
       res
     }
-
-    protected def stopAt: StopAt = StopAt.Static
-
-    /** Can the prefix of this static reference be omitted if the reference
-      * itself can be omitted? Overridden in TypeOps#avoid.
-      */
-    protected def isStaticPrefix(pre: Type)(using Context): Boolean = true
-
-    protected def stopBecauseStaticOrLocal(tp: NamedType)(using Context): Boolean =
-      (tp.prefix eq NoPrefix)
-        || {
-          val stop = stopAt
-          (stop == StopAt.Static && tp.symbol.isStatic && isStaticPrefix(tp.prefix))
-          || (stop == StopAt.Package && tp.symbol.isPackage)
-        }
-    end stopBecauseStaticOrLocal
   end VariantTraversal
 
   abstract class TypeMap(using protected val mapCtx: Context) extends VariantTraversal {
@@ -117,16 +95,14 @@ private[tastyquery] object TypeMaps {
       given Context = ctx
       tp match {
         case tp: NamedType =>
-          if stopBecauseStaticOrLocal(tp) then tp
-          else
-            val prefix1 = atVariance(variance max 0)(this(tp.prefix))
-            // A prefix is never contravariant. Even if say `p.A` is used in a contravariant
-            // context, we cannot assume contravariance for `p` because `p`'s lower
-            // bound might not have a binding for `A` (e.g. the lower bound could be `Nothing`).
-            // By contrast, covariance does translate to the prefix, since we have that
-            // if `p <: q` then `p.A <: q.A`, and well-formedness requires that `A` is a member
-            // of `p`'s upper bound.
-            derivedSelect(tp, prefix1)
+          // A prefix is never contravariant. Even if say `p.A` is used in a contravariant
+          // context, we cannot assume contravariance for `p` because `p`'s lower
+          // bound might not have a binding for `A` (e.g. the lower bound could be `Nothing`).
+          // By contrast, covariance does translate to the prefix, since we have that
+          // if `p <: q` then `p.A <: q.A`, and well-formedness requires that `A` is a member
+          // of `p`'s upper bound.
+          val prefix1 = atVariance(variance max 0)(this(tp.prefix))
+          derivedSelect(tp, prefix1)
 
         case tp: AppliedType =>
           derivedAppliedType(tp, this(tp.tycon), mapArgs(tp.args, tp.tyconTypeParams))
@@ -187,7 +163,6 @@ private[tastyquery] object TypeMaps {
       tp
 
     def andThen(f: Type => Type): TypeMap = new TypeMap {
-      override def stopAt: StopAt = thisMap.stopAt
       def apply(tp: Type): Type = f(thisMap(tp))
     }
   }
