@@ -20,7 +20,12 @@ private[pickles] class PickleReader {
   opaque type Entries = Array[AnyRef | Null]
   opaque type Index = IArray[Int]
 
-  class Structure(using val myEntries: Entries, val myIndex: Index)
+  final class Structure(using val myEntries: Entries, val myIndex: Index):
+    def allRegisteredSymbols: Iterator[Symbol] =
+      myEntries.iterator.collect { case sym: Symbol =>
+        sym
+      }
+  end Structure
 
   extension (i: Index)
     inline def loopWithIndices(inline op: (Int, Int) => Unit): Unit = {
@@ -245,6 +250,7 @@ private[pickles] class PickleReader {
           .asInstanceOf[DeclaringSymbol]
           .getModuleDeclInternal(name.toTermName.withObjectSuffix.toTypeName)
         val sym = TermSymbol.create(name.toTermName, owner)
+        storeResultInEntries(sym)
         moduleClass.foreach(cls => sym.withDeclaredType(cls.asClass.typeRef))
         sym
       case _ =>

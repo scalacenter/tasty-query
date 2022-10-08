@@ -36,6 +36,9 @@ private[reader] object Unpickler {
           // }
         }
       }
+
+      // Check that all the Symbols we created have been completed
+      for sym <- structure.allRegisteredSymbols do sym.checkCompleted()
     }
 
     PklStream.read(sigBytes) {

@@ -73,6 +73,25 @@ object Symbols {
     private var myTree: Option[DefTree] = None
     private var myPrivateWithin: Option[Symbol] = None
 
+    /** Checks that this `Symbol` has been completely initialized.
+      *
+      * This method is called by the various file readers after reading each
+      * file, for all the `Symbol`s created while reading that file.
+      */
+    private[tastyquery] final def checkCompleted(): Unit =
+      doCheckCompleted()
+
+    protected[this] final def failNotCompleted(details: String): Nothing =
+      throw IllegalStateException(s"$this of class ${this.getClass().getName()} was not completed: $details")
+
+    /** This method is overridden in every subclass to perform their own checks.
+      *
+      * Every override is expected to call `super.doCheckCompleted()` first.
+      * If a check fail, it should be reported with [[failNotCompleted]].
+      */
+    protected[this] def doCheckCompleted(): Unit =
+      if !isFlagsInitialized then throw failNotCompleted("flags were not initialized")
+
     private[tastyquery] def withTree(t: DefTree): this.type =
       require(!isPackage, s"Multiple trees correspond to one package, a single tree cannot be assigned")
       myTree = Some(t)
@@ -185,6 +204,8 @@ object Symbols {
     type ThisNameType = SimpleName
 
     val name: SimpleName = nme.EmptySimpleName
+
+    this.withFlags(EmptyFlagSet)
 
     override def toString: String = "NoSymbol"
   end NoSymbol
@@ -591,6 +612,7 @@ object Symbols {
       cls
         .withParentsDirect(defn.ObjectType :: Nil)
         .withFlags(EmptyFlagSet)
+      cls.checkCompleted()
       cls
   end ClassSymbol
 
@@ -602,6 +624,8 @@ object Symbols {
     val packageRef: PackageRef = PackageRef(this: @unchecked)
 
     private var rootsInitialized: Boolean = false
+
+    this.withFlags(EmptyFlagSet)
 
     protected[this] final def ensureDeclsInitialized()(using Context): Unit =
       if !rootsInitialized then

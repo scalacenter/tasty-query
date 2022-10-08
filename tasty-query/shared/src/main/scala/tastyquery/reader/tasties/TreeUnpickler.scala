@@ -48,7 +48,13 @@ private[tasties] class TreeUnpickler(
       if !reader.isAtEnd then read(acc) else acc.toList
 
     fork.enterSymbols()(using fileContext)
-    read(new ListBuffer[Tree])
+    val result = read(new ListBuffer[Tree])
+
+    // Check that all the Symbols we created have been completed
+    for sym <- fileContext.allRegisteredSymbols do sym.checkCompleted()
+
+    result
+  end unpickle
 
   private def enterSymbols()(using LocalContext): Unit =
     while !reader.isAtEnd do createSymbols()
@@ -106,6 +112,7 @@ private[tasties] class TreeUnpickler(
           if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(name.toTypeName, localCtx.owner)
           else TermSymbol.create(name, localCtx.owner)
         localCtx.registerSym(start, sym)
+        sym.withFlags(Case)
         // bind is never an owner
         reader.until(end)(createSymbols())
 
@@ -1283,6 +1290,8 @@ private[tasties] object TreeUnpickler {
         case sym =>
           throw AssertionError(s"Illegal kind of symbol found at address $addr; got: ${sym.getClass()}")
 
+    def allRegisteredSymbols: Iterator[Symbol] =
+      localSymbols.valuesIterator
   }
 
 }

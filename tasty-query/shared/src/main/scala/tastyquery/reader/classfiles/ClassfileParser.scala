@@ -1,5 +1,7 @@
 package tastyquery.reader.classfiles
 
+import scala.collection.mutable
+
 import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
@@ -54,24 +56,30 @@ private[reader] object ClassfileParser {
   ): Unit = {
     import structure.{reader, given}
 
+    val allRegisteredSymbols = mutable.ListBuffer.empty[Symbol]
+
     val cls = ClassSymbol.create(name.toTypeName, classOwner)
+    allRegisteredSymbols += cls
 
     val moduleClass = ClassSymbol
       .create(name.withObjectSuffix.toTypeName, classOwner)
       .withTypeParams(Nil, Nil)
       .withFlags(Flags.ModuleClassCreationFlags)
     moduleClass.withParentsDirect(defn.ObjectType :: Nil)
+    allRegisteredSymbols += moduleClass
 
     val module = TermSymbol
       .create(name.toTermName, classOwner)
       .withDeclaredType(moduleClass.typeRef)
       .withFlags(Flags.ModuleValCreationFlags)
+    allRegisteredSymbols += module
 
     def loadFields(fields: Forked[DataStream]): IndexedSeq[(TermSymbol, SigOrDesc)] =
       fields.use {
         val buf = IndexedSeq.newBuilder[(TermSymbol, SigOrDesc)]
         reader.readFields { (name, sigOrDesc) =>
           val sym = TermSymbol.create(name, cls).withFlags(Flags.EmptyFlagSet)
+          allRegisteredSymbols += sym
           buf += sym -> sigOrDesc
         }
         buf.result()
@@ -82,6 +90,7 @@ private[reader] object ClassfileParser {
         val buf = IndexedSeq.newBuilder[(TermSymbol, SigOrDesc)]
         reader.readMethods { (name, sigOrDesc) =>
           val sym = TermSymbol.create(name, cls).withFlags(Flags.Method)
+          allRegisteredSymbols += sym
           buf += sym -> sigOrDesc
         }
         buf.result()
@@ -92,7 +101,7 @@ private[reader] object ClassfileParser {
         pool.utf8(cls.nameIdx).name
       val parents = classSig match
         case SigOrSupers.Sig(sig) =>
-          JavaSignatures.parseSignature(cls, sig) match
+          JavaSignatures.parseSignature(cls, sig, allRegisteredSymbols) match
             case mix: AndType => mix.parts
             case sup          => sup :: Nil
         case SigOrSupers.Supers =>
@@ -112,7 +121,9 @@ private[reader] object ClassfileParser {
     for (sym, sigOrDesc) <- members do
       sigOrDesc match
         case SigOrDesc.Desc(desc) => sym.withDeclaredType(Descriptors.parseDescriptor(sym, desc))
-        case SigOrDesc.Sig(sig)   => sym.withDeclaredType(JavaSignatures.parseSignature(sym, sig))
+        case SigOrDesc.Sig(sig)   => sym.withDeclaredType(JavaSignatures.parseSignature(sym, sig, allRegisteredSymbols))
+
+    for sym <- allRegisteredSymbols do sym.checkCompleted()
   }
 
   private def parse(classRoot: ClassData, structure: Structure)(using Context): ClassKind = {
