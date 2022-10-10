@@ -12,7 +12,7 @@ import tastyquery.Flags
 private[classfiles] object Descriptors:
 
   def parseSupers(cls: ClassSymbol, superClass: Option[String], interfaces: IArray[String])(using Context): List[Type] =
-    cls.withTypeParams(Nil, Nil)
+    cls.withTypeParams(Nil)
     val superRef = superClass.map(classRef).getOrElse {
       // More efficient would be to only do this check once in Definitions,
       // but parents are immutable currently.

@@ -237,8 +237,7 @@ private[pickles] class PickleReader {
             case tpe =>
               throw AssertionError(s"unexpected type $tpe for $cls, owner is $owner")
           cls.withParentsDirect(parentTypes)
-        val bounds = typeParams.map(_ => defn.NothingAnyBounds) // TODO Read bounds
-        cls.withTypeParams(typeParams, bounds)
+        cls.withTypeParams(typeParams)
         cls
       case VALsym =>
         val sym = TermSymbol.create(name.toTermName, owner)

@@ -497,7 +497,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val RecClass = resolve(name"javadefined" / tname"RecClass")
     val JavaInterface1 = resolve(name"javadefined" / tname"JavaInterface1")
 
-    val List(tparamT) = SubRecClass.typeParamSyms: @unchecked
+    val List(tparamT) = SubRecClass.typeParams: @unchecked
 
     assert(
       SubRecClass.parents.isListOf(
@@ -751,11 +751,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val ListClass = resolve(name"scala" / name"collection" / name"immutable" / tname"List").asClass
     val ArrayClass = resolve(name"scala" / tname"Array").asClass
 
-    val List(targList) = ListClass.typeParamSyms: @unchecked
+    val List(targList) = ListClass.typeParams: @unchecked
     // TODO Set flags ClassTypeParam on TypeParams
     //assert(clue(targList.flags).isAllOf(ClassTypeParam))
 
-    val List(targArray) = ArrayClass.typeParamSyms: @unchecked
+    val List(targArray) = ArrayClass.typeParams: @unchecked
     // TODO Set flags ClassTypeParam on TypeParams
     //assert(clue(targArray.flags).isAllOf(ClassTypeParam))
   }

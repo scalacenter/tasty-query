@@ -63,7 +63,7 @@ private[reader] object ClassfileParser {
 
     val moduleClass = ClassSymbol
       .create(name.withObjectSuffix.toTypeName, classOwner)
-      .withTypeParams(Nil, Nil)
+      .withTypeParams(Nil)
       .withFlags(Flags.ModuleClassCreationFlags)
     moduleClass.withParentsDirect(defn.ObjectType :: Nil)
     allRegisteredSymbols += moduleClass

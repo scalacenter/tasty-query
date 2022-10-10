@@ -511,10 +511,7 @@ private[tasties] class TreeUnpickler(
     val end = reader.readEnd()
     val cls = localCtx.owner.asClass
     val tparams = readTypeParams
-    cls.withTypeParams(
-      tparams.map(_.symbol.asInstanceOf[ClassTypeParamSymbol]),
-      tparams.map(_.computeDeclarationTypeBounds())
-    )
+    cls.withTypeParams(tparams.map(_.symbol.asInstanceOf[ClassTypeParamSymbol]))
     val params = readParams
     val parents: List[Apply | Block | TypeTree] =
       reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF) {

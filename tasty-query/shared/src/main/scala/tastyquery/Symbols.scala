@@ -473,7 +473,7 @@ object Symbols {
 
   final class ClassSymbol private (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner) with DeclaringSymbol {
     // Reference fields (checked in doCheckCompleted)
-    private var myTypeParams: List[(ClassTypeParamSymbol, TypeBounds)] | Null = null
+    private var myTypeParams: List[ClassTypeParamSymbol] | Null = null
     private var myParentsInit: (() => List[Type]) | Null = null
     private var myParents: List[Type] | Null = null
 
@@ -513,23 +513,15 @@ object Symbols {
         }
       case _ => None // not possible yet for local symbols
 
-    private[tastyquery] final def withTypeParams(
-      tparams: List[ClassTypeParamSymbol],
-      bounds: List[TypeBounds]
-    ): this.type =
-      val local = myTypeParams
-      if local != null then throw new IllegalStateException(s"reassignment of type parameters to $this")
-      else
-        myTypeParams = tparams.zip(bounds)
-        this
+    private[tastyquery] final def withTypeParams(tparams: List[ClassTypeParamSymbol]): this.type =
+      if myTypeParams != null then throw new IllegalStateException(s"reassignment of type parameters to $this")
+      myTypeParams = tparams
+      this
 
-    private def typeParamsInternal(using Context): List[(ClassTypeParamSymbol, TypeBounds)] =
+    final def typeParams(using Context): List[ClassTypeParamSymbol] =
       val local = myTypeParams
-      if local == null then throw new IllegalStateException(s"expected type params for $this")
+      if local == null then throw new IllegalStateException(s"type params not initialized for $this")
       else local
-
-    private[tastyquery] final def typeParamSymsNoInitialize(using Context): List[ClassTypeParamSymbol] =
-      typeParamsInternal.map(_(0))
 
     private[tastyquery] final def withParentsDirect(parents: List[Type]): this.type =
       if myParentsInit != null || myParents != null then
@@ -582,13 +574,6 @@ object Symbols {
       // TODO
       tp.widen
 
-    // private[tastyquery] final def hasTypeParams: List[Symbol] = typeParamsInternal.map(_(0))
-    private[tastyquery] final def typeParamSyms(using Context): List[ClassTypeParamSymbol] =
-      typeParamsInternal.map(_(0))
-
-    final def typeParams(using Context): List[ClassTypeParamSymbol] =
-      typeParamSyms
-
     private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[Symbol] =
       def lookup(parents: List[Type]): Option[Symbol] = parents match
         case p :: ps =>
@@ -635,7 +620,7 @@ object Symbols {
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, span: Span)(using Context): ClassSymbol =
       val cls = create(tpnme.RefinedClassMagic, owner)
       cls
-        .withTypeParams(Nil, Nil)
+        .withTypeParams(Nil)
         .withParentsDirect(defn.ObjectType :: Nil)
         .withFlags(EmptyFlagSet)
       cls.checkCompleted()
