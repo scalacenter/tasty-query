@@ -172,7 +172,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
       MethodType(List.tabulate(n)(i => termName("x" + i)))(
         mt => inputTypeParams.map(_.typeRef),
         mt => resultTypeParam.typeRef
-      )(using ctx)
+      )
     )
 
     cls

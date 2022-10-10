@@ -240,7 +240,7 @@ private[classfiles] object JavaSignatures:
           MethodType((0 until params.size).map(i => termName(s"x$$$i")).toList, params, ret)
         else abort
       if consume('<') then
-        PolyType.rec(lookaheadTypeParamNames)(
+        PolyType(lookaheadTypeParamNames)(
           pt => typeParamsRest(pt), // now we know the type parameters, resolve them
           pt => methodRest(pt)
         )

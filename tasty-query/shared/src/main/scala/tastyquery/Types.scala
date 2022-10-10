@@ -1,6 +1,6 @@
 package tastyquery
 
-import scala.annotation.tailrec
+import scala.annotation.{constructorOnly, tailrec, targetName}
 
 import scala.collection.mutable
 
@@ -14,8 +14,6 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Variances.*
-
-import scala.annotation.targetName
 
 object Types {
   private[tastyquery] final case class LookupIn(pre: TypeRef, sel: SignedName)
@@ -248,10 +246,6 @@ object Types {
 
     private[tastyquery] final def applyIfParameterized(args: List[Type])(using Context): Type =
       if (args.nonEmpty /*typeParams.nonEmpty*/ ) appliedTo(args) else this
-
-    /** Substitute all types of the form `TypeParamRef(from, N)` by `TypeParamRef(to, N)`. */
-    private[tastyquery] final def subst(from: Binders, to: Binders)(using Context): Type =
-      Substituters.subst(this, from, to)
 
     /** Substitute bound types by some other types */
     private[tastyquery] final def substParams(from: Binders, to: List[Type])(using Context): Type =
@@ -534,6 +528,7 @@ object Types {
 
     type ThisName <: Name
     type ThisSymbolType <: Symbol { type ThisNameType = ThisName }
+    type ThisNamedType >: this.type <: NamedType
     protected[this] type ThisDesignatorType >: ThisSymbolType <: Symbol | Name | LookupIn | Scala2ExternalSymRef
 
     val prefix: Type
@@ -548,6 +543,9 @@ object Types {
 
     private var myName: ThisName | Null = null
     private var mySymbol: ThisSymbolType | Null = null
+
+    private[tastyquery] final def isLocalRef(sym: Symbol): Boolean =
+      prefix == NoPrefix && designator == sym
 
     final def isType: Boolean = isInstanceOf[TypeRef]
 
@@ -659,7 +657,7 @@ object Types {
       *
       *    T#A --> B    if A is bound to an alias `= B` in T
       */
-    private[tastyquery] final def derivedSelect(prefix: Type)(using Context): Type =
+    private[tastyquery] final def normalizedDerivedSelect(prefix: Type)(using Context): Type =
       if (prefix eq this.prefix) this
       else if (prefix.isExactlyNothing) prefix
       else {
@@ -675,7 +673,14 @@ object Types {
         withPrefix(prefix, cachedSymbol = mySymbol)
       }
 
-    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null)(using Context): Type
+    private[tastyquery] final def derivedSelect(prefix: Type): ThisNamedType =
+      if prefix eq this.prefix then this
+      else withPrefix(prefix)
+
+    private final def withPrefix(prefix: Type): ThisNamedType =
+      withPrefix(prefix, cachedSymbol = mySymbol)
+
+    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): ThisNamedType
   }
 
   object NamedType {
@@ -714,6 +719,7 @@ object Types {
 
     type ThisName = TermName
     type ThisSymbolType = TermSymbol
+    type ThisNamedType = TermRef
     protected[this] type ThisDesignatorType = TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
 
     protected[this] def designator: ThisDesignatorType = myDesignator
@@ -756,7 +762,7 @@ object Types {
         case tp =>
           tp.findMember(name, pre)
 
-    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null)(using Context): Type =
+    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): TermRef =
       new TermRef(prefix, if cachedSymbol != null then cachedSymbol else designator)
   }
 
@@ -796,6 +802,7 @@ object Types {
 
     type ThisName = TypeName
     type ThisSymbolType = TypeSymbol
+    type ThisNamedType = TypeRef
     type ThisDesignatorType = TypeName | TypeSymbol | Scala2ExternalSymRef
 
     protected[this] def designator: ThisDesignatorType = myDesignator
@@ -809,9 +816,6 @@ object Types {
     protected[this] def asThisSymbolType(sym: Symbol): ThisSymbolType =
       sym.asInstanceOf[TypeSymbol]
 
-    private[tastyquery] def isLocalRef(sym: Symbol): Boolean =
-      myDesignator == sym
-
     override def underlying(using Context): Type = symbol match
       case cls: ClassSymbol          => cls.classInfo
       case sym: TypeSymbolWithBounds => sym.upperBound
@@ -823,7 +827,7 @@ object Types {
         case sym: TypeSymbolWithBounds =>
           sym.upperBound.findMember(name, pre)
 
-    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null)(using Context): Type =
+    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): TypeRef =
       new TypeRef(prefix, if cachedSymbol != null then cachedSymbol else designator)
   }
 
@@ -901,11 +905,11 @@ object Types {
         case _ =>
           ???
 
-    private[tastyquery] final def derivedAppliedType(tycon: Type, args: List[Type])(using Context): AppliedType =
+    private[tastyquery] final def derivedAppliedType(tycon: Type, args: List[Type]): AppliedType =
       if ((tycon eq this.tycon) && (args eq this.args)) this
       else AppliedType(tycon, args)
 
-    private[tastyquery] final def map(op: Type => Type)(using Context): AppliedType =
+    private[tastyquery] final def map(op: Type => Type): AppliedType =
       derivedAppliedType(op(tycon), args.mapConserve(op))
 
     override def toString(): String = s"AppliedType($tycon, $args)"
@@ -915,7 +919,7 @@ object Types {
   final class ExprType(val resultType: Type) extends TypeProxy with MethodicType {
     override def underlying(using Context): Type = resultType
 
-    private[tastyquery] final def derivedExprType(resultType: Type)(using Context): ExprType =
+    private[tastyquery] final def derivedExprType(resultType: Type): ExprType =
       if (resultType eq this.resultType) this else ExprType(resultType)
 
     override def toString(): String = s"ExprType($resultType)"
@@ -946,29 +950,29 @@ object Types {
     /** The type `[params := this.paramRefs] tp`, where `params` can be
       * either a list of type parameter symbols or a list of lambda parameters
       */
-    private[tastyquery] def integrate(params: List[Symbol], tp: Type)(using Context): Type =
-      Substituters.subst(tp, params, paramRefs)
+    private[tastyquery] def integrate(params: List[Symbol], tp: Type): Type =
+      Substituters.substLocalParams(tp, params, paramRefs)
 
     private[tastyquery] final def derivedLambdaType(
       paramNames: List[ThisName] = this.paramNames,
       paramInfos: List[PInfo] = this.paramInfos,
       resType: Type = this.resultType
-    )(using Context): This =
+    ): This =
       if (paramNames eq this.paramNames) && (paramInfos eq this.paramInfos) && (resType eq this.resultType) then
         this.asInstanceOf[This]
       else newLikeThis(paramNames, paramInfos, resType)
 
-    private def newLikeThis(paramNames: List[ThisName], paramInfos: List[PInfo], resType: Type)(using Context): This =
+    private def newLikeThis(paramNames: List[ThisName], paramInfos: List[PInfo], resType: Type): This =
       companion(paramNames)(
-        x => paramInfos.mapConserve(Substituters.subst(_, this, x).asInstanceOf[PInfo]),
-        x => resType.subst(this, x)
+        x => paramInfos.mapConserve(Substituters.substBinders(_, this, x).asInstanceOf[PInfo]),
+        x => Substituters.substBinders(resType, this, x)
       )
   }
 
   sealed abstract class LambdaTypeCompanion[N <: Name, PInfo <: Type | TypeBounds, LT <: LambdaType] {
-    def apply(paramNames: List[N])(paramInfosExp: LT => List[PInfo], resultTypeExp: LT => Type)(using Context): LT
+    def apply(paramNames: List[N])(paramInfosExp: LT => List[PInfo], resultTypeExp: LT => Type): LT
 
-    def apply(paramNames: List[N], paramInfos: List[PInfo], resultType: Type)(using Context): LT =
+    final def apply(paramNames: List[N], paramInfos: List[PInfo], resultType: Type): LT =
       apply(paramNames)(_ => paramInfos, _ => resultType)
   }
 
@@ -985,7 +989,7 @@ object Types {
         apply(paramNames)(
           tpLambda => paramTypeBounds.map(tpLambda.integrate(params, _)),
           tpLambda => tpLambda.integrate(params, resultType)
-        )(using ctx)
+        )
   }
 
   sealed trait TermLambdaType extends LambdaType:
@@ -1009,35 +1013,28 @@ object Types {
       Substituters.substParams(resultType, this, args)
 
     /** The type-bounds `[tparams := this.paramRefs] bounds`, where `tparams` is a list of type parameter symbols */
-    private[tastyquery] def integrate(tparams: List[TypeParamSymbol], bounds: TypeBounds)(using Context): TypeBounds =
-      Substituters.subst(bounds, tparams, paramRefs)
+    private[tastyquery] def integrate(tparams: List[TypeParamSymbol], bounds: TypeBounds): TypeBounds =
+      Substituters.substLocalParams(bounds, tparams, paramRefs)
   end TypeLambdaType
 
   final class MethodType(val paramNames: List[TermName])(
-    paramTypesExp: MethodType => List[Type],
-    resultTypeExp: MethodType => Type
+    @constructorOnly paramTypesExp: MethodType => List[Type],
+    @constructorOnly resultTypeExp: MethodType => Type
   ) extends MethodicType
       with TermLambdaType:
     type This = MethodType
 
-    private var evaluating: Boolean = false
-    private var myParamTypes: List[Type] | Null = null
-    private var myRes: Type | Null = null
-
-    private def initialize(): Unit =
-      if evaluating then throw CyclicReferenceException(s"method [$paramNames]=>???")
-      else
-        evaluating = true
-        myParamTypes = paramTypesExp(this)
-        myRes = resultTypeExp(this)
-        evaluating = false
+    private var initialized: Boolean = false
+    private var myParamTypes: List[Type] = paramTypesExp(this: @unchecked)
+    private var myRes: Type = resultTypeExp(this: @unchecked)
+    initialized = true
 
     def paramTypes: List[Type] =
-      if myParamTypes == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
       myParamTypes.nn
 
     def resultType: Type =
-      if myRes == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
       myRes.nn
 
     def paramInfos: List[PInfo] =
@@ -1049,14 +1046,14 @@ object Types {
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
-      if evaluating then s"MethodType($paramNames)(<evaluating>...)"
+      if !initialized then s"MethodType($paramNames)(<evaluating>...)"
       else s"MethodType($paramNames)($paramTypes, $resultType)"
   end MethodType
 
   object MethodType extends LambdaTypeCompanion[TermName, Type, MethodType]:
-    def apply(paramNames: List[TermName])(paramInfosExp: MethodType => List[Type], resultTypeExp: MethodType => Type)(
-      using Context
-    ): MethodType =
+    def apply(
+      paramNames: List[TermName]
+    )(paramInfosExp: MethodType => List[Type], resultTypeExp: MethodType => Type): MethodType =
       new MethodType(paramNames)(paramInfosExp, resultTypeExp)
 
     /** Produce method type from parameter symbols, with special mappings for repeated
@@ -1080,38 +1077,31 @@ object Types {
         paramType
       }
 
-      MethodType.apply(params.map(_.name.toTermName))(
+      MethodType(params.map(_.name.toTermName))(
         tl => params.map(p => tl.integrate(params, paramInfo(p))),
         tl => tl.integrate(params, resultType)
-      )(using ctx)
+      )
     }
 
   final class PolyType private (val paramNames: List[TypeName])(
-    boundsRest: PolyType => List[TypeBounds],
-    resultRest: PolyType => Type
+    @constructorOnly paramTypeBoundsExp: PolyType => List[TypeBounds],
+    @constructorOnly resultTypeExp: PolyType => Type
   ) extends MethodicType
       with Binders
       with TypeLambdaType {
     type This = PolyType
 
-    private var evaluating: Boolean = false
-    private var myBounds: List[TypeBounds] | Null = null
-    private var myRes: Type | Null = null
-
-    private def initialize(): Unit =
-      if evaluating then throw CyclicReferenceException(s"polymorphic method [$paramNames]=>???")
-      else
-        evaluating = true
-        myBounds = boundsRest(this)
-        myRes = resultRest(this)
-        evaluating = false
+    private var initialized: Boolean = false
+    private var myBounds: List[TypeBounds] = paramTypeBoundsExp(this: @unchecked)
+    private var myRes: Type = resultTypeExp(this: @unchecked)
+    initialized = true
 
     def paramTypeBounds: List[TypeBounds] =
-      if myBounds == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"polymorphic method [$paramNames]=>???")
       myBounds.nn
 
     def resultType: Type =
-      if myRes == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"polymorphic method [$paramNames]=>???")
       myRes.nn
 
     def paramInfos: List[PInfo] = paramTypeBounds
@@ -1123,23 +1113,15 @@ object Types {
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
-      if evaluating then s"PolyType($paramNames)(<evaluating>...)"
+      if !initialized then s"PolyType($paramNames)(<evaluating>...)"
       else s"PolyType($paramNames)($myBounds, $myRes)"
   }
 
   object PolyType extends TypeLambdaTypeCompanion[PolyType]:
-
     def apply(
       paramNames: List[TypeName]
-    )(paramTypeBoundsExp: PolyType => List[TypeBounds], resultTypeExp: PolyType => Type)(using Context): PolyType =
+    )(paramTypeBoundsExp: PolyType => List[TypeBounds], resultTypeExp: PolyType => Type): PolyType =
       new PolyType(paramNames)(paramTypeBoundsExp, resultTypeExp)
-
-    def rec(
-      paramNames: List[TypeName]
-    )(boundsRest: Binders => List[TypeBounds], resultRest: Binders => Type): PolyType =
-      val tpe = new PolyType(paramNames)(boundsRest, resultRest)
-      tpe.resultType // initialize now
-      tpe
 
     private[tastyquery] def fromParams(params: List[TypeParam], resultType: Type)(using Context): Type =
       if params.isEmpty then resultType
@@ -1169,31 +1151,24 @@ object Types {
     def paramNum: Int
 
   final class TypeLambda(val paramNames: List[TypeName])(
-    paramTypeBoundsExp: TypeLambda => List[TypeBounds],
-    resultTypeExp: TypeLambda => Type
+    @constructorOnly paramTypeBoundsExp: TypeLambda => List[TypeBounds],
+    @constructorOnly resultTypeExp: TypeLambda => Type
   ) extends TypeProxy
       with TermType
       with TypeLambdaType {
     type This = TypeLambda
 
-    private var evaluating: Boolean = false
-    private var myBounds: List[TypeBounds] | Null = null
-    private var myRes: Type | Null = null
-
-    private def initialize(): Unit =
-      if evaluating then throw CyclicReferenceException(s"type lambda [$paramNames]=>???")
-      else
-        evaluating = true
-        myBounds = paramTypeBoundsExp(this)
-        myRes = resultTypeExp(this)
-        evaluating = false
+    private var initialized: Boolean = false
+    private var myBounds: List[TypeBounds] = paramTypeBoundsExp(this: @unchecked)
+    private var myRes: Type = resultTypeExp(this: @unchecked)
+    initialized = true
 
     def paramTypeBounds: List[TypeBounds] =
-      if myBounds == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"type lambda [$paramNames]=>???")
       myBounds.nn
 
     def resultType: Type =
-      if myRes == null then initialize()
+      if !initialized then throw CyclicReferenceException(s"type lambda [$paramNames]=>???")
       myRes.nn
 
     def paramInfos: List[PInfo] = paramTypeBounds
@@ -1203,27 +1178,20 @@ object Types {
     override def underlying(using Context): Type = defn.AnyType
 
     override def toString: String =
-      if evaluating then s"TypeLambda($paramNames)(<evaluating>)"
-      else s"TypeLambda($paramNames)($myRes)"
+      if !initialized then s"TypeLambda($paramNames)(<evaluating>)"
+      else s"TypeLambda($paramNames)($myBounds, $myRes)"
   }
 
   object TypeLambda extends TypeLambdaTypeCompanion[TypeLambda]:
     def apply(
       paramNames: List[TypeName]
-    )(paramInfosExp: TypeLambda => List[TypeBounds], resultTypeExp: TypeLambda => Type)(using Context): TypeLambda =
+    )(paramInfosExp: TypeLambda => List[TypeBounds], resultTypeExp: TypeLambda => Type): TypeLambda =
       new TypeLambda(paramNames)(paramInfosExp, resultTypeExp)
-
-    def rec(
-      paramNames: List[TypeName]
-    )(paramTypeBoundsExp: Binders => List[TypeBounds], resultTypeExp: Binders => Type): TypeLambda =
-      val tpe = new TypeLambda(paramNames)(paramTypeBoundsExp, resultTypeExp)
-      tpe.resultType // initialize now
-      tpe
 
     private[tastyquery] def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type)(
       using Context
     ): TypeLambda =
-      apply(params.map(_.name))(_ => params.map(_.computeDeclarationTypeBounds()), resultTypeExp)(using ctx)
+      apply(params.map(_.name))(_ => params.map(_.computeDeclarationTypeBounds()), resultTypeExp)
   end TypeLambda
 
   final class TypeParamRef(val binders: TypeLambdaType, val paramNum: Int)
@@ -1261,7 +1229,7 @@ object Types {
   final class AnnotatedType(val typ: Type, val annotation: Tree) extends TypeProxy with ValueType {
     override def underlying(using Context): Type = typ
 
-    private[tastyquery] final def derivedAnnotatedType(typ: Type, annotation: Tree)(using Context): AnnotatedType =
+    private[tastyquery] final def derivedAnnotatedType(typ: Type, annotation: Tree): AnnotatedType =
       if ((typ eq this.typ) && (annotation eq this.annotation)) this
       else AnnotatedType(typ, annotation)
 
@@ -1280,9 +1248,7 @@ object Types {
       with ValueType {
     override def underlying(using Context): Type = parent
 
-    private[tastyquery] final def derivedRefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds)(
-      using Context
-    ): Type =
+    private[tastyquery] final def derivedRefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds): Type =
       if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedInfo eq this.refinedInfo)) this
       else RefinedType(parent, refinedName, refinedInfo)
 
@@ -1318,7 +1284,7 @@ object Types {
     type ThisTypeMappableType = TypeBounds
 
     /** The non-alias type bounds type with given bounds */
-    private[tastyquery] def derivedTypeBounds(low: Type, high: Type)(using Context): TypeBounds =
+    private[tastyquery] def derivedTypeBounds(low: Type, high: Type): TypeBounds =
       if ((low eq this.low) && (high eq this.high)) this
       else RealTypeBounds(low, high)
   }
@@ -1352,7 +1318,7 @@ object Types {
   final class WildcardTypeBounds(val bounds: TypeBounds) extends TypeProxy {
     override def underlying(using Context): Type = bounds.high
 
-    private[tastyquery] def derivedWildcardTypeBounds(bounds: TypeBounds)(using Context): WildcardTypeBounds =
+    private[tastyquery] def derivedWildcardTypeBounds(bounds: TypeBounds): WildcardTypeBounds =
       if bounds eq this.bounds then this
       else WildcardTypeBounds(bounds)
 
@@ -1377,7 +1343,7 @@ object Types {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       join.findMember(name, pre)
 
-    private[tastyquery] def derivedOrType(first: Type, second: Type)(using Context): Type =
+    private[tastyquery] def derivedOrType(first: Type, second: Type): Type =
       if (first eq this.first) && (second eq this.second) then this
       else OrType.make(first, second)
 
@@ -1385,7 +1351,7 @@ object Types {
   }
 
   object OrType {
-    private[tastyquery] def make(first: Type, second: Type)(using Context): Type =
+    private[tastyquery] def make(first: Type, second: Type): Type =
       if (first eq second) first
       else OrType(first, second)
   }
@@ -1394,7 +1360,7 @@ object Types {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       first.findMember(name, pre) // TODO 'meet' with second.findMember(name, pre)
 
-    private[tastyquery] def derivedAndType(first: Type, second: Type)(using Context): Type =
+    private[tastyquery] def derivedAndType(first: Type, second: Type): Type =
       if ((first eq this.first) && (second eq this.second)) this
       else AndType.make(first, second)
 
@@ -1408,7 +1374,7 @@ object Types {
   }
 
   object AndType {
-    private[tastyquery] def make(first: Type, second: Type)(using Context): Type =
+    private[tastyquery] def make(first: Type, second: Type): Type =
       // TODO Avoid &'ing with Any
       if first eq second then first
       else AndType(first, second)
@@ -1418,7 +1384,7 @@ object Types {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       ClassInfo.findMember(cls, name, pre)
 
-    private[tastyquery] def derivedClassInfo(pre: Type)(using Context): ClassInfo =
+    private[tastyquery] def derivedClassInfo(pre: Type): ClassInfo =
       this // so far do not store pre in ClassInfo
 
     override def toString(): String = s"ClassInfo($cls)"

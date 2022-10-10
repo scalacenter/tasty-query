@@ -7,17 +7,17 @@ import tastyquery.TypeMaps.*
 
 private[tastyquery] object Substituters:
 
-  def subst(tp: TypeMappable, from: Binders, to: Binders)(using Context): tp.ThisTypeMappableType =
+  def substBinders(tp: TypeMappable, from: Binders, to: Binders): tp.ThisTypeMappableType =
     new SubstBindingMap(from, to).apply(tp)
 
   def substParams(tp: TypeMappable, from: Binders, to: List[Type])(using Context): tp.ThisTypeMappableType =
     new SubstParamsMap(from, to).apply(tp)
 
-  def subst(tp: TypeMappable, from: List[Symbol], to: List[Type])(using Context): tp.ThisTypeMappableType =
+  def substLocalParams(tp: TypeMappable, from: List[Symbol], to: List[Type]): tp.ThisTypeMappableType =
     if from.isEmpty then tp
-    else new SubstMap(from, to).apply(tp)
+    else new SubstLocalParamsMap(from, to).apply(tp)
 
-  final class SubstBindingMap(from: Binders, to: Binders)(using Context) extends DeepTypeMap:
+  final class SubstBindingMap(from: Binders, to: Binders) extends TypeMap:
     def apply(tp: Type): Type =
       tp match
         case tp: BoundType =>
@@ -51,16 +51,15 @@ private[tastyquery] object Substituters:
     end apply
   end SubstParamsMap
 
-  private final class SubstMap(from: List[Symbol], to: List[Type])(using Context) extends DeepTypeMap:
+  private final class SubstLocalParamsMap(from: List[Symbol], to: List[Type]) extends TypeMap:
     def apply(tp: Type): Type =
       tp match
         case tp: NamedType =>
           if tp.prefix == NoPrefix then
-            val sym = tp.symbol
             var fs = from
             var ts = to
             while fs.nonEmpty && ts.nonEmpty do
-              if fs.head eq sym then return ts.head
+              if tp.isLocalRef(fs.head) then return ts.head
               fs = fs.tail
               ts = ts.tail
             tp
@@ -69,6 +68,6 @@ private[tastyquery] object Substituters:
           tp
         case _ =>
           mapOver(tp)
-  end SubstMap
+  end SubstLocalParamsMap
 
 end Substituters

@@ -11,12 +11,6 @@ import tastyquery.Types.*
 
 private[tastyquery] object TypeMaps {
 
-  /** Where a traversal should stop */
-  enum StopAt:
-    case None // traverse everything
-    case Package // stop at package references
-    case Static // stop at static references
-
   /** Common base class of TypeMap and TypeAccumulator */
   abstract class VariantTraversal:
     protected var variance: Int = 1
@@ -28,25 +22,9 @@ private[tastyquery] object TypeMaps {
       variance = saved
       res
     }
-
-    protected def stopAt: StopAt = StopAt.Static
-
-    /** Can the prefix of this static reference be omitted if the reference
-      * itself can be omitted? Overridden in TypeOps#avoid.
-      */
-    protected def isStaticPrefix(pre: Type)(using Context): Boolean = true
-
-    protected def stopBecauseStaticOrLocal(tp: NamedType)(using Context): Boolean =
-      (tp.prefix eq NoPrefix)
-        || {
-          val stop = stopAt
-          (stop == StopAt.Static && tp.symbol.isStatic && isStaticPrefix(tp.prefix))
-          || (stop == StopAt.Package && tp.symbol.isPackage)
-        }
-    end stopBecauseStaticOrLocal
   end VariantTraversal
 
-  abstract class TypeMap(using protected val mapCtx: Context) extends VariantTraversal {
+  abstract class TypeMap extends VariantTraversal with (Type => Type) {
     thisMap =>
 
     final def apply(tp: TypeMappable): tp.ThisTypeMappableType =
@@ -90,17 +68,6 @@ private[tastyquery] object TypeMaps {
     protected def derivedTypeBounds(bounds: TypeBounds, low: Type, high: Type): TypeBounds =
       bounds.derivedTypeBounds(low, high)
 
-    protected def mapArgs(args: List[Type], tparams: List[TypeParamInfo]): List[Type] = args match
-      case arg :: otherArgs if tparams.nonEmpty =>
-        val arg1 = arg match
-          case arg: WildcardTypeBounds => this(arg)
-          case arg                     => atVariance(variance * tparams.head.paramVariance.sign)(this(arg))
-        val otherArgs1 = mapArgs(otherArgs, tparams.tail)
-        if ((arg1 eq arg) && (otherArgs1 eq otherArgs)) args
-        else arg1 :: otherArgs1
-      case nil =>
-        nil
-
     protected def mapOverLambda(tp: LambdaType): Type =
       val restpe = tp.resultType
       val saved = variance
@@ -112,24 +79,20 @@ private[tastyquery] object TypeMaps {
     def isRange(tp: Type): Boolean = tp.isInstanceOf[Range]
 
     /** Map this function over given type */
-    def mapOver(tp: Type): Type = {
-      val ctx = this.mapCtx // optimization for performance
-      given Context = ctx
+    def mapOver(tp: Type): Type =
       tp match {
         case tp: NamedType =>
-          if stopBecauseStaticOrLocal(tp) then tp
-          else
-            val prefix1 = atVariance(variance max 0)(this(tp.prefix))
-            // A prefix is never contravariant. Even if say `p.A` is used in a contravariant
-            // context, we cannot assume contravariance for `p` because `p`'s lower
-            // bound might not have a binding for `A` (e.g. the lower bound could be `Nothing`).
-            // By contrast, covariance does translate to the prefix, since we have that
-            // if `p <: q` then `p.A <: q.A`, and well-formedness requires that `A` is a member
-            // of `p`'s upper bound.
-            derivedSelect(tp, prefix1)
+          // A prefix is never contravariant. Even if say `p.A` is used in a contravariant
+          // context, we cannot assume contravariance for `p` because `p`'s lower
+          // bound might not have a binding for `A` (e.g. the lower bound could be `Nothing`).
+          // By contrast, covariance does translate to the prefix, since we have that
+          // if `p <: q` then `p.A <: q.A`, and well-formedness requires that `A` is a member
+          // of `p`'s upper bound.
+          val prefix1 = atVariance(variance max 0)(this(tp.prefix))
+          derivedSelect(tp, prefix1)
 
         case tp: AppliedType =>
-          derivedAppliedType(tp, this(tp.tycon), mapArgs(tp.args, tp.tyconTypeParams))
+          tp.map(this)
 
         case tp: LambdaType =>
           mapOverLambda(tp)
@@ -141,11 +104,7 @@ private[tastyquery] object TypeMaps {
           derivedExprType(tp, this(tp.resultType))
 
         case tp: AnnotatedType =>
-          val underlying1 = this(tp.underlying)
-          /*val annot1 = tp.annot //.mapWith(this)
-          if annot1 eq EmptyAnnotation then underlying1
-          else derivedAnnotatedType(tp, underlying1, annot1)*/
-          underlying1
+          derivedAnnotatedType(tp, this(tp.typ), tp.annotation) // tp.annotation.mapWith(this)
 
         case _: ThisType | NoPrefix =>
           tp
@@ -165,7 +124,7 @@ private[tastyquery] object TypeMaps {
         case _ =>
           tp
       }
-    }
+    end mapOver
 
     def mapOver(bounds: TypeBounds): TypeBounds =
       bounds match
@@ -187,10 +146,35 @@ private[tastyquery] object TypeMaps {
       tp
 
     def andThen(f: Type => Type): TypeMap = new TypeMap {
-      override def stopAt: StopAt = thisMap.stopAt
       def apply(tp: Type): Type = f(thisMap(tp))
     }
   }
+
+  abstract class NormalizingTypeMap(using Context) extends TypeMap:
+    override protected def derivedSelect(tp: NamedType, pre: Type): Type =
+      tp.normalizedDerivedSelect(pre)
+
+    protected def mapArgs(args: List[Type], tparams: List[TypeParamInfo]): List[Type] = args match
+      case arg :: otherArgs if tparams.nonEmpty =>
+        val arg1 = arg match
+          case arg: WildcardTypeBounds => this(arg)
+          case arg                     => atVariance(variance * tparams.head.paramVariance.sign)(this(arg))
+        val otherArgs1 = mapArgs(otherArgs, tparams.tail)
+        if ((arg1 eq arg) && (otherArgs1 eq otherArgs)) args
+        else arg1 :: otherArgs1
+      case nil =>
+        nil
+
+    /** Map this function over given type */
+    override def mapOver(tp: Type): Type =
+      tp match
+        case tp: AppliedType =>
+          derivedAppliedType(tp, this(tp.tycon), mapArgs(tp.args, tp.tyconTypeParams))
+
+        case _ =>
+          super.mapOver(tp)
+    end mapOver
+  end NormalizingTypeMap
 
   /** A type map that approximates TypeBounds types depending on
     * variance.
@@ -199,7 +183,7 @@ private[tastyquery] object TypeMaps {
     *    variance < 0 : approximate by lower bound
     *    variance = 0 : propagate bounds to next outer level
     */
-  abstract class ApproximatingTypeMap(using Context) extends TypeMap { thisMap =>
+  abstract class ApproximatingTypeMap(using Context) extends NormalizingTypeMap { thisMap =>
 
     protected def range(lo: Type, hi: Type): Type =
       if (variance > 0) hi
@@ -466,7 +450,7 @@ private[tastyquery] object TypeMaps {
   }
 
   /** A type map that maps also parents and self type of a ClassInfo */
-  abstract class DeepTypeMap(using Context) extends TypeMap
+  abstract class DeepTypeMap(using Context) extends NormalizingTypeMap
 
   /** A range of possible types between lower bound `lo` and upper bound `hi`.
     * Only used internally in `ApproximatingTypeMap`.
