@@ -213,9 +213,16 @@ object Symbols {
   final class TermSymbol private (val name: TermName, override val owner: Symbol) extends Symbol(owner):
     type ThisNameType = TermName
 
+    // Reference fields (checked in doCheckCompleted)
     private var myDeclaredType: Type | Null = null
+
+    // Cache fields
     private var mySignature: Option[Signature] | Null = null
     private var myParamRefss: List[Either[List[TermParamRef], List[TypeParamRef]]] | Null = null
+
+    protected[this] override def doCheckCompleted(): Unit =
+      super.doCheckCompleted()
+      if myDeclaredType == null then failNotCompleted("declaredType was not initialized")
 
     private[tastyquery] final def withDeclaredType(tpe: Type): this.type =
       if myDeclaredType != null then throw new IllegalStateException(s"reassignment of declared type to $this")

@@ -759,11 +759,11 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val name = readName
-      // TODO: use type
       val typ = readType
       val term = readTerm
       skipModifiers(end)
       val symbol = localCtx.getSymbol[TermSymbol](start)
+      symbol.withDeclaredType(typ)
       Bind(name, term, symbol)(spn).definesTreeOf(symbol)
     case ALTERNATIVE =>
       reader.readByte()
