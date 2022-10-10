@@ -472,12 +472,20 @@ object Symbols {
   }
 
   final class ClassSymbol private (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner) with DeclaringSymbol {
+    // Reference fields (checked in doCheckCompleted)
     private var myTypeParams: List[(ClassTypeParamSymbol, TypeBounds)] | Null = null
     private var myParentsInit: (() => List[Type]) | Null = null
     private var myParents: List[Type] | Null = null
+
+    // Optional reference fields
     private var mySpecialErasure: Option[() => ErasedTypeRef] = None
 
     private[tastyquery] val classInfo: ClassInfo = ClassInfo(this: @unchecked)
+
+    protected[this] override def doCheckCompleted(): Unit =
+      super.doCheckCompleted()
+      if myTypeParams == null then failNotCompleted("typeParams not initialized")
+      if myParents == null && myParentsInit == null then failNotCompleted("parents not initialized")
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
       val isValueClass =
@@ -627,6 +635,7 @@ object Symbols {
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, span: Span)(using Context): ClassSymbol =
       val cls = create(tpnme.RefinedClassMagic, owner)
       cls
+        .withTypeParams(Nil, Nil)
         .withParentsDirect(defn.ObjectType :: Nil)
         .withFlags(EmptyFlagSet)
       cls.checkCompleted()

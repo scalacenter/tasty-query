@@ -227,7 +227,8 @@ private[pickles] class PickleReader {
           module.foreach(m => m.asTerm.withDeclaredType(cls.typeRef))
         val tpe = readSymType()
         val typeParams = atNoCache(infoRef)(readTypeParams())
-        if !isRefinementClass(cls) then
+        if isRefinementClass(cls) then cls.withParentsDirect(defn.ObjectType :: Nil)
+        else
           val parentTypes = tpe match
             case TempPolyType(tparams, restpe: TempClassInfoType) =>
               assert(tparams.corresponds(typeParams)(_ eq _)) // should reuse the class type params
