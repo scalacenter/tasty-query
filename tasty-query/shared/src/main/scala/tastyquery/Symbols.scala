@@ -294,7 +294,12 @@ object Symbols {
 
   sealed abstract class TypeParamSymbol protected (name: TypeName, owner: Symbol)
       extends TypeSymbolWithBounds(name, owner):
+    // Reference fields (checked in doCheckCompleted)
     private var myBounds: TypeBounds | Null = null
+
+    protected[this] override def doCheckCompleted(): Unit =
+      super.doCheckCompleted()
+      if myBounds == null then failNotCompleted("bounds are not initialized")
 
     private[tastyquery] final def setBounds(bounds: TypeBounds): this.type =
       if myBounds != null then throw IllegalStateException(s"Trying to re-set the bounds of $this")

@@ -1148,8 +1148,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val name = readName.toTypeName
-      // TODO: use type bounds
-      val typ = readTypeBounds
+      val bounds = readTypeBounds
       /* This is a workaround: consider a BIND inside a MATCHtpt
        * example: case List[t] => t
        * Such a bind has IDENT(_) as its body, which is not a type tree and therefore not expected.
@@ -1163,6 +1162,7 @@ private[tasties] class TreeUnpickler(
       } else readTypeTree
       skipModifiers(end)
       val sym = localCtx.getSymbol[LocalTypeParamSymbol](start)
+      sym.setBounds(bounds)
       TypeTreeBind(name, body, sym)(spn).definesTreeOf(sym)
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree

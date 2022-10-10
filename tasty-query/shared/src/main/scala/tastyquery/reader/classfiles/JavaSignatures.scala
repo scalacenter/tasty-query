@@ -265,7 +265,9 @@ private[classfiles] object JavaSignatures:
           paramSym
         }
         val lookup = tparamNames.lazyZip(tparams).toMap
-        cls.withTypeParams(tparams, typeParamsRest(lookup))
+        val tparamBounds = typeParamsRest(lookup)
+        tparams.lazyZip(tparamBounds).foreach((tparam, bounds) => tparam.setBounds(bounds))
+        cls.withTypeParams(tparams, tparamBounds)
         classRest(lookup)
       else
         cls.withTypeParams(Nil, Nil)
