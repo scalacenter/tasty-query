@@ -203,13 +203,6 @@ object Trees {
     override val symbol: TypeParamSymbol
   )(span: Span)
       extends TypeDef(name, symbol)(span) {
-    private[tastyquery] def computeDeclarationTypeBounds()(using Context): TypeBounds = bounds match
-      case tbt: TypeBoundsTree => tbt.toTypeBounds
-      case bounds: TypeBounds  => bounds
-      case tlt: TypeLambdaTree =>
-        // TODO See the <init> in HigherKinded and HigherKindedWithParam
-        defn.NothingAnyBounds
-
     override final def withSpan(span: Span): TypeParam = TypeParam(name, bounds, symbol)(span)
   }
 

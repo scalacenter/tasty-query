@@ -1127,10 +1127,9 @@ object Types {
       if params.isEmpty then resultType
       else
         val paramNames = params.map(_.name)
-        val paramTypeBounds = params.map(_.computeDeclarationTypeBounds())
         val paramSyms = params.map(_.symbol)
         apply(paramNames)(
-          polyType => paramTypeBounds.map(polyType.integrate(paramSyms, _)),
+          polyType => paramSyms.map(param => polyType.integrate(paramSyms, param.bounds)),
           polyType => polyType.integrate(paramSyms, resultType)
         )
   end PolyType
@@ -1191,7 +1190,7 @@ object Types {
     private[tastyquery] def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type)(
       using Context
     ): TypeLambda =
-      apply(params.map(_.name))(_ => params.map(_.computeDeclarationTypeBounds()), resultTypeExp)
+      apply(params.map(_.name))(_ => params.map(_.symbol.bounds), resultTypeExp)
   end TypeLambda
 
   final class TypeParamRef(val binders: TypeLambdaType, val paramNum: Int)
