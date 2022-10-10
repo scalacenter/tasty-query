@@ -1025,8 +1025,8 @@ object Types {
     type This = MethodType
 
     private var initialized: Boolean = false
-    private var myParamTypes: List[Type] = paramTypesExp(this: @unchecked)
-    private var myRes: Type = resultTypeExp(this: @unchecked)
+    private val myParamTypes: List[Type] = paramTypesExp(this: @unchecked)
+    private val myRes: Type = resultTypeExp(this: @unchecked)
     initialized = true
 
     def paramTypes: List[Type] =
@@ -1092,8 +1092,8 @@ object Types {
     type This = PolyType
 
     private var initialized: Boolean = false
-    private var myBounds: List[TypeBounds] = paramTypeBoundsExp(this: @unchecked)
-    private var myRes: Type = resultTypeExp(this: @unchecked)
+    private val myBounds: List[TypeBounds] = paramTypeBoundsExp(this: @unchecked)
+    private val myRes: Type = resultTypeExp(this: @unchecked)
     initialized = true
 
     def paramTypeBounds: List[TypeBounds] =
@@ -1159,8 +1159,8 @@ object Types {
     type This = TypeLambda
 
     private var initialized: Boolean = false
-    private var myBounds: List[TypeBounds] = paramTypeBoundsExp(this: @unchecked)
-    private var myRes: Type = resultTypeExp(this: @unchecked)
+    private val myBounds: List[TypeBounds] = paramTypeBoundsExp(this: @unchecked)
+    private val myRes: Type = resultTypeExp(this: @unchecked)
     initialized = true
 
     def paramTypeBounds: List[TypeBounds] =
