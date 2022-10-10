@@ -336,7 +336,12 @@ object Symbols {
   end LocalTypeParamSymbol
 
   final class TypeMemberSymbol private (name: TypeName, owner: Symbol) extends TypeSymbolWithBounds(name, owner):
+    // Reference fields (checked in doCheckCompleted)
     private var myDefinition: TypeMemberDefinition | Null = null
+
+    protected[this] override def doCheckCompleted(): Unit =
+      super.doCheckCompleted()
+      if myDefinition == null then failNotCompleted("type member definition not initialized")
 
     private[tastyquery] final def withDefinition(definition: TypeMemberDefinition): this.type =
       if myDefinition != null then throw IllegalStateException(s"Reassignment of the definition of $this")
