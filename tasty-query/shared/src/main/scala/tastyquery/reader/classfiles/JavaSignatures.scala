@@ -34,7 +34,7 @@ private[classfiles] object JavaSignatures:
         def lookupTParam(scope: Symbol): Some[Type] =
           if scope.isPackage then cookFailure(tname, "no enclosing scope declares it")
           else if scope.isClass then
-            scope.asClass.typeParamSymsNoInitialize.find(_.name == tname) match
+            scope.asClass.typeParams.find(_.name == tname) match
               case Some(ref) => Some(TypeRef(NoPrefix, ref))
               case _         => lookupTParam(scope.asClass.owner)
           else cookFailure(tname, "unexpected non-class scope")
@@ -267,10 +267,10 @@ private[classfiles] object JavaSignatures:
         val lookup = tparamNames.lazyZip(tparams).toMap
         val tparamBounds = typeParamsRest(lookup)
         tparams.lazyZip(tparamBounds).foreach((tparam, bounds) => tparam.setBounds(bounds))
-        cls.withTypeParams(tparams, tparamBounds)
+        cls.withTypeParams(tparams)
         classRest(lookup)
       else
-        cls.withTypeParams(Nil, Nil)
+        cls.withTypeParams(Nil)
         classRest(null)
 
     def fieldSignature: Type =

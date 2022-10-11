@@ -59,7 +59,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   private def createSpecialClass(name: TypeName, parents: List[Type], flags: FlagSet): ClassSymbol =
     val cls = ClassSymbol.create(name, scalaPackage)
-    cls.withTypeParams(Nil, Nil)
+    cls.withTypeParams(Nil)
     cls.withParentsDirect(parents)
     cls.withFlags(flags)
     cls
@@ -114,7 +114,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     tparam.withFlags(ClassTypeParam)
     tparam.setBounds(NothingAnyBounds)
 
-    cls.withTypeParams(tparam :: Nil, NothingAnyBounds :: Nil)
+    cls.withTypeParams(tparam :: Nil)
     cls.withFlags(EmptyFlagSet | Artifact)
 
     val parents = parentConstrs(TypeRef(NoPrefix, tparam))
@@ -164,7 +164,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
         .setBounds(NothingAnyBounds)
 
     val allTypeParams = inputTypeParams :+ resultTypeParam
-    cls.withTypeParams(allTypeParams, allTypeParams.map(_.bounds))
+    cls.withTypeParams(allTypeParams)
 
     val applyMethod = TermSymbol.create(termName("apply"), cls)
     applyMethod.withFlags(Method | Deferred)
