@@ -38,7 +38,7 @@ private[tastyquery] object Loaders {
     private val roots: mutable.Map[PackageSymbol, mutable.Map[SimpleName, Entry]] = mutable.HashMap.empty
     private var topLevelTastys: Map[Loader.Root, List[Tree]] = Map.empty
 
-    def toPackageName(dotSeparated: String): FullyQualifiedName =
+    private def toPackageName(dotSeparated: String): FullyQualifiedName =
       val parts =
         if dotSeparated.isEmpty() then nme.EmptyPackageName :: Nil
         else dotSeparated.split('.').toList.map(termName(_))
@@ -120,19 +120,6 @@ private[tastyquery] object Loaders {
           yield resolved
         case _ => None
     end enterRoots
-
-    /** Does not force any classes, returns a root either if root symbols are already loaded, or if there are
-      * unloaded roots matching the name.
-      */
-    private[tastyquery] def findRoot(pkg: PackageSymbol, name: SimpleName)(using Context): Option[Loader.Root] =
-      val root = Loader.Root(pkg, name)
-      if initialisedRoot(root) then Some(root)
-      else // not yet forced
-        roots.get(pkg) match
-          case Some(entries) =>
-            if entries.contains(root.rootName) then Some(root)
-            else None
-          case _ => None
 
     /** Has the root been initialised already? Does not force, but returns true if at least one root was entered */
     private def initialisedRoot(root: Loader.Root): Boolean =

@@ -59,55 +59,6 @@ object Contexts {
 
     val defn: Definitions = Definitions(this: @unchecked, RootPackage, EmptyPackage)
 
-    /** basically an internal method for loading Java classes embedded in Java descriptors */
-    private[tastyquery] def getClassFromBinaryName(binaryName: String): Either[MemberNotFoundException, ClassSymbol] =
-      getRootIfDefined(binaryName).flatMap { root =>
-        root.pkg
-          .getDecl(root.rootName.toTypeName)
-          .collect { case cls: ClassSymbol => cls }
-          .toRight(
-            MemberNotFoundException(
-              root.pkg,
-              root.rootName,
-              s"no root ${root.rootName} in ${root.pkg.fullName}; perhaps it is not on the classpath"
-            )
-          )
-      }
-
-    /** Does there possibly exist a root for the given binary name. Does not force any classes covered by the name */
-    private[tastyquery] def existsRoot(binaryName: String): Boolean =
-      getRootIfDefined(binaryName).isRight
-
-    /** Force a root to discover any top level symbols covered by the root. */
-    private[tastyquery] def rootSymbolsIfDefined(binaryName: String): List[Symbol] =
-      getRootIfDefined(binaryName) match
-        case Right(root) =>
-          root.pkg.getDecl(root.rootName.toTypeName).toList // class value
-            ++ root.pkg.getDecl(root.rootName).toList // module value
-            ++ root.pkg.getDecl(root.rootName.withObjectSuffix.toTypeName).toList // module class value
-        case Left(_) => Nil
-
-    /** Returns a root if there exists one on the classpath, does not force the underlying root symbols */
-    private def getRootIfDefined(binaryName: String): Either[MemberNotFoundException, Loader.Root] =
-      val (packageName, rootName) =
-        val lastSep = binaryName.lastIndexOf('.')
-        if lastSep == -1 then
-          val rootName = termName(binaryName)
-          (FullyQualifiedName(nme.EmptyPackageName :: Nil), rootName)
-        else
-          import scala.language.unsafeNulls
-          val packageName = binaryName.substring(0, lastSep)
-          val rootName = termName(binaryName.substring(lastSep + 1))
-          (classloader.toPackageName(packageName), rootName)
-      try
-        val pkg = PackageRef(packageName).symbol
-        pkg
-          .possibleRoot(rootName)
-          .toRight(MemberNotFoundException(pkg, rootName, s"no root $rootName exists in package $packageName"))
-      catch
-        case e: MemberNotFoundException =>
-          Left(MemberNotFoundException(e.prefix, e.name, s"unknown package $packageName"))
-
     def findPackageFromRoot(fullyQualifiedName: FullyQualifiedName): PackageSymbol =
       @tailrec
       def rec(owner: PackageSymbol, path: List[Name]): PackageSymbol =
