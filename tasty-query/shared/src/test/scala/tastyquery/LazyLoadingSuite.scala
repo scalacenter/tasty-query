@@ -88,7 +88,7 @@ class LazyLoadingSuite extends RestrictedUnpicklingSuite {
     // ignore because this passes only on clean builds
 
     def assertNoTopLevelClass(path: TopLevelDeclPath)(using Context): Unit =
-      assert(!ctx.existsRoot(path.rootClassName), s"expected no class, but got ${path.rootClassName}")
+      intercept[IllegalArgumentException](ctx.findSymbolFromRoot(path.toNameList))
 
     def forceTopLevel(path: TopLevelDeclPath)(using Context): Unit =
       try
