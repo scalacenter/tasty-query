@@ -30,11 +30,6 @@ object Contexts {
     classloader.initPackages()(using ctx)
     ctx
 
-  /** Has the root been initialised already? Does not force, but returns true if at least one root was entered */
-  private[tastyquery] def initialisedRoot(root: Loader.Root): Boolean =
-    root.pkg.getDeclInternal(root.rootName).isDefined // module value
-      || root.pkg.getDeclInternal(root.rootName.toTypeName).isDefined // class value
-
   /** A semantic universe for a given [[Classpaths.Classpath]].
     *
     * A [[Context]] gathers all the semantic information about symbols, types

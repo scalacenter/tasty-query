@@ -60,10 +60,10 @@ private[tastyquery] object Loaders {
         ClassfileParser.readKind(classData) match
           case ClassKind.Scala2(structure, runtimeAnnotStart) =>
             ClassfileParser.loadScala2Class(structure, runtimeAnnotStart)
-            Contexts.initialisedRoot(root)
+            initialisedRoot(root)
           case ClassKind.Java(structure, sig) =>
             ClassfileParser.loadJavaClass(root.pkg, root.rootName, structure, sig)
-            Contexts.initialisedRoot(root)
+            initialisedRoot(root)
           case ClassKind.TASTy =>
             entry match
               case Entry.ClassAndTasty(_, tasty) =>
@@ -83,7 +83,7 @@ private[tastyquery] object Loaders {
           )
           .get
           .unpickle(tastyData.debugPath)
-        if Contexts.initialisedRoot(root) then
+        if initialisedRoot(root) then
           topLevelTastys += root -> trees
           true
         else false
@@ -126,13 +126,18 @@ private[tastyquery] object Loaders {
       */
     private[tastyquery] def findRoot(pkg: PackageSymbol, name: SimpleName)(using Context): Option[Loader.Root] =
       val root = Loader.Root(pkg, name)
-      if Contexts.initialisedRoot(root) then Some(root)
+      if initialisedRoot(root) then Some(root)
       else // not yet forced
         roots.get(pkg) match
           case Some(entries) =>
             if entries.contains(root.rootName) then Some(root)
             else None
           case _ => None
+
+    /** Has the root been initialised already? Does not force, but returns true if at least one root was entered */
+    private def initialisedRoot(root: Loader.Root): Boolean =
+      root.pkg.getDeclInternal(root.rootName).isDefined // module value
+        || root.pkg.getDeclInternal(root.rootName.toTypeName).isDefined // class value
 
     def scanPackage(pkg: PackageSymbol)(using Context): Unit = {
       require(searched)
