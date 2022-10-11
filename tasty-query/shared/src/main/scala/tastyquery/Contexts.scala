@@ -85,11 +85,13 @@ object Contexts {
             val owner = symbol match
               case owner: DeclaringSymbol => owner
               case _ =>
-                throw IllegalArgumentException(
+                throw MemberNotFoundException(
+                  symbol,
+                  name,
                   s"$symbol does not declare a scope, cannot find member ${name.toDebugString}"
                 )
             val next = owner.getDecl(name).getOrElse {
-              throw IllegalArgumentException(s"cannot find member ${name.toDebugString} in $symbol")
+              throw MemberNotFoundException(owner, name, s"cannot find member ${name.toDebugString} in $symbol")
             }
             rec(next, pathRest)
       rec(RootPackage, path)

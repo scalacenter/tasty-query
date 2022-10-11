@@ -3,6 +3,7 @@ package tastyquery
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import tastyquery.Contexts.Context
+import tastyquery.Exceptions.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 
@@ -104,8 +105,9 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
       resolve(toplevelEmptyPackage_package_companion)
       fail(s"Expected not to resolve class ${toplevelEmptyPackage_package_companion.rootClassName}")
     catch
-      case ex: IllegalArgumentException =>
-        assert(ex.getMessage.nn.contains(s"cannot find member ${tname"toplevelEmptyPackage$$package".toDebugString}"))
+      case ex: MemberNotFoundException =>
+        assert(ex.name == tname"toplevelEmptyPackage$$package")
+        assert(ex.prefix == resolve(EmptyPkg))
   }
 
   testWithContext("basic-symbol-structure", empty_class / tname"EmptyClass") {
