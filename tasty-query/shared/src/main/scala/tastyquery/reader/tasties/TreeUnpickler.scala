@@ -48,7 +48,13 @@ private[tasties] class TreeUnpickler(
       if !reader.isAtEnd then read(acc) else acc.toList
 
     fork.enterSymbols()(using fileContext)
-    read(new ListBuffer[Tree])
+    val result = read(new ListBuffer[Tree])
+
+    // Check that all the Symbols we created have been completed
+    for sym <- fileContext.allRegisteredSymbols do sym.checkCompleted()
+
+    result
+  end unpickle
 
   private def enterSymbols()(using LocalContext): Unit =
     while !reader.isAtEnd do createSymbols()
@@ -106,6 +112,7 @@ private[tasties] class TreeUnpickler(
           if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(name.toTypeName, localCtx.owner)
           else TermSymbol.create(name, localCtx.owner)
         localCtx.registerSym(start, sym)
+        sym.withFlags(Case)
         // bind is never an owner
         reader.until(end)(createSymbols())
 
@@ -752,11 +759,11 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val name = readName
-      // TODO: use type
       val typ = readType
       val term = readTerm
       skipModifiers(end)
       val symbol = localCtx.getSymbol[TermSymbol](start)
+      symbol.withDeclaredType(typ)
       Bind(name, term, symbol)(spn).definesTreeOf(symbol)
     case ALTERNATIVE =>
       reader.readByte()
@@ -1141,8 +1148,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val name = readName.toTypeName
-      // TODO: use type bounds
-      val typ = readTypeBounds
+      val bounds = readTypeBounds
       /* This is a workaround: consider a BIND inside a MATCHtpt
        * example: case List[t] => t
        * Such a bind has IDENT(_) as its body, which is not a type tree and therefore not expected.
@@ -1156,6 +1162,7 @@ private[tasties] class TreeUnpickler(
       } else readTypeTree
       skipModifiers(end)
       val sym = localCtx.getSymbol[LocalTypeParamSymbol](start)
+      sym.setBounds(bounds)
       TypeTreeBind(name, body, sym)(spn).definesTreeOf(sym)
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree
@@ -1283,6 +1290,8 @@ private[tasties] object TreeUnpickler {
         case sym =>
           throw AssertionError(s"Illegal kind of symbol found at address $addr; got: ${sym.getClass()}")
 
+    def allRegisteredSymbols: Iterator[Symbol] =
+      localSymbols.valuesIterator
   }
 
 }

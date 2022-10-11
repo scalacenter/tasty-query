@@ -3,6 +3,7 @@ package tastyquery.reader.classfiles
 import scala.annotation.switch
 
 import scala.collection.mutable
+import scala.collection.mutable.Growable
 
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
@@ -16,7 +17,9 @@ private[classfiles] object JavaSignatures:
   private type JavaSignature = Null | Binders | Map[TypeName, ClassTypeParamSymbol] | mutable.ListBuffer[TypeName]
 
   @throws[ClassfileFormatException]
-  def parseSignature(member: Symbol { val owner: Symbol }, signature: String)(using Context): Type =
+  def parseSignature(member: Symbol { val owner: Symbol }, signature: String, allRegisteredSymbols: Growable[Symbol])(
+    using Context
+  ): Type =
     var offset = 0
     var end = signature.length
     val isClass = member.isClass
@@ -255,9 +258,16 @@ private[classfiles] object JavaSignatures:
         interfaces(env, mutable.ListBuffer(superTpe))
       if consume('<') then
         val tparamNames = lookaheadTypeParamNames
-        val tparams = tparamNames.map(tname => ClassTypeParamSymbol.create(tname, cls))
+        val tparams = tparamNames.map { tname =>
+          val paramSym = ClassTypeParamSymbol.create(tname, cls)
+          allRegisteredSymbols += paramSym
+          paramSym.withFlags(ClassTypeParam)
+          paramSym
+        }
         val lookup = tparamNames.lazyZip(tparams).toMap
-        cls.withTypeParams(tparams, typeParamsRest(lookup))
+        val tparamBounds = typeParamsRest(lookup)
+        tparams.lazyZip(tparamBounds).foreach((tparam, bounds) => tparam.setBounds(bounds))
+        cls.withTypeParams(tparams, tparamBounds)
         classRest(lookup)
       else
         cls.withTypeParams(Nil, Nil)

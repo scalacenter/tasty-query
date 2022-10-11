@@ -73,6 +73,25 @@ object Symbols {
     private var myTree: Option[DefTree] = None
     private var myPrivateWithin: Option[Symbol] = None
 
+    /** Checks that this `Symbol` has been completely initialized.
+      *
+      * This method is called by the various file readers after reading each
+      * file, for all the `Symbol`s created while reading that file.
+      */
+    private[tastyquery] final def checkCompleted(): Unit =
+      doCheckCompleted()
+
+    protected[this] final def failNotCompleted(details: String): Nothing =
+      throw IllegalStateException(s"$this of class ${this.getClass().getName()} was not completed: $details")
+
+    /** This method is overridden in every subclass to perform their own checks.
+      *
+      * Every override is expected to call `super.doCheckCompleted()` first.
+      * If a check fail, it should be reported with [[failNotCompleted]].
+      */
+    protected[this] def doCheckCompleted(): Unit =
+      if !isFlagsInitialized then throw failNotCompleted("flags were not initialized")
+
     private[tastyquery] def withTree(t: DefTree): this.type =
       require(!isPackage, s"Multiple trees correspond to one package, a single tree cannot be assigned")
       myTree = Some(t)
@@ -186,15 +205,24 @@ object Symbols {
 
     val name: SimpleName = nme.EmptySimpleName
 
+    this.withFlags(EmptyFlagSet)
+
     override def toString: String = "NoSymbol"
   end NoSymbol
 
   final class TermSymbol private (val name: TermName, override val owner: Symbol) extends Symbol(owner):
     type ThisNameType = TermName
 
+    // Reference fields (checked in doCheckCompleted)
     private var myDeclaredType: Type | Null = null
+
+    // Cache fields
     private var mySignature: Option[Signature] | Null = null
     private var myParamRefss: List[Either[List[TermParamRef], List[TypeParamRef]]] | Null = null
+
+    protected[this] override def doCheckCompleted(): Unit =
+      super.doCheckCompleted()
+      if myDeclaredType == null then failNotCompleted("declaredType was not initialized")
 
     private[tastyquery] final def withDeclaredType(tpe: Type): this.type =
       if myDeclaredType != null then throw new IllegalStateException(s"reassignment of declared type to $this")
@@ -266,7 +294,12 @@ object Symbols {
 
   sealed abstract class TypeParamSymbol protected (name: TypeName, owner: Symbol)
       extends TypeSymbolWithBounds(name, owner):
+    // Reference fields (checked in doCheckCompleted)
     private var myBounds: TypeBounds | Null = null
+
+    protected[this] override def doCheckCompleted(): Unit =
+      super.doCheckCompleted()
+      if myBounds == null then failNotCompleted("bounds are not initialized")
 
     private[tastyquery] final def setBounds(bounds: TypeBounds): this.type =
       if myBounds != null then throw IllegalStateException(s"Trying to re-set the bounds of $this")
@@ -303,7 +336,12 @@ object Symbols {
   end LocalTypeParamSymbol
 
   final class TypeMemberSymbol private (name: TypeName, owner: Symbol) extends TypeSymbolWithBounds(name, owner):
+    // Reference fields (checked in doCheckCompleted)
     private var myDefinition: TypeMemberDefinition | Null = null
+
+    protected[this] override def doCheckCompleted(): Unit =
+      super.doCheckCompleted()
+      if myDefinition == null then failNotCompleted("type member definition not initialized")
 
     private[tastyquery] final def withDefinition(definition: TypeMemberDefinition): this.type =
       if myDefinition != null then throw IllegalStateException(s"Reassignment of the definition of $this")
@@ -434,12 +472,20 @@ object Symbols {
   }
 
   final class ClassSymbol private (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner) with DeclaringSymbol {
+    // Reference fields (checked in doCheckCompleted)
     private var myTypeParams: List[(ClassTypeParamSymbol, TypeBounds)] | Null = null
     private var myParentsInit: (() => List[Type]) | Null = null
     private var myParents: List[Type] | Null = null
+
+    // Optional reference fields
     private var mySpecialErasure: Option[() => ErasedTypeRef] = None
 
     private[tastyquery] val classInfo: ClassInfo = ClassInfo(this: @unchecked)
+
+    protected[this] override def doCheckCompleted(): Unit =
+      super.doCheckCompleted()
+      if myTypeParams == null then failNotCompleted("typeParams not initialized")
+      if myParents == null && myParentsInit == null then failNotCompleted("parents not initialized")
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
       val isValueClass =
@@ -589,8 +635,10 @@ object Symbols {
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, span: Span)(using Context): ClassSymbol =
       val cls = create(tpnme.RefinedClassMagic, owner)
       cls
+        .withTypeParams(Nil, Nil)
         .withParentsDirect(defn.ObjectType :: Nil)
         .withFlags(EmptyFlagSet)
+      cls.checkCompleted()
       cls
   end ClassSymbol
 
@@ -602,6 +650,8 @@ object Symbols {
     val packageRef: PackageRef = PackageRef(this: @unchecked)
 
     private var rootsInitialized: Boolean = false
+
+    this.withFlags(EmptyFlagSet)
 
     protected[this] final def ensureDeclsInitialized()(using Context): Unit =
       if !rootsInitialized then

@@ -57,12 +57,12 @@ private[tastyquery] object Loaders {
     private def completeRoots(root: Loader.Root, entry: Entry)(using Context): Boolean =
 
       def inspectClass(root: Loader.Root, classData: ClassData, entry: Entry): Boolean =
-        ClassfileParser.readKind(classData).toTry.get match
+        ClassfileParser.readKind(classData) match
           case ClassKind.Scala2(structure, runtimeAnnotStart) =>
-            ClassfileParser.loadScala2Class(structure, runtimeAnnotStart).toTry.get
+            ClassfileParser.loadScala2Class(structure, runtimeAnnotStart)
             Contexts.initialisedRoot(root)
           case ClassKind.Java(structure, sig) =>
-            ClassfileParser.loadJavaClass(root.pkg, root.rootName, structure, sig).toTry.get
+            ClassfileParser.loadJavaClass(root.pkg, root.rootName, structure, sig)
             Contexts.initialisedRoot(root)
           case ClassKind.TASTy =>
             entry match

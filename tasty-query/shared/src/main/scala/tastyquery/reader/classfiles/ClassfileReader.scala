@@ -482,10 +482,6 @@ private[classfiles] object ClassfileReader {
       forked
   }
 
-  def read[T](op: => T): Either[ClassfileFormatException, T] =
-    try Right(op)
-    catch { case e: ClassfileFormatException => Left(e) }
-
   def unpickle[T](classRoot: ClassData)(op: ClassfileReader => DataStream ?=> T): T =
     ClassfileBuffer.Root(classRoot.bytes, 0).use { s ?=>
       op(ClassfileReader())

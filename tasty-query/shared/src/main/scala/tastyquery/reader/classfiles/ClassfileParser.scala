@@ -1,5 +1,7 @@
 package tastyquery.reader.classfiles
 
+import scala.collection.mutable
+
 import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
@@ -29,9 +31,7 @@ private[reader] object ClassfileParser {
     val attributes: Forked[DataStream]
   )(using val pool: reader.ConstantPool)
 
-  def loadScala2Class(structure: Structure, runtimeAnnotStart: Forked[DataStream])(
-    using Context
-  ): Either[Scala2PickleFormatException, Unit] = {
+  def loadScala2Class(structure: Structure, runtimeAnnotStart: Forked[DataStream])(using Context): Unit = {
     import structure.{reader, given}
 
     val Some(Annotation(tpe, args)) = runtimeAnnotStart.use {
@@ -53,27 +53,33 @@ private[reader] object ClassfileParser {
 
   def loadJavaClass(classOwner: DeclaringSymbol, name: SimpleName, structure: Structure, classSig: SigOrSupers)(
     using Context
-  ): Either[ClassfileFormatException, Unit] = {
+  ): Unit = {
     import structure.{reader, given}
 
+    val allRegisteredSymbols = mutable.ListBuffer.empty[Symbol]
+
     val cls = ClassSymbol.create(name.toTypeName, classOwner)
+    allRegisteredSymbols += cls
 
     val moduleClass = ClassSymbol
       .create(name.withObjectSuffix.toTypeName, classOwner)
       .withTypeParams(Nil, Nil)
       .withFlags(Flags.ModuleClassCreationFlags)
     moduleClass.withParentsDirect(defn.ObjectType :: Nil)
+    allRegisteredSymbols += moduleClass
 
     val module = TermSymbol
       .create(name.toTermName, classOwner)
       .withDeclaredType(moduleClass.typeRef)
       .withFlags(Flags.ModuleValCreationFlags)
+    allRegisteredSymbols += module
 
     def loadFields(fields: Forked[DataStream]): IndexedSeq[(TermSymbol, SigOrDesc)] =
       fields.use {
         val buf = IndexedSeq.newBuilder[(TermSymbol, SigOrDesc)]
         reader.readFields { (name, sigOrDesc) =>
           val sym = TermSymbol.create(name, cls).withFlags(Flags.EmptyFlagSet)
+          allRegisteredSymbols += sym
           buf += sym -> sigOrDesc
         }
         buf.result()
@@ -84,6 +90,7 @@ private[reader] object ClassfileParser {
         val buf = IndexedSeq.newBuilder[(TermSymbol, SigOrDesc)]
         reader.readMethods { (name, sigOrDesc) =>
           val sym = TermSymbol.create(name, cls).withFlags(Flags.Method)
+          allRegisteredSymbols += sym
           buf += sym -> sigOrDesc
         }
         buf.result()
@@ -94,7 +101,7 @@ private[reader] object ClassfileParser {
         pool.utf8(cls.nameIdx).name
       val parents = classSig match
         case SigOrSupers.Sig(sig) =>
-          JavaSignatures.parseSignature(cls, sig) match
+          JavaSignatures.parseSignature(cls, sig, allRegisteredSymbols) match
             case mix: AndType => mix.parts
             case sup          => sup :: Nil
         case SigOrSupers.Supers =>
@@ -107,16 +114,16 @@ private[reader] object ClassfileParser {
       cls.withParentsDirect(parents)
     end initParents
 
-    ClassfileReader.read {
-      // TODO: move static methods to companion object
-      cls.withFlags(Flags.EmptyFlagSet) // TODO: read flags
-      initParents()
-      val members = loadFields(structure.fields) ++ loadMethods(structure.methods)
-      for (sym, sigOrDesc) <- members do
-        sigOrDesc match
-          case SigOrDesc.Desc(desc) => sym.withDeclaredType(Descriptors.parseDescriptor(sym, desc))
-          case SigOrDesc.Sig(sig)   => sym.withDeclaredType(JavaSignatures.parseSignature(sym, sig))
-    }
+    // TODO: move static methods to companion object
+    cls.withFlags(Flags.EmptyFlagSet) // TODO: read flags
+    initParents()
+    val members = loadFields(structure.fields) ++ loadMethods(structure.methods)
+    for (sym, sigOrDesc) <- members do
+      sigOrDesc match
+        case SigOrDesc.Desc(desc) => sym.withDeclaredType(Descriptors.parseDescriptor(sym, desc))
+        case SigOrDesc.Sig(sig)   => sym.withDeclaredType(JavaSignatures.parseSignature(sym, sig, allRegisteredSymbols))
+
+    for sym <- allRegisteredSymbols do sym.checkCompleted()
   }
 
   private def parse(classRoot: ClassData, structure: Structure)(using Context): ClassKind = {
@@ -194,7 +201,7 @@ private[reader] object ClassfileParser {
     ClassfileReader.unpickle(classRoot)(headerAndStructure)
   }
 
-  def readKind(classRoot: ClassData)(using Context): Either[ClassfileFormatException, ClassKind] =
-    ClassfileReader.read(parse(classRoot, toplevel(classRoot)))
+  def readKind(classRoot: ClassData)(using Context): ClassKind =
+    parse(classRoot, toplevel(classRoot))
 
 }
