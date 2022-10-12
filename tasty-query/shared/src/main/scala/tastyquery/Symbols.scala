@@ -394,7 +394,7 @@ object Symbols {
       set += decl
 
     /** direct lookup without requiring `Context`, can not resolve overloads */
-    private[tastyquery] final def getDeclInternal(name: Name): Option[Symbol] = name match
+    protected[this] final def getDeclInternal(name: Name): Option[Symbol] = name match
       case overloaded: SignedName => None // need context to resolve overloads
       case name =>
         myDeclarations.get(name) match
