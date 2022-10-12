@@ -182,14 +182,6 @@ object Symbols {
       case scope: DeclaringSymbol => scope.hasOverloads(name)
       case _                      => false
 
-    private[tastyquery] final def memberPossiblyOverloaded(name: SignedName): Boolean = this match
-      case scope: DeclaringSymbol => scope.hasPossibleOverloads(name)
-      case _                      => false
-
-    private[tastyquery] final def memberOverloads(name: SignedName): List[TermSymbol] = this match
-      case scope: DeclaringSymbol => scope.allOverloads(name)
-      case _                      => Nil
-
     override def toString: String = {
       val kind = this match
         case _: PackageSymbol => "package "
@@ -414,16 +406,6 @@ object Symbols {
       myDeclarations.get(name.underlying) match
         case Some(decls) => decls.sizeIs > 1
         case _           => false
-
-    private[Symbols] final def hasPossibleOverloads(name: SignedName): Boolean =
-      myDeclarations.get(name.underlying) match
-        case Some(decls) => decls.sizeIs >= 1
-        case _           => false
-
-    private[Symbols] final def allOverloads(name: SignedName): List[TermSymbol] =
-      myDeclarations.get(name.underlying) match
-        case Some(decls) => decls.toList.asInstanceOf[List[TermSymbol]]
-        case _           => Nil
 
     final def getDecls(name: Name)(using Context): List[Symbol] =
       this match
