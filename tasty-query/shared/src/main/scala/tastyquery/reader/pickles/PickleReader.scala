@@ -219,11 +219,6 @@ private[pickles] class PickleReader {
       case CLASSsym =>
         val cls = ClassSymbol.create(name.toTypeName, owner)
         storeResultInEntries(cls)
-        if name.toTypeName.wrapsObjectName then
-          val module = owner
-            .asInstanceOf[DeclaringSymbol]
-            .getModuleDeclInternal(name.toTermName.stripObjectSuffix)
-          module.foreach(m => m.asTerm.withDeclaredType(cls.typeRef))
         val tpe = readSymType()
         val typeParams = atNoCache(infoRef)(readTypeParams())
         if isRefinementClass(cls) then cls.withParentsDirect(defn.ObjectType :: Nil)
@@ -245,12 +240,12 @@ private[pickles] class PickleReader {
         val unwrappedTpe = translateTempPoly(tpe, flags.is(Method))
         sym.withDeclaredType(unwrappedTpe)
       case MODULEsym =>
-        val moduleClass = owner
-          .asInstanceOf[DeclaringSymbol]
-          .getModuleDeclInternal(name.toTermName.withObjectSuffix.toTypeName)
         val sym = TermSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym)
-        moduleClass.foreach(cls => sym.withDeclaredType(cls.asClass.typeRef))
+        val ownerPrefix = owner.asInstanceOf[DeclaringSymbol] match
+          case owner: PackageSymbol => owner.packageRef
+          case owner: ClassSymbol   => owner.accessibleThisType
+        sym.withDeclaredType(TypeRef(ownerPrefix, sym.name.withObjectSuffix.toTypeName))
         sym
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
