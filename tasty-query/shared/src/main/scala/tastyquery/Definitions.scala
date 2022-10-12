@@ -14,14 +14,14 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val RootPackage = rootPackage
   val EmptyPackage = emptyPackage
 
-  val scalaPackage = ctx.createPackageSymbolIfNew(nme.scalaPackageName, RootPackage)
-  private val javaPackage = ctx.createPackageSymbolIfNew(nme.javaPackageName, RootPackage)
-  val javaLangPackage = ctx.createPackageSymbolIfNew(nme.langPackageName, javaPackage)
+  val scalaPackage = RootPackage.getPackageDeclOrCreate(nme.scalaPackageName)
+  private val javaPackage = RootPackage.getPackageDeclOrCreate(nme.javaPackageName)
+  val javaLangPackage = javaPackage.getPackageDeclOrCreate(nme.langPackageName)
 
   private val scalaCollectionPackage =
-    ctx.createPackageSymbolIfNew(termName("collection"), scalaPackage)
+    scalaPackage.getPackageDeclOrCreate(termName("collection"))
   private val scalaCollectionImmutablePackage =
-    ctx.createPackageSymbolIfNew(termName("immutable"), scalaCollectionPackage)
+    scalaCollectionPackage.getPackageDeclOrCreate(termName("immutable"))
 
   // Cached TypeRef's for core types
 

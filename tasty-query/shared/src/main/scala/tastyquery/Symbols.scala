@@ -652,28 +652,38 @@ object Symbols {
     private[tastyquery] def initialiseAllRoots()(using Context): Unit =
       ctx.classloader.forceRoots(this)
 
-    final def getPackageDecl(name: SimpleName)(using Context): Option[PackageSymbol] =
-      // wrapper that ensures the Context is available, just in case we need it
-      // to be side-effecting in the future.
-      getPackageDeclInternal(name)
+    private[tastyquery] def getPackageDeclOrCreate(name: SimpleName)(using Context): PackageSymbol =
+      getPackageDecl(name).getOrElse {
+        assert(name != nme.EmptyPackageName, s"Trying to create a subpackage $name of $this")
+        val pkg = PackageSymbol(name, this)
+        addDecl(pkg)
+        pkg
+      }
+    end getPackageDeclOrCreate
 
-    private[tastyquery] def getPackageDeclInternal(packageName: SimpleName): Option[PackageSymbol] =
+    /** Gets the subpackage with the specified `name`, if it exists.
+      *
+      * If this package contains a subpackage with the name `name`, returns
+      * `Some(subpackage)`. Otherwise, returns `None`.
+      *
+      * If there exists another kind of declaration with the given `name`, this
+      * method returns `None` (instead of, for example, throwing).
+      *
+      * @note
+      *   Performance guarantee: This method does not try to load non-package
+      *   symbols from the classpath.
+      */
+    final def getPackageDecl(name: SimpleName)(using Context): Option[PackageSymbol] =
       /* All subpackages are created eagerly when initializing contexts,
        * so we can use getDeclInternal here.
        */
-      getDeclInternal(packageName).collect { case pkg: PackageSymbol =>
+      getDeclInternal(name).collect { case pkg: PackageSymbol =>
         pkg
       }
+    end getPackageDecl
   }
 
   object PackageSymbol:
-    private[tastyquery] def create(name: SimpleName, owner: PackageSymbol): PackageSymbol =
-      if owner.getPackageDeclInternal(name).isDefined then
-        throw IllegalStateException(s"Trying to recreate package $name in $owner")
-      val pkg = PackageSymbol(name, owner)
-      owner.addDecl(pkg)
-      pkg
-
     private[tastyquery] def createRoots(): (PackageSymbol, PackageSymbol) =
       val root = PackageSymbol(nme.RootName, null)
       root.rootsInitialized = true

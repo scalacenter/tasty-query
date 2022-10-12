@@ -172,7 +172,7 @@ private[tastyquery] object Loaders {
       if !searched then
         searched = true
         val packages = classpath.packages
-        val packageSymbols = packages.map(pkg => ctx.createPackageSymbolIfNew(toPackageName(pkg.dotSeparatedName)))
+        val packageSymbols = packages.map(pkg => ctx.findPackageFromRootOrCreate(toPackageName(pkg.dotSeparatedName)))
         loader.packages = Map.from(packageSymbols.zip(packages))
   }
 }

@@ -140,9 +140,8 @@ private[pickles] class PickleReader {
             case owner: PackageSymbol =>
               name match
                 case packageName: SimpleName =>
-                  // lookup package, do not force anything
-                  owner.getPackageDeclInternal(packageName).getOrElse {
-                    //errorBadSignature(s"cannot find symbol $owner.$name")
+                  // Eagerly follow packages, but nothing else
+                  owner.getPackageDecl(packageName).getOrElse {
                     defaultRef
                   }
                 case _ => defaultRef
