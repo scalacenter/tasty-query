@@ -19,12 +19,10 @@ private[tastyquery] object Loaders {
   class MissingTopLevelTasty(root: Loader.Root) extends Exception(s"Missing TASTy for ${root.fullName}")
 
   object Loader:
-    private[tastyquery] case class Root private[Loaders] (pkg: PackageSymbol, rootName: SimpleName):
-      def packages: IterableOnce[PackageSymbol] =
-        (pkg #:: LazyList.from(pkg.enclosingDecls)).asInstanceOf[IterableOnce[PackageSymbol]]
-
+    private[Loaders] case class Root private[Loaders] (pkg: PackageSymbol, rootName: SimpleName):
       def fullName: FullyQualifiedName =
         pkg.fullName.select(rootName)
+  end Loader
 
   class Loader(val classpath: Classpath) { loader =>
 
@@ -53,28 +51,31 @@ private[tastyquery] object Loaders {
           topLevelTastys.get(root)
         case _ => None
 
-    /** Lookup definitions in the entry, returns true if some roots were entered matching the `rootName`. */
-    private def completeRoots(root: Loader.Root, entry: Entry)(using Context): Boolean =
-
-      def inspectClass(root: Loader.Root, classData: ClassData, entry: Entry): Boolean =
+    /** Completes a root by reading the corresponding entry.
+      *
+      * Zero to many new declarations can be added to `root.pkg` as a result.
+      *
+      * In any case, no new declarations can ever be found for the given root
+      * after this method.
+      */
+    private def completeRoot(root: Loader.Root, entry: Entry)(using Context): Unit =
+      def inspectClass(root: Loader.Root, classData: ClassData, entry: Entry): Unit =
         ClassfileParser.readKind(classData) match
           case ClassKind.Scala2(structure, runtimeAnnotStart) =>
             ClassfileParser.loadScala2Class(structure, runtimeAnnotStart)
-            initialisedRoot(root)
           case ClassKind.Java(structure, sig) =>
             ClassfileParser.loadJavaClass(root.pkg, root.rootName, structure, sig)
-            initialisedRoot(root)
           case ClassKind.TASTy =>
             entry match
               case Entry.ClassAndTasty(_, tasty) =>
                 // TODO: verify UUID of tasty matches classfile, then parse symbols
                 enterTasty(root, tasty)
               case _ => throw MissingTopLevelTasty(root)
-          case _ =>
-            false // no initialisation step to take
+          case ClassKind.Artifact =>
+            () // no initialisation step to take
       end inspectClass
 
-      def enterTasty(root: Loader.Root, tastyData: TastyData): Boolean =
+      def enterTasty(root: Loader.Root, tastyData: TastyData): Unit =
         // TODO: test reading tree from dependency not directly queried??
         val unpickler = TastyUnpickler(Array.from(tastyData.bytes))
         val trees = unpickler
@@ -83,10 +84,7 @@ private[tastyquery] object Loaders {
           )
           .get
           .unpickle(tastyData.debugPath)
-        if initialisedRoot(root) then
-          topLevelTastys += root -> trees
-          true
-        else false
+        topLevelTastys += root -> trees
       end enterTasty
 
       entry match
@@ -100,31 +98,42 @@ private[tastyquery] object Loaders {
         case entry: Entry.TastyOnly =>
           // Tested in `SymbolSuite`, `ReadTreeSuite`, these do not need to see class files.
           enterTasty(root, entry.tastyData)
-    end completeRoots
+    end completeRoot
 
-    private[tastyquery] def forceRoots(pkg: PackageSymbol)(using Context): Unit =
+    /** Loads all the roots of the given `pkg`. */
+    private[tastyquery] def loadAllRoots(pkg: PackageSymbol)(using Context): Unit =
       for
         entries <- roots.remove(pkg)
         (rootName, entry) <- IArray.from(entries).sortBy(_(0)) // sort for determinism.
-      do completeRoots(Loader.Root(pkg, rootName), entry)
+      do completeRoot(Loader.Root(pkg, rootName), entry)
+    end loadAllRoots
 
-    /** @return true if loaded the classes inner definitions */
-    private[tastyquery] def enterRoots(pkg: PackageSymbol, name: Name)(using Context): Option[Symbol] =
+    /** Loads the root of the given `pkg` that would define `name`, if there is one such root.
+      *
+      * When this method returns `true`, it is not guaranteed that the
+      * particular `name` corresponds to a `Symbol`. But when it returns
+      * `false`, there is a guarantee that no new symbol with the given `name`
+      * was loaded.
+      *
+      * Whether this method returns `true` or `false`, any subsequent call to
+      * `loadRoot` with the same arguments will return `false`.
+      *
+      * @return
+      *   `true` if a root was loaded, `false` otherwise.
+      */
+    private[tastyquery] def loadRoot(pkg: PackageSymbol, name: Name)(using Context): Boolean =
       roots.get(pkg) match
         case Some(entries) =>
           val rootName = name.toTermName.stripObjectSuffix.asSimpleName
-          for
-            entry <- entries.remove(rootName)
-            if completeRoots(Loader.Root(pkg, rootName), entry)
-            resolved <- pkg.getDeclInternal(name) // should have entered some roots, now lookup the requested root
-          yield resolved
-        case _ => None
-    end enterRoots
-
-    /** Has the root been initialised already? Does not force, but returns true if at least one root was entered */
-    private def initialisedRoot(root: Loader.Root): Boolean =
-      root.pkg.getDeclInternal(root.rootName).isDefined // module value
-        || root.pkg.getDeclInternal(root.rootName.toTypeName).isDefined // class value
+          entries.remove(rootName) match
+            case Some(entry) =>
+              completeRoot(Loader.Root(pkg, rootName), entry)
+              true
+            case None =>
+              false
+        case None =>
+          false
+    end loadRoot
 
     def scanPackage(pkg: PackageSymbol)(using Context): Unit = {
       require(searched)

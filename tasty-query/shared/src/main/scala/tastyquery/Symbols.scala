@@ -443,8 +443,11 @@ object Symbols {
           getDeclInternal(name) match
             case None =>
               this match
-                case pkg: PackageSymbol => pkg.initialiseRootFor(name)
-                case _                  => None
+                case pkg: PackageSymbol =>
+                  if pkg.loadRoot(name) then getDeclInternal(name)
+                  else None
+                case _ =>
+                  None
             case res => res
 
     private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[Symbol] =
@@ -460,7 +463,7 @@ object Symbols {
     final def declarations(using Context): List[Symbol] =
       ensureDeclsInitialized()
       this match
-        case pkg: PackageSymbol => pkg.initialiseAllRoots()
+        case pkg: PackageSymbol => pkg.loadAllRoots()
         case _                  => ()
       declarationsInternal
 
@@ -646,11 +649,11 @@ object Symbols {
     /** When no symbol exists, try to enter root symbols for the given Name, will shortcut if no root
       * exists for the given name.
       */
-    private[tastyquery] def initialiseRootFor(name: Name)(using Context): Option[Symbol] =
-      ctx.classloader.enterRoots(this, name)
+    private[tastyquery] def loadRoot(name: Name)(using Context): Boolean =
+      ctx.classloader.loadRoot(this, name)
 
-    private[tastyquery] def initialiseAllRoots()(using Context): Unit =
-      ctx.classloader.forceRoots(this)
+    private[tastyquery] def loadAllRoots()(using Context): Unit =
+      ctx.classloader.loadAllRoots(this)
 
     private[tastyquery] def getPackageDeclOrCreate(name: SimpleName)(using Context): PackageSymbol =
       getPackageDecl(name).getOrElse {
