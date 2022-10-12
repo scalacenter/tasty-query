@@ -15,9 +15,7 @@ abstract class RestrictedUnpicklingSuite extends BaseUnpicklingSuite {
   protected def findTopLevelTasty(path: TopLevelDeclPath)(extras: TopLevelDeclPath*): Future[(Context, Tree)] =
     for base <- initRestrictedContext(path, extras) yield
       val topLevelClass = path.rootClassName
-      val rootSym = base.rootSymbolsIfDefined(topLevelClass) match
-        case rootSym :: _ => rootSym
-        case _            => fail(s"Missing class for $topLevelClass")
+      val rootSym = base.findSymbolFromRoot(path.toNameList)
       val tree = base.classloader.topLevelTasty(rootSym)(using base) match
         case Some(trees) => trees.head
         case _           => fail(s"Missing tasty for $topLevelClass, but resolved root $rootSym")

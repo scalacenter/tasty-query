@@ -643,10 +643,6 @@ object Symbols {
         ctx.classloader.scanPackage(this)
         rootsInitialized = true
 
-    private[tastyquery] def possibleRoot(rootName: SimpleName)(using Context): Option[Loader.Root] =
-      ensureDeclsInitialized()
-      ctx.classloader.findRoot(this, rootName)
-
     /** When no symbol exists, try to enter root symbols for the given Name, will shortcut if no root
       * exists for the given name.
       */
