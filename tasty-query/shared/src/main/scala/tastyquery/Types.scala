@@ -3,6 +3,7 @@ package tastyquery
 import scala.annotation.{constructorOnly, tailrec, targetName}
 
 import scala.collection.mutable
+import scala.compiletime.uninitialized
 
 import dotty.tools.tasty.TastyFormat.NameTags
 
@@ -529,13 +530,13 @@ object Types {
     type ThisName <: Name
     type ThisSymbolType <: Symbol { type ThisNameType = ThisName }
     type ThisNamedType >: this.type <: NamedType
-    protected[this] type ThisDesignatorType >: ThisSymbolType <: Symbol | Name | LookupIn | Scala2ExternalSymRef
+    protected type ThisDesignatorType >: ThisSymbolType <: Symbol | Name | LookupIn | Scala2ExternalSymRef
 
     val prefix: Type
 
-    protected[this] def designator: ThisDesignatorType
+    protected def designator: ThisDesignatorType
 
-    protected[this] def storeComputedSymbol(sym: ThisSymbolType): Unit
+    protected def storeComputedSymbol(sym: ThisSymbolType): Unit
 
     // For tests
     private[tastyquery] final def designatorInternal: Symbol | Name | LookupIn | Scala2ExternalSymRef =
@@ -582,7 +583,7 @@ object Types {
         storeComputedSymbol(computed)
         computed
 
-    protected[this] def asThisSymbolType(sym: Symbol): ThisSymbolType
+    protected def asThisSymbolType(sym: Symbol): ThisSymbolType
 
     private def computeSymbol()(using Context): Symbol = designator match
       case sym: Symbol =>
@@ -680,7 +681,7 @@ object Types {
     private final def withPrefix(prefix: Type): ThisNamedType =
       withPrefix(prefix, cachedSymbol = mySymbol)
 
-    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): ThisNamedType
+    protected def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): ThisNamedType
   }
 
   object NamedType {
@@ -720,17 +721,17 @@ object Types {
     type ThisName = TermName
     type ThisSymbolType = TermSymbol
     type ThisNamedType = TermRef
-    protected[this] type ThisDesignatorType = TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
+    protected type ThisDesignatorType = TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
 
-    protected[this] def designator: ThisDesignatorType = myDesignator
+    protected def designator: ThisDesignatorType = myDesignator
 
-    protected[this] def storeComputedSymbol(sym: ThisSymbolType): Unit =
+    protected def storeComputedSymbol(sym: ThisSymbolType): Unit =
       myDesignator = sym
 
     override def toString(): String =
       s"TermRef($prefix, $myDesignator)"
 
-    protected[this] def asThisSymbolType(sym: Symbol): ThisSymbolType =
+    protected def asThisSymbolType(sym: Symbol): ThisSymbolType =
       sym.asInstanceOf[TermSymbol]
 
     private var myUnderlying: Type | Null = null
@@ -762,7 +763,7 @@ object Types {
         case tp =>
           tp.findMember(name, pre)
 
-    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): TermRef =
+    protected def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): TermRef =
       new TermRef(prefix, if cachedSymbol != null then cachedSymbol else designator)
   }
 
@@ -805,15 +806,15 @@ object Types {
     type ThisNamedType = TypeRef
     type ThisDesignatorType = TypeName | TypeSymbol | Scala2ExternalSymRef
 
-    protected[this] def designator: ThisDesignatorType = myDesignator
+    protected def designator: ThisDesignatorType = myDesignator
 
-    protected[this] def storeComputedSymbol(sym: ThisSymbolType): Unit =
+    protected def storeComputedSymbol(sym: ThisSymbolType): Unit =
       myDesignator = sym
 
     override def toString(): String =
       s"TypeRef($prefix, $myDesignator)"
 
-    protected[this] def asThisSymbolType(sym: Symbol): ThisSymbolType =
+    protected def asThisSymbolType(sym: Symbol): ThisSymbolType =
       sym.asInstanceOf[TypeSymbol]
 
     override def underlying(using Context): Type = symbol match
@@ -827,7 +828,7 @@ object Types {
         case sym: TypeSymbolWithBounds =>
           sym.upperBound.findMember(name, pre)
 
-    protected[this] def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): TypeRef =
+    protected def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): TypeRef =
       new TypeRef(prefix, if cachedSymbol != null then cachedSymbol else designator)
   }
 
@@ -1327,7 +1328,7 @@ object Types {
   // ----- Ground Types -------------------------------------------------
 
   final class OrType(val first: Type, val second: Type) extends GroundType with ValueType {
-    private var myJoin: Type | Null = _
+    private var myJoin: Type | Null = uninitialized
 
     /** Returns the closest non-OrType type above this one. */
     def join(using Context): Type = {

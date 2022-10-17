@@ -15,6 +15,13 @@ inThisBuild(Def.settings(
   crossScalaVersions := Seq(usedScalaCompiler),
   scalaVersion := usedScalaCompiler,
 
+  scalacOptions ++= Seq(
+    "-deprecation",
+    "-feature",
+    "-encoding",
+    "utf-8",
+  ),
+
   scmInfo := Some(
     ScmInfo(
       url("https://github.com/scalacenter/tasty-query"),
@@ -37,7 +44,12 @@ val commonSettings = Seq(
 )
 
 val strictCompileSettings = Seq(
-  scalacOptions ++= Seq("-Yexplicit-nulls", "-Ysafe-init", "-source:future"),
+  scalacOptions ++= Seq(
+    "-Xfatal-warnings",
+    "-Yexplicit-nulls",
+    "-Ysafe-init",
+    "-source:future",
+  ),
 )
 
 lazy val root = project.in(file("."))

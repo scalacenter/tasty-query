@@ -50,12 +50,12 @@ private[nodejs] object NodeFS {
 
   @JSImport("fs", "read")
   @js.native
-  def read(fd: Int, buffer: TypedArray[_, _], offset: Int, length: Int, position: Int, callback: CB[Int]): Unit =
+  def read(fd: Int, buffer: TypedArray[?, ?], offset: Int, length: Int, position: Int, callback: CB[Int]): Unit =
     js.native
 
   @JSImport("fs", "writeFile")
   @js.native
-  def writeFile(path: String, data: TypedArray[_, _], callback: CB[Unit]): Unit = js.native
+  def writeFile(path: String, data: TypedArray[?, ?], callback: CB[Unit]): Unit = js.native
 
   @JSImport("fs", "readdir")
   @js.native

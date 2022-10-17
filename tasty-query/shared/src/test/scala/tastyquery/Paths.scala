@@ -76,4 +76,4 @@ object Paths:
           else (pre :+ clsName.toTermName.withObjectSuffix.toTypeName).asInstanceOf[T] // select the companion object
         case _ => path
 
-  extension (names: IterableOnce[Name]) def toDebugString: String = names.map(_.toDebugString).mkString(".")
+  extension (names: Iterable[Name]) def toDebugString: String = names.map(_.toDebugString).mkString(".")

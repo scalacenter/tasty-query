@@ -3,6 +3,7 @@
 package tastyquery.reader.tasties
 
 import scala.collection.mutable.HashMap
+import scala.compiletime.uninitialized
 
 import dotty.tools.tasty.TastyBuffer.{Addr, NameRef}
 import dotty.tools.tasty.TastyFormat.SOURCE
@@ -15,9 +16,9 @@ import tastyquery.Spans.*
 private[reader] class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnpickler.NameTable) {
   import reader.*
 
-  private var myLineSizes: Array[Int] = _
-  private var mySpans: HashMap[Addr, Span] = _
-  private var mySourcePaths: HashMap[Addr, String] = _
+  private var myLineSizes: Array[Int] = uninitialized
+  private var mySpans: HashMap[Addr, Span] = uninitialized
+  private var mySourcePaths: HashMap[Addr, String] = uninitialized
   private var isDefined = false
 
   def ensureDefined(): Unit =
