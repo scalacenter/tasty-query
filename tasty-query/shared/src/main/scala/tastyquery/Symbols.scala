@@ -63,7 +63,7 @@ import tastyquery.reader.Loaders.Loader
   */
 object Symbols {
 
-  sealed abstract class Symbol protected[this] (val owner: Symbol | Null) {
+  sealed abstract class Symbol protected (val owner: Symbol | Null) {
     type ThisNameType <: Name
 
     val name: ThisNameType
@@ -81,7 +81,7 @@ object Symbols {
     private[tastyquery] final def checkCompleted(): Unit =
       doCheckCompleted()
 
-    protected[this] final def failNotCompleted(details: String): Nothing =
+    protected final def failNotCompleted(details: String): Nothing =
       throw IllegalStateException(s"$this of class ${this.getClass().getName()} was not completed: $details")
 
     /** This method is overridden in every subclass to perform their own checks.
@@ -89,7 +89,7 @@ object Symbols {
       * Every override is expected to call `super.doCheckCompleted()` first.
       * If a check fail, it should be reported with [[failNotCompleted]].
       */
-    protected[this] def doCheckCompleted(): Unit =
+    protected def doCheckCompleted(): Unit =
       if !isFlagsInitialized then throw failNotCompleted("flags were not initialized")
 
     private[tastyquery] def withTree(t: DefTree): this.type =
@@ -212,7 +212,7 @@ object Symbols {
     private var mySignature: Option[Signature] | Null = null
     private var myParamRefss: List[Either[List[TermParamRef], List[TypeParamRef]]] | Null = null
 
-    protected[this] override def doCheckCompleted(): Unit =
+    protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
       if myDeclaredType == null then failNotCompleted("declaredType was not initialized")
 
@@ -289,7 +289,7 @@ object Symbols {
     // Reference fields (checked in doCheckCompleted)
     private var myBounds: TypeBounds | Null = null
 
-    protected[this] override def doCheckCompleted(): Unit =
+    protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
       if myBounds == null then failNotCompleted("bounds are not initialized")
 
@@ -331,7 +331,7 @@ object Symbols {
     // Reference fields (checked in doCheckCompleted)
     private var myDefinition: TypeMemberDefinition | Null = null
 
-    protected[this] override def doCheckCompleted(): Unit =
+    protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
       if myDefinition == null then failNotCompleted("type member definition not initialized")
 
@@ -396,7 +396,7 @@ object Symbols {
 
     private[tastyquery] val classInfo: ClassInfo = ClassInfo(this: @unchecked)
 
-    protected[this] override def doCheckCompleted(): Unit =
+    protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
       if myTypeParams == null then failNotCompleted("typeParams not initialized")
       if myParents == null && myParentsInit == null then failNotCompleted("parents not initialized")
