@@ -97,16 +97,9 @@ object Contexts {
       rec(RootPackage, path)
     end findSymbolFromRoot
 
-    private[tastyquery] def createPackageSymbolIfNew(name: SimpleName, owner: PackageSymbol): PackageSymbol =
-      assert(owner != EmptyPackage, s"Trying to create a subpackage $name of $owner")
-      owner.getPackageDeclInternal(name) match {
-        case Some(pkg) => pkg
-        case None      => PackageSymbol.create(name, owner)
-      }
-
-    private[tastyquery] def createPackageSymbolIfNew(fullyQualifiedName: FullyQualifiedName): PackageSymbol =
+    private[tastyquery] def findPackageFromRootOrCreate(fullyQualifiedName: FullyQualifiedName): PackageSymbol =
       fullyQualifiedName.path.foldLeft(RootPackage) { (owner, name) =>
-        createPackageSymbolIfNew(name.asSimpleName, owner)
+        owner.getPackageDeclOrCreate(name.asSimpleName)
       }
   }
 }

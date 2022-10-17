@@ -687,7 +687,7 @@ object Types {
 
     private[tastyquery] def possibleSelFromPackage(prefix: Type, name: TermName)(using Context): Type = prefix match
       case prefix: PackageRef if name.isInstanceOf[SimpleName] =>
-        prefix.symbol.getPackageDeclInternal(name.asSimpleName) match
+        prefix.symbol.getPackageDecl(name.asSimpleName) match
           case Some(nested) => PackageRef(nested)
           case _            => apply(prefix, name)
       case prefix =>

@@ -76,7 +76,7 @@ private[tasties] class TreeUnpickler(
         val end = reader.readEnd()
         val pid = readPotentiallyShared({
           assert(reader.readByte() == TERMREFpkg, posErrorMsg)
-          ctx.createPackageSymbolIfNew(readFullyQualifiedName)
+          ctx.findPackageFromRootOrCreate(readFullyQualifiedName)
         })
         reader.until(end)(createSymbols()(using localCtx.withOwner(pid)))
       case TYPEDEF =>
@@ -329,7 +329,7 @@ private[tasties] class TreeUnpickler(
       val packageEnd = reader.readEnd()
       val pid = readPotentiallyShared({
         assert(reader.readByte() == TERMREFpkg, posErrorMsg)
-        ctx.createPackageSymbolIfNew(readFullyQualifiedName)
+        ctx.findPackageFromRootOrCreate(readFullyQualifiedName)
       })
       PackageDef(pid, reader.until(packageEnd)(readTopLevelStat(using localCtx.withOwner(pid))))(spn)
     case _ => readStat

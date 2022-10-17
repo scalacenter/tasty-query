@@ -179,16 +179,8 @@ object Symbols {
     final def asPackage: PackageSymbol = this.asInstanceOf[PackageSymbol]
 
     private[tastyquery] final def memberIsOverloaded(name: SignedName): Boolean = this match
-      case scope: DeclaringSymbol => scope.hasOverloads(name)
-      case _                      => false
-
-    private[tastyquery] final def memberPossiblyOverloaded(name: SignedName): Boolean = this match
-      case scope: DeclaringSymbol => scope.hasPossibleOverloads(name)
-      case _                      => false
-
-    private[tastyquery] final def memberOverloads(name: SignedName): List[TermSymbol] = this match
-      case scope: DeclaringSymbol => scope.allOverloads(name)
-      case _                      => Nil
+      case scope: ClassSymbol => scope.hasOverloads(name)
+      case _                  => false
 
     override def toString: String = {
       val kind = this match
@@ -379,96 +371,14 @@ object Symbols {
   end TypeMemberDefinition
 
   sealed trait DeclaringSymbol extends Symbol {
+    private[Symbols] def addDecl(decl: Symbol): Unit
 
-    /* A map from the name of a declaration directly inside this symbol to the corresponding symbol
-     * The qualifiers on the name are not dropped. For instance, the package names are always fully qualified. */
-    private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
-      mutable.HashMap[Name, mutable.HashSet[Symbol]]()
+    def getDecls(name: Name)(using Context): List[Symbol]
 
-    /** Ensures that the declarations of this symbol are initialized. */
-    protected[this] def ensureDeclsInitialized()(using Context): Unit
-
-    private[Symbols] final def addDecl(decl: Symbol): Unit =
-      val set = myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet)
-      if decl.isType then assert(set.isEmpty, s"trying to add a second entry $decl for type name ${decl.name} in $this")
-      set += decl
-
-    /** direct lookup without requiring `Context`, can not resolve overloads */
-    private[tastyquery] final def getDeclInternal(name: Name): Option[Symbol] = name match
-      case overloaded: SignedName => None // need context to resolve overloads
-      case name =>
-        myDeclarations.get(name) match
-          case Some(decls) =>
-            if decls.sizeIs == 1 then Some(decls.head)
-            else if decls.sizeIs > 1 then
-              throw MemberNotFoundException(this, name, s"unexpected overloads in $this: ${decls.mkString(", ")}")
-            else None // TODO: this should be an error
-          case _ => None
-
-    private[tastyquery] final def getModuleDeclInternal(name: Name): Option[Symbol] =
-      myDeclarations.get(name) match
-        case Some(decls) => decls.find(_.is(Module))
-        case None        => None
-
-    private[Symbols] final def hasOverloads(name: SignedName): Boolean =
-      myDeclarations.get(name.underlying) match
-        case Some(decls) => decls.sizeIs > 1
-        case _           => false
-
-    private[Symbols] final def hasPossibleOverloads(name: SignedName): Boolean =
-      myDeclarations.get(name.underlying) match
-        case Some(decls) => decls.sizeIs >= 1
-        case _           => false
-
-    private[Symbols] final def allOverloads(name: SignedName): List[TermSymbol] =
-      myDeclarations.get(name.underlying) match
-        case Some(decls) => decls.toList.asInstanceOf[List[TermSymbol]]
-        case _           => Nil
-
-    final def getDecls(name: Name)(using Context): List[Symbol] =
-      this match
-        case pkg: PackageSymbol => getDecl(name).toList
-        case _ =>
-          ensureDeclsInitialized()
-          name match
-            case name: SignedName => getDecl(name).toList
-            case _                => myDeclarations.get(name).fold(Nil)(_.toList)
-
-    final def getDecl(name: Name)(using Context): Option[Symbol] =
-      ensureDeclsInitialized()
-      name match
-        case overloaded: SignedName =>
-          distinguishOverloaded(overloaded)
-        case name =>
-          getDeclInternal(name) match
-            case None =>
-              this match
-                case pkg: PackageSymbol => pkg.initialiseRootFor(name)
-                case _                  => None
-            case res => res
-
-    private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[Symbol] =
-      myDeclarations.get(overloaded.underlying) match
-        case Some(overloads) =>
-          overloads.find {
-            case decl: TermSymbol => decl.signature.exists(_ == overloaded.sig)
-            case _                => false
-          }
-        case None => None
+    def getDecl(name: Name)(using Context): Option[Symbol]
 
     /** Note: this will force all trees in a package */
-    final def declarations(using Context): List[Symbol] =
-      ensureDeclsInitialized()
-      this match
-        case pkg: PackageSymbol => pkg.initialiseAllRoots()
-        case _                  => ()
-      declarationsInternal
-
-    private[tastyquery] final def declarationsInternal: List[Symbol] =
-      myDeclarations.values.toList.flatten
-
-    final override def toDebugString: String =
-      s"${super.toString} with declarations [${myDeclarations.keys.map(_.toDebugString).mkString(", ")}]"
+    def declarations(using Context): List[Symbol]
   }
 
   final class ClassSymbol private (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner) with DeclaringSymbol {
@@ -479,6 +389,10 @@ object Symbols {
 
     // Optional reference fields
     private var mySpecialErasure: Option[() => ErasedTypeRef] = None
+
+    // DeclaringSymbol-related fields
+    private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
+      mutable.HashMap[Name, mutable.HashSet[Symbol]]()
 
     private[tastyquery] val classInfo: ClassInfo = ClassInfo(this: @unchecked)
 
@@ -556,9 +470,51 @@ object Symbols {
     private[tastyquery] final def specialErasure(using Context): Option[() => ErasedTypeRef] =
       mySpecialErasure
 
-    protected[this] final def ensureDeclsInitialized()(using Context): Unit =
-      // ClassSymbols are always initialized when created
-      ()
+    // DeclaringSymbol implementation
+
+    private[Symbols] final def addDecl(decl: Symbol): Unit =
+      val set = myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet)
+      if decl.isType then assert(set.isEmpty, s"trying to add a second entry $decl for type name ${decl.name} in $this")
+      set += decl
+
+    private[Symbols] final def hasOverloads(name: SignedName): Boolean =
+      myDeclarations.get(name.underlying) match
+        case Some(decls) => decls.sizeIs > 1
+        case _           => false
+
+    final def getDecls(name: Name)(using Context): List[Symbol] =
+      name match
+        case name: SignedName => getDecl(name).toList
+        case _                => myDeclarations.get(name).fold(Nil)(_.toList)
+
+    final def getDecl(name: Name)(using Context): Option[Symbol] =
+      name match
+        case overloaded: SignedName =>
+          distinguishOverloaded(overloaded)
+        case name =>
+          myDeclarations.get(name) match
+            case Some(decls) =>
+              if decls.sizeIs == 1 then Some(decls.head)
+              else if decls.sizeIs > 1 then
+                throw MemberNotFoundException(this, name, s"unexpected overloads in $this: ${decls.mkString(", ")}")
+              else None
+            case _ => None
+    end getDecl
+
+    private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[Symbol] =
+      myDeclarations.get(overloaded.underlying) match
+        case Some(overloads) =>
+          overloads.find {
+            case decl: TermSymbol => decl.signature.exists(_ == overloaded.sig)
+            case _                => false
+          }
+        case None => None
+    end distinguishOverloaded
+
+    final def declarations(using Context): List[Symbol] =
+      myDeclarations.values.toList.flatten
+
+    // Type-related things
 
     private[tastyquery] final def initParents: Boolean =
       myTypeParams != null
@@ -632,48 +588,72 @@ object Symbols {
       with DeclaringSymbol {
     type ThisNameType = SimpleName
 
-    val packageRef: PackageRef = PackageRef(this: @unchecked)
-
+    // DeclaringSymbol-related fields
     private var rootsInitialized: Boolean = false
+    private val myDeclarations = mutable.HashMap[Name, Symbol]()
+
+    // Cache fields
+    val packageRef: PackageRef = PackageRef(this: @unchecked)
 
     this.withFlags(EmptyFlagSet)
 
-    protected[this] final def ensureDeclsInitialized()(using Context): Unit =
+    private[tastyquery] def getPackageDeclOrCreate(name: SimpleName)(using Context): PackageSymbol =
+      getPackageDecl(name).getOrElse {
+        assert(name != nme.EmptyPackageName, s"Trying to create a subpackage $name of $this")
+        val pkg = PackageSymbol(name, this)
+        addDecl(pkg)
+        pkg
+      }
+    end getPackageDeclOrCreate
+
+    /** Gets the subpackage with the specified `name`, if it exists.
+      *
+      * If this package contains a subpackage with the name `name`, returns
+      * `Some(subpackage)`. Otherwise, returns `None`.
+      *
+      * If there exists another kind of declaration with the given `name`, this
+      * method returns `None` (instead of, for example, throwing).
+      *
+      * @note
+      *   Performance guarantee: This method does not try to load non-package
+      *   symbols from the classpath.
+      */
+    final def getPackageDecl(name: SimpleName)(using Context): Option[PackageSymbol] =
+      /* All subpackages are created eagerly when initializing contexts,
+       * so we can directly access myDeclarations here.
+       */
+      myDeclarations.get(name).collect { case pkg: PackageSymbol =>
+        pkg
+      }
+    end getPackageDecl
+
+    private[Symbols] final def addDecl(decl: Symbol): Unit =
+      assert(!myDeclarations.contains(decl.name), s"trying to add a second entry $decl for name ${decl.name} in $this")
+      myDeclarations(decl.name) = decl
+
+    final def getDecls(name: Name)(using Context): List[Symbol] =
+      getDecl(name).toList
+
+    private final def ensureRootsInitialized()(using Context): Unit =
       if !rootsInitialized then
         ctx.classloader.scanPackage(this)
         rootsInitialized = true
 
-    /** When no symbol exists, try to enter root symbols for the given Name, will shortcut if no root
-      * exists for the given name.
-      */
-    private[tastyquery] def initialiseRootFor(name: Name)(using Context): Option[Symbol] =
-      ctx.classloader.enterRoots(this, name)
-
-    private[tastyquery] def initialiseAllRoots()(using Context): Unit =
-      ctx.classloader.forceRoots(this)
-
-    final def getPackageDecl(name: SimpleName)(using Context): Option[PackageSymbol] =
-      // wrapper that ensures the Context is available, just in case we need it
-      // to be side-effecting in the future.
-      getPackageDeclInternal(name)
-
-    private[tastyquery] def getPackageDeclInternal(packageName: SimpleName): Option[PackageSymbol] =
-      /* All subpackages are created eagerly when initializing contexts,
-       * so we can use getDeclInternal here.
-       */
-      getDeclInternal(packageName).collect { case pkg: PackageSymbol =>
-        pkg
+    final def getDecl(name: Name)(using Context): Option[Symbol] =
+      myDeclarations.get(name).orElse {
+        ensureRootsInitialized()
+        if ctx.classloader.loadRoot(this, name) then myDeclarations.get(name)
+        else None
       }
+    end getDecl
+
+    final def declarations(using Context): List[Symbol] =
+      ensureRootsInitialized()
+      ctx.classloader.loadAllRoots(this)
+      myDeclarations.values.toList
   }
 
   object PackageSymbol:
-    private[tastyquery] def create(name: SimpleName, owner: PackageSymbol): PackageSymbol =
-      if owner.getPackageDeclInternal(name).isDefined then
-        throw IllegalStateException(s"Trying to recreate package $name in $owner")
-      val pkg = PackageSymbol(name, owner)
-      owner.addDecl(pkg)
-      pkg
-
     private[tastyquery] def createRoots(): (PackageSymbol, PackageSymbol) =
       val root = PackageSymbol(nme.RootName, null)
       root.rootsInitialized = true

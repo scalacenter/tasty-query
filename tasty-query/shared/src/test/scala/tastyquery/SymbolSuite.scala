@@ -110,6 +110,22 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
         assert(ex.prefix == resolve(EmptyPkg))
   }
 
+  testWithContext("getPackageDecl", simple_trees / tname"ScalaObject" / obj) {
+    val pkg = resolve(simple_trees).asPackage
+
+    // Non-existent symbol
+    assert(pkg.getPackageDecl(termName("nonexistentsubpackage")) == None)
+
+    // Symbol exists but is not a package (whitebox knowledge: it is not loaded yet)
+    assert(pkg.getPackageDecl(termName("ScalaObject")) == None)
+
+    // ScalaObject actually exists as a term (but not as a package)
+    assert(pkg.getDecl(name"ScalaObject").isDefined)
+
+    // After loading ScalaObject, getPackageDecl still returns None for it
+    assert(pkg.getPackageDecl(termName("ScalaObject")) == None)
+  }
+
   testWithContext("basic-symbol-structure", empty_class / tname"EmptyClass") {
     val EmptyClass = empty_class / tname"EmptyClass"
     resolve(EmptyClass)
