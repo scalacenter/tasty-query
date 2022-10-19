@@ -55,6 +55,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val UnappliedClassType: TypeRef = TypeRef(javaLangPackage.packageRef, typeName("Class"))
   def ClassTypeOf(tpe: Type): AppliedType = AppliedType(UnappliedClassType, List(tpe))
 
+  val ThrowableType: TypeRef = TypeRef(javaLangPackage.packageRef, typeName("Throwable"))
+
   // Magic symbols that are not found on the classpath, but rather created by hand
 
   private def createSpecialClass(name: TypeName, parents: List[Type], flags: FlagSet): ClassSymbol =
