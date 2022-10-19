@@ -57,7 +57,9 @@ lazy val root = project.in(file("."))
     publish / skip := true,
   )
 
-lazy val testSources = project.in(file("test-sources"))
+lazy val testSources = crossProject(JSPlatform, JVMPlatform)
+  .crossType(CrossType.Pure)
+  .in(file("test-sources"))
   .settings(commonSettings)
   .settings(
     publish / skip := true,
@@ -65,6 +67,7 @@ lazy val testSources = project.in(file("test-sources"))
 
 lazy val tastyQuery =
   crossProject(JSPlatform, JVMPlatform).in(file("tasty-query"))
+    .dependsOn(testSources % Test)
     .settings(commonSettings)
     .settings(strictCompileSettings)
     .settings(name := "tasty-query")
@@ -89,10 +92,11 @@ lazy val tastyQuery =
 
       Test / envVars ++= {
         val javalib = (Test / javalibEntry).value
-        val testSourcesCP = Attributed.data((testSources / Compile / fullClasspath).value)
+        val testSourcesCP = Attributed.data((testSources.jvm / Compile / fullClasspath).value)
         val testClasspath = (javalib +: testSourcesCP.map(_.getAbsolutePath())).mkString(";")
 
-        val testResourcesCode = (testSources / sourceDirectory).value.getAbsolutePath()
+        val testResourcesCode =
+          ((LocalRootProject / baseDirectory).value / "test-sources/src").getAbsolutePath()
 
         Map(
           "TASTY_TEST_CLASSPATH" -> testClasspath,
