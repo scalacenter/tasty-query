@@ -339,11 +339,13 @@ object Types {
         NoType
     }
 
-    /** The basetype of this type with given class symbol, NoType if `base` is not a class. */
-    final def baseType(base: Symbol)(using Context): Type =
-      base match
-        case base: ClassSymbol => base.baseTypeOf(this)
-        case _                 => NoType
+    /** The basetype of this type with given class symbol.
+      *
+      * Returns `NoType` if this type does not have `base` in any of its base
+      * types.
+      */
+    final def baseType(base: ClassSymbol)(using Context): Type =
+      base.baseTypeOf(this)
 
     /** The member with the given `name`. */
     final def member(name: Name)(using Context): Symbol =

@@ -394,7 +394,9 @@ object Symbols {
     private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
       mutable.HashMap[Name, mutable.HashSet[Symbol]]()
 
+    // Cache fields
     private[tastyquery] val classInfo: ClassInfo = ClassInfo(this: @unchecked)
+    private var myLinearization: List[ClassSymbol] | Null = null
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
@@ -462,6 +464,30 @@ object Symbols {
         else throw IllegalStateException(s"$this was not assigned parents")
     end parents
 
+    private def parentClasses(using Context): List[ClassSymbol] =
+      parents.map(tpe =>
+        tpe.classSymbol.getOrElse {
+          throw InvalidProgramStructureException(s"Non-class type $tpe in parents of $this")
+        }
+      )
+
+    final def linearization(using Context): List[ClassSymbol] =
+      val local = myLinearization
+      if local != null then local
+      else
+        val computed = computeLinearization()
+        myLinearization = computed
+        computed
+
+    private def computeLinearization()(using Context): List[ClassSymbol] =
+      val parentsLin = parentClasses.foldLeft[List[ClassSymbol]](Nil) { (lin, parent) =>
+        parent.linearization.filter(c => !lin.contains(c)) ::: lin
+      }
+      this :: parentsLin
+
+    final def isSubclass(that: ClassSymbol)(using Context): Boolean =
+      linearization.contains(that)
+
     private[tastyquery] final def withSpecialErasure(specialErasure: () => ErasedTypeRef): this.type =
       if mySpecialErasure.isDefined then throw IllegalStateException(s"reassignment of the special erasure of $this")
       mySpecialErasure = Some(specialErasure)
@@ -518,12 +544,6 @@ object Symbols {
 
     private[tastyquery] final def initParents: Boolean =
       myTypeParams != null
-
-    final def derivesFrom(base: Symbol)(using Context): Boolean =
-      base.isClass &&
-        ((this eq base)
-        //|| (baseClassSet contains base)
-        )
 
     /** Compute tp.baseType(this) */
     private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Type =

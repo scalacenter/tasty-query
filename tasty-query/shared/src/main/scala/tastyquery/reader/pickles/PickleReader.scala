@@ -610,7 +610,7 @@ private[pickles] class PickleReader {
             RefinedType(parent1, name, info.symbol.info)
           case info: TypeRef if isBound(info) =>
             val info1 = info.symbol.info
-            assert(info1.derivesFrom(defn.SingletonClass))
+            assert(info1.isSubClass(defn.SingletonClass))
             RefinedType(parent1, name, info1.mapReduceAnd(removeSingleton)(_ & _))
           case info =>
             tp.derivedRefinedType(parent1, name, info)

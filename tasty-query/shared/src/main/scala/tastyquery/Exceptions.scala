@@ -5,7 +5,7 @@ import tastyquery.Symbols.*
 import tastyquery.Types.*
 
 object Exceptions:
-  abstract class InvalidProgramStructureException(msg: String, cause: Throwable | Null) extends Exception(msg, cause):
+  class InvalidProgramStructureException(msg: String, cause: Throwable | Null) extends Exception(msg, cause):
     def this(msg: String) = this(msg, null)
 
   final class CyclicReferenceException(kind: String)
