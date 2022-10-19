@@ -30,24 +30,28 @@ private[tastyquery] object TypeOps:
           pre match {
             //case pre: SuperType => toPrefix(pre.thistpe, cls, thiscls)
             case _ =>
-              if (thiscls.derivesFrom(cls) && pre.baseType(thiscls) != NoType)
-                /*if (variance <= 0 && !isLegalPrefix(pre)) // isLegalPrefix always true?
-                if (variance < 0) {
-                  approximated = true
-                  NothingType
-                }
-                else
-                  // Don't set the `approximated` flag yet: if this is a prefix
-                  // of a path, we might be able to dealias the path instead
-                  // (this is handled in `ApproximatingTypeMap`). If dealiasing
-                  // is not possible, then `expandBounds` will end up being
-                  // called which we override to set the `approximated` flag.
-                  range(NothingType, pre)
-              else*/ pre
-              /*else if (pre.termSymbol.isPackage && !thiscls.isPackage)
-              toPrefix(pre.select(nme.PACKAGE), cls, thiscls)*/
-              else
-                toPrefix(pre.baseType(cls).normalizedPrefix, cls.owner.nn, thiscls)
+              cls match
+                case cls: ClassSymbol =>
+                  if (thiscls.isSubclass(cls) && pre.baseType(thiscls) != NoType)
+                    /*if (variance <= 0 && !isLegalPrefix(pre)) // isLegalPrefix always true?
+                    if (variance < 0) {
+                      approximated = true
+                      NothingType
+                    }
+                    else
+                      // Don't set the `approximated` flag yet: if this is a prefix
+                      // of a path, we might be able to dealias the path instead
+                      // (this is handled in `ApproximatingTypeMap`). If dealiasing
+                      // is not possible, then `expandBounds` will end up being
+                      // called which we override to set the `approximated` flag.
+                      range(NothingType, pre)
+                  else*/ pre
+                  /*else if (pre.termSymbol.isPackage && !thiscls.isPackage)
+                  toPrefix(pre.select(nme.PACKAGE), cls, thiscls)*/
+                  else
+                    toPrefix(pre.baseType(cls).normalizedPrefix, cls.owner.nn, thiscls)
+                case _ =>
+                  NoType
           }
       end toPrefix
 

@@ -1,5 +1,7 @@
 package tastyquery
 
+import scala.annotation.tailrec
+
 import scala.collection.mutable
 
 import tastyquery.Contexts.*
@@ -147,10 +149,14 @@ object Symbols {
       Iterator.iterate(enclosingDecl)(_.enclosingDecl).takeWhile(s => s.maybeOuter.exists)
 
     private[tastyquery] final def isStatic: Boolean =
-      Iterator
-        .iterate(this)(_.owner.nn)
-        .takeWhile(s => s.maybeOuter.exists)
-        .forall(s => s.isPackage || s.isClass && s.name.toTypeName.wrapsObjectName)
+      if owner == null then this != NoSymbol
+      else owner.isStaticOwner
+
+    @tailrec
+    private def isStaticOwner: Boolean = this match
+      case _: PackageSymbol => true
+      case cls: ClassSymbol => cls.is(Module) && cls.owner.isStaticOwner
+      case _                => false
 
     private def nameWithPrefix(addPrefix: Symbol => Boolean): FullyQualifiedName =
       if isRoot then FullyQualifiedName.rootPackageName
@@ -226,6 +232,9 @@ object Symbols {
       if local != null then local
       else throw new IllegalStateException(s"$this was not assigned a declared type")
 
+    private[tastyquery] final def declaredTypeAsSeenFrom(prefix: Type)(using Context): Type =
+      declaredType.asSeenFrom(prefix, owner)
+
     private def isConstructor: Boolean =
       maybeOuter.isClass && is(Method) && name == nme.Constructor
 
@@ -281,6 +290,8 @@ object Symbols {
   sealed abstract class TypeSymbolWithBounds protected (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner):
     def bounds(using Context): TypeBounds
 
+    def lowerBound(using Context): Type
+
     def upperBound(using Context): Type
   end TypeSymbolWithBounds
 
@@ -302,6 +313,8 @@ object Symbols {
       val local = myBounds
       if local == null then throw IllegalStateException(s"$this was not assigned type bounds")
       else local
+
+    final def lowerBound(using Context): Type = bounds.low
 
     final def upperBound(using Context): Type = bounds.high
   end TypeParamSymbol
@@ -348,10 +361,18 @@ object Symbols {
     final def aliasedType(using Context): Type =
       typeDef.asInstanceOf[TypeMemberDefinition.TypeAlias].alias
 
+    private[tastyquery] def aliasedTypeAsSeenFrom(pre: Type)(using Context): Type =
+      aliasedType.asSeenFrom(pre, owner)
+
     final def bounds(using Context): TypeBounds = typeDef match
       case TypeMemberDefinition.TypeAlias(alias)           => TypeAlias(alias)
       case TypeMemberDefinition.AbstractType(bounds)       => bounds
       case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds
+
+    final def lowerBound(using Context): Type = typeDef match
+      case TypeMemberDefinition.TypeAlias(alias)           => alias
+      case TypeMemberDefinition.AbstractType(bounds)       => bounds.low
+      case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds.low
 
     final def upperBound(using Context): Type = typeDef match
       case TypeMemberDefinition.TypeAlias(alias)           => alias
@@ -394,16 +415,19 @@ object Symbols {
     private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
       mutable.HashMap[Name, mutable.HashSet[Symbol]]()
 
+    // Cache fields
     private[tastyquery] val classInfo: ClassInfo = ClassInfo(this: @unchecked)
+    private var myLinearization: List[ClassSymbol] | Null = null
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
       if myTypeParams == null then failNotCompleted("typeParams not initialized")
       if myParents == null && myParentsInit == null then failNotCompleted("parents not initialized")
 
+    private[tastyquery] def isValueClass(using Context): Boolean =
+      parents.nonEmpty && parents.head.classSymbol.exists(_ == defn.AnyValClass)
+
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
-      val isValueClass =
-        parents.nonEmpty && parents.head.classSymbol.exists(_ == defn.AnyValClass)
       isValueClass && !defn.isPrimitiveValueClass(this)
 
     /** Get the companion class of this class, if it exists:
@@ -462,6 +486,30 @@ object Symbols {
         else throw IllegalStateException(s"$this was not assigned parents")
     end parents
 
+    private def parentClasses(using Context): List[ClassSymbol] =
+      parents.map(tpe =>
+        tpe.classSymbol.getOrElse {
+          throw InvalidProgramStructureException(s"Non-class type $tpe in parents of $this")
+        }
+      )
+
+    final def linearization(using Context): List[ClassSymbol] =
+      val local = myLinearization
+      if local != null then local
+      else
+        val computed = computeLinearization()
+        myLinearization = computed
+        computed
+
+    private def computeLinearization()(using Context): List[ClassSymbol] =
+      val parentsLin = parentClasses.foldLeft[List[ClassSymbol]](Nil) { (lin, parent) =>
+        parent.linearization.filter(c => !lin.contains(c)) ::: lin
+      }
+      this :: parentsLin
+
+    final def isSubclass(that: ClassSymbol)(using Context): Boolean =
+      linearization.contains(that)
+
     private[tastyquery] final def withSpecialErasure(specialErasure: () => ErasedTypeRef): this.type =
       if mySpecialErasure.isDefined then throw IllegalStateException(s"reassignment of the special erasure of $this")
       mySpecialErasure = Some(specialErasure)
@@ -519,16 +567,54 @@ object Symbols {
     private[tastyquery] final def initParents: Boolean =
       myTypeParams != null
 
-    final def derivesFrom(base: Symbol)(using Context): Boolean =
-      base.isClass &&
-        ((this eq base)
-        //|| (baseClassSet contains base)
-        )
-
     /** Compute tp.baseType(this) */
     private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Type =
-      // TODO
-      tp.widen
+      def recur(tp: Type): Type = tp match
+        case tp: TypeRef =>
+          def combineGlb(bt1: Type, bt2: Type): Type =
+            if bt1 == NoType then bt2
+            else if bt2 == NoType then bt1
+            else bt1 & bt2
+
+          def foldGlb(bt: Type, ps: List[Type]): Type =
+            ps.foldLeft(bt)((bt, p) => combineGlb(bt, recur(p)))
+
+          tp.symbol match
+            case tpSym: ClassSymbol =>
+              def isOwnThis = tp.prefix match
+                case prefix: ThisType   => prefix.cls == tpSym.owner
+                case prefix: PackageRef => prefix.symbol == tpSym.owner
+                case NoPrefix           => true
+                case _                  => false
+
+              if tpSym == this then tp
+              else if isOwnThis then
+                if tpSym.isSubclass(this) then
+                  if this.isStatic && this.typeParams.isEmpty then this.typeRef
+                  else foldGlb(NoType, tpSym.parents)
+                else NoType
+              else recur(tpSym.typeRef).asSeenFrom(tp.prefix, tpSym.owner)
+            case _: TypeSymbolWithBounds =>
+              recur(tp.superType)
+          end match
+
+        case tp: AppliedType =>
+          if tp.tycon.typeSymbol == this then tp
+          else
+            // TODO Also handle TypeLambdas
+            val typeParams = tp.tycon.typeParams
+            recur(tp.tycon).substClassTypeParams(typeParams.asInstanceOf[List[ClassTypeParamSymbol]], tp.args)
+
+        case tp: TypeProxy =>
+          recur(tp.superType)
+
+        case _ =>
+          // TODO Handle AndType and OrType, and JavaArrayType
+          NoType
+      end recur
+
+      recur(tp)
+    end baseTypeOf
 
     private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[Symbol] =
       def lookup(parents: List[Type]): Option[Symbol] = parents match
