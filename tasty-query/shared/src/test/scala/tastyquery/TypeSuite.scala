@@ -763,7 +763,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   testWithContext("poly-type-in-higher-kinded") {
     val HigherKindedClass = resolve(name"simple_trees" / tname"HigherKinded").asClass
     val polyMethod = HigherKindedClass.getDecl(name"m").get.asTerm
-    println(polyMethod.declaredType.asInstanceOf[PolyType].resultType)
+    assert(polyMethod.declaredType.asInstanceOf[PolyType].resultType.isInstanceOf[MethodType])
   }
 
   testWithContext("scala.collection.:+") {
