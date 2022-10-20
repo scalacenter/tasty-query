@@ -72,4 +72,58 @@ private[tastyquery] object TypeOps:
       super.expandBounds(tp)
     }
   }
+
+  // Tests around `matches`
+
+  /** The implementation for `tp1.matches(tp2)`. */
+  final def matchesType(tp1: Type, tp2: Type)(using Context): Boolean = tp1.widen match
+    case tp1: MethodType =>
+      tp2.widen match
+        case tp2: MethodType =>
+          // implicitness is ignored when matching
+          matchingMethodParams(tp1, tp2)
+            && matchesType(tp1.resultType, Substituters.substBinders(tp2.resultType, tp2, tp1))
+        case tp2 =>
+          tp1.paramNames.isEmpty
+            && matchesType(tp1.resultType, tp2)
+
+    case tp1: PolyType =>
+      tp2.widen match
+        case tp2: PolyType =>
+          tp1.paramNames.lengthCompare(tp2.paramNames) == 0
+            && matchesType(tp1.resultType, Substituters.substBinders(tp2.resultType, tp2, tp1))
+        case _ =>
+          false
+
+    case _ =>
+      tp2.widen match
+        case _: PolyType =>
+          false
+        case tp2: MethodType =>
+          matchesType(tp1, tp2.resultType)
+        case tp2 =>
+          true
+  end matchesType
+
+  /** Do the parameter types of `tp1` and `tp2` match in a way that allows `tp1` to override `tp2`?
+    *
+    * This is the case if they're pairwise `=:=`.
+    */
+  private def matchingMethodParams(tp1: MethodType, tp2: MethodType)(using Context): Boolean =
+    def loop(formals1: List[Type], formals2: List[Type]): Boolean = formals1 match
+      case formal1 :: rest1 =>
+        formals2 match
+          case formal2 :: rest2 =>
+            val formal2a = Substituters.substBinders(formal2, tp2, tp1)
+            val paramsMatch = Subtyping.isSameType(formal2a, formal1)
+            paramsMatch && loop(rest1, rest2)
+          case Nil =>
+            false
+
+      case Nil =>
+        formals2.isEmpty
+    end loop
+
+    loop(tp1.paramTypes, tp2.paramTypes)
+  end matchingMethodParams
 end TypeOps

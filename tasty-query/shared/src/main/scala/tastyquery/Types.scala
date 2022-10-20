@@ -429,6 +429,37 @@ object Types {
     /** Is self type bounded by a type lambda or AnyKind? */
     private[tastyquery] final def isLambdaSub(using Context): Boolean = false // TODO hkResult.exists
 
+    /** Is this type close enough to that type so that members with the two types would override each other?
+      *
+      * This means:
+      *
+      * - Either both types are polytypes with the same number of
+      *   type parameters and their result types match after renaming
+      *   corresponding type parameters
+      * - Or both types are method types with `=:=`-equivalent(*) parameter types
+      *   and matching result types after renaming corresponding parameter types
+      *   if the method types are dependent.
+      * - Or both types are `=:=`-equivalent
+      * - Or neither type takes term or type parameters.
+      *
+      * (*) when matching with a Java method, we also regard Any and Object as equivalent parameter types. (TODO)
+      *
+      * This function will always use unsafe-nulls semamtics to check the types.
+      * This is because we are using a relaxed rule (ignoring `Null` types)
+      * to check overriding Java methods.
+      */
+    final def matches(that: Type)(using Context): Boolean =
+      TypeOps.matchesType(this, that)
+
+    /** This is the same as `matches` except that it also matches `=> T` with `T` and vice versa. */
+    final def matchesLoosely(that: Type)(using Context): Boolean =
+      this.matches(that) || {
+        val thisResult = this.widenExpr
+        val thatResult = that.widenExpr
+        (this eq thisResult) != (that eq thatResult) && thisResult.matches(thatResult)
+      }
+    end matchesLoosely
+
     // Combinators
 
     final def &(that: Type)(using Context): Type =
@@ -707,11 +738,11 @@ object Types {
           case sym: TermSymbol =>
             val refinedSym = prefix.findMember(sym.signedName, prefix).asTerm
             TermRef(prefix, refinedSym)
+          case sym: TypeMemberSymbol =>
+            val refinedSym = prefix.findMember(sym.name, prefix).asType
+            TypeRef(prefix, refinedSym)
           case sym: TypeSymbol =>
-            if !sym.isClass && !prefix.isArgPrefixOf(sym) then
-              val refinedSym = prefix.findMember(sym.name, prefix).asType
-              TypeRef(prefix, refinedSym)
-            else TypeRef(prefix, sym)
+            TypeRef(prefix, sym)
           case desig =>
             withPrefix(prefix, cachedSymbol = null)
       }

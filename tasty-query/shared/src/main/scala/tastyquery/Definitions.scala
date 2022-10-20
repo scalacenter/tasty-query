@@ -207,6 +207,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   lazy val CharClass = scalaPackage.requiredClass("Char")
   lazy val UnitClass = scalaPackage.requiredClass("Unit")
 
+  lazy val StringClass = javaLangPackage.requiredClass("String")
+
   def isPrimitiveValueClass(sym: ClassSymbol): Boolean =
     sym == IntClass || sym == LongClass || sym == FloatClass || sym == DoubleClass ||
       sym == BooleanClass || sym == ByteClass || sym == ShortClass || sym == CharClass ||

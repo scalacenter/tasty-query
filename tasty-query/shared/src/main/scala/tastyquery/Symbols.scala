@@ -210,7 +210,75 @@ object Symbols {
     override def toString: String = "NoSymbol"
   end NoSymbol
 
-  sealed abstract class TermOrTypeSymbol(override val owner: Symbol) extends Symbol(owner)
+  sealed abstract class TermOrTypeSymbol(override val owner: Symbol) extends Symbol(owner):
+    // Overriding relationships
+
+    /** The non-private symbol whose name and type matches the type of this symbol in the given class.
+      *
+      * @param inClass
+      *   The class containing the result symbol's definition
+      * @param siteClass
+      *   The base class from which member types are computed
+      */
+    private final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[Symbol] =
+      this match
+        case self: TypeSymbol =>
+          inClass.getDecl(self.name).filterNot(_.is(Private))
+        case self: TermSymbol =>
+          val candidates = inClass.getDecls(self.name).asInstanceOf[List[TermSymbol]].filterNot(_.is(Private))
+          if candidates.isEmpty then None
+          else
+            val site = siteClass.thisType
+            val targetType = self.declaredTypeAsSeenFrom(site)
+            candidates.find { candidate =>
+              // TODO Also check targetName here
+              candidate.declaredTypeAsSeenFrom(site).matchesLoosely(targetType)
+            }
+    end matchingDecl
+
+    /** If false, this symbol cannot possibly participate in an override, either as overrider or overridee. */
+    private final def canMatchInheritedSymbols(using Context): Boolean =
+      owner.isClass && memberCanMatchInheritedSymbols
+
+    /** If false, this class member cannot possibly participate in an override, either as overrider or overridee. */
+    private final def memberCanMatchInheritedSymbols(using Context): Boolean =
+      !isConstructor && !is(Private)
+
+    private final def isConstructor(using Context): Boolean =
+      name == nme.Constructor
+
+    /** The symbol, in class `inClass`, that is overridden by this symbol, if any. */
+    final def overriddenSymbol(inClass: ClassSymbol)(using Context): Option[Symbol] =
+      if inClass == owner then Some(this)
+      else if canMatchInheritedSymbols then
+        val ownerClass = owner.asClass
+        if ownerClass.isSubclass(inClass) then matchingDecl(inClass, siteClass = ownerClass)
+        else None
+      else None
+
+    /** All symbols overridden by this symbol. */
+    final def allOverriddenSymbols(using Context): Iterator[Symbol] =
+      if !canMatchInheritedSymbols then Iterator.empty
+      else
+        owner.asClass.linearization match
+          case _ :: inherited => inherited.iterator.map(overriddenSymbol(_)).flatten
+          case Nil            => Iterator.empty
+    end allOverriddenSymbols
+
+    /** The first symbol overridden by this symbol, if any. */
+    final def nextOverriddenSymbol(using Context): Option[Symbol] =
+      val overridden = allOverriddenSymbols
+      if overridden.hasNext then Some(overridden.next())
+      else None
+    end nextOverriddenSymbol
+
+    /** The symbol overriding this symbol in given subclass `inClass`, if any. */
+    final def overridingSymbol(inClass: ClassSymbol)(using Context): Option[Symbol] =
+      if inClass == owner then Some(this)
+      else if canMatchInheritedSymbols && inClass.isSubclass(owner.asClass) then
+        matchingDecl(inClass, siteClass = inClass)
+      else None
+  end TermOrTypeSymbol
 
   final class TermSymbol private (val name: TermName, owner: Symbol) extends TermOrTypeSymbol(owner):
     type ThisNameType = TermName
@@ -641,7 +709,7 @@ object Symbols {
     end findMember
 
     /** Get the self type of this class, as if viewed from an external package */
-    private[tastyquery] final def accessibleThisType: Type =
+    private[tastyquery] final def accessibleThisType: TypeRef =
       maybeOuter match
         case pre: PackageSymbol => TypeRef(pre.packageRef, this)
         case pre: ClassSymbol   => TypeRef(pre.accessibleThisType, this)
@@ -660,6 +728,20 @@ object Symbols {
         val typeRef = TypeRef(pre, this)
         myTypeRef = typeRef
         typeRef
+
+    private var myThisType: ThisType | Null = null
+
+    /** The `ThisType` for this class, as visible from inside this class. */
+    private[tastyquery] final def thisType(using Context): ThisType =
+      val local = myThisType
+      if local != null then local
+      else
+        val computed = owner match
+          case owner: ClassSymbol => ThisType(TypeRef(owner.thisType, this))
+          case _                  => ThisType(typeRef)
+        myThisType = computed
+        computed
+    end thisType
   }
 
   object ClassSymbol:
