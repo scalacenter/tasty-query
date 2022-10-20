@@ -217,20 +217,22 @@ private[pickles] class PickleReader {
                 throw AssertionError(s"unexpected type $tpe for $sym, owner is $owner")
         sym
       case CLASSsym =>
-        val cls = ClassSymbol.create(name.toTypeName, owner)
+        val tname = name.toTypeName
+        val cls =
+          if tname == tpnme.RefinedClassMagic then ClassSymbol.createRefinedClassSymbol(owner)
+          else ClassSymbol.create(name.toTypeName, owner)
         storeResultInEntries(cls)
         val tpe = readSymType()
         val typeParams = atNoCache(infoRef)(readTypeParams())
-        if isRefinementClass(cls) then cls.withParentsDirect(defn.ObjectType :: Nil)
-        else
-          val parentTypes = tpe match
-            case TempPolyType(tparams, restpe: TempClassInfoType) =>
-              assert(tparams.corresponds(typeParams)(_ eq _)) // should reuse the class type params
-              restpe.parentTypes
-            case tpe: TempClassInfoType => tpe.parentTypes
-            case tpe =>
-              throw AssertionError(s"unexpected type $tpe for $cls, owner is $owner")
-          cls.withParentsDirect(parentTypes)
+        if isRefinementClass(cls) then return cls // by-pass further assignments, including Flags
+        val parentTypes = tpe match
+          case TempPolyType(tparams, restpe: TempClassInfoType) =>
+            assert(tparams.corresponds(typeParams)(_ eq _)) // should reuse the class type params
+            restpe.parentTypes
+          case tpe: TempClassInfoType => tpe.parentTypes
+          case tpe =>
+            throw AssertionError(s"unexpected type $tpe for $cls, owner is $owner")
+        cls.withParentsDirect(parentTypes)
         cls.withTypeParams(typeParams)
         cls
       case VALsym =>
