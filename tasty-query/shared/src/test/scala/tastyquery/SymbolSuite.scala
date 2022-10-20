@@ -288,4 +288,9 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     assert(FooTypeSym.isInstanceOf[TypeMemberSymbol])
     assert(clue(FooTypeSym.owner) == ChildClass)
   }
+
+  testWithContext("MapView.withFilter", name"scala" / name"collection" / tname"MapView") {
+    val MapView = resolve(name"scala" / name"collection" / tname"MapView").asClass
+    assert(MapView.getDecl(tpnme.RefinedClassMagic).isEmpty)
+  }
 }

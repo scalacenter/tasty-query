@@ -659,7 +659,11 @@ object Symbols {
       owner.addDeclIfDeclaringSym(ClassSymbol(name, owner))
 
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, span: Span)(using Context): ClassSymbol =
-      val cls = create(tpnme.RefinedClassMagic, owner)
+      // TODO Store the `span`
+      createRefinedClassSymbol(owner)
+
+    private[tastyquery] def createRefinedClassSymbol(owner: Symbol)(using Context): ClassSymbol =
+      val cls = ClassSymbol(tpnme.RefinedClassMagic, owner) // by-pass `owner.addDeclIfDeclaringSym`
       cls
         .withTypeParams(Nil)
         .withParentsDirect(defn.ObjectType :: Nil)
