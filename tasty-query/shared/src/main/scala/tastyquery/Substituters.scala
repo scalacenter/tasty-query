@@ -39,7 +39,7 @@ private[tastyquery] object Substituters:
     end apply
   end SubstBindingMap
 
-  private final class SubstParamsMap(from: Binders, to: List[Type])(using Context) extends DeepTypeMap:
+  private final class SubstParamsMap(from: Binders, to: List[Type])(using Context) extends NormalizingTypeMap:
     def apply(tp: Type): Type =
       tp match
         case tp: ParamRef =>
@@ -57,7 +57,7 @@ private[tastyquery] object Substituters:
   end SubstParamsMap
 
   private final class SubstClassTypeParamsMap(from: List[ClassTypeParamSymbol], to: List[Type])(using Context)
-      extends DeepTypeMap:
+      extends NormalizingTypeMap:
     def apply(tp: Type): Type =
       tp match
         case tp: NamedType =>

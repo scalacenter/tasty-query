@@ -56,8 +56,6 @@ private[tastyquery] object TypeMaps {
       tp.derivedOrType(tp1, tp2)
     protected def derivedAnnotatedType(tp: AnnotatedType, underlying: Type, annot: Tree): Type =
       tp.derivedAnnotatedType(underlying, annot)
-    protected def derivedClassInfo(tp: ClassInfo, pre: Type): Type =
-      tp.derivedClassInfo(pre)
     protected def derivedExprType(tp: ExprType, restpe: Type): Type =
       tp.derivedExprType(restpe)
     protected def derivedLambdaType(tp: LambdaType, formals: List[tp.PInfo], restpe: Type): Type =
@@ -112,9 +110,6 @@ private[tastyquery] object TypeMaps {
         case tp: RefinedType =>
           derivedRefinedType(tp, this(tp.parent), this(tp.refinedInfo))
 
-        case tp: ClassInfo =>
-          mapClassInfo(tp)
-
         case tp: AndType =>
           derivedAndType(tp, this(tp.first), this(tp.second))
 
@@ -139,11 +134,6 @@ private[tastyquery] object TypeMaps {
     end mapOver
 
     //def mapOver(syms: List[Symbol]): List[Symbol] = mapSymbols(syms, treeTypeMap)
-
-    /** Can be overridden. By default, only the prefix is mapped. */
-    protected def mapClassInfo(tp: ClassInfo): Type =
-      // TODO Should we even have prefixes in our ClassInfo?
-      tp
 
     def andThen(f: Type => Type): TypeMap = new TypeMap {
       def apply(tp: Type): Type = f(thisMap(tp))
@@ -448,9 +438,6 @@ private[tastyquery] object TypeMaps {
 
     protected def reapply(tp: Type): Type = apply(tp)
   }
-
-  /** A type map that maps also parents and self type of a ClassInfo */
-  abstract class DeepTypeMap(using Context) extends NormalizingTypeMap
 
   /** A range of possible types between lower bound `lo` and upper bound `hi`.
     * Only used internally in `ApproximatingTypeMap`.

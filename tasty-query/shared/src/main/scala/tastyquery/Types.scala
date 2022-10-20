@@ -182,8 +182,6 @@ object Types {
           case _: TypeParamSymbol => None
       case tpe: TypeProxy =>
         tpe.superType.classSymbol
-      case info: ClassInfo =>
-        Some(info.cls)
       case _ =>
         None
 
@@ -204,8 +202,6 @@ object Types {
         case self: AppliedType =>
           if (self.tycon.typeSymbol.isClass) Nil
           else self.superType.typeParams
-        case self: ClassInfo =>
-          self.cls.typeParams
         case _: SingletonType | _: RefinedType =>
           Nil
         case self: WildcardTypeBounds =>
@@ -340,9 +336,6 @@ object Types {
             tp.prefix
       case tp: TermRef =>
         tp.prefix
-      case tp: ClassInfo =>
-        // TODO tp.prefix
-        tp.cls.accessibleThisType
       case tp: TypeProxy =>
         tp.superType.normalizedPrefix
       case _ =>
@@ -360,10 +353,7 @@ object Types {
     /** The member with the given `name`. */
     final def member(name: Name)(using Context): Symbol =
       // We need a valid prefix for `asSeenFrom`
-      val pre = this match
-        case tp: ClassInfo => ??? // tp.appliedRef
-        case _             => widenIfUnstable
-      findMember(name, pre)
+      findMember(name, widenIfUnstable)
 
     /** Find the member of this type with the given `name` when prefix `pre`. */
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol
@@ -871,13 +861,17 @@ object Types {
       sym.asInstanceOf[TypeSymbol]
 
     override def underlying(using Context): Type = symbol match
-      case cls: ClassSymbol          => cls.classInfo
-      case sym: TypeSymbolWithBounds => sym.upperBound
+      case cls: ClassSymbol =>
+        throw AssertionError(s"TypeRef $this has no `underlying` because it refers to a `ClassSymbol`")
+      case sym: TypeSymbolWithBounds =>
+        sym.upperBound
 
     private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Symbol =
       symbol match
         case sym: ClassSymbol =>
-          ClassInfo.findMember(sym, name, pre)
+          sym.findMember(pre, name).getOrElse {
+            throw new MemberNotFoundException(sym, name, s"Cannot find member '$name' in class $sym for prefix $pre")
+          }
         case sym: TypeSymbolWithBounds =>
           sym.upperBound.findMember(name, pre)
 
@@ -1432,23 +1426,6 @@ object Types {
       if first eq second then first
       else AndType(first, second)
   }
-
-  final class ClassInfo(val cls: ClassSymbol) extends GroundType {
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
-      ClassInfo.findMember(cls, name, pre)
-
-    private[tastyquery] def derivedClassInfo(pre: Type): ClassInfo =
-      this // so far do not store pre in ClassInfo
-
-    override def toString(): String = s"ClassInfo($cls)"
-  }
-
-  object ClassInfo:
-    private[Types] def findMember(cls: ClassSymbol, name: Name, pre: Type)(using Context): Symbol =
-      cls.findMember(pre, name).getOrElse {
-        throw new AssertionError(s"Cannot find member named '$name' in $pre")
-      }
-  end ClassInfo
 
   object NoType extends GroundType {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
