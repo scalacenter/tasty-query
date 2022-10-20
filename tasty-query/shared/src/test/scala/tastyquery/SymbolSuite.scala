@@ -293,4 +293,10 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val MapView = resolve(name"scala" / name"collection" / tname"MapView").asClass
     assert(MapView.getDecl(tpnme.RefinedClassMagic).isEmpty)
   }
+
+  testWithContext("consistent-exception-in-parents-issue-168", inheritanceCrossTasty / tname"Child") {
+    val ChildClass = resolve(inheritanceCrossTasty / tname"Child").asClass
+    intercept[MemberNotFoundException](ChildClass.parents)
+    intercept[MemberNotFoundException](ChildClass.parents) // it's the same exception the second time
+  }
 }

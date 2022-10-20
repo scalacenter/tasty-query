@@ -478,9 +478,9 @@ object Symbols {
       else
         val localParentsInit = myParentsInit
         if localParentsInit != null then
-          myParentsInit = null
           val parents = localParentsInit()
           myParents = parents
+          myParentsInit = null
           parents
         else throw IllegalStateException(s"$this was not assigned parents")
     end parents
