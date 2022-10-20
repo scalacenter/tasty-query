@@ -439,7 +439,7 @@ object Types {
       // TypeCompare.lub(this, that)
       OrType.make(this, that)
 
-    final def select(sym: Symbol)(using Context): Type =
+    final def select(sym: TermOrTypeSymbol)(using Context): Type =
       NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
 
     final def select(name: Name)(using Context): NamedType =
@@ -549,9 +549,9 @@ object Types {
     self =>
 
     type ThisName <: Name
-    type ThisSymbolType <: Symbol { type ThisNameType = ThisName }
+    type ThisSymbolType <: TermOrTypeSymbol { type ThisNameType = ThisName }
     type ThisNamedType >: this.type <: NamedType
-    protected type ThisDesignatorType >: ThisSymbolType <: Symbol | Name | LookupIn | Scala2ExternalSymRef
+    protected type ThisDesignatorType >: ThisSymbolType <: TermOrTypeSymbol | Name | LookupIn | Scala2ExternalSymRef
 
     val prefix: Type
 
@@ -560,7 +560,7 @@ object Types {
     protected def storeComputedSymbol(sym: ThisSymbolType): Unit
 
     // For tests
-    private[tastyquery] final def designatorInternal: Symbol | Name | LookupIn | Scala2ExternalSymRef =
+    private[tastyquery] final def designatorInternal: TermOrTypeSymbol | Name | LookupIn | Scala2ExternalSymRef =
       designator
 
     private var myName: ThisName | Null = null
@@ -588,7 +588,7 @@ object Types {
 
     private def computeName: ThisName = (designator match {
       case name: Name                       => name
-      case sym: Symbol                      => sym.name
+      case sym: TermOrTypeSymbol            => sym.name
       case LookupIn(_, sel)                 => sel
       case designator: Scala2ExternalSymRef => designator.name
     }).asInstanceOf[ThisName]
@@ -608,7 +608,7 @@ object Types {
     protected def asThisSymbolType(sym: Symbol): ThisSymbolType
 
     private def computeSymbol()(using Context): Symbol = designator match
-      case sym: Symbol =>
+      case sym: TermOrTypeSymbol =>
         sym
       case LookupIn(pre, name) =>
         TermRef(pre, name).symbol
@@ -737,11 +737,10 @@ object Types {
       case prefix =>
         apply(prefix, name)
 
-    def apply(prefix: Type, sym: Symbol)(using Context): NamedType =
+    def apply(prefix: Type, sym: TermOrTypeSymbol)(using Context): NamedType =
       sym match
         case sym: TypeSymbol => TypeRef(prefix, sym)
         case sym: TermSymbol => TermRef(prefix, sym)
-        case _               => throw IllegalArgumentException(s"Invalid symbol $sym for NamedType")
 
     def apply(prefix: Type, name: Name)(using Context): NamedType =
       name match
