@@ -416,7 +416,6 @@ object Symbols {
       mutable.HashMap[Name, mutable.HashSet[Symbol]]()
 
     // Cache fields
-    private[tastyquery] val classInfo: ClassInfo = ClassInfo(this: @unchecked)
     private var myLinearization: List[ClassSymbol] | Null = null
 
     protected override def doCheckCompleted(): Unit =
