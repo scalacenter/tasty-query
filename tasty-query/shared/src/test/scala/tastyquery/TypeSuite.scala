@@ -778,6 +778,23 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val StringBuilder = resolve(RootPkg / name"scala" / name"collection" / name"mutable" / tname"StringBuilder").asClass
   }
 
+  testWithContext("linearization") {
+    val OverridesPath = name"inheritance" / tname"Overrides" / obj
+    val SuperMonoClass = resolve(OverridesPath / tname"SuperMono").asClass
+    val SuperMonoTraitClass = resolve(OverridesPath / tname"SuperMonoTrait").asClass
+    val MidMonoClass = resolve(OverridesPath / tname"MidMono").asClass
+    val ChildMonoClass = resolve(OverridesPath / tname"ChildMono").asClass
+
+    val linTail = defn.ObjectClass :: defn.AnyClass :: Nil
+
+    assert(clue(SuperMonoClass.linearization) == SuperMonoClass :: linTail)
+    assert(clue(SuperMonoTraitClass.linearization) == SuperMonoTraitClass :: linTail)
+
+    val expectedMidMonoLin = MidMonoClass :: SuperMonoTraitClass :: SuperMonoClass :: linTail
+    assert(clue(MidMonoClass.linearization) == expectedMidMonoLin)
+    assert(clue(ChildMonoClass.linearization) == ChildMonoClass :: expectedMidMonoLin)
+  }
+
   testWithContext("overrides-mono-no-overloads") {
     val OverridesPath = name"inheritance" / tname"Overrides" / obj
     val SuperMonoClass = resolve(OverridesPath / tname"SuperMono").asClass

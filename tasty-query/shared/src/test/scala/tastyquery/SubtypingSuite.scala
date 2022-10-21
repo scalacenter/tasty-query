@@ -40,16 +40,19 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   def assertEquiv(tp1: Type, tp2: Type)(using Context): EquivResult.type =
     assertSubtype(tp1, tp2)
     assertSubtype(tp2, tp1)
+    assert(clue(tp1).isSameType(clue(tp2)))
     EquivResult
 
   def assertNeitherSubtype(tp1: Type, tp2: Type)(using Context): NeitherSubtypeResult.type =
     assertNotSubtype(tp1, tp2)
     assertNotSubtype(tp2, tp1)
+    assert(!clue(tp1.isSameType(clue(tp2))))
     NeitherSubtypeResult
 
   def assertStrictSubtype(tp1: Type, tp2: Type)(using Context): StrictSubtypeResult.type =
     assertSubtype(tp1, tp2)
     assertNotSubtype(tp2, tp1)
+    assert(!clue(tp1.isSameType(clue(tp2))))
     StrictSubtypeResult
 
   extension (cls: ClassSymbol)
