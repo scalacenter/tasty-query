@@ -169,6 +169,9 @@ object Types {
     final def isSubtype(that: Type)(using Context): Boolean =
       Subtyping.isSubtype(this, that)
 
+    final def isSameType(that: Type)(using Context): Boolean =
+      Subtyping.isSameType(this, that)
+
     /** The class symbol of this type, None if reduction is not possible */
     private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this.widen match
       case tpe: TypeRef =>
