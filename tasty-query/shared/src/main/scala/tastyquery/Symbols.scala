@@ -29,16 +29,18 @@ import tastyquery.reader.Loaders.Loader
   *  |
   *  +- PackageSymbol                   any package, including the root package, the empty package, and nested packages
   *  |
-  *  +- TermSymbol                      any term definition:
-  *  |                                  `val`, `var`, `def`, term param, term capture, `object` value
-  *  |
-  *  +- TypeSymbol                      any definition for a type
-  *     +- ClassSymbol                  definition for a `class`, `trait`, or the module class of an `object`
-  *     +- TypeSymbolWithBounds         any other kind of type: `type` definitions, type params, type captures
-  *        +- TypeMemberSymbol          `type` definition, further refined through its `typeDef`
-  *        +- TypeParamSymbol
-  *           +- ClassTypeParamSymbol   type parameter of a class
-  *           +- LocalTypeParamSymbol   any other type parameter
+  *  +- TermOrTypeSymbol                   any term or type symbol, i.e., not a package
+  *     |
+  *     +- TermSymbol                      any term definition:
+  *     |                                  `val`, `var`, `def`, term param, term capture, `object` value
+  *     |
+  *     +- TypeSymbol                      any definition for a type
+  *        +- ClassSymbol                  definition for a `class`, `trait`, or the module class of an `object`
+  *        +- TypeSymbolWithBounds         any other kind of type: `type` definitions, type params, type captures
+  *           +- TypeMemberSymbol          `type` definition, further refined through its `typeDef`
+  *           +- TypeParamSymbol
+  *              +- ClassTypeParamSymbol   type parameter of a class
+  *              +- LocalTypeParamSymbol   any other type parameter
   * ```
   *
   * Additionally, `PackageSymbol` and `ClassSymbol` extend `DeclaringSymbol`.
@@ -134,7 +136,7 @@ object Symbols {
         assert(false, s"cannot access owner, ${this.name} is local or not declared within any scope")
     }
 
-    private[Symbols] final def addDeclIfDeclaringSym(decl: Symbol): decl.type =
+    private[Symbols] final def addDeclIfDeclaringSym(decl: TermOrTypeSymbol): decl.type =
       this match
         case declaring: DeclaringSymbol => declaring.addDecl(decl)
         case _                          => ()
@@ -208,7 +210,77 @@ object Symbols {
     override def toString: String = "NoSymbol"
   end NoSymbol
 
-  final class TermSymbol private (val name: TermName, override val owner: Symbol) extends Symbol(owner):
+  sealed abstract class TermOrTypeSymbol(override val owner: Symbol) extends Symbol(owner):
+    // Overriding relationships
+
+    /** The non-private symbol whose name and type matches the type of this symbol in the given class.
+      *
+      * @param inClass
+      *   The class containing the result symbol's definition
+      * @param siteClass
+      *   The base class from which member types are computed
+      */
+    private final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[Symbol] =
+      this match
+        case self: TypeSymbol =>
+          inClass.getDecl(self.name).filterNot(_.is(Private))
+        case self: TermSymbol =>
+          val candidates = inClass.getDecls(self.name).asInstanceOf[List[TermSymbol]].filterNot(_.is(Private))
+          if candidates.isEmpty then None
+          else
+            val site = siteClass.thisType
+            val targetType = self.declaredTypeAsSeenFrom(site)
+            candidates.find { candidate =>
+              // TODO Also check targetName here
+              candidate.declaredTypeAsSeenFrom(site).matchesLoosely(targetType)
+            }
+    end matchingDecl
+
+    /** If false, this symbol cannot possibly participate in an override, either as overrider or overridee. */
+    private final def canMatchInheritedSymbols(using Context): Boolean =
+      owner.isClass && memberCanMatchInheritedSymbols
+
+    /** If false, this class member cannot possibly participate in an override, either as overrider or overridee. */
+    private final def memberCanMatchInheritedSymbols(using Context): Boolean =
+      !isConstructor && !is(Private)
+
+    private final def isConstructor(using Context): Boolean =
+      name == nme.Constructor
+
+    /** The symbol, in class `inClass`, that is overridden by this symbol, if any. */
+    final def overriddenSymbol(inClass: ClassSymbol)(using Context): Option[Symbol] =
+      if inClass == owner then Some(this)
+      else if canMatchInheritedSymbols then
+        val ownerClass = owner.asClass
+        if ownerClass.isSubclass(inClass) then matchingDecl(inClass, siteClass = ownerClass)
+        else None
+      else None
+
+    /** All symbols overridden by this symbol. */
+    final def allOverriddenSymbols(using Context): Iterator[Symbol] =
+      if !canMatchInheritedSymbols then Iterator.empty
+      else
+        owner.asClass.linearization match
+          case _ :: inherited => inherited.iterator.map(overriddenSymbol(_)).flatten
+          case Nil            => Iterator.empty
+    end allOverriddenSymbols
+
+    /** The first symbol overridden by this symbol, if any. */
+    final def nextOverriddenSymbol(using Context): Option[Symbol] =
+      val overridden = allOverriddenSymbols
+      if overridden.hasNext then Some(overridden.next())
+      else None
+    end nextOverriddenSymbol
+
+    /** The symbol overriding this symbol in given subclass `inClass`, if any. */
+    final def overridingSymbol(inClass: ClassSymbol)(using Context): Option[Symbol] =
+      if inClass == owner then Some(this)
+      else if canMatchInheritedSymbols && inClass.isSubclass(owner.asClass) then
+        matchingDecl(inClass, siteClass = inClass)
+      else None
+  end TermOrTypeSymbol
+
+  final class TermSymbol private (val name: TermName, owner: Symbol) extends TermOrTypeSymbol(owner):
     type ThisNameType = TermName
 
     // Reference fields (checked in doCheckCompleted)
@@ -275,7 +347,7 @@ object Symbols {
       owner.addDeclIfDeclaringSym(TermSymbol(name, owner))
   end TermSymbol
 
-  sealed abstract class TypeSymbol protected (val name: TypeName, override val owner: Symbol) extends Symbol(owner):
+  sealed abstract class TypeSymbol protected (val name: TypeName, owner: Symbol) extends TermOrTypeSymbol(owner):
     type ThisNameType = TypeName
 
     final def isTypeAlias(using Context): Boolean = this match
@@ -392,17 +464,21 @@ object Symbols {
   end TypeMemberDefinition
 
   sealed trait DeclaringSymbol extends Symbol {
-    private[Symbols] def addDecl(decl: Symbol): Unit
+    type DeclType >: TermOrTypeSymbol <: Symbol
 
-    def getDecls(name: Name)(using Context): List[Symbol]
+    private[Symbols] def addDecl(decl: DeclType): Unit
 
-    def getDecl(name: Name)(using Context): Option[Symbol]
+    def getDecls(name: Name)(using Context): List[DeclType]
+
+    def getDecl(name: Name)(using Context): Option[DeclType]
 
     /** Note: this will force all trees in a package */
-    def declarations(using Context): List[Symbol]
+    def declarations(using Context): List[DeclType]
   }
 
   final class ClassSymbol private (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner) with DeclaringSymbol {
+    type DeclType = TermOrTypeSymbol
+
     // Reference fields (checked in doCheckCompleted)
     private var myTypeParams: List[ClassTypeParamSymbol] | Null = null
     private var myParentsInit: (() => List[Type]) | Null = null
@@ -412,8 +488,8 @@ object Symbols {
     private var mySpecialErasure: Option[() => ErasedTypeRef] = None
 
     // DeclaringSymbol-related fields
-    private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[Symbol]] =
-      mutable.HashMap[Name, mutable.HashSet[Symbol]]()
+    private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[TermOrTypeSymbol]] =
+      mutable.HashMap[Name, mutable.HashSet[TermOrTypeSymbol]]()
 
     // Cache fields
     private var myLinearization: List[ClassSymbol] | Null = null
@@ -519,7 +595,7 @@ object Symbols {
 
     // DeclaringSymbol implementation
 
-    private[Symbols] final def addDecl(decl: Symbol): Unit =
+    private[Symbols] final def addDecl(decl: TermOrTypeSymbol): Unit =
       val set = myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet)
       if decl.isType then assert(set.isEmpty, s"trying to add a second entry $decl for type name ${decl.name} in $this")
       set += decl
@@ -529,12 +605,12 @@ object Symbols {
         case Some(decls) => decls.sizeIs > 1
         case _           => false
 
-    final def getDecls(name: Name)(using Context): List[Symbol] =
+    final def getDecls(name: Name)(using Context): List[TermOrTypeSymbol] =
       name match
         case name: SignedName => getDecl(name).toList
         case _                => myDeclarations.get(name).fold(Nil)(_.toList)
 
-    final def getDecl(name: Name)(using Context): Option[Symbol] =
+    final def getDecl(name: Name)(using Context): Option[TermOrTypeSymbol] =
       name match
         case overloaded: SignedName =>
           distinguishOverloaded(overloaded)
@@ -548,7 +624,7 @@ object Symbols {
             case _ => None
     end getDecl
 
-    private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[Symbol] =
+    private final def distinguishOverloaded(overloaded: SignedName)(using Context): Option[TermOrTypeSymbol] =
       myDeclarations.get(overloaded.underlying) match
         case Some(overloads) =>
           overloads.find {
@@ -558,7 +634,7 @@ object Symbols {
         case None => None
     end distinguishOverloaded
 
-    final def declarations(using Context): List[Symbol] =
+    final def declarations(using Context): List[TermOrTypeSymbol] =
       myDeclarations.values.toList.flatten
 
     // Type-related things
@@ -633,7 +709,7 @@ object Symbols {
     end findMember
 
     /** Get the self type of this class, as if viewed from an external package */
-    private[tastyquery] final def accessibleThisType: Type =
+    private[tastyquery] final def accessibleThisType: TypeRef =
       maybeOuter match
         case pre: PackageSymbol => TypeRef(pre.packageRef, this)
         case pre: ClassSymbol   => TypeRef(pre.accessibleThisType, this)
@@ -652,6 +728,20 @@ object Symbols {
         val typeRef = TypeRef(pre, this)
         myTypeRef = typeRef
         typeRef
+
+    private var myThisType: ThisType | Null = null
+
+    /** The `ThisType` for this class, as visible from inside this class. */
+    private[tastyquery] final def thisType(using Context): ThisType =
+      val local = myThisType
+      if local != null then local
+      else
+        val computed = owner match
+          case owner: ClassSymbol => ThisType(TypeRef(owner.thisType, this))
+          case _                  => ThisType(typeRef)
+        myThisType = computed
+        computed
+    end thisType
   }
 
   object ClassSymbol:
@@ -676,6 +766,7 @@ object Symbols {
       extends Symbol(owner)
       with DeclaringSymbol {
     type ThisNameType = SimpleName
+    type DeclType = Symbol
 
     // DeclaringSymbol-related fields
     private var rootsInitialized: Boolean = false

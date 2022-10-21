@@ -429,6 +429,37 @@ object Types {
     /** Is self type bounded by a type lambda or AnyKind? */
     private[tastyquery] final def isLambdaSub(using Context): Boolean = false // TODO hkResult.exists
 
+    /** Is this type close enough to that type so that members with the two types would override each other?
+      *
+      * This means:
+      *
+      * - Either both types are polytypes with the same number of
+      *   type parameters and their result types match after renaming
+      *   corresponding type parameters
+      * - Or both types are method types with `=:=`-equivalent(*) parameter types
+      *   and matching result types after renaming corresponding parameter types
+      *   if the method types are dependent.
+      * - Or both types are `=:=`-equivalent
+      * - Or neither type takes term or type parameters.
+      *
+      * (*) when matching with a Java method, we also regard Any and Object as equivalent parameter types. (TODO)
+      *
+      * This function will always use unsafe-nulls semamtics to check the types.
+      * This is because we are using a relaxed rule (ignoring `Null` types)
+      * to check overriding Java methods.
+      */
+    final def matches(that: Type)(using Context): Boolean =
+      TypeOps.matchesType(this, that)
+
+    /** This is the same as `matches` except that it also matches `=> T` with `T` and vice versa. */
+    final def matchesLoosely(that: Type)(using Context): Boolean =
+      this.matches(that) || {
+        val thisResult = this.widenExpr
+        val thatResult = that.widenExpr
+        (this eq thisResult) != (that eq thatResult) && thisResult.matches(thatResult)
+      }
+    end matchesLoosely
+
     // Combinators
 
     final def &(that: Type)(using Context): Type =
@@ -439,7 +470,7 @@ object Types {
       // TypeCompare.lub(this, that)
       OrType.make(this, that)
 
-    final def select(sym: Symbol)(using Context): Type =
+    final def select(sym: TermOrTypeSymbol)(using Context): Type =
       NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
 
     final def select(name: Name)(using Context): NamedType =
@@ -549,9 +580,9 @@ object Types {
     self =>
 
     type ThisName <: Name
-    type ThisSymbolType <: Symbol { type ThisNameType = ThisName }
+    type ThisSymbolType <: TermOrTypeSymbol { type ThisNameType = ThisName }
     type ThisNamedType >: this.type <: NamedType
-    protected type ThisDesignatorType >: ThisSymbolType <: Symbol | Name | LookupIn | Scala2ExternalSymRef
+    protected type ThisDesignatorType >: ThisSymbolType <: TermOrTypeSymbol | Name | LookupIn | Scala2ExternalSymRef
 
     val prefix: Type
 
@@ -560,7 +591,7 @@ object Types {
     protected def storeComputedSymbol(sym: ThisSymbolType): Unit
 
     // For tests
-    private[tastyquery] final def designatorInternal: Symbol | Name | LookupIn | Scala2ExternalSymRef =
+    private[tastyquery] final def designatorInternal: TermOrTypeSymbol | Name | LookupIn | Scala2ExternalSymRef =
       designator
 
     private var myName: ThisName | Null = null
@@ -588,7 +619,7 @@ object Types {
 
     private def computeName: ThisName = (designator match {
       case name: Name                       => name
-      case sym: Symbol                      => sym.name
+      case sym: TermOrTypeSymbol            => sym.name
       case LookupIn(_, sel)                 => sel
       case designator: Scala2ExternalSymRef => designator.name
     }).asInstanceOf[ThisName]
@@ -608,7 +639,7 @@ object Types {
     protected def asThisSymbolType(sym: Symbol): ThisSymbolType
 
     private def computeSymbol()(using Context): Symbol = designator match
-      case sym: Symbol =>
+      case sym: TermOrTypeSymbol =>
         sym
       case LookupIn(pre, name) =>
         TermRef(pre, name).symbol
@@ -707,11 +738,11 @@ object Types {
           case sym: TermSymbol =>
             val refinedSym = prefix.findMember(sym.signedName, prefix).asTerm
             TermRef(prefix, refinedSym)
+          case sym: TypeMemberSymbol =>
+            val refinedSym = prefix.findMember(sym.name, prefix).asType
+            TypeRef(prefix, refinedSym)
           case sym: TypeSymbol =>
-            if !sym.isClass && !prefix.isArgPrefixOf(sym) then
-              val refinedSym = prefix.findMember(sym.name, prefix).asType
-              TypeRef(prefix, refinedSym)
-            else TypeRef(prefix, sym)
+            TypeRef(prefix, sym)
           case desig =>
             withPrefix(prefix, cachedSymbol = null)
       }
@@ -737,11 +768,10 @@ object Types {
       case prefix =>
         apply(prefix, name)
 
-    def apply(prefix: Type, sym: Symbol)(using Context): NamedType =
+    def apply(prefix: Type, sym: TermOrTypeSymbol)(using Context): NamedType =
       sym match
         case sym: TypeSymbol => TypeRef(prefix, sym)
         case sym: TermSymbol => TermRef(prefix, sym)
-        case _               => throw IllegalArgumentException(s"Invalid symbol $sym for NamedType")
 
     def apply(prefix: Type, name: Name)(using Context): NamedType =
       name match

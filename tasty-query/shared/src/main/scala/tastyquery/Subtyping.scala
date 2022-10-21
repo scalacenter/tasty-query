@@ -8,8 +8,12 @@ import tastyquery.Types.*
 import tastyquery.TypeMaps.*
 
 private[tastyquery] object Subtyping:
+  def isSameType(tp1: Type, tp2: Type)(using Context): Boolean =
+    isSubtype(tp1, tp2) && isSubtype(tp2, tp1)
+
   def isSubtype(tp1: Type, tp2: Type)(using Context): Boolean =
-    level1(tp1, tp2)
+    // `eq` is semantically important for identity-based types such as `TypeParamRef`
+    (tp1 eq tp2) || level1(tp1, tp2)
 
   private def level1(tp1: Type, tp2: Type)(using Context): Boolean = tp2 match
     case tp2: NamedType =>

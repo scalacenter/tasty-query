@@ -2,7 +2,7 @@ package tastyquery
 
 import scala.collection.mutable
 
-import tastyquery.Contexts.Context
+import tastyquery.Contexts.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
@@ -763,7 +763,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   testWithContext("poly-type-in-higher-kinded") {
     val HigherKindedClass = resolve(name"simple_trees" / tname"HigherKinded").asClass
     val polyMethod = HigherKindedClass.getDecl(name"m").get.asTerm
-    println(polyMethod.declaredType.asInstanceOf[PolyType].resultType)
+    assert(polyMethod.declaredType.asInstanceOf[PolyType].resultType.isInstanceOf[MethodType])
   }
 
   testWithContext("scala.collection.:+") {
@@ -776,5 +776,437 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     scala.declarations
 
     val StringBuilder = resolve(RootPkg / name"scala" / name"collection" / name"mutable" / tname"StringBuilder").asClass
+  }
+
+  testWithContext("overrides-mono-no-overloads") {
+    val OverridesPath = name"inheritance" / tname"Overrides" / obj
+    val SuperMonoClass = resolve(OverridesPath / tname"SuperMono").asClass
+    val SuperMonoTraitClass = resolve(OverridesPath / tname"SuperMonoTrait").asClass
+    val MidMonoClass = resolve(OverridesPath / tname"MidMono").asClass
+    val ChildMonoClass = resolve(OverridesPath / tname"ChildMono").asClass
+
+    val fooInSuper = SuperMonoClass.getDecl(name"foo").get.asTerm
+    val fooInChild = ChildMonoClass.getDecl(name"foo").get.asTerm
+
+    val barInSuperTrait = SuperMonoTraitClass.getDecl(name"bar").get.asTerm
+    val barInChild = ChildMonoClass.getDecl(name"bar").get.asTerm
+
+    val foobazInSuper = SuperMonoClass.getDecl(name"foobaz").get.asTerm
+    val foobazInChild = ChildMonoClass.getDecl(name"foobaz").get.asTerm
+
+    // From fooInSuper
+
+    assert(clue(fooInSuper.overriddenSymbol(SuperMonoClass)) == Some(fooInSuper))
+    assert(clue(fooInSuper.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(fooInSuper.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(fooInSuper.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(clue(fooInSuper.overridingSymbol(SuperMonoClass)) == Some(fooInSuper))
+    assert(clue(fooInSuper.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(fooInSuper.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(fooInSuper.overridingSymbol(ChildMonoClass)) == Some(fooInChild))
+
+    assert(clue(fooInSuper.allOverriddenSymbols.toList) == Nil)
+    assert(clue(fooInSuper.nextOverriddenSymbol) == None)
+
+    // From fooInChild
+
+    assert(clue(fooInChild.overriddenSymbol(SuperMonoClass)) == Some(fooInSuper))
+    assert(clue(fooInChild.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(fooInChild.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(fooInChild.overriddenSymbol(ChildMonoClass)) == Some(fooInChild))
+
+    assert(clue(fooInChild.overridingSymbol(SuperMonoClass)) == None)
+    assert(clue(fooInChild.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(fooInChild.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(fooInChild.overridingSymbol(ChildMonoClass)) == Some(fooInChild))
+
+    assert(clue(fooInChild.allOverriddenSymbols.toList) == List(fooInSuper))
+    assert(clue(fooInChild.nextOverriddenSymbol) == Some(fooInSuper))
+
+    // From barInSuperTrait
+
+    assert(clue(barInSuperTrait.overriddenSymbol(SuperMonoClass)) == None)
+    assert(clue(barInSuperTrait.overriddenSymbol(SuperMonoTraitClass)) == Some(barInSuperTrait))
+    assert(clue(barInSuperTrait.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(barInSuperTrait.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(clue(barInSuperTrait.overridingSymbol(SuperMonoClass)) == None)
+    assert(clue(barInSuperTrait.overridingSymbol(SuperMonoTraitClass)) == Some(barInSuperTrait))
+    assert(clue(barInSuperTrait.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(barInSuperTrait.overridingSymbol(ChildMonoClass)) == Some(barInChild))
+
+    assert(clue(barInSuperTrait.allOverriddenSymbols.toList) == Nil)
+    assert(clue(barInSuperTrait.nextOverriddenSymbol) == None)
+
+    // From barInChild
+
+    assert(clue(barInChild.overriddenSymbol(SuperMonoClass)) == None)
+    assert(clue(barInChild.overriddenSymbol(SuperMonoTraitClass)) == Some(barInSuperTrait))
+    assert(clue(barInChild.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(barInChild.overriddenSymbol(ChildMonoClass)) == Some(barInChild))
+
+    assert(clue(barInChild.overridingSymbol(SuperMonoClass)) == None)
+    assert(clue(barInChild.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(barInChild.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(barInChild.overridingSymbol(ChildMonoClass)) == Some(barInChild))
+
+    assert(clue(barInChild.allOverriddenSymbols.toList) == List(barInSuperTrait))
+    assert(clue(barInChild.nextOverriddenSymbol) == Some(barInSuperTrait))
+
+    // From foobazInSuper
+
+    assert(clue(foobazInSuper.overriddenSymbol(SuperMonoClass)) == Some(foobazInSuper))
+    assert(clue(foobazInSuper.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(foobazInSuper.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(foobazInSuper.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(clue(foobazInSuper.overridingSymbol(SuperMonoClass)) == Some(foobazInSuper))
+    assert(clue(foobazInSuper.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(foobazInSuper.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(foobazInSuper.overridingSymbol(ChildMonoClass)) == Some(foobazInChild))
+
+    assert(clue(foobazInSuper.allOverriddenSymbols.toList) == Nil)
+    assert(clue(foobazInSuper.nextOverriddenSymbol) == None)
+
+    // From foobazInChild
+
+    assert(clue(foobazInChild.overriddenSymbol(SuperMonoClass)) == Some(foobazInSuper))
+    assert(clue(foobazInChild.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(foobazInChild.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(foobazInChild.overriddenSymbol(ChildMonoClass)) == Some(foobazInChild))
+
+    assert(clue(foobazInChild.overridingSymbol(SuperMonoClass)) == None)
+    assert(clue(foobazInChild.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(foobazInChild.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(foobazInChild.overridingSymbol(ChildMonoClass)) == Some(foobazInChild))
+
+    assert(clue(foobazInChild.allOverriddenSymbols.toList) == List(foobazInSuper))
+    assert(clue(foobazInChild.nextOverriddenSymbol) == Some(foobazInSuper))
+  }
+
+  testWithContext("overrides-mono-overloads") {
+    val OverridesPath = name"inheritance" / tname"Overrides" / obj
+    val SuperMonoClass = resolve(OverridesPath / tname"SuperMono").asClass
+    val SuperMonoTraitClass = resolve(OverridesPath / tname"SuperMonoTrait").asClass
+    val MidMonoClass = resolve(OverridesPath / tname"MidMono").asClass
+    val ChildMonoClass = resolve(OverridesPath / tname"ChildMono").asClass
+
+    val IntClass = defn.IntClass
+    val StringClass = defn.StringClass
+
+    extension (meth: TermSymbol)
+      def firstParamTypeIsRef(cls: Symbol): Boolean =
+        meth.declaredType.asInstanceOf[MethodType].paramTypes.head.isRef(cls)
+      def typeParamCountIs(count: Int): Boolean =
+        meth.declaredType.asInstanceOf[PolyType].paramNames.sizeIs == count
+
+    val overloadedInSuper = SuperMonoClass.getDecls(name"overloaded").map(_.asTerm)
+    val intInSuper = overloadedInSuper.find(_.firstParamTypeIsRef(IntClass)).get
+    val stringInSuper = overloadedInSuper.find(_.firstParamTypeIsRef(StringClass)).get
+
+    val overloadedInChild = ChildMonoClass.getDecls(name"overloaded").map(_.asTerm)
+    val intInChild = overloadedInChild.find(_.firstParamTypeIsRef(IntClass)).get
+    val stringInChild = overloadedInChild.find(_.firstParamTypeIsRef(StringClass)).get
+
+    val polyInSuper = SuperMonoClass.getDecls(name"overloadedPoly").map(_.asTerm)
+    val poly1InSuper = polyInSuper.find(_.typeParamCountIs(1)).get
+    val poly2InSuper = polyInSuper.find(_.typeParamCountIs(2)).get
+
+    val polyInChild = ChildMonoClass.getDecls(name"overloadedPoly").map(_.asTerm)
+    val poly1InChild = polyInChild.find(_.typeParamCountIs(1)).get
+    val poly2InChild = polyInChild.find(_.typeParamCountIs(2)).get
+
+    // From intInSuper
+
+    assert(clue(intInSuper.overriddenSymbol(SuperMonoClass)) == Some(intInSuper))
+    assert(clue(intInSuper.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(intInSuper.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(intInSuper.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(clue(intInSuper.overridingSymbol(SuperMonoClass)) == Some(intInSuper))
+    assert(clue(intInSuper.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(intInSuper.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(intInSuper.overridingSymbol(ChildMonoClass)) == Some(intInChild))
+
+    assert(clue(intInSuper.allOverriddenSymbols.toList) == Nil)
+    assert(clue(intInSuper.nextOverriddenSymbol) == None)
+
+    // From intInChild
+
+    assert(clue(intInChild.overriddenSymbol(SuperMonoClass)) == Some(intInSuper))
+    assert(clue(intInChild.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(intInChild.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(intInChild.overriddenSymbol(ChildMonoClass)) == Some(intInChild))
+
+    assert(clue(intInChild.overridingSymbol(SuperMonoClass)) == None)
+    assert(clue(intInChild.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(intInChild.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(intInChild.overridingSymbol(ChildMonoClass)) == Some(intInChild))
+
+    assert(clue(intInChild.allOverriddenSymbols.toList) == List(intInSuper))
+    assert(clue(intInChild.nextOverriddenSymbol) == Some(intInSuper))
+
+    // From stringInSuper
+
+    assert(clue(stringInSuper.overriddenSymbol(SuperMonoClass)) == Some(stringInSuper))
+    assert(clue(stringInSuper.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(stringInSuper.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(stringInSuper.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(clue(stringInSuper.overridingSymbol(SuperMonoClass)) == Some(stringInSuper))
+    assert(clue(stringInSuper.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(stringInSuper.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(stringInSuper.overridingSymbol(ChildMonoClass)) == Some(stringInChild))
+
+    assert(clue(stringInSuper.allOverriddenSymbols.toList) == Nil)
+    assert(clue(stringInSuper.nextOverriddenSymbol) == None)
+
+    // From stringInChild
+
+    assert(clue(stringInChild.overriddenSymbol(SuperMonoClass)) == Some(stringInSuper))
+    assert(clue(stringInChild.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(stringInChild.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(stringInChild.overriddenSymbol(ChildMonoClass)) == Some(stringInChild))
+
+    assert(clue(stringInChild.overridingSymbol(SuperMonoClass)) == None)
+    assert(clue(stringInChild.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(stringInChild.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(stringInChild.overridingSymbol(ChildMonoClass)) == Some(stringInChild))
+
+    assert(clue(stringInChild.allOverriddenSymbols.toList) == List(stringInSuper))
+    assert(clue(stringInChild.nextOverriddenSymbol) == Some(stringInSuper))
+
+    // From poly1InSuper
+
+    assert(clue(poly1InSuper.overriddenSymbol(SuperMonoClass)) == Some(poly1InSuper))
+    assert(clue(poly1InSuper.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(poly1InSuper.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(poly1InSuper.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(clue(poly1InSuper.overridingSymbol(SuperMonoClass)) == Some(poly1InSuper))
+    assert(clue(poly1InSuper.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(poly1InSuper.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(poly1InSuper.overridingSymbol(ChildMonoClass)) == Some(poly1InChild))
+
+    assert(clue(poly1InSuper.allOverriddenSymbols.toList) == Nil)
+    assert(clue(poly1InSuper.nextOverriddenSymbol) == None)
+
+    // From poly1InChild
+
+    assert(clue(poly1InChild.overriddenSymbol(SuperMonoClass)) == Some(poly1InSuper))
+    assert(clue(poly1InChild.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(poly1InChild.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(poly1InChild.overriddenSymbol(ChildMonoClass)) == Some(poly1InChild))
+
+    assert(clue(poly1InChild.overridingSymbol(SuperMonoClass)) == None)
+    assert(clue(poly1InChild.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(poly1InChild.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(poly1InChild.overridingSymbol(ChildMonoClass)) == Some(poly1InChild))
+
+    assert(clue(poly1InChild.allOverriddenSymbols.toList) == List(poly1InSuper))
+    assert(clue(poly1InChild.nextOverriddenSymbol) == Some(poly1InSuper))
+
+    // From poly2InSuper
+
+    assert(clue(poly2InSuper.overriddenSymbol(SuperMonoClass)) == Some(poly2InSuper))
+    assert(clue(poly2InSuper.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(poly2InSuper.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(poly2InSuper.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(clue(poly2InSuper.overridingSymbol(SuperMonoClass)) == Some(poly2InSuper))
+    assert(clue(poly2InSuper.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(poly2InSuper.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(poly2InSuper.overridingSymbol(ChildMonoClass)) == Some(poly2InChild))
+
+    assert(clue(poly2InSuper.allOverriddenSymbols.toList) == Nil)
+    assert(clue(poly2InSuper.nextOverriddenSymbol) == None)
+
+    // From poly2InChild
+
+    assert(clue(poly2InChild.overriddenSymbol(SuperMonoClass)) == Some(poly2InSuper))
+    assert(clue(poly2InChild.overriddenSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(poly2InChild.overriddenSymbol(MidMonoClass)) == None)
+    assert(clue(poly2InChild.overriddenSymbol(ChildMonoClass)) == Some(poly2InChild))
+
+    assert(clue(poly2InChild.overridingSymbol(SuperMonoClass)) == None)
+    assert(clue(poly2InChild.overridingSymbol(SuperMonoTraitClass)) == None)
+    assert(clue(poly2InChild.overridingSymbol(MidMonoClass)) == None)
+    assert(clue(poly2InChild.overridingSymbol(ChildMonoClass)) == Some(poly2InChild))
+
+    assert(clue(poly2InChild.allOverriddenSymbols.toList) == List(poly2InSuper))
+    assert(clue(poly2InChild.nextOverriddenSymbol) == Some(poly2InSuper))
+  }
+
+  testWithContext("overrides-cannot-override") {
+    val OverridesPath = name"inheritance" / tname"Overrides" / obj
+    val SuperMonoClass = resolve(OverridesPath / tname"SuperMono").asClass
+    val ChildMonoClass = resolve(OverridesPath / tname"ChildMono").asClass
+
+    val superCtor = SuperMonoClass.getDecl(nme.Constructor).get.asTerm
+    val childCtor = ChildMonoClass.getDecl(nme.Constructor).get.asTerm
+
+    val superPrivate = SuperMonoClass.getDecl(name"privateMethod").get.asTerm
+    val childPrivate = ChildMonoClass.getDecl(name"privateMethod").get.asTerm
+
+    // From superCtor
+
+    assert(clue(superCtor.overriddenSymbol(SuperMonoClass)) == Some(superCtor))
+    assert(clue(superCtor.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(clue(superCtor.overridingSymbol(SuperMonoClass)) == Some(superCtor))
+    assert(clue(superCtor.overridingSymbol(ChildMonoClass)) == None)
+
+    assert(clue(superCtor.allOverriddenSymbols.toList) == Nil)
+    assert(clue(superCtor.nextOverriddenSymbol) == None)
+
+    // From childCtor
+
+    assert(clue(childCtor.overriddenSymbol(SuperMonoClass)) == None)
+    assert(clue(childCtor.overriddenSymbol(ChildMonoClass)) == Some(childCtor))
+
+    assert(clue(childCtor.overridingSymbol(SuperMonoClass)) == None)
+    assert(clue(childCtor.overridingSymbol(ChildMonoClass)) == Some(childCtor))
+
+    assert(clue(childCtor.allOverriddenSymbols.toList) == Nil)
+    assert(clue(childCtor.nextOverriddenSymbol) == None)
+
+    // From superPrivate
+
+    assert(clue(superPrivate.overriddenSymbol(SuperMonoClass)) == Some(superPrivate))
+    assert(clue(superPrivate.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(clue(superPrivate.overridingSymbol(SuperMonoClass)) == Some(superPrivate))
+    assert(clue(superPrivate.overridingSymbol(ChildMonoClass)) == None)
+
+    assert(clue(superPrivate.allOverriddenSymbols.toList) == Nil)
+    assert(clue(superPrivate.nextOverriddenSymbol) == None)
+
+    // From childPrivate
+
+    assert(clue(childPrivate.overriddenSymbol(SuperMonoClass)) == None)
+    assert(clue(childPrivate.overriddenSymbol(ChildMonoClass)) == Some(childPrivate))
+
+    assert(clue(childPrivate.overridingSymbol(SuperMonoClass)) == None)
+    assert(clue(childPrivate.overridingSymbol(ChildMonoClass)) == Some(childPrivate))
+
+    assert(clue(childPrivate.allOverriddenSymbols.toList) == Nil)
+    assert(clue(childPrivate.nextOverriddenSymbol) == None)
+  }
+
+  testWithContext("overrides-poly") {
+    val OverridesPath = name"inheritance" / tname"Overrides" / obj
+    val SuperPolyClass = resolve(OverridesPath / tname"SuperPoly").asClass
+    val ChildPolyClass = resolve(OverridesPath / tname"ChildPoly").asClass
+
+    val List(superPolyA, superPolyB) = SuperPolyClass.typeParams: @unchecked
+    val List(childPolyX) = ChildPolyClass.typeParams: @unchecked
+
+    val IntClass = defn.IntClass
+
+    extension (meth: TermSymbol)
+      def firstParamTypeIsRef(cls: Symbol): Boolean =
+        meth.declaredType.asInstanceOf[MethodType].paramTypes.head.isRef(cls)
+
+    val fooInSuper = SuperPolyClass.getDecls(name"foo").map(_.asTerm)
+    val fooAInSuper = fooInSuper.find(_.firstParamTypeIsRef(superPolyA)).get
+    val fooBInSuper = fooInSuper.find(_.firstParamTypeIsRef(superPolyB)).get
+
+    val fooInChild = ChildPolyClass.getDecls(name"foo").map(_.asTerm)
+    val fooXInChild = fooInChild.find(_.firstParamTypeIsRef(childPolyX)).get
+    val fooIntInChild = fooInChild.find(_.firstParamTypeIsRef(IntClass)).get
+
+    // From fooAInSuper
+
+    assert(clue(fooAInSuper.overriddenSymbol(SuperPolyClass)) == Some(fooAInSuper))
+    assert(clue(fooAInSuper.overriddenSymbol(ChildPolyClass)) == None)
+
+    assert(clue(fooAInSuper.overridingSymbol(SuperPolyClass)) == Some(fooAInSuper))
+    assert(clue(fooAInSuper.overridingSymbol(ChildPolyClass)) == Some(fooXInChild))
+
+    assert(clue(fooAInSuper.allOverriddenSymbols.toList) == Nil)
+    assert(clue(fooAInSuper.nextOverriddenSymbol) == None)
+
+    // From fooXInChild
+
+    assert(clue(fooXInChild.overriddenSymbol(SuperPolyClass)) == Some(fooAInSuper))
+    assert(clue(fooXInChild.overriddenSymbol(ChildPolyClass)) == Some(fooXInChild))
+
+    assert(clue(fooXInChild.overridingSymbol(SuperPolyClass)) == None)
+    assert(clue(fooXInChild.overridingSymbol(ChildPolyClass)) == Some(fooXInChild))
+
+    assert(clue(fooXInChild.allOverriddenSymbols.toList) == List(fooAInSuper))
+    assert(clue(fooXInChild.nextOverriddenSymbol) == Some(fooAInSuper))
+
+    // From fooBInSuper
+
+    assert(clue(fooBInSuper.overriddenSymbol(SuperPolyClass)) == Some(fooBInSuper))
+    assert(clue(fooBInSuper.overriddenSymbol(ChildPolyClass)) == None)
+
+    assert(clue(fooBInSuper.overridingSymbol(SuperPolyClass)) == Some(fooBInSuper))
+    assert(clue(fooBInSuper.overridingSymbol(ChildPolyClass)) == Some(fooIntInChild))
+
+    assert(clue(fooBInSuper.allOverriddenSymbols.toList) == Nil)
+    assert(clue(fooBInSuper.nextOverriddenSymbol) == None)
+
+    // From fooIntInChild
+
+    assert(clue(fooIntInChild.overriddenSymbol(SuperPolyClass)) == Some(fooBInSuper))
+    assert(clue(fooIntInChild.overriddenSymbol(ChildPolyClass)) == Some(fooIntInChild))
+
+    assert(clue(fooIntInChild.overridingSymbol(SuperPolyClass)) == None)
+    assert(clue(fooIntInChild.overridingSymbol(ChildPolyClass)) == Some(fooIntInChild))
+
+    assert(clue(fooIntInChild.allOverriddenSymbols.toList) == List(fooBInSuper))
+    assert(clue(fooIntInChild.nextOverriddenSymbol) == Some(fooBInSuper))
+  }
+
+  testWithContext("overrides-relaxed") {
+    val OverridesPath = name"inheritance" / tname"Overrides" / obj
+    val SuperMonoClass = resolve(OverridesPath / tname"SuperMono").asClass
+    val ChildMonoClass = resolve(OverridesPath / tname"ChildMono").asClass
+
+    val objectToString = defn.ObjectClass.getDecl(name"toString").get.asTerm
+    val superToString = SuperMonoClass.getDecl(name"toString").get.asTerm
+    val childToString = ChildMonoClass.getDecl(name"toString").get.asTerm
+
+    // From objectToString
+
+    assert(clue(objectToString.overriddenSymbol(defn.ObjectClass)) == Some(objectToString))
+    assert(clue(objectToString.overriddenSymbol(SuperMonoClass)) == None)
+    assert(clue(objectToString.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(clue(objectToString.overridingSymbol(defn.ObjectClass)) == Some(objectToString))
+    assert(clue(objectToString.overridingSymbol(SuperMonoClass)) == Some(superToString))
+    assert(clue(objectToString.overridingSymbol(ChildMonoClass)) == Some(childToString))
+
+    assert(clue(objectToString.allOverriddenSymbols.toList) == Nil)
+    assert(clue(objectToString.nextOverriddenSymbol) == None)
+
+    // From superToString
+
+    assert(clue(superToString.overriddenSymbol(defn.ObjectClass)) == Some(objectToString))
+    assert(clue(superToString.overriddenSymbol(SuperMonoClass)) == Some(superToString))
+    assert(clue(superToString.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(clue(superToString.overridingSymbol(defn.ObjectClass)) == None)
+    assert(clue(superToString.overridingSymbol(SuperMonoClass)) == Some(superToString))
+    assert(clue(superToString.overridingSymbol(ChildMonoClass)) == Some(childToString))
+
+    assert(clue(superToString.allOverriddenSymbols.toList) == List(objectToString))
+    assert(clue(superToString.nextOverriddenSymbol) == Some(objectToString))
+
+    // From childToString
+
+    assert(clue(childToString.overriddenSymbol(defn.ObjectClass)) == Some(objectToString))
+    assert(clue(childToString.overriddenSymbol(SuperMonoClass)) == Some(superToString))
+    assert(clue(childToString.overriddenSymbol(ChildMonoClass)) == Some(childToString))
+
+    assert(clue(childToString.overridingSymbol(defn.ObjectClass)) == None)
+    assert(clue(childToString.overridingSymbol(SuperMonoClass)) == None)
+    assert(clue(childToString.overridingSymbol(ChildMonoClass)) == Some(childToString))
+
+    assert(clue(childToString.allOverriddenSymbols.toList) == List(superToString, objectToString))
+    assert(clue(childToString.nextOverriddenSymbol) == Some(superToString))
   }
 }
