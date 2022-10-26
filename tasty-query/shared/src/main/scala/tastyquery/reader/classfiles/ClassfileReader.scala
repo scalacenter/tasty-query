@@ -19,25 +19,33 @@ private[classfiles] final class ClassfileReader private () {
 
   transparent inline def pool(using pool: ConstantPool): pool.type = pool
 
-  def acceptHeader()(using DataStream): Unit = {
-    acceptMagicNumber()
-    acceptVersion()
+  def acceptHeader(classOwner: DeclaringSymbol, classRoot: ClassData)(using DataStream): Unit = {
+    acceptMagicNumber(classOwner, classRoot)
+    acceptVersion(classOwner, classRoot)
   }
 
-  private def acceptMagicNumber()(using DataStream): Unit = {
+  private def rootName(classOwner: DeclaringSymbol, classRoot: ClassData): String =
+    s"${classOwner.fullName}.${classRoot.binaryName}"
+
+  private def acceptMagicNumber(classOwner: DeclaringSymbol, classRoot: ClassData)(using DataStream): Unit = {
     val magic = data.readU4()
     if magic != JavaMagicNumber then
+      val root = rootName(classOwner, classRoot)
       throw ClassfileFormatException(
-        s"Invalid magic number ${magic.toHexString}, should be ${JavaMagicNumber.toHexString}"
+        s"Invalid magic number ${magic.toHexString}, should be ${JavaMagicNumber.toHexString} in $root"
       )
   }
 
-  private def acceptVersion()(using DataStream): Unit = {
+  private def acceptVersion(classOwner: DeclaringSymbol, classRoot: ClassData)(using DataStream): Unit = {
     val minor = data.readU2()
     val major = data.readU2()
     if (major < JavaMajorVersion)
       || (major == JavaMajorVersion && minor < JavaMinorVersion)
-    then throw ClassfileFormatException(s"Invalid class file version $major.$minor, should be at least 45.4")
+    then
+      val root = rootName(classOwner, classRoot)
+      throw ClassfileFormatException(
+        s"Invalid class file version $major.$minor, should be at least $JavaMajorVersion.$JavaMinorVersion in $root"
+      )
   }
 
   def readConstantPool()(using DataStream): ConstantPool = {
@@ -349,7 +357,7 @@ private[classfiles] object ClassfileReader {
   import Access.*
 
   inline val JavaMajorVersion = 45
-  inline val JavaMinorVersion = 4
+  inline val JavaMinorVersion = 3 // Java 1.1 (needed for `java.rmi.activation.ActivationGroup_Stub` in rt.jar)
   inline val JavaMagicNumber = 0xcafebabe
 
   private inline def loop(times: Int)(inline op: => Unit): Unit = {
