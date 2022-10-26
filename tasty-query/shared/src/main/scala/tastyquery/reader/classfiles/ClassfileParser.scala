@@ -192,16 +192,16 @@ private[reader] object ClassfileParser {
     )
   }
 
-  private def toplevel(classRoot: ClassData)(using Context): Structure = {
+  private def toplevel(classOwner: DeclaringSymbol, classRoot: ClassData)(using Context): Structure = {
     def headerAndStructure(reader: ClassfileReader)(using DataStream) = {
-      reader.acceptHeader()
+      reader.acceptHeader(classOwner, classRoot)
       structure(reader)(using reader.readConstantPool())
     }
 
     ClassfileReader.unpickle(classRoot)(headerAndStructure)
   }
 
-  def readKind(classRoot: ClassData)(using Context): ClassKind =
-    parse(classRoot, toplevel(classRoot))
+  def readKind(classOwner: DeclaringSymbol, classRoot: ClassData)(using Context): ClassKind =
+    parse(classRoot, toplevel(classOwner, classRoot))
 
 }

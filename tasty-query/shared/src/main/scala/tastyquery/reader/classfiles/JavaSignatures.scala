@@ -247,8 +247,7 @@ private[classfiles] object JavaSignatures:
         if consume('(') then // must have '(', ')', and return type
           val params = termParamsRest(env)
           val ret = result(env)
-          if consume('^') then
-            val _ = throwsSignatureRest(env) // ignored
+          val _ = readWhile('^', throwsSignatureRest(env)) // ignore throws clauses
           MethodType((0 until params.size).map(i => termName(s"x$$$i")).toList, params, ret)
         else abort
       if consume('<') then
@@ -293,7 +292,7 @@ private[classfiles] object JavaSignatures:
 
     def unconsumed: Nothing =
       throw ClassfileFormatException(
-        s"Expected end of descriptor but found $"${signature.slice(offset, end)}$", [is method? $isMethod]"
+        s"Expected end of descriptor but found $"${signature.slice(offset, end)}$", original: `$signature` [is method? $isMethod]"
       )
 
     def abort: Nothing =

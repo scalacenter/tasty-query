@@ -21,8 +21,8 @@ public class BagOfGenJavaDefinitions {
     return new GenericJavaClass[] { x };
   }
 
-  public <X extends Exception> void printX(X x) throws X {
-    // <X:Ljava/lang/Exception;>(TX;)V^TX;
+  public <X extends Exception, Y extends Exception> void printX(X x) throws X, Y {
+    // <X:Ljava/lang/Exception;Y:Ljava/lang/Exception;>(TX;)V^TX;^TY;
     throw x;
   }
 
