@@ -104,7 +104,7 @@ private[classfiles] object JavaSignatures:
     inline def readWhile[T](char: Char, inline op: T): List[T] =
       accumulate(accWhile = true, consume(char))(op)
 
-    def identifier: SimpleName =
+    def identifier(): SimpleName =
       val old = offset
       while available > 0
         && (peek: @switch).match
@@ -130,43 +130,52 @@ private[classfiles] object JavaSignatures:
 
     def typeVariableSignature(env: JavaSignature): Option[Type] =
       if consume('T') then
-        val tname = identifier.toTypeName
+        val tname = identifier().toTypeName
         expect(';')
         env.tparamRef(tname)
       else None
 
     def classTypeSignature(env: JavaSignature): Option[Type] =
-      def readSimpleClassType: TypeRef =
+
+      def packageSpecifierAndRawClass(): TypeRef =
         def followPackages(acc: PackageSymbol): TypeRef =
-          val next = identifier
+          val next = identifier()
           if consume('/') then // must have '/', identifier, and terminal char.
             acc.getPackageDecl(next) match
               case Some(pkg) =>
                 followPackages(pkg)
               case res =>
                 sys.error(s"cannot find package $next in $acc")
-          else TypeRef(PackageRef(acc), next.toTypeName)
+          else TypeRef(acc.packageRef, next.toTypeName)
         end followPackages
 
-        val firstIdent = identifier
+        val firstIdent = identifier()
         if consume('/') then // must have '/', identifier, and terminal char.
           val firstPackage = defn.RootPackage.getPackageDecl(firstIdent).getOrElse {
             sys.error(s"cannot find package $firstIdent in ${defn.RootPackage}")
           }
           followPackages(firstPackage)
-        else TypeRef(PackageRef(FullyQualifiedName.emptyPackageName), firstIdent.toTypeName)
-      end readSimpleClassType
+        else TypeRef(defn.EmptyPackage.packageRef, firstIdent.toTypeName)
+      end packageSpecifierAndRawClass
 
       def simpleClassTypeSignature(clsTpe: TypeRef): Type =
         if consume('<') then // must have '<', '>', and class type
           AppliedType(clsTpe, typeArgumentsRest(env))
         else clsTpe
-      end simpleClassTypeSignature
+
+      def classTypeSignatureRest(pre: Type): Type =
+        if consume('.') then // must have '.', identifier, and class type
+          val rawClass = TypeRef(pre, identifier().toTypeName)
+          val clsTpe = simpleClassTypeSignature(rawClass)
+          classTypeSignatureRest(clsTpe)
+        else
+          expect(';')
+          pre
+      end classTypeSignatureRest
 
       if consume('L') then // must have 'L', identifier, and ';'.
-        val clsTpe = simpleClassTypeSignature(readSimpleClassType)
-        if consume(';') then Some(clsTpe)
-        else None // TODO: read type arguments, inner classes
+        val pre = simpleClassTypeSignature(packageSpecifierAndRawClass())
+        Some(classTypeSignatureRest(pre))
       else None
     end classTypeSignature
 
@@ -187,7 +196,7 @@ private[classfiles] object JavaSignatures:
       readUntil('>', typeArgument(env))
 
     def typeParameter(env: JavaSignature): TypeBounds =
-      val tname = identifier.toTypeName
+      val tname = identifier().toTypeName
       val classBound =
         expect(':')
         referenceTypeSignature(env) match

@@ -9,6 +9,7 @@ import tastyquery.Symbols.*
 
 import Paths.*
 import tastyquery.Trees.{ClassDef, ValDef}
+import tastyquery.Types.*
 
 class SymbolSuite extends RestrictedUnpicklingSuite {
   val empty_class = RootPkg / name"empty_class"
@@ -20,6 +21,10 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   val jlObject = RootPkg / name"java" / name"lang" / tname"Object"
   val scUnit = RootPkg / name"scala" / tname"Unit"
   val scAnyVal = RootPkg / name"scala" / tname"AnyVal"
+
+  val jlCloneable = name"java" / name"lang" / tname"Cloneable"
+  val jioSerializable = name"java" / name"io" / tname"Serializable"
+  val javaFunction1 = name"java" / name"util" / name"function" / tname"Function"
 
   /** Needed for correct resolving of ctor signatures */
   val fundamentalClasses = Seq(jlObject, scUnit, scAnyVal)
@@ -298,5 +303,37 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val ChildClass = resolve(inheritanceCrossTasty / tname"Child").asClass
     intercept[MemberNotFoundException](ChildClass.parents)
     intercept[MemberNotFoundException](ChildClass.parents) // it's the same exception the second time
+  }
+
+  testWithContext(
+    "resolve-class-mentioning-inner-class",
+    name"java" / name"util" / tname"TreeMap",
+    name"java" / name"util" / tname"AbstractMap",
+    name"java" / name"util" / tname"NavigableMap",
+    name"java" / name"util" / tname"SortedMap",
+    name"java" / name"util" / tname"Map",
+    jlObject,
+    jlCloneable,
+    javaFunction1,
+    jioSerializable
+  ) {
+    val TreeMap = resolve(name"java" / name"util" / tname"TreeMap").asClass
+    val entrySet = TreeMap
+      .getDecls(name"entrySet")
+      .collectFirst {
+        case sym: TermSymbol if !sym.is(Flags.Method) => sym
+      }
+      .get // private field entrySet: Ljava/util/TreeMap<TK;TV;>.EntrySet;
+    val entrySetSelection = entrySet.declaredType match
+      case fieldTpe: ExprType =>
+        fieldTpe.resultType match
+          case sel: TypeRef => sel
+          case _            => fail("expected a type selection")
+      case _ => fail("entrySet is not an ExprType")
+    val expectedMessage =
+      "Cannot find member 'EntrySet' in class symbol[class TreeMap] for prefix " +
+        "AppliedType(TypeRef(PackageRef(java.util), symbol[class TreeMap]), " +
+        "List(TypeRef(NoPrefix, symbol[K]), TypeRef(NoPrefix, symbol[V])))"
+    interceptMessage[MemberNotFoundException](expectedMessage)(entrySetSelection.symbol)
   }
 }
