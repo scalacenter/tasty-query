@@ -1,12 +1,36 @@
 # TASTy Query
 
-TASTy Query will be the basis for all compiler-independent tools that analyze TASTy - an intermediate representation of Scala 3 code.
+TASTy Query is a compiler-independent library to semantically analyze TASTy - an intermediate representation of Scala 3 code.
 
-It scans the classpath to build a map of all definitions in a project.
-Its API will allow users to query the code for a class, inspect signatures of methods, values and types, and compare them.
+It scans the classpath to build a map of all definitions in a project, whether they are defined in Java, Scala 2 or Scala 3.
+Its API allows users to query semantic information about the project:
 
-TASTy Query is still in development.
-It is possible to obtain cursory information about trees, types and symbols in TASTy files, but deep semantic information like subtyping are not there yet.
+* Find classes, methods, fields, and type definitions.
+* Resolve symbol references.
+* Inspect types, and make semantic operations on them such as type equivalence and subtyping.
+* Follow overriding relationships across classes.
+
+In addition, for Scala 3 code, it provides access to the full Trees, allowing for deeper inspection of the code.
+
+TASTy Query is still in development, so it is not unlikely that you will encounter bugs.
+Feel free to file them in our bug tracker.
+Nevertheless, it should already be usable for the most part.
+
+## Usage
+
+Add the following dependency to your build:
+
+```scala
+libraryDependencies += "ch.epfl.scala" %% "tasty-query" % "<latest-version>"
+// or %%% from Scala.js
+```
+
+You can find the latest release in the Releases list on GitHub.
+
+Head over to the [latest API docs](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery.html) to see what's available.
+To get started, create a [`Classpath`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Classpaths$$Classpath.html) using [`ClasspathLoaders.read`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/jdk/ClasspathLoaders$.html).
+Then, create a [`Context`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Contexts$$Context.html) object using [`Contexts.init(classpath)`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Contexts$.html#init-fffffe7c).
+From there, follow the available methods to access [`Symbols`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Symbols$.html), [`Types`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Types$.html) and [`Trees`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Trees$.html).
 
 ## Motivation
 
@@ -226,11 +250,3 @@ We can build a "TASTy verifier" that only performs type *checking*, and verify t
 ## Contributing
 
 Thank you for wanting to contribute! Please read our [contributing guide](CONTRIBUTING.md).
-
-## Example Usage
-
-to scan the TASTy of a several classes, and print the definitions contained within:
-
-```shell
-sbt "tastyQueryJVM/run -cp app.jar:lib.jar lib.Foo app.Bar"
-```
