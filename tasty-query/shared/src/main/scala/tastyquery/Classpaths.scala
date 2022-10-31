@@ -10,14 +10,24 @@ object Classpaths:
     *
     * `binaryName` is the file name without the `.class` extension.
     */
-  final class ClassData(val binaryName: String, val debugPath: String, val bytes: IArray[Byte]):
+  final class ClassData(
+    val binaryName: String,
+    val debugPath: String,
+    val bytes: IArray[Byte],
+    private[tastyquery] val src: AnyRef
+  ):
     override def toString(): String = s"ClassData($binaryName, $debugPath)"
 
   /** In-memory representation of a `.tasty` file.
     *
     * `binaryName` is the file name without the `.class` extension.
     */
-  final class TastyData(val binaryName: String, val debugPath: String, val bytes: IArray[Byte]):
+  final class TastyData(
+    val binaryName: String,
+    val debugPath: String,
+    val bytes: IArray[Byte],
+    private[tastyquery] val src: AnyRef
+  ):
     override def toString(): String = s"TastyData($binaryName, $debugPath)"
 
   /** In-memory representation of an entire classpath.

@@ -61,8 +61,8 @@ object ClasspathLoaders:
             val binaryName =
               if isClassFile then fileContent.name.stripSuffix(".class")
               else fileContent.name.stripSuffix(".tasty")
-            if isClassFile then ClassData(binaryName, fileContent.debugPath, fileContent.content)
-            else TastyData(binaryName, fileContent.debugPath, fileContent.content)
+            if isClassFile then ClassData(binaryName, fileContent.debugPath, fileContent.content, fileContent.entry)
+            else TastyData(binaryName, fileContent.debugPath, fileContent.content, fileContent.entry)
           }
           .map { (packagePath, classAndTastys) =>
             val packageName = packagePath.replace('/', '.').nn
@@ -95,7 +95,7 @@ object ClasspathLoaders:
         val path = join(dir, n)
         cbFuture[Uint8Array](readFile(path, _)).map { content =>
           val contentAsInt8Array = new Int8Array(content.buffer)
-          FileContent(relPath, n, path, IArray.from(contentAsInt8Array.toArray))
+          FileContent(relPath, n, path, IArray.from(contentAsInt8Array.toArray), dir)
         }
       }
 
@@ -131,7 +131,7 @@ object ClasspathLoaders:
     Future.traverse(entries) { entry =>
       entry.async(JSZipInterop.arrayBuffer).toFuture.map { buf =>
         val (packagePath, name) = splitPackagePathAndName(entry.name)
-        new FileContent(packagePath, name, s"$jarPath:${entry.name}", IArray.from(new Int8Array(buf).toArray))
+        new FileContent(packagePath, name, s"$jarPath:${entry.name}", IArray.from(new Int8Array(buf).toArray), jarPath)
       }
     }
   end loadFromZip
@@ -139,7 +139,13 @@ object ClasspathLoaders:
   private def isClassOrTasty(name: String): Boolean =
     name.endsWith(".class") || name.endsWith(".tasty")
 
-  private class FileContent(val packagePath: String, val name: String, val debugPath: String, val content: IArray[Byte])
+  private class FileContent(
+    val packagePath: String,
+    val name: String,
+    val debugPath: String,
+    val content: IArray[Byte],
+    val entry: String
+  )
 
   private object MatchableJSException:
     def unapply(x: js.JavaScriptException): Some[Matchable] =

@@ -59,6 +59,14 @@ object Contexts {
 
     val defn: Definitions = Definitions(this: @unchecked, RootPackage, EmptyPackage)
 
+    /** for a given classpath entry, return a lazy view over all the roots covered by the entry,
+      *  grouped by package.
+      */
+    def findPackagesByClasspathEntry(entry: AnyRef): Map[PackageSymbol, IterableOnce[Symbol]] =
+      classloader.lookupByEntry(entry).getOrElse {
+        throw new UnknownClasspathEntry(entry)
+      }
+
     def findPackageFromRoot(fullyQualifiedName: FullyQualifiedName): PackageSymbol =
       @tailrec
       def rec(owner: PackageSymbol, path: List[Name]): PackageSymbol =

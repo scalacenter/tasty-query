@@ -73,9 +73,9 @@ object ClasspathLoaders {
               val (packageName, simpleName) = classAndPackage(bin)
               kind match {
                 case FileKind.Class =>
-                  packageName -> ClassData(simpleName, path, bytes)
+                  packageName -> ClassData(simpleName, path, bytes, entry.entryPath)
                 case FileKind.Tasty =>
-                  packageName -> TastyData(simpleName, path, bytes)
+                  packageName -> TastyData(simpleName, path, bytes, entry.entryPath)
               }
             }
           }
@@ -128,6 +128,10 @@ object ClasspathLoaders {
   private enum ClasspathEntry {
     case Jar(path: Path)
     case Directory(path: Path)
+
+    def entryPath: Path = this match
+      case Jar(path)       => path
+      case Directory(path) => path
 
     def walkFiles[T](kinds: FileKind*)(op: (FileKind, String, String, IArray[Byte]) => T): Map[FileKind, List[T]] =
       this match {

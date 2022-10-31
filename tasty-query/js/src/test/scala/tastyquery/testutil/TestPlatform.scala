@@ -11,6 +11,9 @@ object TestPlatform:
   def loadClasspath(): Future[Classpath] =
     nodejs.NodeJSTestPlatform.loadClasspath()
 
+  def scala3ClasspathEntry(): AnyRef =
+    nodejs.NodeJSTestPlatform.scala3ClasspathEntry()
+
   def readResourceCodeFile(relPath: String): String =
     nodejs.NodeJSTestPlatform.readResourceCodeFile(relPath)
 end TestPlatform

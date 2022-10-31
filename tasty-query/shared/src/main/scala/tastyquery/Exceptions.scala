@@ -5,6 +5,8 @@ import tastyquery.Symbols.*
 import tastyquery.Types.*
 
 object Exceptions:
+  class UnknownClasspathEntry(entry: AnyRef) extends Exception(s"Unknown classpath entry: $entry")
+
   class InvalidProgramStructureException(msg: String, cause: Throwable | Null) extends Exception(msg, cause):
     def this(msg: String) = this(msg, null)
 

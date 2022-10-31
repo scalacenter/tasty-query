@@ -22,8 +22,16 @@ object NodeJSTestPlatform:
     tastyquery.nodejs.ClasspathLoaders.read(stringEntries)
   end classpath
 
+  private lazy val scala3CpEntry: String =
+    val cpEnvVar = getEnvVar(TestClassPathEnvVar)
+    val stringEntries = cpEnvVar.split(';').toList
+    stringEntries.find(_.contains("scala3-library_3").nn).get
+
   def loadClasspath(): Future[Classpath] =
     classpath
+
+  def scala3ClasspathEntry(): AnyRef =
+    scala3CpEntry
 
   def readResourceCodeFile(relPath: String): String =
     val path = getEnvVar(ResourceCodeEnvVar).nn + "/" + relPath

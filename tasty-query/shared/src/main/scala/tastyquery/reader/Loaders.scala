@@ -31,8 +31,12 @@ private[tastyquery] object Loaders {
       case TastyOnly(tastyData: TastyData)
       case ClassOnly(classData: ClassData)
 
+    private type ByEntryMap = Map[AnyRef, IArray[(PackageSymbol, IArray[Name])]]
+
     private var searched = false
     private var packages: Map[PackageSymbol, PackageData] = compiletime.uninitialized
+    private var byEntry: ByEntryMap | Null = null
+    private var computeByEntry: (() => ByEntryMap) | Null = null
     private val roots: mutable.Map[PackageSymbol, mutable.Map[SimpleName, Entry]] = mutable.HashMap.empty
     private var topLevelTastys: Map[Loader.Root, List[Tree]] = Map.empty
 
@@ -135,53 +139,96 @@ private[tastyquery] object Loaders {
           false
     end loadRoot
 
+    private def foldEntries(data: PackageData)(f: (AnyRef, SimpleName, Entry) => Unit): Unit =
+      def isNestedOrModuleClassName(name: String): Boolean =
+        def isNested =
+          val idx = name.lastIndexOf('$', name.length - 2)
+          idx >= 0 &&
+          !(idx + str.topLevelSuffix.length == name.length && name.endsWith(str.topLevelSuffix))
+        def isModule =
+          name.last == '$' && name.length > 1
+        isNested || isModule
+      end isNestedOrModuleClassName
+
+      if data.classes.isEmpty then
+        for
+          tData <- data.tastys
+          decodedName = NameTransformer.decode(tData.binaryName)
+          if !isNestedOrModuleClassName(decodedName)
+        do f(tData.src, SimpleName(decodedName), Entry.TastyOnly(tData))
+      else
+        val tastyMap = data.tastys.map(t => t.binaryName -> t).toMap
+        for
+          cData <- data.classes
+          decodedName = NameTransformer.decode(cData.binaryName)
+          if !isNestedOrModuleClassName(decodedName)
+        do
+          def mergeClassAndTasty(cData: ClassData, tData: TastyData): Entry =
+            assert(cData.src eq tData.src)
+            Entry.ClassAndTasty(cData, tData)
+          val entry =
+            tastyMap.get(cData.binaryName).map(mergeClassAndTasty(cData, _)).getOrElse(Entry.ClassOnly(cData))
+          f(cData.src, SimpleName(decodedName), entry)
+    end foldEntries
+
     def scanPackage(pkg: PackageSymbol)(using Context): Unit = {
       require(searched)
       packages.get(pkg) match {
         case Some(data) =>
-          def isNestedOrModuleClassName(name: String): Boolean = {
-            def isNested = {
-              val idx = name.lastIndexOf('$', name.length - 2)
-              idx >= 0 &&
-              !(idx + str.topLevelSuffix.length == name.length && name.endsWith(str.topLevelSuffix))
-            }
-            def isModule =
-              name.last == '$' && name.length > 1
-            isNested || isModule
-          }
-
           packages -= pkg
-
           val localRoots = mutable.HashMap.empty[SimpleName, Entry]
-
-          if data.classes.isEmpty then
-            for
-              tData <- data.tastys
-              decodedName = NameTransformer.decode(tData.binaryName)
-              if !isNestedOrModuleClassName(decodedName)
-            do localRoots += (SimpleName(decodedName) -> Entry.TastyOnly(tData))
-          else
-            val tastyMap = data.tastys.map(t => t.binaryName -> t).toMap
-            for
-              cData <- data.classes
-              decodedName = NameTransformer.decode(cData.binaryName)
-              if !isNestedOrModuleClassName(decodedName)
-            do
-              val entry =
-                tastyMap.get(cData.binaryName).map(Entry.ClassAndTasty(cData, _)).getOrElse(Entry.ClassOnly(cData))
-              localRoots += (SimpleName(decodedName) -> entry)
-
+          foldEntries(data)((_, n, e) => localRoots += (n -> e))
           roots(pkg) = localRoots
-
         case _ => // probably a synthetic package that only has other packages as members. (i.e. `package java`)
       }
     }
+
+    def lookupByEntry(src: AnyRef)(using Context): Option[Map[PackageSymbol, IterableOnce[Symbol]]] =
+      require(searched)
+
+      def computeLookup(map: ByEntryMap) =
+        map.get(src) match
+          case Some(entries) =>
+            val syms = entries.iterator.map((pkg, names) => pkg -> names.iterator.flatMap(pkg.getDecl))
+            Some(syms.toMap)
+          case _ => None
+
+      val localByEntry = byEntry
+      if localByEntry == null then
+        val localCompute = computeByEntry
+        if localCompute == null then throw AssertionError("expected byEntry or computeByEntry to be set")
+        else
+          val newByEntry = localCompute()
+          byEntry = newByEntry
+          computeLookup(newByEntry)
+      else computeLookup(localByEntry)
+    end lookupByEntry
 
     def initPackages()(using ctx: Context): Unit =
       if !searched then
         searched = true
         val packages = classpath.packages
         val packageSymbols = packages.map(pkg => ctx.findPackageFromRootOrCreate(toPackageName(pkg.dotSeparatedName)))
-        loader.packages = Map.from(packageSymbols.zip(packages))
+        val packageToEntries = packageSymbols.zip(packages)
+        loader.packages = Map.from(packageToEntries)
+
+        loader.computeByEntry = () =>
+          // TODO: compute this on demand?
+          val localByEntry = mutable.HashMap.empty[AnyRef, mutable.HashMap[PackageSymbol, mutable.HashSet[Name]]]
+          for (pkg, data) <- packageToEntries do
+            foldEntries(data)((src, name, _) =>
+              localByEntry
+                .getOrElseUpdate(src, mutable.HashMap.empty)
+                .getOrElseUpdate(pkg, mutable.HashSet.empty)
+                .addOne(name)
+                .addOne(name.withObjectSuffix.toTypeName)
+                .addOne(name.toTypeName)
+            )
+          localByEntry.view
+            .mapValues(entries => IArray.from(entries.map((pkg, names) => pkg -> IArray.from(names))))
+            .toMap
+
+    // set up entry map here
+    // lookup by entry then forces packages in that entry
   }
 }
