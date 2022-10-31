@@ -8,6 +8,9 @@ object TestPlatform:
   def loadClasspath(): Future[Classpath] =
     jdk.JavaTestPlatform.loadClasspath()
 
+  def loadDerivedClasspath(): Future[Classpath] =
+    jdk.JavaTestPlatform.loadDerivedClasspath()
+
   def scala3ClasspathEntry(): AnyRef =
     jdk.JavaTestPlatform.scala3ClasspathEntry()
 

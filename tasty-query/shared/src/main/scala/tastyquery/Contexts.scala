@@ -62,7 +62,7 @@ object Contexts {
     /** for a given classpath entry, return a lazy view over all the roots covered by the entry,
       *  grouped by package.
       */
-    def findPackagesByClasspathEntry(entry: AnyRef): Map[PackageSymbol, IterableOnce[Symbol]] =
+    def findSymbolsByClasspathEntry(entry: AnyRef): IterableOnce[Symbol] =
       classloader.lookupByEntry(entry).getOrElse {
         throw new UnknownClasspathEntry(entry)
       }

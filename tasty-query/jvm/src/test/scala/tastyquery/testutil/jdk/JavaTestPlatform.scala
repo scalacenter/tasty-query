@@ -16,16 +16,22 @@ object JavaTestPlatform {
   private lazy val classpathEntries: List[String] =
     System.getenv(TestClassPathEnvVar).nn.split(';').toList
 
-  private lazy val classpath: Classpath =
-    val entries: List[Path] =
-      for stringEntry <- classpathEntries yield stringEntry match
-        case s"jrt:/modules/$module/" =>
-          FileSystems.getFileSystem(java.net.URI.create("jrt:/")).nn.getPath("modules", module).nn
-        case _ =>
-          Paths.get(stringEntry).nn
+  private lazy val classpathPaths: List[Path] =
+    for stringEntry <- classpathEntries yield stringEntry match
+      case s"jrt:/modules/$module/" =>
+        FileSystems.getFileSystem(java.net.URI.create("jrt:/")).nn.getPath("modules", module).nn
+      case _ =>
+        Paths.get(stringEntry).nn
 
-    ClasspathLoaders.read(entries)
-  end classpath
+  private lazy val classpath: Classpath =
+    ClasspathLoaders.read(classpathPaths)
+
+  private lazy val classpathDerived: Classpath =
+    val cp = classpath
+    val entries: List[Path] = cp.entries.toList.map(_.asInstanceOf[Path])
+    assert(entries == classpathPaths)
+    ClasspathLoaders.read(entries, old = cp)
+  end classpathDerived
 
   private lazy val scala3Entry: Path =
     Paths.get(classpathEntries.find(_.contains("scala3-library_3").nn).get).nn
@@ -35,6 +41,9 @@ object JavaTestPlatform {
 
   def loadClasspath(): Future[Classpath] =
     Future(classpath)
+
+  def loadDerivedClasspath(): Future[Classpath] =
+    Future(classpathDerived)
 
   def readResourceCodeFile(relPath: String): String =
     val path = System.getenv(ResourceCodeEnvVar).nn + "/" + relPath

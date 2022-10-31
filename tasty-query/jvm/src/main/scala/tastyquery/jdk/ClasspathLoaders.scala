@@ -16,6 +16,10 @@ import tastyquery.Classpaths.*
   */
 object ClasspathLoaders {
 
+  private given Ordering[ClassData] = Ordering.by(_.binaryName)
+  private given Ordering[TastyData] = Ordering.by(_.binaryName)
+  private given Ordering[PackageData] = Ordering.by(_.dotSeparatedName)
+
   private enum FileKind(val ext: String):
     case Class extends FileKind("class")
     case Tasty extends FileKind("tasty")
@@ -39,12 +43,15 @@ object ClasspathLoaders {
     * The resulting [[Classpaths.Classpath]] can be given to [[Contexts.init]]
     * to create a [[Contexts.Context]]. The latter gives semantic access to all
     * the definitions on the classpath.
+    *
+    * `old` should be the previous classpath created by this method (or defaults to [[Classpath.Empty]]).
+    *  Using the previous classpath allows to share already loaded classpath data when possible.
     */
-  def read(classpath: List[Path]): Classpath =
-    read(classpath, FileKind.All)
+  def read(classpath: List[Path], old: Classpath = Classpath.Empty): Classpath =
+    read(old, classpath, FileKind.All)
 
-  private def read(classpath: List[Path], kinds: Set[FileKind]): Classpath = {
-    def load(): IArray[PackageData] = {
+  private def read(old: Classpath, classpath: List[Path], kinds: Set[FileKind]): Classpath = {
+    def load(): IArray[(Path, IArray[PackageData])] = {
 
       def classAndPackage(binaryName: String): (String, String) = {
         val lastSep = binaryName.lastIndexOf('.')
@@ -65,42 +72,42 @@ object ClasspathLoaders {
       end binaryName
 
       def streamPackages() =
-        classpathToEntries(classpath).flatMap { entry =>
-          val map = {
-            entry.walkFiles(kinds.toSeq*) { (kind, fileWithExt, path, bytes) =>
-              val (s"$file.${kind.`ext`}") = fileWithExt: @unchecked
-              val bin = binaryName(file)
-              val (packageName, simpleName) = classAndPackage(bin)
-              kind match {
-                case FileKind.Class =>
-                  packageName -> ClassData(simpleName, path, bytes, entry.entryPath)
-                case FileKind.Tasty =>
-                  packageName -> TastyData(simpleName, path, bytes, entry.entryPath)
-              }
+
+        def compressPackageData(data: List[(String, ClassData | TastyData)]): IArray[PackageData] =
+          val groupedPackages = IArray.from(data).groupMap((pkg, _) => pkg)((_, data) => data)
+          val pkgs = groupedPackages.map { (pkg, classAndTastys) =>
+            val (classes, tastys) = classAndTastys.partitionMap {
+              case classData: ClassData => Left(classData)
+              case tastyData: TastyData => Right(tastyData)
+            }
+            PackageData(pkg, classes.sorted, tastys.sorted)
+          }
+          IArray.from(pkgs).sorted
+        end compressPackageData
+
+        def packagesOfEntry(entry: ClasspathEntry) =
+          val map = entry.walkFiles(kinds.toSeq*) { (kind, fileWithExt, path, bytes) =>
+            val (s"$file.${kind.`ext`}") = fileWithExt: @unchecked
+            val bin = binaryName(file)
+            val (packageName, simpleName) = classAndPackage(bin)
+            kind match {
+              case FileKind.Class =>
+                packageName -> ClassData(simpleName, path, bytes)
+              case FileKind.Tasty =>
+                packageName -> TastyData(simpleName, path, bytes)
             }
           }
-          map.get(FileKind.Class).getOrElse(Nil) ++ map.get(FileKind.Tasty).getOrElse(Nil)
-        }
+          compressPackageData(map.get(FileKind.Class).getOrElse(Nil) ++ map.get(FileKind.Tasty).getOrElse(Nil))
+        end packagesOfEntry
 
-      def compress(packages: List[(String, ClassData | TastyData)]) = {
-        given Ordering[ClassData] = Ordering.by(_.binaryName)
-        given Ordering[TastyData] = Ordering.by(_.binaryName)
-        given Ordering[PackageData] = Ordering.by(_.dotSeparatedName)
-        val groupedPackages = IArray.from(packages).groupMap((pkg, _) => pkg)((_, data) => data)
-        val pkgs = groupedPackages.map { (pkg, classAndTastys) =>
-          val (classes, tastys) = classAndTastys.partitionMap {
-            case classData: ClassData => Left(classData)
-            case tastyData: TastyData => Right(tastyData)
-          }
-          PackageData(pkg, classes.sorted, tastys.sorted)
+        classpathToEntries(classpath).map { entry =>
+          entry.entryPath -> old.lookupOrElse(entry.entryPath, packagesOfEntry(entry))
         }
-        IArray.from(pkgs).sorted
-      }
-
-      compress(streamPackages())
+      end streamPackages
+      streamPackages()
     }
     val cp = load()
-    Classpath.from(cp)
+    Classpath.from(old, cp)
   }
 
   private def loadBytes(fileStream: InputStream): IArray[Byte] = {
@@ -114,16 +121,16 @@ object ClasspathLoaders {
     IArray.from(bytes.toByteArray().nn)
   }
 
-  private def classpathToEntries(classpath: List[Path]): List[ClasspathEntry] =
-    classpath.flatMap(e =>
-      if (Files.exists(e)) {
-        if (Files.isDirectory(e)) ClasspathEntry.Directory(e) :: Nil
-        else if (e.getFileName().toString().endsWith(".jar")) ClasspathEntry.Jar(e) :: Nil
-        else Nil
-      } else {
-        Nil
-      }
-    )
+  private def classpathToEntries(classpath: List[Path]): IArray[ClasspathEntry] =
+    val buf = IArray.newBuilder[ClasspathEntry]
+    for e <- classpath do
+      if Files.exists(e) then
+        if Files.isDirectory(e) then buf += ClasspathEntry.Directory(e)
+        else if e.getFileName().toString().endsWith(".jar") then buf += ClasspathEntry.Jar(e)
+        else ()
+      else ()
+    end for
+    buf.result()
 
   private enum ClasspathEntry {
     case Jar(path: Path)

@@ -22,6 +22,19 @@ object NodeJSTestPlatform:
     tastyquery.nodejs.ClasspathLoaders.read(stringEntries)
   end classpath
 
+  private lazy val classpathDerived: Future[Classpath] =
+    def loadNewCp(oldCp: Classpath) =
+      val oldEntries: List[String] = oldCp.entries.toList.map(_.asInstanceOf[String])
+      val cpEnvVar = getEnvVar(TestClassPathEnvVar)
+      val stringEntries = cpEnvVar.split(';').toList
+      assert(oldEntries == stringEntries)
+      tastyquery.nodejs.ClasspathLoaders.read(oldEntries, old = oldCp)
+    for
+      oldCp <- classpath
+      newCp <- loadNewCp(oldCp)
+    yield newCp
+  end classpathDerived
+
   private lazy val scala3CpEntry: String =
     val cpEnvVar = getEnvVar(TestClassPathEnvVar)
     val stringEntries = cpEnvVar.split(';').toList
@@ -29,6 +42,9 @@ object NodeJSTestPlatform:
 
   def loadClasspath(): Future[Classpath] =
     classpath
+
+  def loadDerivedClasspath(): Future[Classpath] =
+    classpathDerived
 
   def scala3ClasspathEntry(): AnyRef =
     scala3CpEntry

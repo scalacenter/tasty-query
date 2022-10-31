@@ -30,56 +30,61 @@ object ClasspathLoaders:
     * The resulting [[Classpaths.Classpath]] can be given to [[Contexts.init]]
     * to create a [[Contexts.Context]]. The latter gives semantic access to all
     * the definitions on the classpath.
+    *
+    * `old` should be the previous classpath created by this method (or defaults to [[Classpath.Empty]]).
+    *  Using the previous classpath allows to share already loaded classpath data when possible.
     */
-  def read(classpath: List[String])(using ExecutionContext): Future[Classpath] =
-    val allFilesFuture = Future
+  def read(classpath: List[String], old: Classpath = Classpath.Empty)(using ExecutionContext): Future[Classpath] =
+    def replaceEntry(entry: String, compute: => Future[Seq[FileContent]]) =
+      val data = old.lookup(entry) match
+        case Some(packages) => Future.successful(Right(packages))
+        case None           => compute.map(Left(_))
+      data.map(entry -> _)
+
+    val allFilesFuture: Future[List[(String, Either[Seq[FileContent], IArray[PackageData]])]] = Future
       .traverse(classpath) { entry =>
         cbFuture[Stats](stat(entry, _)).transformWith {
           case Success(stat) if stat.isDirectory() =>
-            fromDirectory(entry, "")
+            replaceEntry(entry, fromDirectory(entry, ""))
 
           case Success(_) if entry.endsWith(".jar") =>
-            fromJarFile(entry)
+            replaceEntry(entry, fromJarFile(entry))
 
           case Success(_) =>
             throw new IllegalArgumentException("Illegal classpath entry: " + entry)
 
           case Failure(MatchableJSException(e: js.Error)) if isNotFound(e) =>
-            Future.successful(Nil)
+            Future.successful(entry -> Right(IArray.empty))
 
           case Failure(t) =>
             throw t
         }
       }
-      .map(_.flatten)
 
-    for allFiles <- allFilesFuture yield
-      val allPackageDatas =
-        allFiles
-          .groupMap[String, ClassData | TastyData](_.packagePath) { fileContent =>
-            val isClassFile = fileContent.name.endsWith(".class")
-            val binaryName =
-              if isClassFile then fileContent.name.stripSuffix(".class")
-              else fileContent.name.stripSuffix(".tasty")
-            if isClassFile then ClassData(binaryName, fileContent.debugPath, fileContent.content, fileContent.entry)
-            else TastyData(binaryName, fileContent.debugPath, fileContent.content, fileContent.entry)
+    def compressPackages(allFiles: Seq[FileContent]): Iterable[PackageData] =
+      allFiles
+        .groupMap[String, ClassData | TastyData](_.packagePath) { fileContent =>
+          val isClassFile = fileContent.name.endsWith(".class")
+          val binaryName =
+            if isClassFile then fileContent.name.stripSuffix(".class")
+            else fileContent.name.stripSuffix(".tasty")
+          if isClassFile then ClassData(binaryName, fileContent.debugPath, fileContent.content)
+          else TastyData(binaryName, fileContent.debugPath, fileContent.content)
+        }
+        .map { (packagePath, classAndTastys) =>
+          val packageName = packagePath.replace('/', '.').nn
+          val (classes, tastys) = classAndTastys.partitionMap {
+            case classData: ClassData => Left(classData)
+            case tastyData: TastyData => Right(tastyData)
           }
-          .map { (packagePath, classAndTastys) =>
-            val packageName = packagePath.replace('/', '.').nn
-            val (classes, tastys) = classAndTastys.partitionMap {
-              case classData: ClassData => Left(classData)
-              case tastyData: TastyData => Right(tastyData)
-            }
-            PackageData(
-              packageName,
-              IArray.from(classes.sortBy(_.binaryName)),
-              IArray.from(tastys.sortBy(_.binaryName))
-            )
-          }
-      end allPackageDatas
+          PackageData(packageName, IArray.from(classes.sortBy(_.binaryName)), IArray.from(tastys.sortBy(_.binaryName)))
+        }
 
-      Classpath.from(IArray.from(allPackageDatas))
-    end for
+    for allEntries <- allFilesFuture yield
+      val compressedEntries =
+        for (entry, allFiles) <- allEntries
+        yield entry -> allFiles.fold(fa => IArray.from(compressPackages(fa)), identity)
+      Classpath.from(old, IArray.from(compressedEntries))
   end read
 
   private def fromDirectory(dir: String, relPath: String)(implicit ec: ExecutionContext): Future[Seq[FileContent]] =
@@ -95,7 +100,7 @@ object ClasspathLoaders:
         val path = join(dir, n)
         cbFuture[Uint8Array](readFile(path, _)).map { content =>
           val contentAsInt8Array = new Int8Array(content.buffer)
-          FileContent(relPath, n, path, IArray.from(contentAsInt8Array.toArray), dir)
+          FileContent(relPath, n, path, IArray.from(contentAsInt8Array.toArray))
         }
       }
 
@@ -131,7 +136,7 @@ object ClasspathLoaders:
     Future.traverse(entries) { entry =>
       entry.async(JSZipInterop.arrayBuffer).toFuture.map { buf =>
         val (packagePath, name) = splitPackagePathAndName(entry.name)
-        new FileContent(packagePath, name, s"$jarPath:${entry.name}", IArray.from(new Int8Array(buf).toArray), jarPath)
+        new FileContent(packagePath, name, s"$jarPath:${entry.name}", IArray.from(new Int8Array(buf).toArray))
       }
     }
   end loadFromZip
@@ -139,13 +144,7 @@ object ClasspathLoaders:
   private def isClassOrTasty(name: String): Boolean =
     name.endsWith(".class") || name.endsWith(".tasty")
 
-  private class FileContent(
-    val packagePath: String,
-    val name: String,
-    val debugPath: String,
-    val content: IArray[Byte],
-    val entry: String
-  )
+  private class FileContent(val packagePath: String, val name: String, val debugPath: String, val content: IArray[Byte])
 
   private object MatchableJSException:
     def unapply(x: js.JavaScriptException): Some[Matchable] =

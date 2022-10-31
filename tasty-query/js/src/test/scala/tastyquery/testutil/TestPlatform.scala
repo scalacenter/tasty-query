@@ -11,6 +11,9 @@ object TestPlatform:
   def loadClasspath(): Future[Classpath] =
     nodejs.NodeJSTestPlatform.loadClasspath()
 
+  def loadDerivedClasspath(): Future[Classpath] =
+    nodejs.NodeJSTestPlatform.loadDerivedClasspath()
+
   def scala3ClasspathEntry(): AnyRef =
     nodejs.NodeJSTestPlatform.scala3ClasspathEntry()
 
