@@ -15,15 +15,18 @@ object NodeJSTestPlatform:
   private def getEnvVar(name: String): String =
     js.Dynamic.global.process.env.selectDynamic(name).asInstanceOf[String]
 
-  private lazy val classpath: Future[Classpath] =
+  private lazy val classpathEntries: List[String] =
     val cpEnvVar = getEnvVar(TestClassPathEnvVar)
-    val stringEntries = cpEnvVar.split(';').toList
+    cpEnvVar.split(';').toList
 
-    tastyquery.nodejs.ClasspathLoaders.read(stringEntries)
-  end classpath
+  private lazy val classpath: Future[Classpath] =
+    tastyquery.nodejs.ClasspathLoaders.read(classpathEntries)
 
   def loadClasspath(): Future[Classpath] =
     classpath
+
+  lazy val scala3ClasspathIndex: Int =
+    classpathEntries.indexWhere(_.contains("scala3-library_3").nn)
 
   def readResourceCodeFile(relPath: String): String =
     val path = getEnvVar(ResourceCodeEnvVar).nn + "/" + relPath

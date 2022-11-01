@@ -26,35 +26,68 @@ object Classpaths:
     * [[Contexts.Context]]. The latter gives semantic access to all the
     * definitions on the classpath.
     */
-  final class Classpath private (val packages: IArray[PackageData]):
+  final class Classpath private (val entries: IArray[Classpath.Entry]):
+
+    /** Returns the concatenation of this classpath with `other`.
+      * This is useful for structural sharing of [[Classpath.Entry Classpath Entries]]. e.g. in the following example
+      * the standard library is loaded once and shared between two classpaths:
+      * ```scala
+      * val stdLibCp = ClasspathLoaders.read(standardLibraryPaths)
+      * val libV101Cp = ClasspathLoaders.read(List(Paths.get("path/to/lib-1.0.1.jar"))) ++ stdLibCp
+      * val libV102Cp = ClasspathLoaders.read(List(Paths.get("path/to/lib-1.0.2.jar"))) ++ stdLibCp
+      * ```
+      */
+    def ++(other: Classpath): Classpath = Classpath(entries ++ other.entries)
+
+    /** Filter a classpath so it only contains roots that match the given binary names. */
     def withFilter(binaryNames: List[String]): Classpath =
-      def packageAndClass(binaryName: String): (String, String) = {
+
+      def packageAndClass(binaryName: String): (String, String) =
         val lastSep = binaryName.lastIndexOf('.')
         if lastSep == -1 then ("", binaryName)
-        else {
+        else
           import scala.language.unsafeNulls
           val packageName = binaryName.substring(0, lastSep)
           val className = binaryName.substring(lastSep + 1)
           (packageName, className)
+
+      def filterEntry(entry: Classpath.Entry, lookup: Map[String, List[String]]) =
+        val packages = entry.packages.collect {
+          case pkg if lookup.contains(pkg.dotSeparatedName) =>
+            val tastys = pkg.tastys.filter(t => lookup(pkg.dotSeparatedName).contains(t.binaryName))
+            val classes = pkg.classes.filter(c => lookup(pkg.dotSeparatedName).contains(c.binaryName))
+            PackageData(pkg.dotSeparatedName, classes, tastys)
         }
-      }
+        Classpath.Entry(packages)
+
       val formatted = binaryNames.map(packageAndClass)
-      val grouped = formatted.groupMap((pkg, _) => pkg)((_, cls) => cls)
-      val filtered = packages.collect {
-        case pkg if grouped.contains(pkg.dotSeparatedName) =>
-          val tastys = pkg.tastys.filter(t => grouped(pkg.dotSeparatedName).contains(t.binaryName))
-          val classes = pkg.classes.filter(c => grouped(pkg.dotSeparatedName).contains(c.binaryName))
-          PackageData(pkg.dotSeparatedName, classes, tastys)
-      }
-      new Classpath(filtered)
+      val lookup = formatted.groupMap((pkg, _) => pkg)((_, cls) => cls)
+      val filtered = entries.map(filterEntry(_, lookup))
+      Classpath(filtered)
     end withFilter
   end Classpath
 
   /** Factory object for [[Classpath]] instances. */
   object Classpath {
 
-    /** Constructs an instance of [[Classpath]] with the given [[PackageData]]s. */
-    def from(packages: IArray[PackageData]): Classpath =
-      new Classpath(packages)
+    /** A [[Classpath.Entry]] encapsulates the package data for a single classpath entry
+      * (i.e. a given directory or jar file).
+      * Can only be created by [[Classpath.from]]. You can lookup all symbols
+      * originating from this entry
+      * with [[Contexts.Context.findSymbolsByClasspathEntry ctx.findSymbolsByClasspathEntry]].
+      * e.g.:
+      * ```scala
+      * val classpath = ClasspathLoaders.read(myLibraryPath :: stdLibPaths)
+      * given Context = Contexts.init(classpath)
+      * val myLibSyms = ctx.findSymbolsByClasspathEntry(classpath.entries.head)
+      * ```
+      */
+    final class Entry private[Classpath] (val packages: IArray[PackageData])
+
+    /** Creates a [[Classpath]] from a sequence of classpath entries. Each entry corresponds to a single directory
+      * or jar file, and represents the various `.class` and `.tasty` files found within it.
+      */
+    def from(entries: Seq[IArray[PackageData]]): Classpath =
+      Classpath(IArray.from(entries).map(Entry(_)))
   }
 end Classpaths

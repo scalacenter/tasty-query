@@ -13,18 +13,21 @@ object JavaTestPlatform {
   private val TestClassPathEnvVar = "TASTY_TEST_CLASSPATH"
   private val ResourceCodeEnvVar = "TASTY_TEST_SOURCES"
 
+  private lazy val classpathEntries: List[String] =
+    System.getenv(TestClassPathEnvVar).nn.split(';').toList
+
+  private lazy val classpathPaths: List[Path] =
+    for stringEntry <- classpathEntries yield stringEntry match
+      case s"jrt:/modules/$module/" =>
+        FileSystems.getFileSystem(java.net.URI.create("jrt:/")).nn.getPath("modules", module).nn
+      case _ =>
+        Paths.get(stringEntry).nn
+
   private lazy val classpath: Classpath =
-    val stringEntries = System.getenv(TestClassPathEnvVar).nn.split(';').toList
+    ClasspathLoaders.read(classpathPaths)
 
-    val entries: List[Path] =
-      for stringEntry <- stringEntries yield stringEntry match
-        case s"jrt:/modules/$module/" =>
-          FileSystems.getFileSystem(java.net.URI.create("jrt:/")).nn.getPath("modules", module).nn
-        case _ =>
-          Paths.get(stringEntry).nn
-
-    ClasspathLoaders.read(entries)
-  end classpath
+  lazy val scala3ClasspathIndex: Int =
+    classpathEntries.indexWhere(_.contains("scala3-library_3").nn)
 
   def loadClasspath(): Future[Classpath] =
     Future(classpath)

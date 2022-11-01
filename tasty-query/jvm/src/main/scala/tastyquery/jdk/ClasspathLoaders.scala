@@ -16,6 +16,10 @@ import tastyquery.Classpaths.*
   */
 object ClasspathLoaders {
 
+  private given Ordering[ClassData] = Ordering.by(_.binaryName)
+  private given Ordering[TastyData] = Ordering.by(_.binaryName)
+  private given Ordering[PackageData] = Ordering.by(_.dotSeparatedName)
+
   private enum FileKind(val ext: String):
     case Class extends FileKind("class")
     case Tasty extends FileKind("tasty")
@@ -39,69 +43,63 @@ object ClasspathLoaders {
     * The resulting [[Classpaths.Classpath]] can be given to [[Contexts.init]]
     * to create a [[Contexts.Context]]. The latter gives semantic access to all
     * the definitions on the classpath.
+    *
+    * @note the resulting [[Classpaths.Classpath.Entry Classpath.Entry]] entries of
+    *       the returned [[Classpaths.Classpath]] correspond to the elements of `classpath`.
     */
   def read(classpath: List[Path]): Classpath =
     read(classpath, FileKind.All)
 
-  private def read(classpath: List[Path], kinds: Set[FileKind]): Classpath = {
-    def load(): IArray[PackageData] = {
+  private def read(classpath: List[Path], kinds: Set[FileKind]): Classpath =
 
-      def classAndPackage(binaryName: String): (String, String) = {
-        val lastSep = binaryName.lastIndexOf('.')
-        if (lastSep == -1) ("", binaryName)
-        else
-          import scala.language.unsafeNulls
-          val packageName = binaryName.substring(0, lastSep)
-          val simpleName = binaryName.substring(lastSep + 1)
-          (packageName, simpleName)
-      }
-
-      def binaryName(classFile: String): String =
-        /* Replace *both* slashes and backslashes, because the Java file APIs
-         * are permissive in what they manipulate, so it's possible to get,
-         * especially on Windows.
-         */
-        classFile.replace('/', '.').nn.replace('\\', '.').nn
-      end binaryName
-
-      def streamPackages() =
-        classpathToEntries(classpath).flatMap { entry =>
-          val map = {
-            entry.walkFiles(kinds.toSeq*) { (kind, fileWithExt, path, bytes) =>
-              val (s"$file.${kind.`ext`}") = fileWithExt: @unchecked
-              val bin = binaryName(file)
-              val (packageName, simpleName) = classAndPackage(bin)
-              kind match {
-                case FileKind.Class =>
-                  packageName -> ClassData(simpleName, path, bytes)
-                case FileKind.Tasty =>
-                  packageName -> TastyData(simpleName, path, bytes)
-              }
-            }
-          }
-          map.get(FileKind.Class).getOrElse(Nil) ++ map.get(FileKind.Tasty).getOrElse(Nil)
-        }
-
-      def compress(packages: List[(String, ClassData | TastyData)]) = {
-        given Ordering[ClassData] = Ordering.by(_.binaryName)
-        given Ordering[TastyData] = Ordering.by(_.binaryName)
-        given Ordering[PackageData] = Ordering.by(_.dotSeparatedName)
-        val groupedPackages = IArray.from(packages).groupMap((pkg, _) => pkg)((_, data) => data)
-        val pkgs = groupedPackages.map { (pkg, classAndTastys) =>
-          val (classes, tastys) = classAndTastys.partitionMap {
-            case classData: ClassData => Left(classData)
-            case tastyData: TastyData => Right(tastyData)
-          }
-          PackageData(pkg, classes.sorted, tastys.sorted)
-        }
-        IArray.from(pkgs).sorted
-      }
-
-      compress(streamPackages())
+    def classAndPackage(binaryName: String): (String, String) = {
+      val lastSep = binaryName.lastIndexOf('.')
+      if (lastSep == -1) ("", binaryName)
+      else
+        import scala.language.unsafeNulls
+        val packageName = binaryName.substring(0, lastSep)
+        val simpleName = binaryName.substring(lastSep + 1)
+        (packageName, simpleName)
     }
-    val cp = load()
+
+    def binaryName(classFile: String): String =
+      /* Replace *both* slashes and backslashes, because the Java file APIs
+       * are permissive in what they manipulate, so it's possible to get,
+       * especially on Windows.
+       */
+      classFile.replace('/', '.').nn.replace('\\', '.').nn
+    end binaryName
+
+    def compressPackageData(data: List[(String, ClassData | TastyData)]): IArray[PackageData] =
+      val groupedPackages = IArray.from(data).groupMap((pkg, _) => pkg)((_, data) => data)
+      val pkgs = groupedPackages.map { (pkg, classAndTastys) =>
+        val (classes, tastys) = classAndTastys.partitionMap {
+          case classData: ClassData => Left(classData)
+          case tastyData: TastyData => Right(tastyData)
+        }
+        PackageData(pkg, classes.sorted, tastys.sorted)
+      }
+      IArray.from(pkgs).sorted
+    end compressPackageData
+
+    def packagesOfEntry(entry: ClasspathEntry) =
+      val map = entry.walkFiles(kinds.toSeq*) { (kind, fileWithExt, path, bytes) =>
+        val (s"$file.${kind.`ext`}") = fileWithExt: @unchecked
+        val bin = binaryName(file)
+        val (packageName, simpleName) = classAndPackage(bin)
+        kind match {
+          case FileKind.Class =>
+            packageName -> ClassData(simpleName, path, bytes)
+          case FileKind.Tasty =>
+            packageName -> TastyData(simpleName, path, bytes)
+        }
+      }
+      compressPackageData(map.get(FileKind.Class).getOrElse(Nil) ++ map.get(FileKind.Tasty).getOrElse(Nil))
+    end packagesOfEntry
+
+    val cp = classpathToEntries(classpath).map(packagesOfEntry)
     Classpath.from(cp)
-  }
+  end read
 
   private def loadBytes(fileStream: InputStream): IArray[Byte] = {
     val bytes = new java.io.ByteArrayOutputStream()
@@ -114,20 +112,19 @@ object ClasspathLoaders {
     IArray.from(bytes.toByteArray().nn)
   }
 
-  private def classpathToEntries(classpath: List[Path]): List[ClasspathEntry] =
-    classpath.flatMap(e =>
-      if (Files.exists(e)) {
-        if (Files.isDirectory(e)) ClasspathEntry.Directory(e) :: Nil
-        else if (e.getFileName().toString().endsWith(".jar")) ClasspathEntry.Jar(e) :: Nil
-        else Nil
-      } else {
-        Nil
-      }
-    )
+  private def classpathToEntries(classpath: List[Path]): IArray[ClasspathEntry] =
+    for e <- IArray.from(classpath)
+    yield
+      if Files.exists(e) then
+        if Files.isDirectory(e) then ClasspathEntry.Directory(e)
+        else if e.getFileName().toString().endsWith(".jar") then ClasspathEntry.Jar(e)
+        else throw IllegalArgumentException("Illegal classpath entry: " + e)
+      else ClasspathEntry.Empty
 
   private enum ClasspathEntry {
     case Jar(path: Path)
     case Directory(path: Path)
+    case Empty
 
     def walkFiles[T](kinds: FileKind*)(op: (FileKind, String, String, IArray[Byte]) => T): Map[FileKind, List[T]] =
       this match {
@@ -192,6 +189,8 @@ object ClasspathLoaders {
                 op(ext, path.relativize(f).toString(), f.toString(), bytes)
               }
           }.toMap
+
+        case ClasspathEntry.Empty => Map.empty
       }
   }
 

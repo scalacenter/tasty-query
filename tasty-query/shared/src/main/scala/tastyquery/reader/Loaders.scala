@@ -31,8 +31,11 @@ private[tastyquery] object Loaders {
       case TastyOnly(tastyData: TastyData)
       case ClassOnly(classData: ClassData)
 
+    private type ByEntryMap = Map[Classpath.Entry, IArray[(PackageSymbol, IArray[SimpleName])]]
+
     private var searched = false
-    private var packages: Map[PackageSymbol, PackageData] = compiletime.uninitialized
+    private var packages: Map[PackageSymbol, IArray[PackageData]] = compiletime.uninitialized
+    private var byEntry: ByEntryMap | Null = null
     private val roots: mutable.Map[PackageSymbol, mutable.Map[SimpleName, Entry]] = mutable.HashMap.empty
     private var topLevelTastys: Map[Loader.Root, List[Tree]] = Map.empty
 
@@ -135,53 +138,118 @@ private[tastyquery] object Loaders {
           false
     end loadRoot
 
+    private def foreachEntry(data: PackageData)(f: (SimpleName, Entry) => Unit): Unit =
+      def isNestedOrModuleClassName(name: String): Boolean =
+        def isNested =
+          val idx = name.lastIndexOf('$', name.length - 2)
+          idx >= 0 &&
+          !(idx + str.topLevelSuffix.length == name.length && name.endsWith(str.topLevelSuffix))
+        def isModule =
+          name.last == '$' && name.length > 1
+        isNested || isModule
+      end isNestedOrModuleClassName
+
+      if data.classes.isEmpty then
+        for
+          tData <- data.tastys
+          decodedName = NameTransformer.decode(tData.binaryName)
+          if !isNestedOrModuleClassName(decodedName)
+        do f(SimpleName(decodedName), Entry.TastyOnly(tData))
+      else
+        val tastyMap = data.tastys.map(t => t.binaryName -> t).toMap
+        for
+          cData <- data.classes
+          decodedName = NameTransformer.decode(cData.binaryName)
+          if !isNestedOrModuleClassName(decodedName)
+        do
+          val entry =
+            tastyMap.get(cData.binaryName).map(Entry.ClassAndTasty(cData, _)).getOrElse(Entry.ClassOnly(cData))
+          f(SimpleName(decodedName), entry)
+    end foreachEntry
+
     def scanPackage(pkg: PackageSymbol)(using Context): Unit = {
       require(searched)
       packages.get(pkg) match {
-        case Some(data) =>
-          def isNestedOrModuleClassName(name: String): Boolean = {
-            def isNested = {
-              val idx = name.lastIndexOf('$', name.length - 2)
-              idx >= 0 &&
-              !(idx + str.topLevelSuffix.length == name.length && name.endsWith(str.topLevelSuffix))
-            }
-            def isModule =
-              name.last == '$' && name.length > 1
-            isNested || isModule
-          }
-
+        case Some(datas) =>
           packages -= pkg
-
           val localRoots = mutable.HashMap.empty[SimpleName, Entry]
-
-          if data.classes.isEmpty then
-            for
-              tData <- data.tastys
-              decodedName = NameTransformer.decode(tData.binaryName)
-              if !isNestedOrModuleClassName(decodedName)
-            do localRoots += (SimpleName(decodedName) -> Entry.TastyOnly(tData))
-          else
-            val tastyMap = data.tastys.map(t => t.binaryName -> t).toMap
-            for
-              cData <- data.classes
-              decodedName = NameTransformer.decode(cData.binaryName)
-              if !isNestedOrModuleClassName(decodedName)
-            do
-              val entry =
-                tastyMap.get(cData.binaryName).map(Entry.ClassAndTasty(cData, _)).getOrElse(Entry.ClassOnly(cData))
-              localRoots += (SimpleName(decodedName) -> entry)
-
+          for data <- datas do
+            foreachEntry(data)(localRoots.getOrElseUpdate) // duplicate roots from later classpath entries are ignored
           roots(pkg) = localRoots
-
         case _ => // probably a synthetic package that only has other packages as members. (i.e. `package java`)
       }
     }
 
+    def lookupByEntry(src: Classpath.Entry)(using Context): Option[Iterable[TermOrTypeSymbol]] =
+
+      def lookupRoots(pkg: PackageSymbol, rootNames: IArray[SimpleName]) =
+        val buf = IArray.newBuilder[TermOrTypeSymbol]
+        def lookup(n: Name) =
+          for case t: TermOrTypeSymbol <- pkg.getDecl(n) do buf += t
+        for rootName <- rootNames do
+          lookup(rootName)
+          lookup(rootName.toTypeName)
+          lookup(rootName.withObjectSuffix.toTypeName)
+        buf.result()
+
+      def computeLookup(map: ByEntryMap) =
+        map.get(src) match
+          case Some(pkgs) => Some(pkgs.view.flatMap(lookupRoots))
+          case None       => None
+
+      val localByEntry = byEntry
+      if localByEntry == null then
+        val newByEntry = computeByEntry()
+        byEntry = newByEntry
+        computeLookup(newByEntry)
+      else computeLookup(localByEntry)
+    end lookupByEntry
+
     def initPackages()(using ctx: Context): Unit =
+
+      def loadPackages(): IArray[(PackageSymbol, PackageData)] =
+        val localPackages = mutable.HashMap.empty[String, PackageSymbol]
+        def createOrLookupPackage(pkgName: String): PackageSymbol =
+          localPackages.getOrElseUpdate(pkgName, ctx.findPackageFromRootOrCreate(toPackageName(pkgName)))
+        classpath.entries.flatMap(entry =>
+          entry.packages.map(pkg => createOrLookupPackage(pkg.dotSeparatedName) -> pkg)
+        )
+      end loadPackages
+
       if !searched then
         searched = true
-        val packages = classpath.packages
-        val packageSymbols = packages.map(pkg => ctx.findPackageFromRootOrCreate(toPackageName(pkg.dotSeparatedName)))
-        loader.packages = Map.from(packageSymbols.zip(packages))
+        loader.packages = loadPackages().groupMap((pkg, _) => pkg)((_, data) => data)
+    end initPackages
+
+    private def computeByEntry()(using Context): ByEntryMap =
+      require(searched)
+
+      val localByEntry =
+        mutable.HashMap.empty[Classpath.Entry, mutable.HashMap[PackageSymbol, mutable.HashSet[SimpleName]]]
+      val localSeen = mutable.HashMap.empty[PackageSymbol, mutable.HashSet[SimpleName]]
+      val localPackages = mutable.HashMap.empty[String, PackageSymbol]
+
+      def lookupPackage(pkgName: String): PackageSymbol =
+        localPackages.getOrElseUpdate(pkgName, ctx.findPackageFromRoot(toPackageName(pkgName)))
+
+      for
+        entry <- classpath.entries
+        pkgData <- entry.packages
+      do
+        val pkg = lookupPackage(pkgData.dotSeparatedName)
+        foreachEntry(pkgData)((name, _) =>
+          if !localSeen.getOrElseUpdate(pkg, mutable.HashSet.empty).contains(name) then
+            // only enter here the first time we see this name in this package
+            localSeen(pkg).add(name)
+            localByEntry
+              .getOrElseUpdate(entry, mutable.HashMap.empty)
+              .getOrElseUpdate(pkg, mutable.HashSet.empty)
+              .add(name)
+        )
+      end for
+      localByEntry.view
+        .mapValues(entries => IArray.from(entries.view.mapValues(IArray.from)))
+        .toMap
+    end computeByEntry
   }
 }

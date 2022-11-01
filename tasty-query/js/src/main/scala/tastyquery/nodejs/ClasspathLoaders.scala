@@ -30,9 +30,12 @@ object ClasspathLoaders:
     * The resulting [[Classpaths.Classpath]] can be given to [[Contexts.init]]
     * to create a [[Contexts.Context]]. The latter gives semantic access to all
     * the definitions on the classpath.
+    *
+    * @note the resulting [[Classpaths.Classpath.Entry Classpath.Entry]] entries of
+    *       the returned [[Classpaths.Classpath]] correspond to the elements of `classpath`.
     */
   def read(classpath: List[String])(using ExecutionContext): Future[Classpath] =
-    val allFilesFuture = Future
+    val allEntriesFuture = Future
       .traverse(classpath) { entry =>
         cbFuture[Stats](stat(entry, _)).transformWith {
           case Success(stat) if stat.isDirectory() =>
@@ -51,35 +54,29 @@ object ClasspathLoaders:
             throw t
         }
       }
-      .map(_.flatten)
 
-    for allFiles <- allFilesFuture yield
-      val allPackageDatas =
-        allFiles
-          .groupMap[String, ClassData | TastyData](_.packagePath) { fileContent =>
-            val isClassFile = fileContent.name.endsWith(".class")
-            val binaryName =
-              if isClassFile then fileContent.name.stripSuffix(".class")
-              else fileContent.name.stripSuffix(".tasty")
-            if isClassFile then ClassData(binaryName, fileContent.debugPath, fileContent.content)
-            else TastyData(binaryName, fileContent.debugPath, fileContent.content)
+    def compressPackages(allFiles: Seq[FileContent]): Iterable[PackageData] =
+      allFiles
+        .groupMap[String, ClassData | TastyData](_.packagePath) { fileContent =>
+          val isClassFile = fileContent.name.endsWith(".class")
+          val binaryName =
+            if isClassFile then fileContent.name.stripSuffix(".class")
+            else fileContent.name.stripSuffix(".tasty")
+          if isClassFile then ClassData(binaryName, fileContent.debugPath, fileContent.content)
+          else TastyData(binaryName, fileContent.debugPath, fileContent.content)
+        }
+        .map { (packagePath, classAndTastys) =>
+          val packageName = packagePath.replace('/', '.').nn
+          val (classes, tastys) = classAndTastys.partitionMap {
+            case classData: ClassData => Left(classData)
+            case tastyData: TastyData => Right(tastyData)
           }
-          .map { (packagePath, classAndTastys) =>
-            val packageName = packagePath.replace('/', '.').nn
-            val (classes, tastys) = classAndTastys.partitionMap {
-              case classData: ClassData => Left(classData)
-              case tastyData: TastyData => Right(tastyData)
-            }
-            PackageData(
-              packageName,
-              IArray.from(classes.sortBy(_.binaryName)),
-              IArray.from(tastys.sortBy(_.binaryName))
-            )
-          }
-      end allPackageDatas
+          PackageData(packageName, IArray.from(classes.sortBy(_.binaryName)), IArray.from(tastys.sortBy(_.binaryName)))
+        }
 
-      Classpath.from(IArray.from(allPackageDatas))
-    end for
+    for allEntries <- allEntriesFuture yield
+      val compressedEntries = allEntries.map(compressPackages andThen IArray.from)
+      Classpath.from(compressedEntries)
   end read
 
   private def fromDirectory(dir: String, relPath: String)(implicit ec: ExecutionContext): Future[Seq[FileContent]] =
