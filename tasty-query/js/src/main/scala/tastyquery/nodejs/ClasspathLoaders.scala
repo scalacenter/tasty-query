@@ -30,6 +30,9 @@ object ClasspathLoaders:
     * The resulting [[Classpaths.Classpath]] can be given to [[Contexts.init]]
     * to create a [[Contexts.Context]]. The latter gives semantic access to all
     * the definitions on the classpath.
+    *
+    * @note the resulting [[Classpaths.Classpath.Entry Classpath.Entry]] entries of
+    *       the returned [[Classpaths.Classpath]] correspond to the elements of `classpath`.
     */
   def read(classpath: List[String])(using ExecutionContext): Future[Classpath] =
     val allEntriesFuture = Future

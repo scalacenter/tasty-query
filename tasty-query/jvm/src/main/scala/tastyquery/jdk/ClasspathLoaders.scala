@@ -43,6 +43,9 @@ object ClasspathLoaders {
     * The resulting [[Classpaths.Classpath]] can be given to [[Contexts.init]]
     * to create a [[Contexts.Context]]. The latter gives semantic access to all
     * the definitions on the classpath.
+    *
+    * @note the resulting [[Classpaths.Classpath.Entry Classpath.Entry]] entries of
+    *       the returned [[Classpaths.Classpath]] correspond to the elements of `classpath`.
     */
   def read(classpath: List[Path]): Classpath =
     read(classpath, FileKind.All)
@@ -110,19 +113,18 @@ object ClasspathLoaders {
   }
 
   private def classpathToEntries(classpath: List[Path]): IArray[ClasspathEntry] =
-    val buf = IArray.newBuilder[ClasspathEntry]
-    for e <- classpath do
+    for e <- IArray.from(classpath)
+    yield
       if Files.exists(e) then
-        if Files.isDirectory(e) then buf += ClasspathEntry.Directory(e)
-        else if e.getFileName().toString().endsWith(".jar") then buf += ClasspathEntry.Jar(e)
-        else ()
-      else ()
-    end for
-    buf.result()
+        if Files.isDirectory(e) then ClasspathEntry.Directory(e)
+        else if e.getFileName().toString().endsWith(".jar") then ClasspathEntry.Jar(e)
+        else throw IllegalArgumentException("Illegal classpath entry: " + e)
+      else ClasspathEntry.Empty
 
   private enum ClasspathEntry {
     case Jar(path: Path)
     case Directory(path: Path)
+    case Empty
 
     def walkFiles[T](kinds: FileKind*)(op: (FileKind, String, String, IArray[Byte]) => T): Map[FileKind, List[T]] =
       this match {
@@ -187,6 +189,8 @@ object ClasspathLoaders {
                 op(ext, path.relativize(f).toString(), f.toString(), bytes)
               }
           }.toMap
+
+        case ClasspathEntry.Empty => Map.empty
       }
   }
 
