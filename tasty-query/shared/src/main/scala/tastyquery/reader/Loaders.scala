@@ -36,7 +36,6 @@ private[tastyquery] object Loaders {
     private var searched = false
     private var packages: Map[PackageSymbol, IArray[PackageData]] = compiletime.uninitialized
     private var byEntry: ByEntryMap | Null = null
-    private var computeByEntry: (() => ByEntryMap) | Null = null
     private val roots: mutable.Map[PackageSymbol, mutable.Map[SimpleName, Entry]] = mutable.HashMap.empty
     private var topLevelTastys: Map[Loader.Root, List[Tree]] = Map.empty
 
@@ -182,7 +181,6 @@ private[tastyquery] object Loaders {
     }
 
     def lookupByEntry(src: Classpath.Entry)(using Context): Option[Iterable[TermOrTypeSymbol]] =
-      require(searched)
 
       def lookupRoots(pkg: PackageSymbol, rootNames: IArray[SimpleName]) =
         val buf = IArray.newBuilder[TermOrTypeSymbol]
@@ -196,57 +194,62 @@ private[tastyquery] object Loaders {
 
       def computeLookup(map: ByEntryMap) =
         map.get(src) match
-          case Some(packages) =>
-            Some(packages.view.flatMap(lookupRoots))
-          case _ => None
+          case Some(pkgs) => Some(pkgs.view.flatMap(lookupRoots))
+          case None       => None
 
       val localByEntry = byEntry
       if localByEntry == null then
-        val localCompute = computeByEntry
-        if localCompute == null then throw AssertionError("expected byEntry or computeByEntry to be set")
-        else
-          val newByEntry = localCompute()
-          byEntry = newByEntry
-          computeLookup(newByEntry)
+        val newByEntry = computeByEntry()
+        byEntry = newByEntry
+        computeLookup(newByEntry)
       else computeLookup(localByEntry)
     end lookupByEntry
 
     def initPackages()(using ctx: Context): Unit =
+
+      def loadPackages(): IArray[(PackageSymbol, PackageData)] =
+        val localPackages = mutable.HashMap.empty[String, PackageSymbol]
+        def createOrLookupPackage(pkgName: String): PackageSymbol =
+          localPackages.getOrElseUpdate(pkgName, ctx.findPackageFromRootOrCreate(toPackageName(pkgName)))
+        classpath.entries.flatMap(entry =>
+          entry.packages.map(pkg => createOrLookupPackage(pkg.dotSeparatedName) -> pkg)
+        )
+      end loadPackages
+
       if !searched then
         searched = true
-        val packageSymbols = classpath.entries.map(entry =>
-          entry -> entry.packages.map(pkg =>
-            ctx.findPackageFromRootOrCreate(toPackageName(pkg.dotSeparatedName)) -> pkg
-          )
-        )
-        val packageToEntries =
-          val pre = packageSymbols.flatMap(_(1))
-          pre.groupMap((pkg, _) => pkg)((_, data) => data)
-        loader.packages = packageToEntries
-
-        def computeByEntry(): ByEntryMap =
-          val localByEntry =
-            mutable.HashMap.empty[Classpath.Entry, mutable.HashMap[PackageSymbol, mutable.HashSet[SimpleName]]]
-          val localSeen = mutable.HashMap.empty[PackageSymbol, mutable.HashSet[SimpleName]]
-          for
-            (entry, datas) <- packageSymbols
-            (pkg, data) <- datas
-          do
-            foreachEntry(data)((name, _) =>
-              if !localSeen.getOrElseUpdate(pkg, mutable.HashSet.empty).contains(name) then
-                localSeen(pkg).add(name) // if we see this package and name in a second entry, don't add it.
-                localByEntry
-                  .getOrElseUpdate(entry, mutable.HashMap.empty)
-                  .getOrElseUpdate(pkg, mutable.HashSet.empty)
-                  .addOne(name)
-            )
-          end for
-          localByEntry.view
-            .mapValues(entries => IArray.from(entries.view.mapValues(IArray.from)))
-            .toMap
-        end computeByEntry
-
-        loader.computeByEntry = () => computeByEntry()
+        loader.packages = loadPackages().groupMap((pkg, _) => pkg)((_, data) => data)
     end initPackages
+
+    private def computeByEntry()(using Context): ByEntryMap =
+      require(searched)
+
+      val localByEntry =
+        mutable.HashMap.empty[Classpath.Entry, mutable.HashMap[PackageSymbol, mutable.HashSet[SimpleName]]]
+      val localSeen = mutable.HashMap.empty[PackageSymbol, mutable.HashSet[SimpleName]]
+      val localPackages = mutable.HashMap.empty[String, PackageSymbol]
+
+      def lookupPackage(pkgName: String): PackageSymbol =
+        localPackages.getOrElseUpdate(pkgName, ctx.findPackageFromRoot(toPackageName(pkgName)))
+
+      for
+        entry <- classpath.entries
+        pkgData <- entry.packages
+      do
+        val pkg = lookupPackage(pkgData.dotSeparatedName)
+        foreachEntry(pkgData)((name, _) =>
+          if !localSeen.getOrElseUpdate(pkg, mutable.HashSet.empty).contains(name) then
+            // only enter here the first time we see this name in this package
+            localSeen(pkg).add(name)
+            localByEntry
+              .getOrElseUpdate(entry, mutable.HashMap.empty)
+              .getOrElseUpdate(pkg, mutable.HashSet.empty)
+              .add(name)
+        )
+      end for
+      localByEntry.view
+        .mapValues(entries => IArray.from(entries.view.mapValues(IArray.from)))
+        .toMap
+    end computeByEntry
   }
 }

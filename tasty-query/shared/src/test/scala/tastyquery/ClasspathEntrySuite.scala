@@ -5,9 +5,7 @@ import Paths.*
 import Symbols.*
 
 import tastyquery.testutil.TestPlatform
-import scala.concurrent.Future
 import tastyquery.Classpaths.Classpath
-import scala.concurrent.ExecutionContext.Implicits.global
 
 class ClasspathEntrySuite extends UnrestrictedUnpicklingSuite:
 
@@ -30,17 +28,24 @@ class ClasspathEntrySuite extends UnrestrictedUnpicklingSuite:
 
   }
 
+  testWithContext("lookup-by-entry-single") {
+    val MirrorClass = resolve(name"scala" / name"deriving" / tname"Mirror")
+
+    val syms = lookupSyms(scala3ClasspathEntry)
+
+    assert(syms.exists(_ == MirrorClass))
+  }
+
   testWithContext("lookup-by-entry-reentrant") {
-    // WHITEBOX: test that we can lookup by classpath entries twice without
-    // caching problems
+    // WHITEBOX: test performance impact of reentrant lookup
 
     val MirrorClass = resolve(name"scala" / name"deriving" / tname"Mirror")
 
-    val syms1 = lookupSyms(scala3ClasspathEntry)
-    val syms2 = lookupSyms(scala3ClasspathEntry) // explicit second lookup
+    def lookupMirror() =
+      val syms = lookupSyms(scala3ClasspathEntry)
+      assert(syms.exists(_ == MirrorClass))
 
-    assert(syms1.exists(_ == MirrorClass))
-    assert(syms2.exists(_ == MirrorClass))
+    for _ <- 1 to 50 do lookupMirror()
 
   }
 
