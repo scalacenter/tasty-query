@@ -31,7 +31,7 @@ private[tastyquery] object Loaders {
       case TastyOnly(tastyData: TastyData)
       case ClassOnly(classData: ClassData)
 
-    private type ByEntryMap = Map[Classpath.Entry, IArray[(PackageSymbol, IArray[Name])]]
+    private type ByEntryMap = Map[Classpath.Entry, IArray[(PackageSymbol, IArray[SimpleName])]]
 
     private var searched = false
     private var packages: Map[PackageSymbol, IArray[PackageData]] = compiletime.uninitialized
@@ -184,20 +184,20 @@ private[tastyquery] object Loaders {
     def lookupByEntry(src: Classpath.Entry)(using Context): Option[Iterable[TermOrTypeSymbol]] =
       require(searched)
 
+      def lookupRoots(pkg: PackageSymbol, rootNames: IArray[SimpleName]) =
+        val buf = IArray.newBuilder[TermOrTypeSymbol]
+        def lookup(n: Name) =
+          for case t: TermOrTypeSymbol <- pkg.getDecl(n) do buf += t
+        for rootName <- rootNames do
+          lookup(rootName)
+          lookup(rootName.toTypeName)
+          lookup(rootName.withObjectSuffix.toTypeName)
+        buf.result()
+
       def computeLookup(map: ByEntryMap) =
         map.get(src) match
-          case Some(entries) =>
-            Some(
-              entries.view.flatMap((pkg, names) =>
-                names.flatMap(
-                  pkg
-                    .getDecl(_)
-                    .collect({ case t: TermOrTypeSymbol =>
-                      t
-                    })
-                )
-              )
-            )
+          case Some(packages) =>
+            Some(packages.view.flatMap(lookupRoots))
           case _ => None
 
       val localByEntry = byEntry
@@ -226,8 +226,8 @@ private[tastyquery] object Loaders {
 
         def computeByEntry(): ByEntryMap =
           val localByEntry =
-            mutable.HashMap.empty[Classpath.Entry, mutable.HashMap[PackageSymbol, mutable.HashSet[Name]]]
-          val localSeen = mutable.HashMap.empty[PackageSymbol, mutable.HashSet[Name]]
+            mutable.HashMap.empty[Classpath.Entry, mutable.HashMap[PackageSymbol, mutable.HashSet[SimpleName]]]
+          val localSeen = mutable.HashMap.empty[PackageSymbol, mutable.HashSet[SimpleName]]
           for
             (entry, datas) <- packageSymbols
             (pkg, data) <- datas
@@ -239,8 +239,6 @@ private[tastyquery] object Loaders {
                   .getOrElseUpdate(entry, mutable.HashMap.empty)
                   .getOrElseUpdate(pkg, mutable.HashSet.empty)
                   .addOne(name)
-                  .addOne(name.withObjectSuffix.toTypeName)
-                  .addOne(name.toTypeName)
             )
           end for
           localByEntry.view
