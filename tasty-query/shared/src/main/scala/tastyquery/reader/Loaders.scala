@@ -31,7 +31,7 @@ private[tastyquery] object Loaders {
       case TastyOnly(tastyData: TastyData)
       case ClassOnly(classData: ClassData)
 
-    private type ByEntryMap = Map[AnyRef, IArray[(PackageSymbol, IArray[Name])]]
+    private type ByEntryMap = Map[Classpath.Entry, IArray[(PackageSymbol, IArray[Name])]]
 
     private var searched = false
     private var packages: Map[PackageSymbol, IArray[PackageData]] = compiletime.uninitialized
@@ -139,7 +139,7 @@ private[tastyquery] object Loaders {
           false
     end loadRoot
 
-    private def foldEntries(data: PackageData)(f: (SimpleName, Entry) => Unit): Unit =
+    private def foreachEntry(data: PackageData)(f: (SimpleName, Entry) => Unit): Unit =
       def isNestedOrModuleClassName(name: String): Boolean =
         def isNested =
           val idx = name.lastIndexOf('$', name.length - 2)
@@ -166,7 +166,7 @@ private[tastyquery] object Loaders {
           val entry =
             tastyMap.get(cData.binaryName).map(Entry.ClassAndTasty(cData, _)).getOrElse(Entry.ClassOnly(cData))
           f(SimpleName(decodedName), entry)
-    end foldEntries
+    end foreachEntry
 
     def scanPackage(pkg: PackageSymbol)(using Context): Unit = {
       require(searched)
@@ -175,24 +175,29 @@ private[tastyquery] object Loaders {
           packages -= pkg
           val localRoots = mutable.HashMap.empty[SimpleName, Entry]
           for data <- datas do
-            foldEntries(data)((n, e) =>
-              localRoots.updateWith(n)({
-                case None        => Some(e) // first entry wins
-                case s @ Some(_) => s // do not replace existing root, i.e. follow classpath order
-              })
-            )
+            foreachEntry(data)(localRoots.getOrElseUpdate) // duplicate roots from later classpath entries are ignored
           roots(pkg) = localRoots
         case _ => // probably a synthetic package that only has other packages as members. (i.e. `package java`)
       }
     }
 
-    def lookupByEntry(src: AnyRef)(using Context): Option[IterableOnce[Symbol]] =
+    def lookupByEntry(src: Classpath.Entry)(using Context): Option[Iterable[TermOrTypeSymbol]] =
       require(searched)
 
       def computeLookup(map: ByEntryMap) =
         map.get(src) match
           case Some(entries) =>
-            Some(entries.iterator.flatMap((pkg, names) => names.iterator.flatMap(pkg.getDecl)))
+            Some(
+              entries.view.flatMap((pkg, names) =>
+                names.flatMap(
+                  pkg
+                    .getDecl(_)
+                    .collect({ case t: TermOrTypeSymbol =>
+                      t
+                    })
+                )
+              )
+            )
           case _ => None
 
       val localByEntry = byEntry
@@ -209,9 +214,10 @@ private[tastyquery] object Loaders {
     def initPackages()(using ctx: Context): Unit =
       if !searched then
         searched = true
-        val packages = classpath.entries.map(key => key -> classpath.db(key))
-        val packageSymbols = packages.map((entry, pkgs) =>
-          entry -> pkgs.map(pkg => ctx.findPackageFromRootOrCreate(toPackageName(pkg.dotSeparatedName)) -> pkg)
+        val packageSymbols = classpath.entries.map(entry =>
+          entry -> entry.packages.map(pkg =>
+            ctx.findPackageFromRootOrCreate(toPackageName(pkg.dotSeparatedName)) -> pkg
+          )
         )
         val packageToEntries =
           val pre = packageSymbols.flatMap(_(1))
@@ -219,13 +225,14 @@ private[tastyquery] object Loaders {
         loader.packages = packageToEntries
 
         def computeByEntry(): ByEntryMap =
-          val localByEntry = mutable.HashMap.empty[AnyRef, mutable.HashMap[PackageSymbol, mutable.HashSet[Name]]]
+          val localByEntry =
+            mutable.HashMap.empty[Classpath.Entry, mutable.HashMap[PackageSymbol, mutable.HashSet[Name]]]
           val localSeen = mutable.HashMap.empty[PackageSymbol, mutable.HashSet[Name]]
           for
             (entry, datas) <- packageSymbols
             (pkg, data) <- datas
           do
-            foldEntries(data)((name, _) =>
+            foreachEntry(data)((name, _) =>
               if !localSeen.getOrElseUpdate(pkg, mutable.HashSet.empty).contains(name) then
                 localSeen(pkg).add(name) // if we see this package and name in a second entry, don't add it.
                 localByEntry
@@ -237,7 +244,7 @@ private[tastyquery] object Loaders {
             )
           end for
           localByEntry.view
-            .mapValues(entries => IArray.from(entries.map((pkg, names) => pkg -> IArray.from(names))))
+            .mapValues(entries => IArray.from(entries.view.mapValues(IArray.from)))
             .toMap
         end computeByEntry
 

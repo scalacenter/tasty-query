@@ -26,24 +26,11 @@ object JavaTestPlatform {
   private lazy val classpath: Classpath =
     ClasspathLoaders.read(classpathPaths)
 
-  private lazy val classpathDerived: Classpath =
-    val cp = classpath
-    val entries: List[Path] = cp.entries.toList.map(_.asInstanceOf[Path])
-    assert(entries == classpathPaths)
-    ClasspathLoaders.read(entries, old = cp)
-  end classpathDerived
-
-  private lazy val scala3Entry: Path =
-    Paths.get(classpathEntries.find(_.contains("scala3-library_3").nn).get).nn
-
-  def scala3ClasspathEntry(): AnyRef =
-    scala3Entry
+  lazy val scala3ClasspathIndex: Int =
+    classpathEntries.indexWhere(_.contains("scala3-library_3").nn)
 
   def loadClasspath(): Future[Classpath] =
     Future(classpath)
-
-  def loadDerivedClasspath(): Future[Classpath] =
-    Future(classpathDerived)
 
   def readResourceCodeFile(relPath: String): String =
     val path = System.getenv(ResourceCodeEnvVar).nn + "/" + relPath

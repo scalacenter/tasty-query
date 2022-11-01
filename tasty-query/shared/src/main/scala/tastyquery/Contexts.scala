@@ -59,10 +59,8 @@ object Contexts {
 
     val defn: Definitions = Definitions(this: @unchecked, RootPackage, EmptyPackage)
 
-    /** for a given classpath entry, return a lazy view over all the roots covered by the entry,
-      *  grouped by package.
-      */
-    def findSymbolsByClasspathEntry(entry: AnyRef): IterableOnce[Symbol] =
+    /** For a given classpath entry, return a lazy view over all the roots covered by the entry. */
+    def findSymbolsByClasspathEntry(entry: Classpath.Entry): Iterable[TermOrTypeSymbol] =
       classloader.lookupByEntry(entry).getOrElse {
         throw new UnknownClasspathEntry(entry)
       }

@@ -11,9 +11,9 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class ClasspathEntrySuite extends UnrestrictedUnpicklingSuite:
 
-  def scala3ClasspathEntry = TestPlatform.scala3ClasspathEntry()
+  def scala3ClasspathEntry(using Context) = ctx.classloader.classpath.entries(TestPlatform.scala3ClasspathIndex)
 
-  def lookupSyms(entry: AnyRef)(using Context): IArray[Symbol] =
+  def lookupSyms(entry: Classpath.Entry)(using Context): IArray[Symbol] =
     IArray.from(ctx.findSymbolsByClasspathEntry(entry))
 
   testWithContext("scala-library-by-entry") {
@@ -36,26 +36,12 @@ class ClasspathEntrySuite extends UnrestrictedUnpicklingSuite:
 
     val MirrorClass = resolve(name"scala" / name"deriving" / tname"Mirror")
 
-    val syms1, syms2 = lookupSyms(scala3ClasspathEntry)
+    val syms1 = lookupSyms(scala3ClasspathEntry)
+    val syms2 = lookupSyms(scala3ClasspathEntry) // explicit second lookup
 
     assert(syms1.exists(_ == MirrorClass))
     assert(syms2.exists(_ == MirrorClass))
 
   }
 
-  testWithContextDerived("load-symbols-from-derived-classpath") {
-    // WHITEBOX: The context here was loaded from a classpath derived from another one.
-    resolve(name"scala" / name"deriving" / tname"Mirror")
-  }
-
-  def testWithContextDerived(name: String)(using munit.Location)(body: Context ?=> Unit): Unit =
-    testWithContextDerived(new munit.TestOptions(name))(body)
-
-  def testWithContextDerived(options: munit.TestOptions)(using munit.Location)(body: Context ?=> Unit): Unit =
-    test(options) {
-      for derivedClasspath <- testClasspathDerived yield
-        val ctx = Contexts.init(derivedClasspath)
-        body(using ctx)
-    }
-
-  lazy val testClasspathDerived: Future[Classpath] = TestPlatform.loadDerivedClasspath()
+end ClasspathEntrySuite

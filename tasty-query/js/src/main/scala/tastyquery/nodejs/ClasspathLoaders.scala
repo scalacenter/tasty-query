@@ -30,31 +30,22 @@ object ClasspathLoaders:
     * The resulting [[Classpaths.Classpath]] can be given to [[Contexts.init]]
     * to create a [[Contexts.Context]]. The latter gives semantic access to all
     * the definitions on the classpath.
-    *
-    * `old` should be the previous classpath created by this method (or defaults to [[Classpath.Empty]]).
-    *  Using the previous classpath allows to share already loaded classpath data when possible.
     */
-  def read(classpath: List[String], old: Classpath = Classpath.Empty)(using ExecutionContext): Future[Classpath] =
-    def replaceEntry(entry: String, compute: => Future[Seq[FileContent]]) =
-      val data = old.lookup(entry) match
-        case Some(packages) => Future.successful(Right(packages))
-        case None           => compute.map(Left(_))
-      data.map(entry -> _)
-
-    val allFilesFuture: Future[List[(String, Either[Seq[FileContent], IArray[PackageData]])]] = Future
+  def read(classpath: List[String])(using ExecutionContext): Future[Classpath] =
+    val allEntriesFuture = Future
       .traverse(classpath) { entry =>
         cbFuture[Stats](stat(entry, _)).transformWith {
           case Success(stat) if stat.isDirectory() =>
-            replaceEntry(entry, fromDirectory(entry, ""))
+            fromDirectory(entry, "")
 
           case Success(_) if entry.endsWith(".jar") =>
-            replaceEntry(entry, fromJarFile(entry))
+            fromJarFile(entry)
 
           case Success(_) =>
             throw new IllegalArgumentException("Illegal classpath entry: " + entry)
 
           case Failure(MatchableJSException(e: js.Error)) if isNotFound(e) =>
-            Future.successful(entry -> Right(IArray.empty))
+            Future.successful(Nil)
 
           case Failure(t) =>
             throw t
@@ -80,11 +71,9 @@ object ClasspathLoaders:
           PackageData(packageName, IArray.from(classes.sortBy(_.binaryName)), IArray.from(tastys.sortBy(_.binaryName)))
         }
 
-    for allEntries <- allFilesFuture yield
-      val compressedEntries =
-        for (entry, allFiles) <- allEntries
-        yield entry -> allFiles.fold(fa => IArray.from(compressPackages(fa)), identity)
-      Classpath.from(old, IArray.from(compressedEntries))
+    for allEntries <- allEntriesFuture yield
+      val compressedEntries = allEntries.map(compressPackages andThen IArray.from)
+      Classpath.from(compressedEntries)
   end read
 
   private def fromDirectory(dir: String, relPath: String)(implicit ec: ExecutionContext): Future[Seq[FileContent]] =
