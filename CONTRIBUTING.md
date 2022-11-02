@@ -16,15 +16,44 @@ We also use a continuous integration (CI) system to automate some of the checkin
 ## Tools Needed To Begin
 The following tools can be installed following our [Scala getting started guide](https://docs.scala-lang.org/getting-started/index.html):
 - JVM 1.8+
+- [Node.js](https://nodejs.org/en/download/) (optional)
 - [sbt](https://www.scala-sbt.org/download.html)
 
 A text editor is also useful, we recommend [VS Code](https://code.visualstudio.com) with the [Metals IDE extension](https://marketplace.visualstudio.com/items?itemName=scalameta.metals).
 
 ## Try your setup / Running Tests
-To test that everything is working, you can run the tests. In a terminal, navigate to the directory of this project and use the command:
-```script
-sbt test
+To test that everything is working, you can run the tests.
+In a terminal, navigate to the directory of this project and start `sbt` with the command:
 ```
+$ sbt
+[...]
+sbt:root>
+```
+
+All the other commands in this document are assumed to be done within `sbt`.
+
+To run all the tests on the JVM:
+```
+sbt:root> tastyQueryJVM/test
+[...]
+[success] Total time: 5 s, completed Nov 2, 2022 2:31:15 PM
+```
+
+You can also test the JS version, assuming you have installed Node.js, with:
+```
+sbt:root> tastyQueryJS/test
+[...]
+[success] Total time: 8 s, completed Nov 2, 2022 2:32:35 PM
+```
+
+## Structure of the project
+
+* `tasty-query/`: source code and tests for tasty-query itself
+  * `shared/src/main/`: main, portable sources
+  * `shared/src/test`: test sources
+  * `jvm/`: JVM-specific sources and tests
+  * `js/`: JS-specific sources and tests
+* `test-sources/`: source files used as input in the test cases of `tasty-query/`
 
 ## Procedure
 
@@ -35,12 +64,15 @@ sbt test
 ## Adding Tests
 
 We have several test suites to add to, depending on the contribution type:
-- For additions of new TASTy tree kinds, please add to [ReadTreeSuite](jvm/src/test/scala/tastyquery/ReadTreeSuite.scala)
-- To test symbol structure of self-contained TASTy files, please add to [SymbolSuite](jvm/src/test/scala/tastyquery/SymbolSuite.scala)
-  - `SymbolSuite` is best avoided unless you are specifically testing reading of symbols defined in TASTy files.
-- To test symbol structure and types of TASTy files, and reading of external dependencies, please add to [TypeSuite](jvm/src/test/scala/tastyquery/TypeSuite.scala)
 
-for each test suite, it is usually sufficient to copy a pre-existing test and change it for your needs.
+* `ReadTreeSuite`: tests for reading specific kinds of TASTy trees
+* `TypeSuite`: tests about computing the types of symbols and trees
+* `SubtypingSuite`: tests about `tp1.isSubtype(tp2)` and `tp1.isSameType(tp2)`
+* `PositionSuite`: tests for reading the positions (`Spans`) of trees
+* `SignatureSuite` tests for the `signedName` of methods (and indirectly for the *erasure* of types)
+* `SymbolSuite`: tests for reaching symbols in an isolated way (this is probably *not* where you want to add tests)
+
+Take inspiration from existing tests in the appropriate test suite to write your own.
 
 ## Formatting Code
 We use [Scalafmt](https://scalameta.org/scalafmt/) to format our code, and pull requests are validated by CI to ensure that code is formatted correctly.
@@ -48,7 +80,7 @@ We use [Scalafmt](https://scalameta.org/scalafmt/) to format our code, and pull 
 To format your code before making a PR, run Scalafmt with:
 
 ```script
-sbt scalafmtAll
+sbt:root> scalafmtAll
 ```
 
 #### Edit Scalafmt Config:
