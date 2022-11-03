@@ -496,6 +496,15 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     )
   }
 
+  testWithContext("Parents of special classes") {
+    assert(clue(defn.AnyClass.parentClasses) == Nil)
+    assert(clue(defn.MatchableClass.parentClasses) == List(defn.AnyClass))
+    assert(clue(defn.ObjectClass.parentClasses) == List(defn.AnyClass, defn.MatchableClass))
+    assert(clue(defn.AnyValClass.parentClasses) == List(defn.AnyClass, defn.MatchableClass))
+    assert(clue(defn.NullClass.parentClasses) == List(defn.AnyClass, defn.MatchableClass))
+    assert(clue(defn.NothingClass.parentClasses) == List(defn.AnyClass))
+  }
+
   testWithContext("java-class-signatures-[RecClass]") {
     val RecClass = resolve(name"javadefined" / tname"RecClass").asClass
     val ObjectClass = resolve(name"java" / name"lang" / tname"Object")
@@ -796,7 +805,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val MidMonoClass = resolve(OverridesPath / tname"MidMono").asClass
     val ChildMonoClass = resolve(OverridesPath / tname"ChildMono").asClass
 
-    val linTail = defn.ObjectClass :: defn.AnyClass :: Nil
+    val linTail = defn.ObjectClass :: defn.MatchableClass :: defn.AnyClass :: Nil
 
     assert(clue(SuperMonoClass.linearization) == SuperMonoClass :: linTail)
     assert(clue(SuperMonoTraitClass.linearization) == SuperMonoTraitClass :: linTail)

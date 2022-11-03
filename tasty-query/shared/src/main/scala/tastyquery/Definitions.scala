@@ -26,6 +26,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   // Cached TypeRef's for core types
 
   val AnyType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Any"))
+  val MatchableType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Matchable"))
   val AnyRefType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("AnyRef"))
   val AnyValType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("AnyVal"))
 
@@ -69,7 +70,11 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val AnyClass = createSpecialClass(typeName("Any"), Nil, Abstract)
     .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
 
-  val NullClass = createSpecialClass(typeName("Null"), AnyClass.typeRef :: Nil, Abstract | Final)
+  val MatchableClass = createSpecialClass(typeName("Matchable"), AnyClass.typeRef :: Nil, Trait)
+    .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
+
+  val NullClass =
+    createSpecialClass(typeName("Null"), AnyClass.typeRef :: MatchableClass.typeRef :: Nil, Abstract | Final)
 
   val NothingClass = createSpecialClass(typeName("Nothing"), AnyClass.typeRef :: Nil, Abstract | Final)
 
