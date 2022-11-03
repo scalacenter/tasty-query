@@ -868,7 +868,17 @@ object Types {
 
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       symbol.getDecl(name).getOrElse {
-        throw MemberNotFoundException(symbol, name)
+        /* #179 For some very unfortunate reason, Scala 3 emits TypeRefs
+         * whose prefix is a PackageRef but the name references something in a
+         * *package object*. That goes contrary to TASTy's purpose of being a
+         * fully-resolved thing. We have to work around it here.
+         */
+        val fallback = symbol.getDecl(tpnme.scala2PackageObjectClass) match
+          case Some(pkgObjectClass) => pkgObjectClass.asClass.getDecl(name)
+          case None                 => None
+        fallback.getOrElse {
+          throw MemberNotFoundException(symbol, name)
+        }
       }
 
     override def toString(): String = s"PackageRef($fullyQualifiedName)"

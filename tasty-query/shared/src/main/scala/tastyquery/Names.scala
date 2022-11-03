@@ -95,6 +95,8 @@ object Names {
     val RefinedClassMagic: TypeName = typeName("<refinement>")
     val ByNameParamClassMagic: TypeName = typeName("<byname>")
     val RepeatedParamClassMagic: TypeName = typeName("<repeated>")
+
+    val scala2PackageObjectClass: TypeName = termName("package").withObjectSuffix.toTypeName
   }
 
   /** Create a type name from a string */
