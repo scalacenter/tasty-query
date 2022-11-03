@@ -72,6 +72,7 @@ object Names {
 
   object tpnme {
     val Any: TypeName = typeName("Any")
+    val AnyVal: TypeName = typeName("AnyVal")
     val Nothing: TypeName = typeName("Nothing")
     val Null: TypeName = typeName("Null")
 

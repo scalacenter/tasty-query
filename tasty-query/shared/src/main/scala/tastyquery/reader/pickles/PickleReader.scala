@@ -225,13 +225,18 @@ private[pickles] class PickleReader {
         val tpe = readSymType()
         val typeParams = atNoCache(infoRef)(readTypeParams())
         if isRefinementClass(cls) then return cls // by-pass further assignments, including Flags
-        val parentTypes = tpe match
-          case TempPolyType(tparams, restpe: TempClassInfoType) =>
-            assert(tparams.corresponds(typeParams)(_ eq _)) // should reuse the class type params
-            restpe.parentTypes
-          case tpe: TempClassInfoType => tpe.parentTypes
-          case tpe =>
-            throw AssertionError(s"unexpected type $tpe for $cls, owner is $owner")
+        val parentTypes =
+          if cls.owner == defn.scalaPackage && tname == tpnme.AnyVal then
+            // Patch the superclasses of AnyVal to contain Matchable
+            defn.AnyType :: defn.MatchableType :: Nil
+          else
+            tpe match
+              case TempPolyType(tparams, restpe: TempClassInfoType) =>
+                assert(tparams.corresponds(typeParams)(_ eq _)) // should reuse the class type params
+                restpe.parentTypes
+              case tpe: TempClassInfoType => tpe.parentTypes
+              case tpe =>
+                throw AssertionError(s"unexpected type $tpe for $cls, owner is $owner")
         cls.withParentsDirect(parentTypes)
         cls.withTypeParams(typeParams)
         cls

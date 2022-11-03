@@ -13,14 +13,11 @@ private[classfiles] object Descriptors:
 
   def parseSupers(cls: ClassSymbol, superClass: Option[String], interfaces: IArray[String])(using Context): List[Type] =
     cls.withTypeParams(Nil)
-    val superRef = superClass.map(classRef).getOrElse {
-      // More efficient would be to only do this check once in Definitions,
-      // but parents are immutable currently.
-      // !!! Cannot access `defn.ObjectClass` here, because that's a cycle when initializing defn.ObjectClass itself
-      if cls.owner == defn.javaLangPackage && cls.name == tpnme.Object then defn.AnyType
-      else defn.ObjectType
-    }
-    superRef :: interfaces.map(classRef).toList
+    // !!! Cannot access `defn.ObjectClass` here, because that's a cycle when initializing defn.ObjectClass itself
+    if cls.owner == defn.javaLangPackage && cls.name == tpnme.Object then defn.AnyType :: defn.MatchableType :: Nil
+    else
+      val superRef = superClass.map(classRef).getOrElse(defn.ObjectType)
+      superRef :: interfaces.map(classRef).toList
 
   private def classRef(binaryName: String)(using Context): TypeRef =
     def followPackages(acc: PackageSymbol, parts: List[String]): TypeRef =
