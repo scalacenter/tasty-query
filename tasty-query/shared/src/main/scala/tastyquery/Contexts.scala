@@ -103,6 +103,98 @@ object Contexts {
       rec(RootPackage, path)
     end findSymbolFromRoot
 
+    def findPackage(fullyQualifiedName: String): PackageSymbol =
+      findPackageFromRoot(FullyQualifiedName(fullyQualifiedName.split('.').toList.map(termName(_))))
+
+    def findTopLevelClass(fullyQualifiedName: String): ClassSymbol =
+      val (pkg, nameStr) = splitPackageAndName(fullyQualifiedName)
+      val name = typeName(nameStr)
+      pkg.getDecl(name) match
+        case Some(cls: ClassSymbol) =>
+          cls
+        case _ =>
+          throw MemberNotFoundException(pkg, name, s"cannot find class $nameStr in $pkg")
+    end findTopLevelClass
+
+    def findTopLevelModuleClass(fullyQualifiedName: String): ClassSymbol =
+      val (pkg, nameStr) = splitPackageAndName(fullyQualifiedName)
+      val name = termName(nameStr).withObjectSuffix.toTypeName
+      pkg.getDecl(name) match
+        case Some(cls: ClassSymbol) =>
+          cls
+        case _ =>
+          throw MemberNotFoundException(pkg, name, s"cannot find module class $nameStr in $pkg")
+    end findTopLevelModuleClass
+
+    def findStaticClass(fullyQualifiedName: String): ClassSymbol =
+      findStaticType(fullyQualifiedName) match
+        case cls: ClassSymbol =>
+          cls
+        case sym =>
+          throw InvalidProgramStructureException(s"expected class symbol but got $sym")
+    end findStaticClass
+
+    def findStaticModuleClass(fullyQualifiedName: String): ClassSymbol =
+      findStaticTerm(fullyQualifiedName) match
+        case sym if sym.is(Module) =>
+          sym.moduleClass.get
+        case sym =>
+          throw InvalidProgramStructureException(s"expected module symbol but got $sym")
+    end findStaticModuleClass
+
+    def findStaticType(fullyQualifiedName: String): TypeSymbol =
+      val (owner, nameStr) = findStaticOwnerAndName(fullyQualifiedName)
+      val name = typeName(nameStr)
+      owner
+        .getDecl(name)
+        .getOrElse {
+          throw MemberNotFoundException(owner, name)
+        }
+        .asType
+    end findStaticType
+
+    def findStaticTerm(fullyQualifiedName: String): TermSymbol =
+      val (owner, nameStr) = findStaticOwnerAndName(fullyQualifiedName)
+      val name = termName(nameStr)
+      owner
+        .getDecl(name)
+        .getOrElse {
+          throw MemberNotFoundException(owner, name)
+        }
+        .asTerm
+    end findStaticTerm
+
+    private def findStaticOwnerAndName(fullyQualifiedName: String): (DeclaringSymbol, String) =
+      val path = fullyQualifiedName.split('.').toList
+      (findStaticOwner(path.init), path.last)
+
+    private def findStaticOwner(path: List[String]): DeclaringSymbol =
+      def loop(owner: DeclaringSymbol, path: List[String]): DeclaringSymbol =
+        path match
+          case Nil =>
+            owner
+          case nameStr :: rest =>
+            val name = termName(nameStr)
+            owner.getDecl(name) match
+              case Some(pkg: PackageSymbol) =>
+                loop(pkg, rest)
+              case Some(moduleSymbol: TermSymbol) if moduleSymbol.is(Module) =>
+                loop(moduleSymbol.moduleClass.get, rest)
+              case Some(sym) =>
+                throw InvalidProgramStructureException(s"$sym is not a static owner")
+              case None =>
+                throw MemberNotFoundException(owner, name)
+      end loop
+
+      if path.isEmpty then EmptyPackage
+      else loop(RootPackage, path)
+    end findStaticOwner
+
+    private def splitPackageAndName(fullyQualifiedName: String): (PackageSymbol, String) =
+      fullyQualifiedName.split('.').toList match
+        case name :: Nil => (EmptyPackage, name)
+        case path        => (findPackageFromRoot(FullyQualifiedName(path.init.map(termName(_)))), path.last)
+
     private[tastyquery] def findPackageFromRootOrCreate(fullyQualifiedName: FullyQualifiedName): PackageSymbol =
       fullyQualifiedName.path.foldLeft(RootPackage) { (owner, name) =>
         owner.getPackageDeclOrCreate(name.asSimpleName)
