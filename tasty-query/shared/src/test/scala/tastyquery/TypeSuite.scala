@@ -1256,4 +1256,25 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(childToString.allOverriddenSymbols.toList) == List(superToString, objectToString))
     assert(clue(childToString.nextOverriddenSymbol) == Some(superToString))
   }
+
+  def companionClassFullCycle(path: DeclarationPath)(using Context, munit.Location): Unit = {
+    val cls: ClassSymbol = resolve(path).asClass
+    val moduleClass: ClassSymbol = resolve(path.asObj).asClass
+
+    assert(cls == moduleClass.companionClass.get)
+    assert(moduleClass.companionClass.get == cls)
+  }
+
+  testWithContext("companion-tests-module-value") {
+    companionClassFullCycle(name"companions" / tname"CompanionObject")
+  }
+
+  testWithContext("companion-tests-nested-module-value") {
+    companionClassFullCycle(name"companions" / tname"CompanionObject" / obj / tname"NestedObject")
+  }
+
+  testWithContext("companion-tests-class-nested-module-value") {
+    companionClassFullCycle(name"companions" / tname"CompanionObject" / tname"ClassNestedObject")
+  }
+
 }
