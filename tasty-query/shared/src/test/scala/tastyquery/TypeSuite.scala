@@ -89,8 +89,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val SerializableClass = resolve(name"java" / name"io" / tname"Serializable").asClass
     val CompTimeErrorClass = resolve(name"scala" / name"compiletime" / name"testing" / tname"Error").asClass
 
-    val parents = CompTimeErrorClass.parents
-    val parentClasses = parents.map(_.classSymbol.get)
+    val parentClasses = CompTimeErrorClass.parentClasses
     assert(clue(parentClasses) == List(defn.ObjectClass, ProductClass, SerializableClass))
   }
 
