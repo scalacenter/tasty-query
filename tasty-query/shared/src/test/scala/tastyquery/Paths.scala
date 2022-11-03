@@ -66,6 +66,7 @@ object Paths:
     }
     def show: String = path.mkString(".")
     def debug: String = toDebugString(path)
+    def asObj: DeclarationPath = path.convertAsObject
 
   extension [T <: DeclarationPath](path: T)
     private def convertAsObject: T =

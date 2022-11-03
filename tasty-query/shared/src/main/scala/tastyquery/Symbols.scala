@@ -510,7 +510,7 @@ object Symbols {
       * - for `object class C[$]` => `class C`
       */
     final def companionClass(using Context): Option[ClassSymbol] = maybeOuter match
-      case scope: PackageSymbol =>
+      case scope: DeclaringSymbol =>
         scope.getDecl(this.name.companionName).collect { case sym: ClassSymbol =>
           sym
         }
