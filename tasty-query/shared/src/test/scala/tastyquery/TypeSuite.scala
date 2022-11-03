@@ -742,6 +742,16 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(ord.declaredType).isRef(BooleanOrdering))
   }
 
+  testWithContext("read-encoded-scala2-type-ref-type") {
+    val Function1Class = resolve(name"scala" / tname"Function1").asClass
+    val SerializableClass = resolve(name"java" / name"io" / tname"Serializable").asClass
+    val TypeEqClass = resolve(name"scala" / tname"=:=").asClass
+    val SubtypeClass = resolve(name"scala" / tname"<:<").asClass
+
+    assert(clue(SubtypeClass.parentClasses) == List(defn.ObjectClass, Function1Class, SerializableClass))
+    assert(clue(TypeEqClass.parentClasses) == List(SubtypeClass, SerializableClass))
+  }
+
   testWithContext("scala2-type-alias") {
     val PredefString = resolve(name"scala" / tname"Predef" / obj / tname"String").asType
     val JLString = resolve(name"java" / name"lang" / tname"String")
