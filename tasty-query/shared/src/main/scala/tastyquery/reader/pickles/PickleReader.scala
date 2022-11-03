@@ -129,7 +129,7 @@ private[pickles] class PickleReader {
       entries(storeInEntriesAt) = result
 
     def readExtSymbol(): MaybeExternalSymbol =
-      val name = readNameRef() // TODO .decode
+      val name = readNameRef().decode
       val owner = if (atEnd) ctx.defn.RootPackage else readMaybeExternalSymbolRef()
       name match
         case nme.RootName | nme.RootPackageName =>
