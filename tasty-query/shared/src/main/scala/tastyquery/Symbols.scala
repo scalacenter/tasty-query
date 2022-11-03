@@ -304,6 +304,13 @@ object Symbols {
       if local != null then local
       else throw new IllegalStateException(s"$this was not assigned a declared type")
 
+    /** Get the module class of this module value definition, if it exists:
+      * - for `object val C` => `object class C[$]`
+      */
+    final def moduleClass(using Context): Option[ClassSymbol] =
+      if is(Module) then declaredType.classSymbol
+      else None
+
     private[tastyquery] final def declaredTypeAsSeenFrom(prefix: Type)(using Context): Type =
       declaredType.asSeenFrom(prefix, owner)
 

@@ -2,7 +2,7 @@ package tastyquery
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import tastyquery.Contexts.Context
+import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
@@ -76,13 +76,11 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     "top-level-package-object[class]-empty-package",
     EmptyPkg / tname"toplevelEmptyPackage$$package" / obj
   ) {
-    val toplevelEmptyPackage_package = EmptyPkg / tname"toplevelEmptyPackage$$package" / obj
-
-    val toplevelEmptyPackage_packageClass = resolve(toplevelEmptyPackage_package)
+    val toplevelEmptyPackage_packageClass = ctx.findTopLevelModuleClass("toplevelEmptyPackage$package")
 
     val (tree @ _: ClassDef) = toplevelEmptyPackage_packageClass.tree.get: @unchecked
 
-    assert(tree.name == toplevelEmptyPackage_package.name)
+    assert(tree.name == termName("toplevelEmptyPackage$package").withObjectSuffix.toTypeName)
     assert(tree.symbol == toplevelEmptyPackage_packageClass)
   }
 
@@ -90,13 +88,11 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     "top-level-package-object[value]-empty-package",
     EmptyPkg / name"toplevelEmptyPackage$$package" / obj
   ) {
-    val toplevelEmptyPackage_package = EmptyPkg / name"toplevelEmptyPackage$$package" / obj
-
-    val toplevelEmptyPackage_packageValue = resolve(toplevelEmptyPackage_package)
+    val toplevelEmptyPackage_packageValue = ctx.findStaticTerm("toplevelEmptyPackage$package")
 
     val (tree @ _: ValDef) = toplevelEmptyPackage_packageValue.tree.get: @unchecked
 
-    assert(tree.name == name"toplevelEmptyPackage$$package")
+    assert(tree.name == termName("toplevelEmptyPackage$package"))
     assert(tree.symbol == toplevelEmptyPackage_packageValue)
   }
 
@@ -104,19 +100,17 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     "top-level-package-object[companion class]-empty-package",
     EmptyPkg / name"toplevelEmptyPackage$$package" / obj
   ) {
-    val toplevelEmptyPackage_package_companion = EmptyPkg / tname"toplevelEmptyPackage$$package"
-
     try
-      resolve(toplevelEmptyPackage_package_companion)
-      fail(s"Expected not to resolve class ${toplevelEmptyPackage_package_companion.rootClassName}")
+      ctx.findStaticType("toplevelEmptyPackage$package")
+      fail(s"Expected not to resolve class toplevelEmptyPackage$$package")
     catch
       case ex: MemberNotFoundException =>
-        assert(ex.name == tname"toplevelEmptyPackage$$package")
-        assert(ex.prefix == resolve(EmptyPkg))
+        assert(ex.name == typeName("toplevelEmptyPackage$package"))
+        assert(ex.prefix == defn.EmptyPackage)
   }
 
   testWithContext("getPackageDecl", simple_trees / tname"ScalaObject" / obj) {
-    val pkg = resolve(simple_trees).asPackage
+    val pkg = ctx.findPackage("simple_trees")
 
     // Non-existent symbol
     assert(pkg.getPackageDecl(termName("nonexistentsubpackage")) == None)
@@ -132,8 +126,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   }
 
   testWithContext("basic-symbol-structure", empty_class / tname"EmptyClass") {
-    val EmptyClass = empty_class / tname"EmptyClass"
-    resolve(EmptyClass)
+    ctx.findTopLevelClass("empty_class.EmptyClass")
     // EmptyClass and its constructor are the only declarations in empty_class package
     assertContainsExactly(
       empty_class,
@@ -142,8 +135,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   }
 
   testWithContext("basic-symbol-structure-nested", `simple_trees.nested` / tname"InNestedPackage") {
-    val InNestedPackage = `simple_trees.nested` / tname"InNestedPackage"
-    resolve(InNestedPackage)
+    ctx.findTopLevelClass("simple_trees.nested.InNestedPackage")
     // EmptyClass and its constructor are the only declarations in empty_class package
     assertContainsExactly(
       `simple_trees.nested`,
@@ -152,9 +144,9 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   }
 
   testWithContext("inner-class", simple_trees / tname"InnerClass") {
-    val InnerClass = simple_trees / tname"InnerClass"
+    val InnerClass = ctx.findTopLevelClass("simple_trees.InnerClass")
     // Inner is a declaration in InnerClass
-    resolve(InnerClass / tname"Inner")
+    assert(InnerClass.getDecl(typeName("Inner")).isDefined)
   }
 
   testWithContext("empty-package-contains-no-packages", simple_trees / tname"SharedPackageReference$$package") {
@@ -213,11 +205,11 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   testWithContext("nested-package-lookup", `simple_trees.nested` / tname"InNestedPackage") {
     import tastyquery.Types.*
 
-    val InNestedPackage = `simple_trees.nested` / tname"InNestedPackage"
+    val InNestedPackageClass = ctx.findTopLevelClass("simple_trees.nested.InNestedPackage")
 
-    assert(resolve(InNestedPackage).fullName.toString == "simple_trees.nested.InNestedPackage")
+    assert(InNestedPackageClass.fullName.toString == "simple_trees.nested.InNestedPackage")
 
-    val (simpleTreesPkg @ _: PackageSymbol) = resolve(simple_trees): @unchecked
+    val simpleTreesPkg = ctx.findPackage("simple_trees")
 
     assert(simpleTreesPkg.fullName.toString == "simple_trees")
 
@@ -229,11 +221,9 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   }
 
   testWithContext("basic-inheritance-same-root", inheritance / tname"SameTasty" / obj, fundamentalClasses*) {
-    val SameTasty = inheritance / tname"SameTasty" / obj
-
-    val ParentClass = resolve(SameTasty / tname"Parent").asClass
-    val ChildClass = resolve(SameTasty / tname"Child").asClass
-    val SubClass = resolve(SameTasty / tname"Sub").asClass
+    val ParentClass = ctx.findStaticClass("inheritance.SameTasty.Parent")
+    val ChildClass = ctx.findStaticClass("inheritance.SameTasty.Child")
+    val SubClass = ctx.findStaticClass("inheritance.SameTasty.Sub")
 
     val fooMethod = SubClass.typeRef.member(name"foo")
     assert(clue(fooMethod.owner) == ChildClass)
@@ -257,11 +247,9 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     //             │
     //         SubWithMixin
 
-    val SameTasty = inheritance / tname"SameTasty" / obj
-
-    val SubWithMixinClass = resolve(SameTasty / tname"SubWithMixin").asClass
-    val MixinClass = resolve(SameTasty / tname"Mixin").asClass
-    val SubMixinClass = resolve(SameTasty / tname"SubMixin").asClass
+    val SubWithMixinClass = ctx.findStaticClass("inheritance.SameTasty.SubWithMixin")
+    val MixinClass = ctx.findStaticClass("inheritance.SameTasty.Mixin")
+    val SubMixinClass = ctx.findStaticClass("inheritance.SameTasty.SubMixin")
 
     val barMethod = SubWithMixinClass.typeRef.member(name"bar")
     assert(clue(barMethod.owner) == SubMixinClass)
@@ -279,9 +267,9 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     inheritanceCrossTasty / tname"Parent",
     (Seq(inheritanceCrossTasty / tname"Child", inheritanceCrossTasty / tname"Sub") ++ fundamentalClasses)*
   ) {
-    val ParentClass = resolve(inheritanceCrossTasty / tname"Parent").asClass
-    val ChildClass = resolve(inheritanceCrossTasty / tname"Child").asClass
-    val SubClass = resolve(inheritanceCrossTasty / tname"Sub").asClass
+    val ParentClass = ctx.findStaticClass("inheritance.crosstasty.Parent")
+    val ChildClass = ctx.findStaticClass("inheritance.crosstasty.Child")
+    val SubClass = ctx.findStaticClass("inheritance.crosstasty.Sub")
 
     val fooMethod = SubClass.typeRef.member(name"foo")
     assert(clue(fooMethod.owner) == ChildClass)
@@ -295,12 +283,12 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   }
 
   testWithContext("MapView.withFilter", name"scala" / name"collection" / tname"MapView") {
-    val MapView = resolve(name"scala" / name"collection" / tname"MapView").asClass
+    val MapView = ctx.findTopLevelClass("scala.collection.MapView")
     assert(MapView.getDecl(tpnme.RefinedClassMagic).isEmpty)
   }
 
   testWithContext("consistent-exception-in-parents-issue-168", inheritanceCrossTasty / tname"Child") {
-    val ChildClass = resolve(inheritanceCrossTasty / tname"Child").asClass
+    val ChildClass = ctx.findStaticClass("inheritance.crosstasty.Child")
     intercept[MemberNotFoundException](ChildClass.parents)
     intercept[MemberNotFoundException](ChildClass.parents) // it's the same exception the second time
   }
@@ -317,7 +305,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     javaFunction1,
     jioSerializable
   ) {
-    val TreeMap = resolve(name"java" / name"util" / tname"TreeMap").asClass
+    val TreeMap = ctx.findTopLevelClass("java.util.TreeMap")
     val entrySet = TreeMap
       .getDecls(name"entrySet")
       .collectFirst {
