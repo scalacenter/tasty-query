@@ -561,7 +561,7 @@ object Symbols {
         else throw IllegalStateException(s"$this was not assigned parents")
     end parents
 
-    private def parentClasses(using Context): List[ClassSymbol] =
+    def parentClasses(using Context): List[ClassSymbol] =
       parents.map(tpe =>
         tpe.classSymbol.getOrElse {
           throw InvalidProgramStructureException(s"Non-class type $tpe in parents of $this")

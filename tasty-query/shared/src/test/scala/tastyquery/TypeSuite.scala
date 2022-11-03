@@ -82,6 +82,17 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(tpe.resultType).isRef(CharClass))
   }
 
+  testWithContext("scala.compiletime.Error parents") {
+    // #179 The parents of Error contain a TypeRef(PackageRef(scala), "Serializable")
+
+    val ProductClass = resolve(name"scala" / tname"Product").asClass
+    val SerializableClass = resolve(name"java" / name"io" / tname"Serializable").asClass
+    val CompTimeErrorClass = resolve(name"scala" / name"compiletime" / name"testing" / tname"Error").asClass
+
+    val parentClasses = CompTimeErrorClass.parentClasses
+    assert(clue(parentClasses) == List(defn.ObjectClass, ProductClass, SerializableClass))
+  }
+
   def applyOverloadedTest(name: String)(callMethod: String, paramCls: DeclarationPath)(using munit.Location): Unit =
     testWithContext(name) {
       val OverloadedApply = name"simple_trees" / tname"OverloadedApply"
