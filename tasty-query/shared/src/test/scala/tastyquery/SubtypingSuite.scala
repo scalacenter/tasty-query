@@ -61,28 +61,28 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       TypeRef(cls.typeRef.prefix, cls)
 
   def ProductClass(using Context): ClassSymbol =
-    resolve(name"scala" / tname"Product").asClass
+    ctx.findTopLevelClass("scala.Product")
 
   def MatchErrorClass(using Context): ClassSymbol =
-    resolve(name"scala" / tname"MatchError").asClass
+    ctx.findTopLevelClass("scala.MatchError")
 
   def ListClass(using Context): ClassSymbol =
-    resolve(name"scala" / name"collection" / name"immutable" / tname"List").asClass
+    ctx.findTopLevelClass("scala.collection.immutable.List")
 
   def PredefModuleClass(using Context): ClassSymbol =
-    resolve(name"scala" / tname"Predef" / obj).asClass
+    ctx.findTopLevelModuleClass("scala.Predef")
 
   def PredefPrefix(using Context): Type =
     PredefModuleClass.accessibleThisType
 
   def ScalaPackageObjectPrefix(using Context): Type =
-    resolve(name"scala" / tname"package" / obj).asClass.accessibleThisType
+    ctx.findTopLevelModuleClass("scala.package").accessibleThisType
 
   def javaLangPrefix(using Context): Type =
     defn.javaLangPackage.packageRef
 
   def javaIOPrefix(using Context): Type =
-    resolve(name"java" / name"io").asPackage.packageRef
+    ctx.findPackage("java.io").packageRef
 
   def scalaPrefix(using Context): Type =
     defn.scalaPackage.packageRef
@@ -91,10 +91,10 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     ListClass.typeRef.appliedTo(tpe)
 
   def genSeqOf(tpe: Type)(using Context): Type =
-    resolve(name"scala" / name"collection" / tname"Seq").asClass.typeRef.appliedTo(tpe)
+    ctx.findTopLevelClass("scala.collection.Seq").typeRef.appliedTo(tpe)
 
   def mutableSeqOf(tpe: Type)(using Context): Type =
-    resolve(name"scala" / name"collection" / name"mutable" / tname"Seq").asClass.typeRef.appliedTo(tpe)
+    ctx.findTopLevelClass("scala.collection.mutable.Seq").typeRef.appliedTo(tpe)
 
   def findLocalValDef(body: Tree, name: TermName)(using Context): TermSymbol =
     var result: Option[TermSymbol] = None
@@ -276,7 +276,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("this-type") {
     // No withRef's in this test because we cannot write code that refers to the `this` of an external class
 
-    val TypeMemberClass = resolve(name"simple_trees" / tname"TypeMember").asClass
+    val TypeMemberClass = ctx.findTopLevelClass("simple_trees.TypeMember")
     val TypeMemberThis = ThisType(TypeMemberClass.typeRef)
 
     assertStrictSubtype(TypeMemberThis, TypeMemberClass.typeRef)
@@ -288,7 +288,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("type-member-this") {
     // No withRef's in this test because we cannot write code that refers to the `this` of an external class
 
-    val TypeMemberClass = resolve(name"simple_trees" / tname"TypeMember").asClass
+    val TypeMemberClass = ctx.findTopLevelClass("simple_trees.TypeMember")
     val TypeMemberThis = ThisType(TypeMemberClass.typeRef)
 
     assertEquiv(TypeMemberThis.select(tname"TypeMember"), defn.IntType)
@@ -307,7 +307,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("type-member-external") {
     import simple_trees.TypeMember
 
-    val TypeMemberClass = resolve(name"simple_trees" / tname"TypeMember").asClass
+    val TypeMemberClass = ctx.findTopLevelClass("simple_trees.TypeMember")
     val TypeMemberRef = TypeMemberClass.typeRef
 
     assertEquiv(TypeMemberRef.select(tname"TypeMember"), defn.IntType).withRef[TypeMember#TypeMember, Int]
@@ -334,14 +334,14 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("simple-paths") {
     import subtyping.paths.{A, B, C, SimplePaths, OtherSimplePaths}
 
-    val paths = name"subtyping" / name"paths"
-    val AClass = resolve(paths / tname"A").asClass
-    val BClass = resolve(paths / tname"B").asClass
-    val CClass = resolve(paths / tname"C").asClass
-    val SimplePathsClass = resolve(paths / tname"SimplePaths").asClass
-    val OtherSimplePathsClass = resolve(paths / tname"OtherSimplePaths").asClass
+    val paths = "subtyping.paths"
+    val AClass = ctx.findTopLevelClass(s"$paths.A")
+    val BClass = ctx.findTopLevelClass(s"$paths.B")
+    val CClass = ctx.findTopLevelClass(s"$paths.C")
+    val SimplePathsClass = ctx.findTopLevelClass(s"$paths.SimplePaths")
+    val OtherSimplePathsClass = ctx.findTopLevelClass(s"$paths.OtherSimplePaths")
 
-    val setupMethod = resolve(paths / tname"Setup" / obj / name"simplePaths").asTerm
+    val setupMethod = ctx.findTopLevelModuleClass(s"$paths.Setup").findNonOverloadedDecl(name"simplePaths")
     val setupMethodDef = setupMethod.tree.get.asInstanceOf[DefDef]
     val Left(valDefs) = setupMethodDef.paramLists.head: @unchecked
     val List(x, y, z) = valDefs.map(valDef => TermRef(NoPrefix, valDef.symbol))
@@ -405,14 +405,14 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("simple-paths-in-subclasses") {
     import subtyping.paths.{A, B, C, SimplePaths, ConcreteSimplePathsChild}
 
-    val paths = name"subtyping" / name"paths"
-    val AClass = resolve(paths / tname"A").asClass
-    val BClass = resolve(paths / tname"B").asClass
-    val CClass = resolve(paths / tname"C").asClass
-    val SimplePathsClass = resolve(paths / tname"SimplePaths").asClass
-    val ConcreteSimplePathsChildClass = resolve(paths / tname"ConcreteSimplePathsChild").asClass
+    val paths = "subtyping.paths"
+    val AClass = ctx.findTopLevelClass(s"$paths.A")
+    val BClass = ctx.findTopLevelClass(s"$paths.B")
+    val CClass = ctx.findTopLevelClass(s"$paths.C")
+    val SimplePathsClass = ctx.findTopLevelClass(s"$paths.SimplePaths")
+    val ConcreteSimplePathsChildClass = ctx.findTopLevelClass(s"$paths.ConcreteSimplePathsChild")
 
-    val setupMethod = resolve(paths / tname"Setup" / obj / name"subclassPaths").asTerm
+    val setupMethod = ctx.findTopLevelModuleClass(s"$paths.Setup").findNonOverloadedDecl(name"subclassPaths")
     val setupMethodDef = setupMethod.tree.get.asInstanceOf[DefDef]
     val Left(valDefs) = setupMethodDef.paramLists.head: @unchecked
     val List(x, y, z) = valDefs.map(valDef => TermRef(NoPrefix, valDef.symbol))

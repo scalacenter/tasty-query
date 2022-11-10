@@ -12,19 +12,14 @@ import tastyquery.Types.*
 import Paths.*
 
 class TypeSuite extends UnrestrictedUnpicklingSuite {
-  def assertIsSymbolWithPath(path: DeclarationPath)(actualSymbol: Symbol)(using Context): Unit = {
-    val expectedSymbol = resolve(path)
-    assert(actualSymbol eq expectedSymbol, clues(actualSymbol, expectedSymbol))
-  }
-
   extension [T](elems: List[T])
     def isListOf(tests: (T => Boolean)*)(using Context): Boolean =
       elems.corresponds(tests)((t, test) => test(t))
 
   extension (tpe: Type)
-    def isAny(using Context): Boolean = tpe.isRef(resolve(name"scala" / tname"Any"))
+    def isAny(using Context): Boolean = tpe.isRef(defn.AnyClass)
 
-    def isNothing(using Context): Boolean = tpe.isRef(resolve(name"scala" / tname"Nothing"))
+    def isNothing(using Context): Boolean = tpe.isRef(defn.NothingClass)
 
     def isWildcard(using Context): Boolean =
       isBounded(_.isNothing, _.isAny)
@@ -46,13 +41,13 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         case _ => false
 
     def isArrayOf(arg: Type => Boolean)(using Context): Boolean =
-      isApplied(_.isRef(resolve(name"scala" / tname"Array")), Seq(arg))
+      isApplied(_.isRef(defn.ArrayClass), Seq(arg))
 
   testWithContext("apply-recursive") {
-    val RecApply = name"simple_trees" / tname"RecApply"
+    val RecApplyClass = ctx.findTopLevelClass("simple_trees.RecApply")
 
-    val gcdSym = resolve(RecApply / name"gcd")
-    val NumClass = resolve(RecApply / tname"Num")
+    val gcdSym = RecApplyClass.findNonOverloadedDecl(name"gcd")
+    val NumClass = RecApplyClass.findDecl(tname"Num").asClass
 
     val Some(gcdTree @ _: DefDef) = gcdSym.tree: @unchecked
 
@@ -74,32 +69,28 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("java.lang.String") {
-    val StringClass = resolve(name"java" / name"lang" / tname"String").asClass
-    val CharClass = resolve(name"scala" / tname"Char").asClass
-
-    val charAt = StringClass.getDecl(name"charAt").get.asTerm
+    val charAt = defn.StringClass.findNonOverloadedDecl(name"charAt")
     val tpe = charAt.declaredType.asInstanceOf[MethodType]
-    assert(clue(tpe.resultType).isRef(CharClass))
+    assert(clue(tpe.resultType).isRef(defn.CharClass))
   }
 
   testWithContext("scala.compiletime.Error parents") {
     // #179 The parents of Error contain a TypeRef(PackageRef(scala), "Serializable")
 
-    val ProductClass = resolve(name"scala" / tname"Product").asClass
-    val SerializableClass = resolve(name"java" / name"io" / tname"Serializable").asClass
-    val CompTimeErrorClass = resolve(name"scala" / name"compiletime" / name"testing" / tname"Error").asClass
+    val ProductClass = ctx.findTopLevelClass("scala.Product")
+    val SerializableClass = ctx.findTopLevelClass("java.io.Serializable")
+    val CompTimeErrorClass = ctx.findTopLevelClass("scala.compiletime.testing.Error")
 
     val parentClasses = CompTimeErrorClass.parentClasses
     assert(clue(parentClasses) == List(defn.ObjectClass, ProductClass, SerializableClass))
   }
 
-  def applyOverloadedTest(name: String)(callMethod: String, paramCls: DeclarationPath)(using munit.Location): Unit =
+  def applyOverloadedTest(name: String)(callMethod: String, paramCls: Context ?=> Symbol)(using munit.Location): Unit =
     testWithContext(name) {
-      val OverloadedApply = name"simple_trees" / tname"OverloadedApply"
+      val OverloadedApplyClass = ctx.findTopLevelClass("simple_trees.OverloadedApply")
 
-      val callSym = resolve(OverloadedApply / termName(callMethod))
-      val Acls = resolve(paramCls)
-      val UnitClass = resolve(name"scala" / tname"Unit")
+      val callSym = OverloadedApplyClass.findDecl(termName(callMethod))
+      val Acls = paramCls
 
       val Some(callTree @ _: DefDef) = callSym.tree: @unchecked
 
@@ -109,8 +100,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         tree match
           case app @ Apply(fooRef @ Select(_, SignedName(SimpleName("foo"), _, _)), _) =>
             callCount += 1
-            assert(app.tpe.isRef(UnitClass), clue(app)) // todo: resolve overloaded
-            val fooSym = fooRef.tpe.termSymbol.asTerm
+            assert(app.tpe.isRef(defn.UnitClass), clue(app))
+            val fooSym = fooRef.tpe.asInstanceOf[TermRef].symbol
             val List(Left(List(aRef)), _*) = fooSym.paramRefss: @unchecked
             assert(aRef.isRef(Acls), clues(Acls.fullName, aRef))
           case _ => ()
@@ -119,22 +110,53 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(callCount == 1)
     }
 
-  applyOverloadedTest("apply-overloaded-int")("callA", name"scala" / tname"Int")
-  applyOverloadedTest("apply-overloaded-gen")("callB", name"simple_trees" / tname"OverloadedApply" / tname"Box")
+  applyOverloadedTest("apply-overloaded-int")("callA", defn.IntClass)
+  applyOverloadedTest("apply-overloaded-gen")(
+    "callB",
+    ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Box")
+  )
   applyOverloadedTest("apply-overloaded-nestedObj")(
     "callC",
-    name"simple_trees" / tname"OverloadedApply" / tname"Foo" / obj / name"Bar"
+    ctx
+      .findTopLevelClass("simple_trees.OverloadedApply")
+      .findDecl(moduleClassName("Foo"))
+      .asClass
+      .findDecl(termName("Bar"))
   )
-  // applyOverloadedTest("apply-overloaded-arrayObj")("callD", name"scala" / tname"Array") // TODO: re-enable when we add types to scala 2 symbols
-  applyOverloadedTest("apply-overloaded-byName")("callE", name"simple_trees" / tname"OverloadedApply" / tname"Num")
+  applyOverloadedTest("apply-overloaded-arrayObj")("callD", defn.ArrayClass)
+  applyOverloadedTest("apply-overloaded-byName")(
+    "callE",
+    ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Num")
+  )
+
+  testWithContext("apply-overloaded-not-method") {
+    val OverloadedApplyClass = ctx.findTopLevelClass("simple_trees.OverloadedApply")
+
+    val callSym = OverloadedApplyClass.findNonOverloadedDecl(termName("callF"))
+
+    val Some(callTree @ _: DefDef) = callSym.tree: @unchecked
+
+    var callCount = 0
+
+    callTree.walkTree { tree =>
+      tree match
+        case fooRef @ Select(_, SimpleName("foo")) =>
+          callCount += 1
+          val fooSym = fooRef.tpe.asInstanceOf[TermRef].symbol
+          assert(clue(fooSym.paramRefss).isEmpty)
+        case _ => ()
+    }
+
+    assert(callCount == 1)
+  }
 
   testWithContext("typeapply-recursive") {
-    val RecApply = name"simple_trees" / tname"RecApply"
+    val RecApplyClass = ctx.findTopLevelClass("simple_trees.RecApply")
 
-    val evalSym = resolve(RecApply / name"eval").asTerm
-    val ExprClass = resolve(RecApply / tname"Expr")
-    val NumClass = resolve(RecApply / tname"Num")
-    val BoolClass = resolve(RecApply / tname"Bool")
+    val evalSym = RecApplyClass.findNonOverloadedDecl(name"eval")
+    val ExprClass = RecApplyClass.findDecl(tname"Expr")
+    val NumClass = RecApplyClass.findDecl(tname"Num")
+    val BoolClass = RecApplyClass.findDecl(tname"Bool")
 
     val evalParamRefss = evalSym.paramRefss
 
@@ -168,20 +190,19 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("basic-local-val") {
-    val AssignPath = name"simple_trees" / tname"Assign"
+    val AssignPathClass = ctx.findTopLevelClass("simple_trees.Assign")
 
-    val fSym = resolve(AssignPath / name"f").asTerm
+    val fSym = AssignPathClass.findNonOverloadedDecl(name"f")
     val fTree = fSym.tree.get.asInstanceOf[DefDef]
 
     val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
-    val IntClass = resolve(name"scala" / tname"Int")
-    assert(xParamDef.symbol.asTerm.declaredType.isRef(IntClass))
+    assert(xParamDef.symbol.asTerm.declaredType.isRef(defn.IntClass))
 
     fSym.declaredType match
       case mt: MethodType =>
-        assert(mt.paramTypes.sizeIs == 1 && mt.paramTypes.head.isRef(IntClass))
-        assert(mt.resultType.isRef(IntClass))
+        assert(mt.paramTypes.sizeIs == 1 && mt.paramTypes.head.isRef(defn.IntClass))
+        assert(mt.resultType.isRef(defn.IntClass))
       case _ =>
         fail(s"$fSym does not have a MethodType", clues(fSym.declaredType))
 
@@ -195,10 +216,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       tree match {
         case Ident(`x`) =>
           xCount += 1
-          assert(tree.tpe.isOfClass(IntClass), clue(tree.tpe))
+          assert(tree.tpe.isOfClass(defn.IntClass), clue(tree.tpe))
         case Ident(`y`) =>
           yCount += 1
-          assert(tree.tpe.isOfClass(IntClass), clue(tree.tpe))
+          assert(tree.tpe.isOfClass(defn.IntClass), clue(tree.tpe))
         case _ =>
           ()
       }
@@ -209,9 +230,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("term-ref") {
-    val RepeatedPath = name"simple_trees" / tname"Repeated"
+    val RepeatedPathClass = ctx.findTopLevelClass("simple_trees.Repeated")
 
-    val fSym = resolve(RepeatedPath / name"f")
+    val fSym = RepeatedPathClass.findNonOverloadedDecl(name"f")
     val fTree = fSym.tree.get.asInstanceOf[DefDef]
 
     var bitSetIdentCount = 0
@@ -232,15 +253,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("free-ident") {
-    val MatchPath = name"simple_trees" / tname"Match"
+    val MatchPathClass = ctx.findTopLevelClass("simple_trees.Match")
 
-    val fSym = resolve(MatchPath / name"f")
+    val fSym = MatchPathClass.findNonOverloadedDecl(name"f")
     val fTree = fSym.tree.get.asInstanceOf[DefDef]
 
     val List(Left(List(xParamDef))) = fTree.paramLists: @unchecked
 
-    val IntClass = resolve(name"scala" / tname"Int")
-    assert(xParamDef.symbol.asTerm.declaredType.isRef(IntClass))
+    assert(xParamDef.symbol.asTerm.declaredType.isRef(defn.IntClass))
 
     var freeIdentCount = 0
 
@@ -249,7 +269,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         case tree: FreeIdent =>
           freeIdentCount += 1
           assert(tree.name == nme.Wildcard, clue(tree.name))
-          assert(tree.tpe.isOfClass(IntClass), clue(tree.tpe))
+          assert(tree.tpe.isOfClass(defn.IntClass), clue(tree.tpe))
         case _ =>
           ()
       }
@@ -259,9 +279,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("return") {
-    val ReturnPath = name"simple_trees" / tname"Return"
+    val ReturnPathClass = ctx.findTopLevelClass("simple_trees.Return")
 
-    val withReturnSym = resolve(ReturnPath / name"withReturn")
+    val withReturnSym = ReturnPathClass.findNonOverloadedDecl(name"withReturn")
     val withReturnTree = withReturnSym.tree.get.asInstanceOf[DefDef]
 
     var returnCount = 0
@@ -271,7 +291,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         case Return(expr, from: Ident) =>
           returnCount += 1
           assert(from.tpe.isRef(withReturnSym), clue(from.tpe))
-          assert(tree.tpe.isRef(resolve(name"scala" / tname"Nothing")))
+          assert(tree.tpe.isNothing)
         case _ =>
           ()
       }
@@ -281,9 +301,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("assign") {
-    val AssignPath = name"simple_trees" / tname"Assign"
+    val AssignPathClass = ctx.findTopLevelClass("simple_trees.Assign")
 
-    val fSym = resolve(AssignPath / name"f")
+    val fSym = AssignPathClass.findNonOverloadedDecl(name"f")
     val fTree = fSym.tree.get.asInstanceOf[DefDef]
 
     var assignCount = 0
@@ -292,8 +312,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       tree match {
         case Assign(lhs, rhs) =>
           assignCount += 1
-          val UnitClass = resolve(name"scala" / tname"Unit")
-          assert(tree.tpe.isOfClass(UnitClass), clue(tree.tpe))
+          assert(tree.tpe.isOfClass(defn.UnitClass), clue(tree.tpe))
         case _ =>
           ()
       }
@@ -303,43 +322,38 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("basic-scala2-types") {
-    val ScalaRange = name"scala" / name"collection" / name"immutable" / tname"Range"
-
-    val RangeClass = resolve(ScalaRange).asClass
-
-    val BooleanClass = resolve(name"scala" / tname"Boolean")
-    val IntClass = resolve(name"scala" / tname"Int")
-    val Function1Class = resolve(name"scala" / tname"Function1")
-    val IndexedSeqClass = resolve(name"scala" / name"collection" / name"immutable" / tname"IndexedSeq")
+    val RangeClass = ctx.findTopLevelClass("scala.collection.immutable.Range")
+    val Function1Class = ctx.findTopLevelClass("scala.Function1")
+    val IndexedSeqClass = ctx.findTopLevelClass("scala.collection.immutable.IndexedSeq")
 
     // val start: Int
-    val startSym = RangeClass.getDecl(name"start").get.asTerm
-    assert(startSym.declaredType.isOfClass(IntClass), clue(startSym.declaredType))
+    val startSym = RangeClass.findDecl(name"start")
+    assert(startSym.declaredType.isOfClass(defn.IntClass), clue(startSym.declaredType))
     assert(startSym.declaredType.isInstanceOf[ExprType], clue(startSym.declaredType)) // should this be TypeRef?
 
     // val isEmpty: Boolean
-    val isEmptySym = RangeClass.getDecl(name"isEmpty").get.asTerm
-    assert(isEmptySym.declaredType.isOfClass(BooleanClass), clue(isEmptySym.declaredType))
+    val isEmptySym = RangeClass.findDecl(name"isEmpty")
+    assert(isEmptySym.declaredType.isOfClass(defn.BooleanClass), clue(isEmptySym.declaredType))
     assert(isEmptySym.declaredType.isInstanceOf[ExprType], clue(isEmptySym.declaredType)) // should this be TypeRef?
 
     // def isInclusive: Boolean
-    val isInclusiveSym = RangeClass.getDecl(name"isInclusive").get.asTerm
-    assert(isInclusiveSym.declaredType.isOfClass(BooleanClass), clue(isInclusiveSym.declaredType))
+    val isInclusiveSym = RangeClass.findDecl(name"isInclusive")
+    assert(isInclusiveSym.declaredType.isOfClass(defn.BooleanClass), clue(isInclusiveSym.declaredType))
     assert(isInclusiveSym.declaredType.isInstanceOf[ExprType], clue(isInclusiveSym.declaredType))
 
     // def by(step: Int): Range
     locally {
-      val bySym = RangeClass.getDecl(name"by").get.asTerm
+      val bySym = RangeClass.findNonOverloadedDecl(name"by")
       val mt = bySym.declaredType.asInstanceOf[MethodType]
       assertEquals(List[TermName](name"step"), mt.paramNames, clue(mt.paramNames))
       assert(mt.paramTypes.sizeIs == 1)
-      assert(mt.paramTypes.head.isOfClass(IntClass), clue(mt.paramTypes.head))
+      assert(mt.paramTypes.head.isOfClass(defn.IntClass), clue(mt.paramTypes.head))
       assert(mt.resultType.isOfClass(RangeClass), clue(mt.resultType))
     }
 
     // def map[B](f: Int => B): IndexedSeq[B]
     locally {
-      val mapSym = RangeClass.getDecl(name"map").get.asTerm
+      val mapSym = RangeClass.findNonOverloadedDecl(name"map")
       val pt = mapSym.declaredType.asInstanceOf[PolyType]
       val mt = pt.resultType.asInstanceOf[MethodType]
       assertEquals(List[TypeName](name"B".toTypeName), pt.paramNames, clue(pt.paramNames))
@@ -352,57 +366,54 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("basic-java-class-dependency") {
-    val BoxedJava = name"javacompat" / tname"BoxedJava"
-    val JavaDefined = name"javadefined" / tname"JavaDefined"
+    val BoxedJavaClass = ctx.findTopLevelClass("javacompat.BoxedJava")
+    val JavaDefinedClass = ctx.findTopLevelClass("javadefined.JavaDefined")
 
-    val boxedSym = resolve(BoxedJava / name"boxed").asTerm
+    val boxedSym = BoxedJavaClass.getDecl(name"boxed").get.asTerm
 
     val (JavaDefinedRef @ _: TypeRef) = boxedSym.declaredType: @unchecked
 
-    assertIsSymbolWithPath(JavaDefined)(JavaDefinedRef.symbol)
+    assert(clue(JavaDefinedRef.symbol) == JavaDefinedClass)
   }
 
   testWithContext("bag-of-java-definitions") {
-    val BagOfJavaDefinitions = name"javadefined" / tname"BagOfJavaDefinitions"
+    val BagOfJavaDefinitionsClass = ctx.findTopLevelClass("javadefined.BagOfJavaDefinitions")
 
-    val IntClass = resolve(name"scala" / tname"Int")
-    val UnitClass = resolve(name"scala" / tname"Unit")
+    def testDef(name: TermName)(op: TermSymbol => Unit): Unit =
+      op(BagOfJavaDefinitionsClass.findNonOverloadedDecl(name))
 
-    def testDef(path: DeclarationPath)(op: TermSymbol => Unit): Unit =
-      op(resolve(path).asTerm)
-
-    testDef(BagOfJavaDefinitions / name"x") { x =>
-      assert(x.declaredType.isRef(IntClass))
+    testDef(name"x") { x =>
+      assert(x.declaredType.isRef(defn.IntClass))
     }
 
-    testDef(BagOfJavaDefinitions / name"recField") { recField =>
-      assert(recField.declaredType.isRef(resolve(BagOfJavaDefinitions)))
+    testDef(name"recField") { recField =>
+      assert(recField.declaredType.isRef(BagOfJavaDefinitionsClass))
     }
 
-    testDef(BagOfJavaDefinitions / name"printX") { printX =>
+    testDef(name"printX") { printX =>
       val tpe = printX.declaredType.asInstanceOf[MethodType]
-      assert(tpe.resultType.isRef(UnitClass))
+      assert(tpe.resultType.isRef(defn.UnitClass))
     }
 
-    testDef(BagOfJavaDefinitions / name"<init>") { ctor =>
+    testDef(name"<init>") { ctor =>
       val tpe = ctor.declaredType.asInstanceOf[MethodType]
-      assert(tpe.paramTypes.head.isRef(IntClass))
-      assert(tpe.resultType.isRef(UnitClass))
+      assert(tpe.paramTypes.head.isRef(defn.IntClass))
+      assert(tpe.resultType.isRef(defn.UnitClass))
     }
 
-    testDef(BagOfJavaDefinitions / name"wrapXArray") { wrapXArray =>
+    testDef(name"wrapXArray") { wrapXArray =>
       val tpe = wrapXArray.declaredType.asInstanceOf[MethodType]
-      assert(tpe.resultType.isArrayOf(_.isRef(IntClass)))
+      assert(tpe.resultType.isArrayOf(_.isRef(defn.IntClass)))
     }
 
-    testDef(BagOfJavaDefinitions / name"arrIdentity") { arrIdentity =>
+    testDef(name"arrIdentity") { arrIdentity =>
       val tpe = arrIdentity.declaredType.asInstanceOf[MethodType]
-      val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
+      val JavaDefinedClass = ctx.findTopLevelClass("javadefined.JavaDefined")
       assert(tpe.paramInfos.head.isArrayOf(_.isRef(JavaDefinedClass)))
       assert(tpe.resultType.isArrayOf(_.isRef(JavaDefinedClass)))
     }
 
-    testDef(BagOfJavaDefinitions / name"processBuilder") { processBuilder =>
+    testDef(name"processBuilder") { processBuilder =>
       val tpe = processBuilder.declaredType.asInstanceOf[MethodType]
       assert(tpe.resultType.isInstanceOf[TypeRef]) // do not call isRef, as we do not have the java lib
     }
@@ -410,46 +421,46 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("bag-of-generic-java-definitions[signatures]") {
-    val BagOfGenJavaDefinitions = name"javadefined" / tname"BagOfGenJavaDefinitions"
-    val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
-    val GenericJavaClass = resolve(name"javadefined" / tname"GenericJavaClass")
-    val JavaInterface1 = resolve(name"javadefined" / tname"JavaInterface1")
-    val JavaInterface2 = resolve(name"javadefined" / tname"JavaInterface2")
-    val ExceptionClass = resolve(name"java" / name"lang" / tname"Exception")
+    val BagOfGenJavaDefinitionsClass = ctx.findTopLevelClass("javadefined.BagOfGenJavaDefinitions")
+    val JavaDefinedClass = ctx.findTopLevelClass("javadefined.JavaDefined")
+    val GenericJavaClass = ctx.findTopLevelClass("javadefined.GenericJavaClass")
+    val JavaInterface1 = ctx.findTopLevelClass("javadefined.JavaInterface1")
+    val JavaInterface2 = ctx.findTopLevelClass("javadefined.JavaInterface2")
+    val ExceptionClass = ctx.findTopLevelClass("java.lang.Exception")
 
-    def testDef(path: DeclarationPath)(op: TermSymbol => Unit): Unit =
-      op(resolve(path).asTerm)
+    def testDef(name: TermName)(op: TermSymbol => Unit): Unit =
+      op(BagOfGenJavaDefinitionsClass.findNonOverloadedDecl(name))
 
     extension (tpe: Type)
       def isGenJavaClassOf(arg: Type => Boolean)(using Context): Boolean =
         tpe.isApplied(_.isRef(GenericJavaClass), List(arg))
 
-    testDef(BagOfGenJavaDefinitions / name"x") { x =>
+    testDef(name"x") { x =>
       assert(x.declaredType.isGenJavaClassOf(_.isRef(JavaDefinedClass)))
     }
 
-    testDef(BagOfGenJavaDefinitions / name"getX") { getX =>
+    testDef(name"getX") { getX =>
       val tpe = getX.declaredType.asInstanceOf[MethodType]
       assert(tpe.resultType.isGenJavaClassOf(_.isRef(JavaDefinedClass)))
     }
 
-    testDef(BagOfGenJavaDefinitions / name"getXArray") { getXArray =>
+    testDef(name"getXArray") { getXArray =>
       val tpe = getXArray.declaredType.asInstanceOf[MethodType]
       assert(tpe.resultType.isArrayOf(_.isGenJavaClassOf(_.isRef(JavaDefinedClass))))
     }
 
-    testDef(BagOfGenJavaDefinitions / name"printX") { printX =>
+    testDef(name"printX") { printX =>
       val tpe = printX.declaredType.asInstanceOf[PolyType]
       assert(tpe.paramTypeBounds.head.high.isRef(ExceptionClass))
     }
 
-    testDef(BagOfGenJavaDefinitions / name"recTypeParams") { recTypeParams =>
+    testDef(name"recTypeParams") { recTypeParams =>
       val tpe = recTypeParams.declaredType.asInstanceOf[TypeLambdaType]
       val List(tparamRefA, tparamRefY) = tpe.paramRefs: @unchecked
       assert(tparamRefA.bounds.high.isGenJavaClassOf(_ == tparamRefY))
     }
 
-    testDef(BagOfGenJavaDefinitions / name"refInterface") { refInterface =>
+    testDef(name"refInterface") { refInterface =>
       val tpe = refInterface.declaredType.asInstanceOf[TypeLambdaType]
       val List(tparamRefA) = tpe.paramRefs: @unchecked
       assert(
@@ -458,7 +469,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       )
     }
 
-    testDef(BagOfGenJavaDefinitions / name"genraw") { genraw =>
+    testDef(name"genraw") { genraw =>
       /* Raw types are not really supported (see #80). They are read and
        * stored as if they were *monomorphic* class references, i.e., TypeRef's
        * without any AppliedType.
@@ -466,29 +477,29 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(genraw.declaredType.isRef(GenericJavaClass))
     }
 
-    testDef(BagOfGenJavaDefinitions / name"mixgenraw") { mixgenraw =>
+    testDef(name"mixgenraw") { mixgenraw =>
       // Same comment about raw types.
       assert(mixgenraw.declaredType.isGenJavaClassOf(_.isRef(GenericJavaClass)))
     }
 
-    testDef(BagOfGenJavaDefinitions / name"genwild") { genwild =>
+    testDef(name"genwild") { genwild =>
       assert(genwild.declaredType.isGenJavaClassOf(_.isWildcard))
     }
 
-    testDef(BagOfGenJavaDefinitions / name"gencovarient") { gencovarient =>
+    testDef(name"gencovarient") { gencovarient =>
       assert(gencovarient.declaredType.isGenJavaClassOf(_.isBounded(_.isNothing, _.isRef(JavaDefinedClass))))
     }
 
-    testDef(BagOfGenJavaDefinitions / name"gencontravarient") { gencontravarient =>
+    testDef(name"gencontravarient") { gencontravarient =>
       assert(gencontravarient.declaredType.isGenJavaClassOf(_.isBounded(_.isRef(JavaDefinedClass), _.isAny)))
     }
   }
 
   testWithContext("java-class-parents") {
-    val SubJavaDefinedClass = resolve(name"javadefined" / tname"SubJavaDefined").asClass
-    val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
-    val JavaInterface1Class = resolve(name"javadefined" / tname"JavaInterface1")
-    val JavaInterface2Class = resolve(name"javadefined" / tname"JavaInterface2")
+    val SubJavaDefinedClass = ctx.findTopLevelClass("javadefined.SubJavaDefined")
+    val JavaDefinedClass = ctx.findTopLevelClass("javadefined.JavaDefined")
+    val JavaInterface1Class = ctx.findTopLevelClass("javadefined.JavaInterface1")
+    val JavaInterface2Class = ctx.findTopLevelClass("javadefined.JavaInterface2")
 
     assert(
       SubJavaDefinedClass.parents
@@ -506,16 +517,15 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("java-class-signatures-[RecClass]") {
-    val RecClass = resolve(name"javadefined" / tname"RecClass").asClass
-    val ObjectClass = resolve(name"java" / name"lang" / tname"Object")
+    val RecClass = ctx.findTopLevelClass("javadefined.RecClass")
 
-    assert(RecClass.parents.isListOf(_.isRef(ObjectClass)))
+    assert(RecClass.parents.isListOf(_.isRef(defn.ObjectClass)))
   }
 
   testWithContext("java-class-signatures-[SubRecClass]") {
-    val SubRecClass = resolve(name"javadefined" / tname"SubRecClass").asClass
-    val RecClass = resolve(name"javadefined" / tname"RecClass")
-    val JavaInterface1 = resolve(name"javadefined" / tname"JavaInterface1")
+    val SubRecClass = ctx.findTopLevelClass("javadefined.SubRecClass")
+    val RecClass = ctx.findTopLevelClass("javadefined.RecClass")
+    val JavaInterface1 = ctx.findTopLevelClass("javadefined.JavaInterface1")
 
     val List(tparamT) = SubRecClass.typeParams: @unchecked
 
@@ -528,39 +538,39 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("select-method-from-java-class") {
-    val BoxedJava = name"javacompat" / tname"BoxedJava"
-    val getX = name"javadefined" / tname"JavaDefined" / name"getX"
+    val BoxedJavaClass = ctx.findTopLevelClass("javacompat.BoxedJava")
+    val JavaDefinedClass = ctx.findTopLevelClass("javadefined.JavaDefined")
 
-    val xMethodSym = resolve(BoxedJava / name"xMethod")
+    val getX = JavaDefinedClass.findNonOverloadedDecl(name"getX")
+    val xMethodSym = BoxedJavaClass.findNonOverloadedDecl(name"xMethod")
 
     val Some(DefDef(_, _, _, Apply(getXSelection, _), _)) = xMethodSym.tree: @unchecked
 
     val (getXRef @ _: TermRef) = getXSelection.tpe: @unchecked
 
-    assertIsSymbolWithPath(getX)(getXRef.symbol)
+    assert(clue(getXRef.symbol) == getX)
   }
 
   testWithContext("select-field-from-java-class") {
-    val BoxedJava = name"javacompat" / tname"BoxedJava"
-    val x = name"javadefined" / tname"JavaDefined" / name"x"
+    val BoxedJavaClass = ctx.findTopLevelClass("javacompat.BoxedJava")
+    val JavaDefinedClass = ctx.findTopLevelClass("javadefined.JavaDefined")
 
-    val xFieldSym = resolve(BoxedJava / name"xField")
+    val x = JavaDefinedClass.findDecl(name"x")
+    val xFieldSym = BoxedJavaClass.findDecl(name"xField")
 
     val Some(DefDef(_, _, _, xSelection, _)) = xFieldSym.tree: @unchecked
 
     val (xRef @ _: TermRef) = xSelection.tpe: @unchecked
 
-    assertIsSymbolWithPath(x)(xRef.symbol)
+    assert(clue(xRef.symbol) == x)
   }
 
   testWithContext("basic-scala-2-stdlib-class-dependency") {
-    val BoxedCons = name"scala2compat" / tname"BoxedCons"
-    val :: = name"scala" / name"collection" / name"immutable" / tname"::"
+    val BoxedConsClass = ctx.findTopLevelClass("scala2compat.BoxedCons")
+    val ConsClass = ctx.findTopLevelClass("scala.collection.immutable.::")
+    val JavaDefinedClass = ctx.findTopLevelClass("javadefined.JavaDefined")
 
-    val ConsClass = resolve(::)
-    val JavaDefinedClass = resolve(name"javadefined" / tname"JavaDefined")
-
-    val boxedSym = resolve(BoxedCons / name"boxed").asTerm
+    val boxedSym = BoxedConsClass.findDecl(name"boxed")
 
     val app = boxedSym.declaredType.asInstanceOf[AppliedType]
     assert(clue(app.tycon).isOfClass(ConsClass))
@@ -568,13 +578,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("select-method-from-scala-2-stdlib-class") {
-    val BoxedCons = name"scala2compat" / tname"BoxedCons"
-    val canEqual = name"scala" / name"collection" / tname"Seq" / name"canEqual"
+    val BoxedConsClass = ctx.findTopLevelClass("scala2compat.BoxedCons")
 
-    val AnyClass = resolve(name"scala" / tname"Any")
-    val BooleanClass = resolve(name"scala" / tname"Boolean")
-
-    val fooSym = resolve(BoxedCons / name"foo")
+    val fooSym = BoxedConsClass.findDecl(name"foo")
 
     val Some(DefDef(_, _, _, Apply(canEqualSelection, _), _)) = fooSym.tree: @unchecked
 
@@ -585,97 +591,95 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val mt = underlyingType.asInstanceOf[MethodType]
     assertEquals(List[TermName](name"that"), mt.paramNames, clue(mt.paramNames))
     assert(mt.paramTypes.sizeIs == 1, clue(mt.paramTypes))
-    assert(mt.paramTypes.head.isOfClass(AnyClass), clue(mt.paramTypes.head))
-    assert(mt.resultType.isOfClass(BooleanClass), clue(mt.resultType))
+    assert(mt.paramTypes.head.isOfClass(defn.AnyClass), clue(mt.paramTypes.head))
+    assert(mt.resultType.isOfClass(defn.BooleanClass), clue(mt.resultType))
   }
 
   testWithContext("select-field-from-tasty-in-other-package:dependency-from-class-file") {
-    val BoxedConstants = name"crosspackagetasty" / tname"BoxedConstants"
-    val unitVal = name"simple_trees" / tname"Constants" / name"unitVal"
+    val BoxedConstantsClass = ctx.findTopLevelClass("crosspackagetasty.BoxedConstants")
+    val ConstantsClass = ctx.findTopLevelClass("simple_trees.Constants")
 
-    val boxedUnitValSym = resolve(BoxedConstants / name"boxedUnitVal")
+    val unitVal = ConstantsClass.findDecl(name"unitVal")
+    val boxedUnitValSym = BoxedConstantsClass.findDecl(name"boxedUnitVal")
 
     val Some(DefDef(_, _, _, unitValSelection, _)) = boxedUnitValSym.tree: @unchecked
 
     val (unitValRef @ _: TermRef) = unitValSelection.tpe: @unchecked
 
-    assertIsSymbolWithPath(unitVal)(unitValRef.symbol)
+    assert(clue(unitValRef.symbol) == unitVal)
   }
 
   testWithContext("select-method-from-java-class-same-package-as-tasty") {
-    // This tests reading top level classes in the same package, defined by
+    // This tests reads top-level classes in the same package, defined by
     // both Java and Tasty. If we strictly require that all symbols are defined
     // exactly once, then we must be careful to not redefine `ScalaBox`/`JavaBox`
     // when scanning a package from the classpath.
 
-    val ScalaBox = name"mixjavascala" / tname"ScalaBox"
-    val getX = name"mixjavascala" / tname"JavaBox" / name"getX"
+    val ScalaBoxClass = ctx.findTopLevelClass("mixjavascala.ScalaBox")
+    val JavaBoxClass = ctx.findTopLevelClass("mixjavascala.JavaBox")
 
-    val xMethodSym = resolve(ScalaBox / name"xMethod")
+    val getX = JavaBoxClass.findNonOverloadedDecl(name"getX")
+    val xMethodSym = ScalaBoxClass.findNonOverloadedDecl(name"xMethod")
 
     val Some(DefDef(_, _, _, Apply(getXSelection, _), _)) = xMethodSym.tree: @unchecked
 
     val (getXRef @ _: TermRef) = getXSelection.tpe: @unchecked
 
-    assertIsSymbolWithPath(getX)(getXRef.symbol)
+    assert(clue(getXRef.symbol) == getX)
   }
 
   testWithContext("select-field-from-generic-class") {
-    val GenClass = resolve(name"simple_trees" / tname"GenericClass").asClass
-    val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
-    val IntClass = resolve(name"scala" / tname"Int")
+    val GenClass = ctx.findTopLevelClass("simple_trees.GenericClass")
+    val PolySelect = ctx.findTopLevelClass("simple_trees.PolySelect")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.getDecl(name"testField").get.tree: @unchecked
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.findNonOverloadedDecl(name"testField").tree: @unchecked
 
     val Select(qual, fieldName) = body: @unchecked
 
-    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(IntClass))))
+    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(defn.IntClass))))
     assertEquals(fieldName, name"field")
-    assert(clue(body.tpe).isOfClass(IntClass))
+    assert(clue(body.tpe).isOfClass(defn.IntClass))
   }
 
   testWithContext("select-getter-from-generic-class") {
-    val GenClass = resolve(name"simple_trees" / tname"GenericClass").asClass
-    val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
-    val IntClass = resolve(name"scala" / tname"Int")
+    val GenClass = ctx.findTopLevelClass("simple_trees.GenericClass")
+    val PolySelect = ctx.findTopLevelClass("simple_trees.PolySelect")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.getDecl(name"testGetter").get.tree: @unchecked
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.findNonOverloadedDecl(name"testGetter").tree: @unchecked
 
     val Select(qual, getterName) = body: @unchecked
 
-    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(IntClass))))
+    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(defn.IntClass))))
     assertEquals(getterName, name"getter")
-    assert(clue(body.tpe).isOfClass(IntClass))
+    assert(clue(body.tpe).isOfClass(defn.IntClass))
   }
 
   testWithContext("select-and-apply-method-from-generic-class") {
-    val GenClass = resolve(name"simple_trees" / tname"GenericClass").asClass
-    val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
-    val IntClass = resolve(name"scala" / tname"Int")
+    val GenClass = ctx.findTopLevelClass("simple_trees.GenericClass")
+    val PolySelect = ctx.findTopLevelClass("simple_trees.PolySelect")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.getDecl(name"testMethod").get.tree: @unchecked
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.findNonOverloadedDecl(name"testMethod").tree: @unchecked
 
     val Apply(fun @ Select(qual, methodName), List(arg)) = body: @unchecked
 
-    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(IntClass))))
+    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(defn.IntClass))))
     methodName match {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"method")
     }
     fun.tpe.widen match {
       case mt: MethodType =>
         assert(clue(mt.paramNames) == List(name"x"))
-        assert(clue(mt.paramTypes.head).isOfClass(IntClass))
-        assert(clue(mt.resultType).isOfClass(IntClass))
+        assert(clue(mt.paramTypes.head).isOfClass(defn.IntClass))
+        assert(clue(mt.resultType).isOfClass(defn.IntClass))
     }
-    assert(clue(body.tpe).isOfClass(IntClass))
+    assert(clue(body.tpe).isOfClass(defn.IntClass))
   }
 
   testWithContext("select-and-apply-poly-method") {
-    val GenMethod = resolve(name"simple_trees" / tname"GenericMethod").asClass
-    val PolySelect = resolve(name"simple_trees" / tname"PolySelect").asClass
-    val IntClass = resolve(name"scala" / tname"Int")
+    val GenMethod = ctx.findTopLevelClass("simple_trees.GenericMethod")
+    val PolySelect = ctx.findTopLevelClass("simple_trees.PolySelect")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.getDecl(name"testGenericMethod").get.tree: @unchecked
+    val Some(DefDef(_, _, _, body, _)) = PolySelect.findNonOverloadedDecl(name"testGenericMethod").tree: @unchecked
 
     val Apply(tapp @ TypeApply(fun @ Select(qual, methodName), List(targ)), List(arg)) = body: @unchecked
 
@@ -686,85 +690,80 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     tapp.tpe.widen match {
       case mt: MethodType =>
         assert(clue(mt.paramNames) == List(name"x"))
-        assert(clue(mt.paramTypes.head).isOfClass(IntClass))
-        assert(clue(mt.resultType).isOfClass(IntClass))
+        assert(clue(mt.paramTypes.head).isOfClass(defn.IntClass))
+        assert(clue(mt.resultType).isOfClass(defn.IntClass))
     }
-    assert(clue(body.tpe).isOfClass(IntClass))
+    assert(clue(body.tpe).isOfClass(defn.IntClass))
   }
 
   testWithContext("console-outvar-issue-78") {
-    val Console = resolve(name"scala" / tname"Console" / obj).asClass
-    val DynamicVariable = resolve(name"scala" / name"util" / tname"DynamicVariable").asClass
+    val Console = ctx.findTopLevelModuleClass("scala.Console")
+    val DynamicVariable = ctx.findTopLevelClass("scala.util.DynamicVariable")
 
-    val outVar = Console.getDecl(name"outVar").get.asTerm
+    val outVar = Console.findDecl(name"outVar")
     assert(clue(outVar.declaredType).isApplied(_.isRef(DynamicVariable), List(_ => true)))
   }
 
   testWithContext("scala-predef-declared-type") {
-    val predef = resolve(name"scala" / name"Predef").asTerm
-    val Predef = resolve(name"scala" / tname"Predef" / obj)
+    val predef = ctx.findStaticTerm("scala.Predef")
+    val Predef = ctx.findTopLevelModuleClass("scala.Predef")
     assert(clue(predef.declaredType).isRef(Predef))
   }
 
   testWithContext("scala.math.Ordering") {
-    val OrderingModClass = resolve(name"scala" / name"math" / tname"Ordering" / obj).asClass
-    assert(OrderingModClass.getDecl(name"by").isDefined)
+    val OrderingModClass = ctx.findTopLevelModuleClass("scala.math.Ordering")
+    assert(OrderingModClass.getNonOverloadedDecl(name"by").isDefined)
   }
 
   testWithContext("scala.math.Ordering.IntOrdering") {
-    val IntOrderingClass = resolve(name"scala" / name"math" / tname"Ordering" / obj / tname"IntOrdering").asClass
-    val IntClass = resolve(name"scala" / tname"Int").asClass
+    val IntOrderingClass = ctx.findStaticClass("scala.math.Ordering.IntOrdering")
 
-    val compare = IntOrderingClass.getDecl(name"compare").get.asTerm
+    val compare = IntOrderingClass.findNonOverloadedDecl(name"compare")
     val mt = compare.declaredType.asInstanceOf[MethodType]
-    assert(clue(mt.paramTypes(0)).isRef(IntClass))
-    assert(clue(mt.paramTypes(1)).isRef(IntClass))
-    assert(clue(mt.resultType).isRef(IntClass))
+    assert(clue(mt.paramTypes(0)).isRef(defn.IntClass))
+    assert(clue(mt.paramTypes(1)).isRef(defn.IntClass))
+    assert(clue(mt.resultType).isRef(defn.IntClass))
   }
 
   testWithContext("scala.math.Ordering.Float.TotalOrdering") {
-    val path = name"scala" / name"math" / tname"Ordering" / obj / tname"Float" / obj / tname"TotalOrdering"
-    val FloatTotalOrderingClass = resolve(path).asClass
-    val IntClass = resolve(name"scala" / tname"Int").asClass
-    val FloatClass = resolve(name"scala" / tname"Float").asClass
+    val FloatTotalOrderingClass = ctx.findStaticClass("scala.math.Ordering.Float.TotalOrdering")
 
-    val compare = FloatTotalOrderingClass.getDecl(name"compare").get.asTerm
+    val compare = FloatTotalOrderingClass.findNonOverloadedDecl(name"compare")
     val mt = compare.declaredType.asInstanceOf[MethodType]
-    assert(clue(mt.paramTypes(0)).isRef(FloatClass))
-    assert(clue(mt.paramTypes(1)).isRef(FloatClass))
-    assert(clue(mt.resultType).isRef(IntClass))
+    assert(clue(mt.paramTypes(0)).isRef(defn.FloatClass))
+    assert(clue(mt.paramTypes(1)).isRef(defn.FloatClass))
+    assert(clue(mt.resultType).isRef(defn.IntClass))
   }
 
   testWithContext("read-scala2-type-ref-type") {
-    val RichBoolean = resolve(name"scala" / name"runtime" / tname"RichBoolean").asClass
-    val BooleanOrdering = resolve(name"scala" / name"math" / tname"Ordering" / obj / name"Boolean")
-    val ord = RichBoolean.getDecl(name"ord").get.asTerm
+    val RichBoolean = ctx.findTopLevelClass("scala.runtime.RichBoolean")
+    val BooleanOrdering = ctx.findStaticTerm("scala.math.Ordering.Boolean")
+    val ord = RichBoolean.findDecl(name"ord")
     assert(clue(ord.declaredType).isRef(BooleanOrdering))
   }
 
   testWithContext("read-encoded-scala2-type-ref-type") {
-    val Function1Class = resolve(name"scala" / tname"Function1").asClass
-    val SerializableClass = resolve(name"java" / name"io" / tname"Serializable").asClass
-    val TypeEqClass = resolve(name"scala" / tname"=:=").asClass
-    val SubtypeClass = resolve(name"scala" / tname"<:<").asClass
+    val Function1Class = ctx.findTopLevelClass("scala.Function1")
+    val SerializableClass = ctx.findTopLevelClass("java.io.Serializable")
+    val TypeEqClass = ctx.findTopLevelClass("scala.=:=")
+    val SubtypeClass = ctx.findTopLevelClass("scala.<:<")
 
     assert(clue(SubtypeClass.parentClasses) == List(defn.ObjectClass, Function1Class, SerializableClass))
     assert(clue(TypeEqClass.parentClasses) == List(SubtypeClass, SerializableClass))
   }
 
   testWithContext("scala2-type-alias") {
-    val PredefString = resolve(name"scala" / tname"Predef" / obj / tname"String").asType
-    val JLString = resolve(name"java" / name"lang" / tname"String")
+    val PredefString = ctx.findStaticType("scala.Predef.String")
 
     assert(clue(PredefString).isTypeAlias)
-    assert(clue(PredefString.asInstanceOf[TypeMemberSymbol].aliasedType).isRef(JLString))
+    assert(clue(PredefString.asInstanceOf[TypeMemberSymbol].aliasedType).isRef(defn.StringClass))
   }
 
   testWithContext("scala2-module-and-def-with-same-name") {
-    val StringContext = resolve(name"scala" / tname"StringContext").asClass
-    val sModuleClass = resolve(name"scala" / tname"StringContext" / tname"s" / obj)
+    val StringContext = ctx.findTopLevelClass("scala.StringContext")
+    val sModuleClass = StringContext.findDecl(moduleClassName("s")).asClass
 
-    val sDecls = StringContext.getDecls(name"s")
+    val sDecls = StringContext.getAllOverloadedDecls(name"s")
     assert(clue(sDecls).sizeIs == 2)
 
     val (sModule, sDef) =
@@ -778,42 +777,40 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("scala2-class-type-params") {
-    val ListClass = resolve(name"scala" / name"collection" / name"immutable" / tname"List").asClass
-    val ArrayClass = resolve(name"scala" / tname"Array").asClass
+    val ListClass = ctx.findTopLevelClass("scala.collection.immutable.List")
 
     val List(targList) = ListClass.typeParams: @unchecked
     // TODO Set flags ClassTypeParam on TypeParams
     //assert(clue(targList.flags).isAllOf(ClassTypeParam))
 
-    val List(targArray) = ArrayClass.typeParams: @unchecked
+    val List(targArray) = defn.ArrayClass.typeParams: @unchecked
     // TODO Set flags ClassTypeParam on TypeParams
     //assert(clue(targArray.flags).isAllOf(ClassTypeParam))
   }
 
   testWithContext("poly-type-in-higher-kinded") {
-    val HigherKindedClass = resolve(name"simple_trees" / tname"HigherKinded").asClass
-    val polyMethod = HigherKindedClass.getDecl(name"m").get.asTerm
+    val HigherKindedClass = ctx.findTopLevelClass("simple_trees.HigherKinded")
+    val polyMethod = HigherKindedClass.findNonOverloadedDecl(name"m")
     assert(polyMethod.declaredType.asInstanceOf[PolyType].resultType.isInstanceOf[MethodType])
   }
 
   testWithContext("scala.collection.:+") {
     // type parameter C <: SeqOps[A, CC, C]
-    val `:+` = resolve(name"scala" / name"collection" / tname"package" / obj / tname":+" / obj).asClass
+    ctx.findStaticModuleClass("scala.collection.package.:+")
   }
 
   testWithContext("read-scala.collection.mutable.StringBuilder_after-force-scala-pkg") {
-    val scala = resolve(RootPkg / name"scala").asPackage
-    scala.declarations
+    val scalaPackage = ctx.findPackage("scala")
+    scalaPackage.declarations
 
-    val StringBuilder = resolve(RootPkg / name"scala" / name"collection" / name"mutable" / tname"StringBuilder").asClass
+    ctx.findTopLevelClass("scala.collection.mutable.StringBuilder")
   }
 
   testWithContext("linearization") {
-    val OverridesPath = name"inheritance" / tname"Overrides" / obj
-    val SuperMonoClass = resolve(OverridesPath / tname"SuperMono").asClass
-    val SuperMonoTraitClass = resolve(OverridesPath / tname"SuperMonoTrait").asClass
-    val MidMonoClass = resolve(OverridesPath / tname"MidMono").asClass
-    val ChildMonoClass = resolve(OverridesPath / tname"ChildMono").asClass
+    val SuperMonoClass = ctx.findStaticClass("inheritance.Overrides.SuperMono")
+    val SuperMonoTraitClass = ctx.findStaticClass("inheritance.Overrides.SuperMonoTrait")
+    val MidMonoClass = ctx.findStaticClass("inheritance.Overrides.MidMono")
+    val ChildMonoClass = ctx.findStaticClass("inheritance.Overrides.ChildMono")
 
     val linTail = defn.ObjectClass :: defn.MatchableClass :: defn.AnyClass :: Nil
 
@@ -826,20 +823,19 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("overrides-mono-no-overloads") {
-    val OverridesPath = name"inheritance" / tname"Overrides" / obj
-    val SuperMonoClass = resolve(OverridesPath / tname"SuperMono").asClass
-    val SuperMonoTraitClass = resolve(OverridesPath / tname"SuperMonoTrait").asClass
-    val MidMonoClass = resolve(OverridesPath / tname"MidMono").asClass
-    val ChildMonoClass = resolve(OverridesPath / tname"ChildMono").asClass
+    val SuperMonoClass = ctx.findStaticClass("inheritance.Overrides.SuperMono")
+    val SuperMonoTraitClass = ctx.findStaticClass("inheritance.Overrides.SuperMonoTrait")
+    val MidMonoClass = ctx.findStaticClass("inheritance.Overrides.MidMono")
+    val ChildMonoClass = ctx.findStaticClass("inheritance.Overrides.ChildMono")
 
-    val fooInSuper = SuperMonoClass.getDecl(name"foo").get.asTerm
-    val fooInChild = ChildMonoClass.getDecl(name"foo").get.asTerm
+    val fooInSuper = SuperMonoClass.findNonOverloadedDecl(name"foo")
+    val fooInChild = ChildMonoClass.findNonOverloadedDecl(name"foo")
 
-    val barInSuperTrait = SuperMonoTraitClass.getDecl(name"bar").get.asTerm
-    val barInChild = ChildMonoClass.getDecl(name"bar").get.asTerm
+    val barInSuperTrait = SuperMonoTraitClass.findNonOverloadedDecl(name"bar")
+    val barInChild = ChildMonoClass.findNonOverloadedDecl(name"bar")
 
-    val foobazInSuper = SuperMonoClass.getDecl(name"foobaz").get.asTerm
-    val foobazInChild = ChildMonoClass.getDecl(name"foobaz").get.asTerm
+    val foobazInSuper = SuperMonoClass.findNonOverloadedDecl(name"foobaz")
+    val foobazInChild = ChildMonoClass.findNonOverloadedDecl(name"foobaz")
 
     // From fooInSuper
 
@@ -933,11 +929,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("overrides-mono-overloads") {
-    val OverridesPath = name"inheritance" / tname"Overrides" / obj
-    val SuperMonoClass = resolve(OverridesPath / tname"SuperMono").asClass
-    val SuperMonoTraitClass = resolve(OverridesPath / tname"SuperMonoTrait").asClass
-    val MidMonoClass = resolve(OverridesPath / tname"MidMono").asClass
-    val ChildMonoClass = resolve(OverridesPath / tname"ChildMono").asClass
+    val SuperMonoClass = ctx.findStaticClass("inheritance.Overrides.SuperMono")
+    val SuperMonoTraitClass = ctx.findStaticClass("inheritance.Overrides.SuperMonoTrait")
+    val MidMonoClass = ctx.findStaticClass("inheritance.Overrides.MidMono")
+    val ChildMonoClass = ctx.findStaticClass("inheritance.Overrides.ChildMono")
 
     val IntClass = defn.IntClass
     val StringClass = defn.StringClass
@@ -948,19 +943,19 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       def typeParamCountIs(count: Int): Boolean =
         meth.declaredType.asInstanceOf[PolyType].paramNames.sizeIs == count
 
-    val overloadedInSuper = SuperMonoClass.getDecls(name"overloaded").map(_.asTerm)
+    val overloadedInSuper = SuperMonoClass.findAllOverloadedDecls(name"overloaded")
     val intInSuper = overloadedInSuper.find(_.firstParamTypeIsRef(IntClass)).get
     val stringInSuper = overloadedInSuper.find(_.firstParamTypeIsRef(StringClass)).get
 
-    val overloadedInChild = ChildMonoClass.getDecls(name"overloaded").map(_.asTerm)
+    val overloadedInChild = ChildMonoClass.findAllOverloadedDecls(name"overloaded")
     val intInChild = overloadedInChild.find(_.firstParamTypeIsRef(IntClass)).get
     val stringInChild = overloadedInChild.find(_.firstParamTypeIsRef(StringClass)).get
 
-    val polyInSuper = SuperMonoClass.getDecls(name"overloadedPoly").map(_.asTerm)
+    val polyInSuper = SuperMonoClass.findAllOverloadedDecls(name"overloadedPoly")
     val poly1InSuper = polyInSuper.find(_.typeParamCountIs(1)).get
     val poly2InSuper = polyInSuper.find(_.typeParamCountIs(2)).get
 
-    val polyInChild = ChildMonoClass.getDecls(name"overloadedPoly").map(_.asTerm)
+    val polyInChild = ChildMonoClass.findAllOverloadedDecls(name"overloadedPoly")
     val poly1InChild = polyInChild.find(_.typeParamCountIs(1)).get
     val poly2InChild = polyInChild.find(_.typeParamCountIs(2)).get
 
@@ -1086,15 +1081,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("overrides-cannot-override") {
-    val OverridesPath = name"inheritance" / tname"Overrides" / obj
-    val SuperMonoClass = resolve(OverridesPath / tname"SuperMono").asClass
-    val ChildMonoClass = resolve(OverridesPath / tname"ChildMono").asClass
+    val SuperMonoClass = ctx.findStaticClass("inheritance.Overrides.SuperMono")
+    val ChildMonoClass = ctx.findStaticClass("inheritance.Overrides.ChildMono")
 
-    val superCtor = SuperMonoClass.getDecl(nme.Constructor).get.asTerm
-    val childCtor = ChildMonoClass.getDecl(nme.Constructor).get.asTerm
+    val superCtor = SuperMonoClass.findNonOverloadedDecl(nme.Constructor)
+    val childCtor = ChildMonoClass.findNonOverloadedDecl(nme.Constructor)
 
-    val superPrivate = SuperMonoClass.getDecl(name"privateMethod").get.asTerm
-    val childPrivate = ChildMonoClass.getDecl(name"privateMethod").get.asTerm
+    val superPrivate = SuperMonoClass.findNonOverloadedDecl(name"privateMethod")
+    val childPrivate = ChildMonoClass.findNonOverloadedDecl(name"privateMethod")
 
     // From superCtor
 
@@ -1142,9 +1136,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("overrides-poly") {
-    val OverridesPath = name"inheritance" / tname"Overrides" / obj
-    val SuperPolyClass = resolve(OverridesPath / tname"SuperPoly").asClass
-    val ChildPolyClass = resolve(OverridesPath / tname"ChildPoly").asClass
+    val SuperPolyClass = ctx.findStaticClass("inheritance.Overrides.SuperPoly")
+    val ChildPolyClass = ctx.findStaticClass("inheritance.Overrides.ChildPoly")
 
     val List(superPolyA, superPolyB) = SuperPolyClass.typeParams: @unchecked
     val List(childPolyX) = ChildPolyClass.typeParams: @unchecked
@@ -1155,11 +1148,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       def firstParamTypeIsRef(cls: Symbol): Boolean =
         meth.declaredType.asInstanceOf[MethodType].paramTypes.head.isRef(cls)
 
-    val fooInSuper = SuperPolyClass.getDecls(name"foo").map(_.asTerm)
+    val fooInSuper = SuperPolyClass.findAllOverloadedDecls(name"foo")
     val fooAInSuper = fooInSuper.find(_.firstParamTypeIsRef(superPolyA)).get
     val fooBInSuper = fooInSuper.find(_.firstParamTypeIsRef(superPolyB)).get
 
-    val fooInChild = ChildPolyClass.getDecls(name"foo").map(_.asTerm)
+    val fooInChild = ChildPolyClass.findAllOverloadedDecls(name"foo")
     val fooXInChild = fooInChild.find(_.firstParamTypeIsRef(childPolyX)).get
     val fooIntInChild = fooInChild.find(_.firstParamTypeIsRef(IntClass)).get
 
@@ -1209,13 +1202,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("overrides-relaxed") {
-    val OverridesPath = name"inheritance" / tname"Overrides" / obj
-    val SuperMonoClass = resolve(OverridesPath / tname"SuperMono").asClass
-    val ChildMonoClass = resolve(OverridesPath / tname"ChildMono").asClass
+    val SuperMonoClass = ctx.findStaticClass("inheritance.Overrides.SuperMono")
+    val ChildMonoClass = ctx.findStaticClass("inheritance.Overrides.ChildMono")
 
-    val objectToString = defn.ObjectClass.getDecl(name"toString").get.asTerm
-    val superToString = SuperMonoClass.getDecl(name"toString").get.asTerm
-    val childToString = ChildMonoClass.getDecl(name"toString").get.asTerm
+    val objectToString = defn.ObjectClass.findNonOverloadedDecl(name"toString")
+    val superToString = SuperMonoClass.findNonOverloadedDecl(name"toString")
+    val childToString = ChildMonoClass.findNonOverloadedDecl(name"toString")
 
     // From objectToString
 
@@ -1257,24 +1249,24 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(childToString.nextOverriddenSymbol) == Some(superToString))
   }
 
-  def companionClassFullCycle(path: DeclarationPath)(using Context, munit.Location): Unit = {
-    val cls: ClassSymbol = resolve(path).asClass
-    val moduleClass: ClassSymbol = resolve(path.asObj).asClass
+  def companionClassFullCycle(owner: DeclaringSymbol, baseName: String)(using Context, munit.Location): Unit = {
+    val cls: ClassSymbol = owner.getDecl(typeName(baseName)).get.asClass
+    val moduleClass: ClassSymbol = owner.getDecl(moduleClassName(baseName)).get.asClass
 
     assert(cls == moduleClass.companionClass.get)
     assert(moduleClass.companionClass.get == cls)
   }
 
   testWithContext("companion-tests-module-value") {
-    companionClassFullCycle(name"companions" / tname"CompanionObject")
+    companionClassFullCycle(ctx.findPackage("companions"), "CompanionObject")
   }
 
   testWithContext("companion-tests-nested-module-value") {
-    companionClassFullCycle(name"companions" / tname"CompanionObject" / obj / tname"NestedObject")
+    companionClassFullCycle(ctx.findTopLevelModuleClass("companions.CompanionObject"), "NestedObject")
   }
 
   testWithContext("companion-tests-class-nested-module-value") {
-    companionClassFullCycle(name"companions" / tname"CompanionObject" / tname"ClassNestedObject")
+    companionClassFullCycle(ctx.findTopLevelClass("companions.CompanionObject"), "ClassNestedObject")
   }
 
 }

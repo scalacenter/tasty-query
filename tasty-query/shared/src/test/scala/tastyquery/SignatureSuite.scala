@@ -28,54 +28,54 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("java.lang.String") {
     val StringClass = defn.StringClass
 
-    val charAt = StringClass.getDecl(name"charAt").get.asTerm
+    val charAt = StringClass.findNonOverloadedDecl(name"charAt")
     assertIsSignedName(charAt.signedName, "charAt", "(scala.Int):scala.Char")
 
-    val contains = StringClass.getDecl(name"contains").get.asTerm
+    val contains = StringClass.findNonOverloadedDecl(name"contains")
     assertIsSignedName(contains.signedName, "contains", "(java.lang.CharSequence):scala.Boolean")
 
-    val length = StringClass.getDecl(name"length").get.asTerm
+    val length = StringClass.findNonOverloadedDecl(name"length")
     assertIsSignedName(length.signedName, "length", "():scala.Int")
   }
 
   testWithContext("GenericClass") {
     val GenericClass = ctx.findTopLevelClass("simple_trees.GenericClass")
 
-    val field = GenericClass.getDecl(name"field").get.asTerm
+    val field = GenericClass.findDecl(name"field")
     assertNotSignedName(field.signedName)
 
-    val getter = GenericClass.getDecl(name"getter").get.asTerm
+    val getter = GenericClass.findDecl(name"getter")
     assertIsSignedName(getter.signedName, "getter", "():java.lang.Object")
 
-    val method = GenericClass.getDecl(name"method").get.asTerm
+    val method = GenericClass.findNonOverloadedDecl(name"method")
     assertIsSignedName(method.signedName, "method", "(java.lang.Object):java.lang.Object")
   }
 
   testWithContext("GenericMethod") {
     val GenericMethod = ctx.findTopLevelClass("simple_trees.GenericMethod")
 
-    val identity = GenericMethod.getDecl(name"identity").get.asTerm
+    val identity = GenericMethod.findNonOverloadedDecl(name"identity")
     assertIsSignedName(identity.signedName, "identity", "(1,java.lang.Object):java.lang.Object")
   }
 
   testWithContext("RichInt") {
     val RichInt = ctx.findTopLevelClass("scala.runtime.RichInt")
 
-    val toHexString = RichInt.getDecl(name"toHexString").get.asTerm
+    val toHexString = RichInt.findDecl(name"toHexString")
     assertIsSignedName(toHexString.signedName, "toHexString", "():java.lang.String")
   }
 
   testWithContext("Product") {
     val Product = ctx.findTopLevelClass("scala.Product")
 
-    val productIterator = Product.getDecl(name"productIterator").get.asTerm
+    val productIterator = Product.findDecl(name"productIterator")
     assertIsSignedName(productIterator.signedName, "productIterator", "():scala.collection.Iterator")
   }
 
   testWithContext("with type") {
     val RefinedTypeTree = ctx.findTopLevelClass("simple_trees.RefinedTypeTree")
 
-    val andType = RefinedTypeTree.getDecl(name"andType").get.asTerm
+    val andType = RefinedTypeTree.findNonOverloadedDecl(name"andType")
     intercept[UnsupportedOperationException](andType.signedName)
   }
 
@@ -84,36 +84,36 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
     // TODO The erasure is not actually correct here, but at least we don't crash
 
-    val withArray = TypeRefIn.getDecl(name"withArray").get.asTerm
+    val withArray = TypeRefIn.findNonOverloadedDecl(name"withArray")
     assertIsSignedName(withArray.signedName, "withArray", "(1,java.lang.Object):scala.Unit")
 
-    val withArrayOfSubtype = TypeRefIn.getDecl(name"withArrayOfSubtype").get.asTerm
+    val withArrayOfSubtype = TypeRefIn.findNonOverloadedDecl(name"withArrayOfSubtype")
     assertIsSignedName(withArrayOfSubtype.signedName, "withArrayOfSubtype", "(1,java.lang.Object):scala.Unit")
 
-    val withArrayAnyRef = TypeRefIn.getDecl(name"withArrayAnyRef").get.asTerm
+    val withArrayAnyRef = TypeRefIn.findNonOverloadedDecl(name"withArrayAnyRef")
     assertIsSignedName(withArrayAnyRef.signedName, "withArrayAnyRef", "(1,java.lang.Object[]):scala.Unit")
 
-    val withArrayOfSubtypeAnyRef = TypeRefIn.getDecl(name"withArrayOfSubtypeAnyRef").get.asTerm
+    val withArrayOfSubtypeAnyRef = TypeRefIn.findNonOverloadedDecl(name"withArrayOfSubtypeAnyRef")
     assertIsSignedName(
       withArrayOfSubtypeAnyRef.signedName,
       "withArrayOfSubtypeAnyRef",
       "(1,java.lang.Object[]):scala.Unit"
     )
 
-    val withArrayAnyVal = TypeRefIn.getDecl(name"withArrayAnyVal").get.asTerm
+    val withArrayAnyVal = TypeRefIn.findNonOverloadedDecl(name"withArrayAnyVal")
     assertIsSignedName(withArrayAnyVal.signedName, "withArrayAnyVal", "(1,java.lang.Object):scala.Unit")
 
-    val withArrayOfSubtypeAnyVal = TypeRefIn.getDecl(name"withArrayOfSubtypeAnyVal").get.asTerm
+    val withArrayOfSubtypeAnyVal = TypeRefIn.findNonOverloadedDecl(name"withArrayOfSubtypeAnyVal")
     assertIsSignedName(
       withArrayOfSubtypeAnyVal.signedName,
       "withArrayOfSubtypeAnyVal",
       "(1,java.lang.Object):scala.Unit"
     )
 
-    val withArrayList = TypeRefIn.getDecl(name"withArrayList").get.asTerm
+    val withArrayList = TypeRefIn.findNonOverloadedDecl(name"withArrayList")
     assertIsSignedName(withArrayList.signedName, "withArrayList", "(1,scala.collection.immutable.List[]):scala.Unit")
 
-    val withArrayOfSubtypeList = TypeRefIn.getDecl(name"withArrayOfSubtypeList").get.asTerm
+    val withArrayOfSubtypeList = TypeRefIn.findNonOverloadedDecl(name"withArrayOfSubtypeList")
     assertIsSignedName(
       withArrayOfSubtypeList.signedName,
       "withArrayOfSubtypeList",
@@ -124,127 +124,127 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("type-member") {
     val TypeMember = ctx.findTopLevelClass("simple_trees.TypeMember")
 
-    val mTypeAlias = TypeMember.getDecl(name"mTypeAlias").get.asTerm
+    val mTypeAlias = TypeMember.findNonOverloadedDecl(name"mTypeAlias")
     assertIsSignedName(mTypeAlias.signedName, "mTypeAlias", "(scala.Int):scala.Int")
 
-    val mAbstractType = TypeMember.getDecl(name"mAbstractType").get.asTerm
+    val mAbstractType = TypeMember.findNonOverloadedDecl(name"mAbstractType")
     assertIsSignedName(mAbstractType.signedName, "mAbstractType", "(java.lang.Object):java.lang.Object")
 
-    val mAbstractTypeWithBounds = TypeMember.getDecl(name"mAbstractTypeWithBounds").get.asTerm
+    val mAbstractTypeWithBounds = TypeMember.findNonOverloadedDecl(name"mAbstractTypeWithBounds")
     assertIsSignedName(mAbstractTypeWithBounds.signedName, "mAbstractTypeWithBounds", "(scala.Product):scala.Product")
 
-    val mOpaque = TypeMember.getDecl(name"mOpaque").get.asTerm
+    val mOpaque = TypeMember.findNonOverloadedDecl(name"mOpaque")
     assertIsSignedName(mOpaque.signedName, "mOpaque", "(scala.Int):scala.Int")
 
-    val mOpaqueWithBounds = TypeMember.getDecl(name"mOpaqueWithBounds").get.asTerm
+    val mOpaqueWithBounds = TypeMember.findNonOverloadedDecl(name"mOpaqueWithBounds")
     assertIsSignedName(mOpaqueWithBounds.signedName, "mOpaqueWithBounds", "(scala.Null):scala.Null")
   }
 
   testWithContext("scala2-case-class-varargs") {
     val StringContext = ctx.findTopLevelClass("scala.StringContext")
 
-    val parts = StringContext.getDecl(name"parts").get.asTerm
+    val parts = StringContext.findDecl(name"parts")
     assertIsSignedName(parts.signedName, "parts", "():scala.collection.immutable.Seq")
   }
 
   testWithContext("scala2-method-byname") {
     val StringContext = ctx.findTopLevelClass("scala.Option")
 
-    val getOrElse = StringContext.getDecl(name"getOrElse").get.asTerm
+    val getOrElse = StringContext.findNonOverloadedDecl(name"getOrElse")
     assertIsSignedName(getOrElse.signedName, "getOrElse", "(1,scala.Function0):java.lang.Object")
   }
 
   testWithContext("scala2-existential-type") {
     val ClassTag = ctx.findTopLevelModuleClass("scala.reflect.ClassTag")
 
-    val apply = ClassTag.getDecl(name"apply").get.asTerm
+    val apply = ClassTag.findNonOverloadedDecl(name"apply")
     assertIsSignedName(apply.signedName, "apply", "(1,java.lang.Class):scala.reflect.ClassTag")
   }
 
   testWithContext("iarray") {
     val IArraySig = ctx.findTopLevelClass("simple_trees.IArraySig")
 
-    val from = IArraySig.getDecl(name"from").get.asTerm
+    val from = IArraySig.findNonOverloadedDecl(name"from")
     assertIsSignedName(from.signedName, "from", "():java.lang.String[]")
   }
 
   testWithContext("value-class-arrayOps-generic") {
     val MyArrayOps = ctx.findTopLevelModuleClass("inheritance.MyArrayOps")
-    val genericArrayOps = MyArrayOps.getDecl(name"genericArrayOps").get.asTerm
+    val genericArrayOps = MyArrayOps.findNonOverloadedDecl(name"genericArrayOps")
     assertIsSignedName(genericArrayOps.signedName, "genericArrayOps", "(1,java.lang.Object):java.lang.Object")
   }
 
   testWithContext("value-class-arrayOps-int") {
     val MyArrayOps = ctx.findTopLevelModuleClass("inheritance.MyArrayOps")
-    val intArrayOps = MyArrayOps.getDecl(name"intArrayOps").get.asTerm
+    val intArrayOps = MyArrayOps.findNonOverloadedDecl(name"intArrayOps")
     assertIsSignedName(intArrayOps.signedName, "intArrayOps", "(scala.Int[]):java.lang.Object")
   }
 
   testWithContext("scala2-value-class-arrayOps-generic") {
     val Predef = ctx.findTopLevelModuleClass("scala.Predef")
-    val genericArrayOps = Predef.getDecl(name"genericArrayOps").get.asTerm
+    val genericArrayOps = Predef.findNonOverloadedDecl(name"genericArrayOps")
     assertIsSignedName(genericArrayOps.signedName, "genericArrayOps", "(1,java.lang.Object):java.lang.Object")
   }
 
   testWithContext("scala2-value-class-arrayOps-int") {
     val Predef = ctx.findTopLevelModuleClass("scala.Predef")
-    val intArrayOps = Predef.getDecl(name"intArrayOps").get.asTerm
+    val intArrayOps = Predef.findNonOverloadedDecl(name"intArrayOps")
     assertIsSignedName(intArrayOps.signedName, "intArrayOps", "(scala.Int[]):java.lang.Object")
   }
 
   testWithContext("value-class-monomorphic") {
     val MyFlags = ctx.findTopLevelClass("inheritance.MyFlags")
-    val merge = MyFlags.getDecl(name"merge").get.asTerm
+    val merge = MyFlags.findNonOverloadedDecl(name"merge")
     assertIsSignedName(merge.signedName, "merge", "(scala.Long):scala.Long")
   }
 
   testWithContext("value-class-monomorphic-arrayOf") {
     val MyFlags = ctx.findTopLevelModuleClass("inheritance.MyFlags")
-    val mergeAll = MyFlags.getDecl(name"mergeAll").get.asTerm
+    val mergeAll = MyFlags.findNonOverloadedDecl(name"mergeAll")
     assertIsSignedName(mergeAll.signedName, "mergeAll", "(inheritance.MyFlags[]):scala.Long")
   }
 
   testWithContext("value-class-polymorphic-arrayOf") {
     val MyArrayOps = ctx.findTopLevelModuleClass("inheritance.MyArrayOps")
-    val arrayOfIntArrayOps = MyArrayOps.getDecl(name"arrayOfIntArrayOps").get.asTerm
+    val arrayOfIntArrayOps = MyArrayOps.findNonOverloadedDecl(name"arrayOfIntArrayOps")
     assertIsSignedName(arrayOfIntArrayOps.signedName, "arrayOfIntArrayOps", "(scala.Int[][]):inheritance.MyArrayOps[]")
   }
 
   testWithContext("package-ref-from-tasty") {
     val LazyVals = ctx.findTopLevelModuleClass("javacompat.LazyVals")
-    val getOffsetStatic = LazyVals.getDecl(name"getOffsetStatic").get.asTerm
+    val getOffsetStatic = LazyVals.findNonOverloadedDecl(name"getOffsetStatic")
     assertIsSignedName(getOffsetStatic.signedName, "getOffsetStatic", "(java.lang.reflect.Field):scala.Long")
   }
 
   testWithContext("Scala 3 special function types") {
     val SpecialFunctionTypes = ctx.findTopLevelClass("simple_trees.SpecialFunctionTypes")
-    val contextFunction = SpecialFunctionTypes.getDecl(name"contextFunction").get.asTerm
+    val contextFunction = SpecialFunctionTypes.findNonOverloadedDecl(name"contextFunction")
     assertIsSignedName(contextFunction.signedName, "contextFunction", "(scala.Function1):scala.Unit")
   }
 
   testWithContext("inherited type member, same tasty") {
     val SubClass = ctx.findStaticClass("inheritance.SameTasty.Sub")
-    val foo3 = SubClass.getDecl(name"foo3").get.asTerm
+    val foo3 = SubClass.findDecl(name"foo3")
     assertIsSignedName(foo3.signedName, "foo3", "():scala.Int")
 
     val SubWithMixinClass = ctx.findStaticClass("inheritance.SameTasty.SubWithMixin")
-    val bar3 = SubWithMixinClass.getDecl(name"bar3").get.asTerm
+    val bar3 = SubWithMixinClass.findDecl(name"bar3")
     assertIsSignedName(bar3.signedName, "bar3", "():scala.Int")
   }
 
   testWithContext("inherited type member, cross tasty") {
     val SubClass = ctx.findTopLevelClass("inheritance.crosstasty.Sub")
-    val foo3 = SubClass.getDecl(name"foo3").get.asTerm
+    val foo3 = SubClass.findDecl(name"foo3")
     assertIsSignedName(foo3.signedName, "foo3", "():scala.Int")
 
     val SubWithMixinClass = ctx.findTopLevelClass("inheritance.crosstasty.SubWithMixin")
-    val bar3 = SubWithMixinClass.getDecl(name"bar3").get.asTerm
+    val bar3 = SubWithMixinClass.findDecl(name"bar3")
     assertIsSignedName(bar3.signedName, "bar3", "():scala.Int")
   }
 
   testWithContext("case class copy method") {
     val CaseClass = ctx.findTopLevelClass("synthetics.CaseClass")
-    val copy = CaseClass.getDecl(name"copy").get.asTerm
+    val copy = CaseClass.findNonOverloadedDecl(name"copy")
     assertIsSignedName(copy.signedName, "copy", "(java.lang.String):synthetics.CaseClass")
   }
 

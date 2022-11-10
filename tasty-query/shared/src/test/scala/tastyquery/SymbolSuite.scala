@@ -5,11 +5,12 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Names.*
+import tastyquery.Signatures.*
 import tastyquery.Symbols.*
+import tastyquery.Trees.*
+import tastyquery.Types.*
 
 import Paths.*
-import tastyquery.Trees.{ClassDef, ValDef}
-import tastyquery.Types.*
 
 class SymbolSuite extends RestrictedUnpicklingSuite {
   val empty_class = RootPkg / name"empty_class"
@@ -41,25 +42,32 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
       for ctx <- getUnpicklingContext(path, extraClasspath*) yield body(using ctx)
     }
 
-  def getDeclsByPrefix(prefix: DeclarationPath)(using Context): Seq[Symbol] = {
+  def getDeclsByPrefix(prefix: Symbol)(using Context): Seq[Symbol] = {
     def symbolsInSubtree(root: Symbol): Seq[Symbol] =
       if (root.isInstanceOf[DeclaringSymbol]) {
         root +: root.asInstanceOf[DeclaringSymbol].declarations.toSeq.flatMap(symbolsInSubtree(_))
       } else {
         Seq(root)
       }
-    symbolsInSubtree(resolve(prefix)).tail // discard prefix
+    symbolsInSubtree(prefix).tail // discard prefix
   }
 
-  def assertForallWithPrefix(prefix: DeclarationPath, condition: Symbol => Boolean)(using Context): Unit =
+  def assertForallWithPrefix(prefix: Symbol, condition: Symbol => Boolean)(using Context): Unit =
     assert(
       getDeclsByPrefix(prefix).forall(condition),
       s"Condition does not hold for ${getDeclsByPrefix(prefix).filter(!condition(_))}"
     )
 
-  def assertContainsExactly(prefix: DeclarationPath, symbolPaths: Set[DeclarationPath])(using Context): Unit = {
+  def assertContainsExactly(prefix: Symbol, symbolPaths: Set[DeclarationPath])(using Context): Unit = {
     val decls = getDeclsByPrefix(prefix)
-    val expected = symbolPaths.toList.map(p => resolve(p))
+    val expected = symbolPaths.toList.map { path =>
+      val pathList = path.toNameList
+      if pathList.sizeIs > 1 && pathList.last.isTermName then
+        ctx.findSymbolFromRoot(pathList.init).asDeclaringSymbol match
+          case cls: ClassSymbol => cls.findNonOverloadedDecl(pathList.last.toTermName)
+          case owner            => owner.getDecl(pathList.last).get
+      else ctx.findSymbolFromRoot(pathList)
+    }
     // each declaration is in the passed set
     assert(
       decls.forall(decls.contains(_)),
@@ -129,7 +137,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     ctx.findTopLevelClass("empty_class.EmptyClass")
     // EmptyClass and its constructor are the only declarations in empty_class package
     assertContainsExactly(
-      empty_class,
+      ctx.findPackage("empty_class"),
       Set(empty_class / tname"EmptyClass", empty_class / tname"EmptyClass" / name"<init>")
     )
   }
@@ -138,7 +146,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     ctx.findTopLevelClass("simple_trees.nested.InNestedPackage")
     // EmptyClass and its constructor are the only declarations in empty_class package
     assertContainsExactly(
-      `simple_trees.nested`,
+      ctx.findPackage("simple_trees.nested"),
       Set(`simple_trees.nested` / tname"InNestedPackage", `simple_trees.nested` / tname"InNestedPackage" / name"<init>")
     )
   }
@@ -151,13 +159,13 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
   testWithContext("empty-package-contains-no-packages", simple_trees / tname"SharedPackageReference$$package") {
     // simple_trees is not a subpackage of empty package
-    assertForallWithPrefix(EmptyPkg, s => s.name == nme.EmptyPackageName || !s.isPackage)
+    assertForallWithPrefix(defn.EmptyPackage, s => !s.isPackage)
   }
 
   testWithContext("class-parameter-is-a-decl", simple_trees / tname"ConstructorWithParameters") {
     val ConstructorWithParameters = simple_trees / tname"ConstructorWithParameters"
     assertContainsExactly(
-      ConstructorWithParameters,
+      ctx.findTopLevelClass("simple_trees.ConstructorWithParameters"),
       Set(
         ConstructorWithParameters / name"<init>",
         ConstructorWithParameters / name"local",
@@ -172,31 +180,28 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
   testWithContext("class-type-parameter-is-not-a-decl", simple_trees / tname"GenericClass") {
     val GenericClass = simple_trees / tname"GenericClass"
-    assertContainsExactly(simple_trees, Set(GenericClass, GenericClass / name"<init>"))
+    assertContainsExactly(ctx.findTopLevelClass("simple_trees.GenericClass"), Set(GenericClass / name"<init>"))
   }
 
   testWithContext("method-type-parameter-is-not-a-decl", simple_trees / tname"GenericMethod") {
-    val GenericMethod = simple_trees / tname"GenericMethod"
     assertContainsExactly(
-      GenericMethod / name"usesTypeParam",
+      ctx.findTopLevelClass("simple_trees.GenericMethod").findNonOverloadedDecl(name"usesTypeParam"),
       // No declaratiins as type parameter `T` is not a declaration of `usesTypeParam`
       Set.empty
     )
   }
 
   testWithContext("method-term-parameter-is-not-a-decl", simple_trees / tname"GenericMethod") {
-    val GenericMethod = simple_trees / tname"GenericMethod"
     assertContainsExactly(
-      GenericMethod / name"usesTermParam",
+      ctx.findTopLevelClass("simple_trees.GenericMethod").findNonOverloadedDecl(name"usesTermParam"),
       // No declaratiins as term parameter `i: Int` is not a declaration of `usesTermParam`
       Set.empty
     )
   }
 
   testWithContext("nested-method-is-not-a-decl", simple_trees / tname"NestedMethod") {
-    val NestedMethod = simple_trees / tname"NestedMethod"
     assertContainsExactly(
-      NestedMethod / name"outerMethod",
+      ctx.findTopLevelClass("simple_trees.NestedMethod").findNonOverloadedDecl(name"outerMethod"),
       // local method `innerMethod` is not a declaration of `outerMethod`
       Set.empty
     )
@@ -228,7 +233,8 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val fooMethod = SubClass.typeRef.member(name"foo")
     assert(clue(fooMethod.owner) == ChildClass)
 
-    val getFooMethod = SubClass.typeRef.member(name"getFoo")
+    val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.fullName))
+    val getFooMethod = SubClass.typeRef.member(getFooName)
     assert(clue(getFooMethod.owner) == ParentClass)
 
     val FooTypeSym = SubClass.typeRef.member(tname"FooType")
@@ -254,7 +260,8 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val barMethod = SubWithMixinClass.typeRef.member(name"bar")
     assert(clue(barMethod.owner) == SubMixinClass)
 
-    val getBarMethod = SubWithMixinClass.typeRef.member(name"getBar")
+    val getBarName = SignedName(termName("getBar"), Signature(Nil, defn.ObjectClass.fullName))
+    val getBarMethod = SubWithMixinClass.typeRef.member(getBarName)
     assert(clue(getBarMethod.owner) == MixinClass)
 
     val BarTypeSym = SubWithMixinClass.typeRef.member(tname"BarType")
@@ -274,7 +281,8 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val fooMethod = SubClass.typeRef.member(name"foo")
     assert(clue(fooMethod.owner) == ChildClass)
 
-    val getFooMethod = SubClass.typeRef.member(name"getFoo")
+    val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.fullName))
+    val getFooMethod = SubClass.typeRef.member(getFooName)
     assert(clue(getFooMethod.owner) == ParentClass)
 
     val FooTypeSym = SubClass.typeRef.member(tname"FooType")
@@ -306,12 +314,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     jioSerializable
   ) {
     val TreeMap = ctx.findTopLevelClass("java.util.TreeMap")
-    val entrySet = TreeMap
-      .getDecls(name"entrySet")
-      .collectFirst {
-        case sym: TermSymbol if !sym.is(Flags.Method) => sym
-      }
-      .get // private field entrySet: Ljava/util/TreeMap<TK;TV;>.EntrySet;
+    val entrySet = TreeMap.findDecl(name"entrySet") // private field entrySet: Ljava/util/TreeMap<TK;TV;>.EntrySet;
     val entrySetSelection = entrySet.declaredType match
       case fieldTpe: ExprType =>
         fieldTpe.resultType match

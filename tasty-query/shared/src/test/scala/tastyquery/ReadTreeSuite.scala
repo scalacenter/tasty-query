@@ -145,7 +145,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     test(testOptions) {
       for ctx <- getUnpicklingContext(path) yield
         given Context = ctx
-        val cls = resolve(path)
+        val cls = ctx.findSymbolFromRoot(path.toNameList)
         val tree = cls.tree.getOrElse {
           fail(s"Missing tasty for ${path.rootClassName}, $cls")
         }

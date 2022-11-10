@@ -292,7 +292,12 @@ private[tasties] class TreeUnpickler(
     (flags, privateWithin)
   end readModifiers
 
-  private def readWithin(using LocalContext): Symbol = readType.typeSymbol
+  private def readWithin(using LocalContext): Symbol =
+    readType match
+      case typeRef: TypeRef   => typeRef.symbol
+      case pkgRef: PackageRef => pkgRef.symbol
+      case tpe                => throw TastyFormatException(s"unexpected type for readWithin: $tpe")
+  end readWithin
 
   /** Performs the read action as if SHARED tags were transparent:
     *  - follows the SHARED tags to the term or type that is shared

@@ -103,7 +103,7 @@ private[tastyquery] object Subtyping:
     case tp1: ThisType =>
       val cls1 = tp1.cls
       tp2 match {
-        case tp2: TermRef if cls1.is(Module) && cls1.eq(tp2.typeSymbol) =>
+        case tp2: TermRef if cls1.is(Module) && tp2.symbol.declaredType.isRef(cls1) =>
           (cls1.isStatic || isSubprefix(cls1.typeRef.prefix, tp2.prefix))
             || level3(tp1, tp2)
         case _ =>

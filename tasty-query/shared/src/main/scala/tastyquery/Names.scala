@@ -111,6 +111,10 @@ object Names {
   def termName(s: String): SimpleName =
     NameCache.cache(SimpleName(s))
 
+  /** Creates a type name for a module class from a string. */
+  def moduleClassName(s: String): TypeName =
+    termName(s).withObjectSuffix.toTypeName
+
   sealed abstract class Name derives CanEqual {
 
     /** This name converted to a type name */
@@ -177,6 +181,11 @@ object Names {
 
     override def toString: String = s"$underlying[with sig $sig @$target]"
   }
+
+  object SignedName:
+    def apply(underlying: TermName, sig: Signature): SignedName =
+      SignedName(underlying, sig, underlying)
+  end SignedName
 
   final case class ExpandedName(override val tag: Int, prefix: TermName, name: SimpleName) extends DerivedName(prefix) {
     def separator: String = tag match {

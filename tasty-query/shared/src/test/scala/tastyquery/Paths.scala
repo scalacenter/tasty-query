@@ -18,9 +18,6 @@ object Paths:
   opaque type TopLevelClassDeclPath <: TopLevelDeclPath = List[Name] // top level classes
   opaque type MemberDeclPath <: DeclarationPath = List[Name] // local classes / values
 
-  def resolve(path: DeclarationPath)(using Context): Symbol =
-    summon[Context].findSymbolFromRoot(path.toNameList)
-
   extension (sc: StringContext)
     def name(args: Any*): SimpleName =
       SimpleName(sc.parts.mkString)
