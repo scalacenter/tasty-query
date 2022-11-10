@@ -641,6 +641,33 @@ object Symbols {
         case None => None
     end distinguishOverloaded
 
+    final def getDecl(name: TypeName)(using Context): Option[TypeSymbol] =
+      myDeclarations.get(name) match
+        case Some(decls) =>
+          assert(decls.sizeIs == 1, decls)
+          Some(decls.head.asType)
+        case None =>
+          None
+    end getDecl
+
+    final def getDecl(name: TermName)(using Context): Option[TermSymbol] =
+      getDecl(name: Name).map(_.asTerm)
+
+    final def findDecl(name: Name)(using Context): TermOrTypeSymbol =
+      getDecl(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
+    final def findDecl(name: TypeName)(using Context): TypeSymbol =
+      getDecl(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
+    final def findDecl(name: TermName)(using Context): TermSymbol =
+      getDecl(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
     final def declarations(using Context): List[TermOrTypeSymbol] =
       myDeclarations.values.toList.flatten
 

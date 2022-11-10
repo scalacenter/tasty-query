@@ -111,6 +111,10 @@ object Names {
   def termName(s: String): SimpleName =
     NameCache.cache(SimpleName(s))
 
+  /** Creates a type name for a module class from a string. */
+  def moduleClassName(s: String): TypeName =
+    termName(s).withObjectSuffix.toTypeName
+
   sealed abstract class Name derives CanEqual {
 
     /** This name converted to a type name */

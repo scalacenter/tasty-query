@@ -48,7 +48,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
       } else {
         Seq(root)
       }
-    symbolsInSubtree(resolve(prefix)).tail // discard prefix
+    symbolsInSubtree(ctx.findSymbolFromRoot(prefix.toNameList)).tail // discard prefix
   }
 
   def assertForallWithPrefix(prefix: DeclarationPath, condition: Symbol => Boolean)(using Context): Unit =
@@ -59,7 +59,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
   def assertContainsExactly(prefix: DeclarationPath, symbolPaths: Set[DeclarationPath])(using Context): Unit = {
     val decls = getDeclsByPrefix(prefix)
-    val expected = symbolPaths.toList.map(p => resolve(p))
+    val expected = symbolPaths.toList.map(p => ctx.findSymbolFromRoot(p.toNameList))
     // each declaration is in the passed set
     assert(
       decls.forall(decls.contains(_)),
