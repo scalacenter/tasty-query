@@ -41,23 +41,23 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
       for ctx <- getUnpicklingContext(path, extraClasspath*) yield body(using ctx)
     }
 
-  def getDeclsByPrefix(prefix: DeclarationPath)(using Context): Seq[Symbol] = {
+  def getDeclsByPrefix(prefix: Symbol)(using Context): Seq[Symbol] = {
     def symbolsInSubtree(root: Symbol): Seq[Symbol] =
       if (root.isInstanceOf[DeclaringSymbol]) {
         root +: root.asInstanceOf[DeclaringSymbol].declarations.toSeq.flatMap(symbolsInSubtree(_))
       } else {
         Seq(root)
       }
-    symbolsInSubtree(ctx.findSymbolFromRoot(prefix.toNameList)).tail // discard prefix
+    symbolsInSubtree(prefix).tail // discard prefix
   }
 
-  def assertForallWithPrefix(prefix: DeclarationPath, condition: Symbol => Boolean)(using Context): Unit =
+  def assertForallWithPrefix(prefix: Symbol, condition: Symbol => Boolean)(using Context): Unit =
     assert(
       getDeclsByPrefix(prefix).forall(condition),
       s"Condition does not hold for ${getDeclsByPrefix(prefix).filter(!condition(_))}"
     )
 
-  def assertContainsExactly(prefix: DeclarationPath, symbolPaths: Set[DeclarationPath])(using Context): Unit = {
+  def assertContainsExactly(prefix: Symbol, symbolPaths: Set[DeclarationPath])(using Context): Unit = {
     val decls = getDeclsByPrefix(prefix)
     val expected = symbolPaths.toList.map(p => ctx.findSymbolFromRoot(p.toNameList))
     // each declaration is in the passed set
@@ -129,7 +129,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     ctx.findTopLevelClass("empty_class.EmptyClass")
     // EmptyClass and its constructor are the only declarations in empty_class package
     assertContainsExactly(
-      empty_class,
+      ctx.findPackage("empty_class"),
       Set(empty_class / tname"EmptyClass", empty_class / tname"EmptyClass" / name"<init>")
     )
   }
@@ -138,7 +138,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     ctx.findTopLevelClass("simple_trees.nested.InNestedPackage")
     // EmptyClass and its constructor are the only declarations in empty_class package
     assertContainsExactly(
-      `simple_trees.nested`,
+      ctx.findPackage("simple_trees.nested"),
       Set(`simple_trees.nested` / tname"InNestedPackage", `simple_trees.nested` / tname"InNestedPackage" / name"<init>")
     )
   }
@@ -151,13 +151,13 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
   testWithContext("empty-package-contains-no-packages", simple_trees / tname"SharedPackageReference$$package") {
     // simple_trees is not a subpackage of empty package
-    assertForallWithPrefix(EmptyPkg, s => s.name == nme.EmptyPackageName || !s.isPackage)
+    assertForallWithPrefix(defn.EmptyPackage, s => !s.isPackage)
   }
 
   testWithContext("class-parameter-is-a-decl", simple_trees / tname"ConstructorWithParameters") {
     val ConstructorWithParameters = simple_trees / tname"ConstructorWithParameters"
     assertContainsExactly(
-      ConstructorWithParameters,
+      ctx.findTopLevelClass("simple_trees.ConstructorWithParameters"),
       Set(
         ConstructorWithParameters / name"<init>",
         ConstructorWithParameters / name"local",
@@ -172,31 +172,28 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
   testWithContext("class-type-parameter-is-not-a-decl", simple_trees / tname"GenericClass") {
     val GenericClass = simple_trees / tname"GenericClass"
-    assertContainsExactly(simple_trees, Set(GenericClass, GenericClass / name"<init>"))
+    assertContainsExactly(ctx.findTopLevelClass("simple_trees.GenericClass"), Set(GenericClass / name"<init>"))
   }
 
   testWithContext("method-type-parameter-is-not-a-decl", simple_trees / tname"GenericMethod") {
-    val GenericMethod = simple_trees / tname"GenericMethod"
     assertContainsExactly(
-      GenericMethod / name"usesTypeParam",
+      ctx.findTopLevelClass("simple_trees.GenericMethod").findDecl(name"usesTypeParam"),
       // No declaratiins as type parameter `T` is not a declaration of `usesTypeParam`
       Set.empty
     )
   }
 
   testWithContext("method-term-parameter-is-not-a-decl", simple_trees / tname"GenericMethod") {
-    val GenericMethod = simple_trees / tname"GenericMethod"
     assertContainsExactly(
-      GenericMethod / name"usesTermParam",
+      ctx.findTopLevelClass("simple_trees.GenericMethod").findDecl(name"usesTermParam"),
       // No declaratiins as term parameter `i: Int` is not a declaration of `usesTermParam`
       Set.empty
     )
   }
 
   testWithContext("nested-method-is-not-a-decl", simple_trees / tname"NestedMethod") {
-    val NestedMethod = simple_trees / tname"NestedMethod"
     assertContainsExactly(
-      NestedMethod / name"outerMethod",
+      ctx.findTopLevelClass("simple_trees.NestedMethod").findDecl(name"outerMethod"),
       // local method `innerMethod` is not a declaration of `outerMethod`
       Set.empty
     )
