@@ -225,7 +225,7 @@ object Symbols {
         case self: TypeSymbol =>
           inClass.getDecl(self.name).filterNot(_.is(Private))
         case self: TermSymbol =>
-          val candidates = inClass.getDecls(self.name).asInstanceOf[List[TermSymbol]].filterNot(_.is(Private))
+          val candidates = inClass.getAllOverloadedDecls(self.name).filterNot(_.is(Private))
           if candidates.isEmpty then None
           else
             val site = siteClass.thisType
@@ -316,6 +316,12 @@ object Symbols {
 
     private def isConstructor: Boolean =
       maybeOuter.isClass && is(Method) && name == nme.Constructor
+
+    private[tastyquery] final def needsSignature(using Context): Boolean =
+      declaredType match
+        case _: MethodType | _: PolyType => true
+        case _                           => false
+    end needsSignature
 
     private[tastyquery] final def signature(using Context): Option[Signature] =
       val local = mySignature
@@ -475,6 +481,7 @@ object Symbols {
 
     private[Symbols] def addDecl(decl: DeclType): Unit
 
+    @deprecated("use ClassSymbol.getAllOverloadedDecls", "0.4.0")
     def getDecls(name: Name)(using Context): List[DeclType]
 
     def getDecl(name: Name)(using Context): Option[DeclType]
@@ -612,10 +619,12 @@ object Symbols {
         case Some(decls) => decls.sizeIs > 1
         case _           => false
 
+    @deprecated("use getAllOverloadedDecls", "0.4.0")
     final def getDecls(name: Name)(using Context): List[TermOrTypeSymbol] =
       name match
         case name: SignedName => getDecl(name).toList
-        case _                => myDeclarations.get(name).fold(Nil)(_.toList)
+        case name: TermName   => getAllOverloadedDecls(name)
+        case name             => getDecl(name).toList
 
     final def getDecl(name: Name)(using Context): Option[TermOrTypeSymbol] =
       name match
@@ -624,10 +633,10 @@ object Symbols {
         case name =>
           myDeclarations.get(name) match
             case Some(decls) =>
-              if decls.sizeIs == 1 then Some(decls.head)
-              else if decls.sizeIs > 1 then
-                throw MemberNotFoundException(this, name, s"unexpected overloads in $this: ${decls.mkString(", ")}")
-              else None
+              decls.find {
+                case decl: TermSymbol if decl.needsSignature => false
+                case _                                       => true
+              }
             case _ => None
     end getDecl
 
@@ -667,6 +676,65 @@ object Symbols {
       getDecl(name).getOrElse {
         throw MemberNotFoundException(this, name)
       }
+
+    /** Returns a list of all the overloaded declarations with the given unsigned name.
+      *
+      * If there is no declaration with the given unsigned name, this method
+      * returns `Nil`.
+      *
+      * @throws java.lang.IllegalArgumentException
+      *   if the provided `name` is a [[SignedName]]
+      */
+    final def getAllOverloadedDecls(name: TermName)(using Context): List[TermSymbol] =
+      name match
+        case name: SignedName => throw IllegalArgumentException(s"Illegal SignedName argument: $name")
+        case _                => myDeclarations.get(name).fold(Nil)(_.toList.map(_.asTerm))
+    end getAllOverloadedDecls
+
+    /** Returns a list of all the overloaded declarations with the given unsigned name.
+      *
+      * @throws tastyquery.Exceptions.MemberNotFoundException
+      *   if there is no declaration with the given unsigned name
+      * @throws java.lang.IllegalArgumentException
+      *   if the provided `name` is a [[SignedName]]
+      */
+    final def findAllOverloadedDecls(name: TermName)(using Context): List[TermSymbol] =
+      getAllOverloadedDecls(name) match
+        case Nil   => throw MemberNotFoundException(this, name)
+        case decls => decls
+    end findAllOverloadedDecls
+
+    /** Convenience method to get a non-overloaded decl from its unsigned name.
+      *
+      * If there are multiple or no overload with the given unsigned name, this
+      * method returns `None`.
+      *
+      * @throws java.lang.IllegalArgumentException
+      *   if the provided `name` is a [[SignedName]]
+      */
+    final def getNonOverloadedDecl(name: TermName)(using Context): Option[TermSymbol] =
+      myDeclarations.get(name) match
+        case Some(decls) =>
+          if decls.sizeIs == 1 then Some(decls.head.asTerm)
+          else None
+        case None =>
+          name match
+            case _: SignedName => throw IllegalArgumentException(s"Illegal SignedName argument: $name")
+            case _             => None
+    end getNonOverloadedDecl
+
+    /** Convenience method to find a non-overloaded decl from its unsigned name.
+      *
+      * @throws tastyquery.Exceptions.MemberNotFoundException
+      *   if there are multiple or no overload with the given unsigned name
+      * @throws java.lang.IllegalArgumentException
+      *   if the provided `name` is a [[SignedName]]
+      */
+    final def findNonOverloadedDecl(name: TermName)(using Context): TermSymbol =
+      getNonOverloadedDecl(name).getOrElse {
+        throw MemberNotFoundException(this, name, s"Multiple overloads or no overload of '$name' in $this")
+      }
+    end findNonOverloadedDecl
 
     final def declarations(using Context): List[TermOrTypeSymbol] =
       myDeclarations.values.toList.flatten
@@ -847,6 +915,7 @@ object Symbols {
       assert(!myDeclarations.contains(decl.name), s"trying to add a second entry $decl for name ${decl.name} in $this")
       myDeclarations(decl.name) = decl
 
+    @deprecated("use getDecl; members of packages are never overloaded", "0.4.0")
     final def getDecls(name: Name)(using Context): List[Symbol] =
       getDecl(name).toList
 

@@ -136,7 +136,7 @@ object Types {
 
     private def finishErase(typeRef: ErasedTypeRef)(using Context): ErasedTypeRef =
       def valueClass(cls: ClassSymbol): ErasedTypeRef =
-        val ctor = cls.getDecl(nme.Constructor).get.asTerm
+        val ctor = cls.findNonOverloadedDecl(nme.Constructor)
         val List(Left(List(paramRef))) = ctor.paramRefss.dropWhile(_.isRight): @unchecked
         val paramType = paramRef.underlying
         erase(paramType)

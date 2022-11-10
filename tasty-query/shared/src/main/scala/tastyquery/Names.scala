@@ -182,6 +182,11 @@ object Names {
     override def toString: String = s"$underlying[with sig $sig @$target]"
   }
 
+  object SignedName:
+    def apply(underlying: TermName, sig: Signature): SignedName =
+      SignedName(underlying, sig, underlying)
+  end SignedName
+
   final case class ExpandedName(override val tag: Int, prefix: TermName, name: SimpleName) extends DerivedName(prefix) {
     def separator: String = tag match {
       case NameTags.EXPANDED     => "$$"

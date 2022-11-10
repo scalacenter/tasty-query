@@ -15,11 +15,13 @@ class OverloadedApply {
   def foo(a: Foo.Bar.type): Unit = ()
   def foo(a: Array[Foo.type]): Unit = ()
   def foo(a: => Num): Unit = ()
+  def foo: String = "foo"
 
   def callA = foo(1)
   def callB = foo(Box())
   def callC = foo(Foo.Bar)
   def callD = foo(Array(Foo))
   def callE = foo(Num())
+  def callF = foo
 
 }

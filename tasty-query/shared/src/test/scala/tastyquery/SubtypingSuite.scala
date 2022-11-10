@@ -341,7 +341,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val SimplePathsClass = ctx.findTopLevelClass(s"$paths.SimplePaths")
     val OtherSimplePathsClass = ctx.findTopLevelClass(s"$paths.OtherSimplePaths")
 
-    val setupMethod = ctx.findStaticTerm(s"$paths.Setup.simplePaths")
+    val setupMethod = ctx.findTopLevelModuleClass(s"$paths.Setup").findNonOverloadedDecl(name"simplePaths")
     val setupMethodDef = setupMethod.tree.get.asInstanceOf[DefDef]
     val Left(valDefs) = setupMethodDef.paramLists.head: @unchecked
     val List(x, y, z) = valDefs.map(valDef => TermRef(NoPrefix, valDef.symbol))
@@ -412,7 +412,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val SimplePathsClass = ctx.findTopLevelClass(s"$paths.SimplePaths")
     val ConcreteSimplePathsChildClass = ctx.findTopLevelClass(s"$paths.ConcreteSimplePathsChild")
 
-    val setupMethod = ctx.findStaticTerm(s"$paths.Setup.subclassPaths")
+    val setupMethod = ctx.findTopLevelModuleClass(s"$paths.Setup").findNonOverloadedDecl(name"subclassPaths")
     val setupMethodDef = setupMethod.tree.get.asInstanceOf[DefDef]
     val Left(valDefs) = setupMethodDef.paramLists.head: @unchecked
     val List(x, y, z) = valDefs.map(valDef => TermRef(NoPrefix, valDef.symbol))
