@@ -203,8 +203,9 @@ object Types {
             case cls: ClassSymbol              => cls.typeParams
             case typeSym: TypeSymbolWithBounds => typeSym.upperBound.typeParams
         case self: AppliedType =>
-          if (self.tycon.typeSymbol.isClass) Nil
-          else self.superType.typeParams
+          self.tycon match
+            case tycon: TypeRef if tycon.symbol.isClass => Nil
+            case _                                      => self.superType.typeParams
         case _: SingletonType | _: RefinedType =>
           Nil
         case self: WildcardTypeBounds =>
@@ -260,14 +261,6 @@ object Types {
       using Context
     ): Type =
       Substituters.substClassTypeParams(this, from, to)
-
-    private[tastyquery] final def typeSymbol(using Context): Symbol = this match
-      case tpe: TypeRef => tpe.symbol
-      case _            => NoSymbol
-
-    private[tastyquery] final def termSymbol(using Context): Symbol = this match
-      case tpe: TermRef => tpe.symbol
-      case _            => NoSymbol
 
     private[tastyquery] final def widenOverloads(using Context): Type =
       this.widen match

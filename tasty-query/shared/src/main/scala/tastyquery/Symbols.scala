@@ -708,11 +708,13 @@ object Symbols {
           end match
 
         case tp: AppliedType =>
-          if tp.tycon.typeSymbol == this then tp
-          else
-            // TODO Also handle TypeLambdas
-            val typeParams = tp.tycon.typeParams
-            recur(tp.tycon).substClassTypeParams(typeParams.asInstanceOf[List[ClassTypeParamSymbol]], tp.args)
+          tp.tycon match
+            case tycon: TypeRef if tycon.symbol == this =>
+              tp
+            case tycon =>
+              // TODO Also handle TypeLambdas
+              val typeParams = tycon.typeParams
+              recur(tycon).substClassTypeParams(typeParams.asInstanceOf[List[ClassTypeParamSymbol]], tp.args)
 
         case tp: TypeProxy =>
           recur(tp.superType)

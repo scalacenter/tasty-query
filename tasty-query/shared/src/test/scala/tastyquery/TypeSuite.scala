@@ -101,7 +101,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
           case app @ Apply(fooRef @ Select(_, SignedName(SimpleName("foo"), _, _)), _) =>
             callCount += 1
             assert(app.tpe.isRef(defn.UnitClass), clue(app))
-            val fooSym = fooRef.tpe.termSymbol.asTerm
+            val fooSym = fooRef.tpe.asInstanceOf[TermRef].symbol
             val List(Left(List(aRef)), _*) = fooSym.paramRefss: @unchecked
             assert(aRef.isRef(Acls), clues(Acls.fullName, aRef))
           case _ => ()
