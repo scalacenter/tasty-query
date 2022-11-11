@@ -179,10 +179,10 @@ private[pickles] class PickleReader {
 
     val (privateWithin, infoRef) = {
       val ref = pkl.readNat()
-      if (!isSymbolRef(ref)) (NoSymbol, ref)
+      if (!isSymbolRef(ref)) (None, ref)
       else {
         val pw = readLocalSymbolAt(ref)
-        (pw, pkl.readNat())
+        (Some(pw), pkl.readNat())
       }
     }
 
@@ -257,9 +257,9 @@ private[pickles] class PickleReader {
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     }
+    sym.withFlags(flags)
+    privateWithin.foreach(sym.withPrivateWithin(_))
     sym
-      .withFlags(flags)
-      .withPrivateWithin(privateWithin)
   }
 
   private def readPickleFlags(isType: Boolean)(using PklStream): PickleFlagSet =
