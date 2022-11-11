@@ -714,11 +714,9 @@ private[reader] object PickleReader {
   private val Scala2Constructor: SimpleName = termName("this")
 
   private[tastyquery] case class TempPolyType(paramSyms: List[TypeParamSymbol], resType: Type)
-      extends CustomTransientGroundType:
-    override def findMember(name: Name, pre: Type)(using Context): Symbol = NoSymbol
+      extends CustomTransientGroundType
 
   /** Temporary type for classinfos, will be decomposed on completion of the class */
-  private[tastyquery] case class TempClassInfoType(parentTypes: List[Type]) extends CustomTransientGroundType:
-    override def findMember(name: Name, pre: Type)(using Context): Symbol = NoSymbol
+  private[tastyquery] case class TempClassInfoType(parentTypes: List[Type]) extends CustomTransientGroundType
 
 }

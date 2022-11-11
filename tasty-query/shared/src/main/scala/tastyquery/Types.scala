@@ -549,7 +549,10 @@ object Types {
     * end match
     * ```
     */
-  abstract class CustomTransientGroundType extends GroundType
+  abstract class CustomTransientGroundType extends GroundType:
+    private[tastyquery] final def findMember(name: Name, pre: Type)(using Context): Symbol =
+      throw AssertionError(s"Trying to findMember($name, $pre) on $this")
+  end CustomTransientGroundType
 
   // ----- Marker traits ------------------------------------------------
 
@@ -1351,7 +1354,9 @@ object Types {
 
   /** case `pattern` => `result` */
   final class MatchTypeCase(val pattern: Type, val result: Type) extends GroundType:
-    def findMember(name: Name, pre: Type)(using Context): Symbol = NoSymbol
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
+      throw AssertionError(s"MatchTypeCase.findMember($name, $pre)")
+
     override def toString(): String = s"MatchTypeCase($pattern, $result)"
   end MatchTypeCase
 
