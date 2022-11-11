@@ -145,11 +145,13 @@ private[pickles] class PickleReader {
                     defaultRef
                   }
                 case _ => defaultRef
+            case _: NoExternalSymbolRef =>
+              throw Scala2PickleFormatException(s"unexpected external owner NoSymbol for name $name")
             case _ =>
               defaultRef
 
     tag match {
-      case NONEsym                 => return NoSymbol
+      case NONEsym                 => return NoExternalSymbolRef.instance
       case EXTref | EXTMODCLASSref => return readExtSymbol()
       case _                       =>
     }
@@ -160,7 +162,22 @@ private[pickles] class PickleReader {
     val name1 = name0.decode
 
     assert(entries(storeInEntriesAt) == null, entries(storeInEntriesAt))
-    val owner = readLocalSymbolRef()
+    val owner = readMaybeExternalSymbolRef() match
+      case sym: Symbol =>
+        sym
+      case noRef: NoExternalSymbolRef if tag == TYPEsym =>
+        /* For some reason, Scala 2 pickles `TYPEsym` symbols whose owner references `NONEsym`.
+         * However, they do not appear to be referenced *themselves* from anywhere. They
+         * only appear in the table, and hence get read from the loop in `Unpickler.run`.
+         * We ignore these entries here by replacing them with `NONEsym`. If they end up
+         * being actually referenced somewhere, then that somewhere will then crash with
+         * an unexpected reference to `NONEsym`, which would provide us with more context
+         * to perhaps solve this at a deeper level.
+         * If someone wants to investigate, there is a case of this in `scala.collection.Iterator`.
+         */
+        return NoExternalSymbolRef.instance
+      case external =>
+        errorBadSignature(s"expected local symbol reference but found $external")
 
     /* In some situations, notably involving EXISTENTIALtpe, reading the
      * reference to the owner may re-try to read this very symbol. In that
@@ -393,6 +410,8 @@ private[pickles] class PickleReader {
             external.toNamedType(NoPrefix) match
               case termRef: TermRef => termRef // necessary for package refs?
               case typeRef: TypeRef => ThisType(typeRef)
+          case _: NoExternalSymbolRef =>
+            throw Scala2PickleFormatException("cannot construct a THIStpe for NoSymbol")
       case SINGLEtpe =>
         val pre = readPrefix()
         val designator = readMaybeExternalSymbolRef()
@@ -400,7 +419,7 @@ private[pickles] class PickleReader {
           case sym: PackageSymbol          => sym.packageRef
           case sym: TermOrTypeSymbol       => NamedType(pre, sym)
           case external: ExternalSymbolRef => external.toNamedType(pre)
-          case NoSymbol                    => throw Scala2PickleFormatException("SINGLEtpe references NoSymbol")
+          case _: NoExternalSymbolRef      => throw Scala2PickleFormatException("SINGLEtpe references NoSymbol")
       /*case SUPERtpe =>
         val thistpe = readTypeRef()
         val supertpe = readTypeRef()
@@ -436,7 +455,7 @@ private[pickles] class PickleReader {
           case sym: PackageSymbol          => sym.packageRef
           case sym: TermOrTypeSymbol       => select(pre, sym)
           case external: ExternalSymbolRef => external.toNamedType(pre)
-          case NoSymbol                    => throw Scala2PickleFormatException("TYPEREFtpe references NoSymbol")
+          case _: NoExternalSymbolRef      => throw Scala2PickleFormatException("TYPEREFtpe references NoSymbol")
         val args = pkl.until(end, () => readTypeRef())
         /*if (sym == defn.ByNameParamClass2x) ExprType(args.head)
         else if (ctx.settings.scalajs.value && args.length == 2 &&
@@ -565,6 +584,7 @@ private[pickles] class PickleReader {
           case sym: TermSymbol             => TermRef(NoPrefix, sym)
           case sym: Symbol                 => errorBadSignature(s"unexpected literal enum reference $sym")
           case external: ExternalSymbolRef => external.toTermRef(NoPrefix)
+          case _: NoExternalSymbolRef      => errorBadSignature("unexpected literal enum reference with NoSymbol")
       case _ => noSuchConstantTag(tag, len)
     }
   }
@@ -707,9 +727,18 @@ private[reader] object PickleReader {
         case owner: ExternalSymbolRef =>
           val Scala2ExternalSymRef(ownerOwner, ownerPath) = owner.toScala2ExternalSymRef
           Scala2ExternalSymRef(ownerOwner, ownerPath :+ name)
+        case _: NoExternalSymbolRef =>
+          // This is already caught when builing the ExternalSymbolRef
+          throw AssertionError(s"Illegal ExternalSymbolRef(NoSymbol, $name)")
   }
 
-  type MaybeExternalSymbol = Symbol | ExternalSymbolRef
+  // This is a final class with a single instance instead of an `object` to behave better within the union type below
+  final class NoExternalSymbolRef private ()
+  object NoExternalSymbolRef:
+    val instance = new NoExternalSymbolRef
+  end NoExternalSymbolRef
+
+  type MaybeExternalSymbol = Symbol | ExternalSymbolRef | NoExternalSymbolRef
 
   private val Scala2Constructor: SimpleName = termName("this")
 

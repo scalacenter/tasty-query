@@ -25,8 +25,6 @@ import tastyquery.reader.Loaders.Loader
   * ```none
   * Symbol
   *  |
-  *  +- NoSymbol                        singleton instance used when there is no symbol
-  *  |
   *  +- PackageSymbol                   any package, including the root package, the empty package, and nested packages
   *  |
   *  +- TermOrTypeSymbol                   any term or type symbol, i.e., not a package
@@ -59,11 +57,11 @@ import tastyquery.reader.Loaders.Loader
   * often used as their primary characteristic. `ClassSymbol`s are entirely
   * defined by themselves.
   *
-  * With the exception of `NoSymbol` and the root package symbol, all symbols
-  * have an `owner` which is another `Symbol`.
+  * With the exception of the root package symbol, all symbols have an `owner`
+  * which is another `Symbol`.
   *
   * All symbols also have a `name`. It is a `TypeName` for `TypeSymbol`s, and a
-  * `TermName` for `TermSymbol`s, `PackageSymbol`s and `NoSymbol`.
+  * `TermName` for `TermSymbol`s and `PackageSymbol`s.
   */
 object Symbols {
 
@@ -143,7 +141,7 @@ object Symbols {
       decl
 
     private[tastyquery] final def isStatic: Boolean =
-      if owner == null then this != NoSymbol
+      if owner == null then true
       else owner.isStaticOwner
 
     @tailrec
@@ -161,8 +159,6 @@ object Symbols {
 
     final def fullName: FullyQualifiedName = nameWithPrefix(_.isStatic)
     private[tastyquery] final def erasedName: FullyQualifiedName = nameWithPrefix(_ => true)
-
-    final def exists: Boolean = this ne NoSymbol
 
     final def isType: Boolean = this.isInstanceOf[TypeSymbol]
     final def isTerm: Boolean = this.isInstanceOf[TermSymbol]
@@ -191,16 +187,6 @@ object Symbols {
     }
     def toDebugString = toString
   }
-
-  object NoSymbol extends Symbol(null):
-    type ThisNameType = SimpleName
-
-    val name: SimpleName = nme.EmptySimpleName
-
-    this.withFlags(EmptyFlagSet)
-
-    override def toString: String = "NoSymbol"
-  end NoSymbol
 
   sealed abstract class TermOrTypeSymbol(override val owner: Symbol) extends Symbol(owner):
     // Overriding relationships
