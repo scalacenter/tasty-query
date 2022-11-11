@@ -356,13 +356,14 @@ private[tasties] class TreeUnpickler(
             val renamedSpan = span
             reader.readByte()
             val renamed = ImportIdent(readName)(renamedSpan)
-            ImportSelector(name, renamed)(nameSpan.union(renamedSpan))
+            ImportSelector(name, Some(renamed), bound = None)(nameSpan.union(renamedSpan))
           case BOUNDED =>
             reader.readByte()
             val boundSpan = span
             val bound = readTypeTree
-            ImportSelector(name, EmptyTree, bound)(nameSpan.union(boundSpan))
-          case _ => ImportSelector(name)(nameSpan)
+            ImportSelector(name, renamed = None, Some(bound))(nameSpan.union(boundSpan))
+          case _ =>
+            ImportSelector(name, renamed = None, bound = None)(nameSpan)
         }
       }
       val spn = span

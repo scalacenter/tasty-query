@@ -60,7 +60,7 @@ object Trees {
 
     protected def subtrees: List[Tree] = this match {
       case PackageDef(pid, stats)                   => stats
-      case ImportSelector(imported, renamed, bound) => imported :: renamed :: Nil
+      case ImportSelector(imported, renamed, bound) => imported :: renamed.toList
       case Import(expr, selectors)                  => expr :: selectors
       case Export(expr, selectors)                  => expr :: selectors
       case ClassDef(name, rhs, symbol)              => rhs :: Nil
@@ -90,13 +90,13 @@ object Trees {
       case Return(expr, from)                     => expr :: from :: Nil
       case Inlined(expr, caller, bindings)        => expr :: bindings
 
-      case _: TypeMember | _: TypeParam | _: Ident | _: ReferencedPackage | _: This | _: New | _: Literal | _: SelfDef |
-          EmptyTree =>
+      case _: ImportIdent | _: TypeMember | _: TypeParam | _: Ident | _: ReferencedPackage | _: This | _: New |
+          _: Literal | _: SelfDef | EmptyTree =>
         Nil
     }
 
     protected def typeTrees: List[TypeTree] = this match {
-      case ImportSelector(imported, renamed, bound) => bound :: Nil
+      case ImportSelector(imported, renamed, bound) => bound.toList
       case TypeMember(_, rhs, _) =>
         if (rhs.isInstanceOf[TypeTree]) rhs.asInstanceOf[TypeTree] :: Nil else Nil
       case Template(constr, parents, self, body) =>
@@ -137,7 +137,14 @@ object Trees {
     override final def withSpan(span: Span): PackageDef = PackageDef(pid, stats)(span)
   }
 
-  case class ImportSelector(imported: Ident, renamed: Tree = EmptyTree, bound: TypeTree = EmptyTypeTree)(span: Span)
+  /** An identifier appearing in an `import` clause; it has no type. */
+  final case class ImportIdent(name: TermName)(span: Span) extends Tree(span) {
+    protected final def calculateType(using Context): Type = NoType
+
+    override final def withSpan(span: Span): ImportIdent = ImportIdent(name)(span)
+  }
+
+  case class ImportSelector(imported: ImportIdent, renamed: Option[ImportIdent], bound: Option[TypeTree])(span: Span)
       extends Tree(span) {
 
     /** It's a `given` selector */
@@ -147,12 +154,12 @@ object Trees {
     val isWildcard: Boolean = isGiven || imported.name == nme.Wildcard
 
     /** The imported name, EmptyTermName if it's a given selector */
-    val name: TermName = imported.name.asInstanceOf[TermName]
+    val name: TermName = imported.name
 
     /** The renamed part (which might be `_`), if present, or `name`, if missing */
     val rename: TermName = renamed match {
-      case Ident(rename: TermName) => rename
-      case _                       => name
+      case Some(ImportIdent(rename)) => rename
+      case None                      => name
     }
 
     protected final def calculateType(using Context): Type = NoType
@@ -271,13 +278,6 @@ object Trees {
     protected final def calculateType(using Context): Type = tpe
 
     override final def withSpan(span: Span): FreeIdent = FreeIdent(name, tpe)(span)
-  }
-
-  /** An identifier appearing in an `import` clause; it has no type. */
-  final class ImportIdent(name: TermName)(span: Span) extends Ident(name)(span) {
-    protected final def calculateType(using Context): Type = NoType
-
-    override final def withSpan(span: Span): ImportIdent = ImportIdent(name)(span)
   }
 
   abstract class SimpleRef(name: TermName, tpe: Type)(span: Span) extends Ident(name)(span) {

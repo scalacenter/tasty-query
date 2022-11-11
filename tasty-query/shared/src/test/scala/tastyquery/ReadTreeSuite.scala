@@ -208,7 +208,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
   testUnpickleTopLevel("basic-import", imports / tname"Import") { tree =>
     val importMatch: StructureCheck = {
-      case Import(_, List(ImportSelector(Ident(SimpleName("A")), EmptyTree, EmptyTypeTree))) =>
+      case Import(_, List(ImportSelector(ImportIdent(SimpleName("A")), None, None))) =>
     }
     assert(containsSubtree(clue(importMatch))(clue(tree)))
   }
@@ -218,8 +218,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case Import(
             ReferencedPackage(SimpleName("imported_files")),
             List(
-              ImportSelector(Ident(SimpleName("A")), EmptyTree, EmptyTypeTree),
-              ImportSelector(Ident(SimpleName("B")), EmptyTree, EmptyTypeTree)
+              ImportSelector(ImportIdent(SimpleName("A")), None, None),
+              ImportSelector(ImportIdent(SimpleName("B")), None, None)
             )
           ) =>
     }
@@ -230,7 +230,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val importMatch: StructureCheck = {
       case Import(
             ReferencedPackage(SimpleName("imported_files")),
-            List(ImportSelector(Ident(SimpleName("A")), Ident(SimpleName("ClassA")), EmptyTypeTree))
+            List(ImportSelector(ImportIdent(SimpleName("A")), Some(ImportIdent(SimpleName("ClassA"))), None))
           ) =>
     }
     assert(containsSubtree(importMatch)(clue(tree)))
@@ -242,7 +242,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case Import(
             // TODO: SELECTtpt?
             Select(ReferencedPackage(SimpleName("imported_files")), SimpleName("Givens")),
-            List(ImportSelector(Ident(nme.EmptyTermName), EmptyTree, EmptyTypeTree))
+            List(ImportSelector(ImportIdent(nme.EmptyTermName), None, None))
           ) =>
     }
     assert(containsSubtree(importMatch)(clue(tree)))
@@ -254,7 +254,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case Import(
             // TODO: SELECTtpt?
             Select(ReferencedPackage(SimpleName("imported_files")), SimpleName("Givens")),
-            ImportSelector(Ident(nme.EmptyTermName), EmptyTree, TypeIdent(TypeName(SimpleName("A")))) :: Nil
+            ImportSelector(ImportIdent(nme.EmptyTermName), None, Some(TypeIdent(TypeName(SimpleName("A"))))) :: Nil
           ) =>
     }
     assert(containsSubtree(importMatch)(clue(tree)))
@@ -264,7 +264,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val simpleExport: StructureCheck = {
       case Export(
             Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("first")),
-            ImportSelector(Ident(SimpleName("status")), EmptyTree, EmptyTypeTree) :: Nil
+            ImportSelector(ImportIdent(SimpleName("status")), None, None) :: Nil
           ) =>
     }
     assert(containsSubtree(simpleExport)(clue(tree)))
@@ -273,8 +273,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case Export(
             Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("second")),
             // An omitting selector is simply a rename to _
-            ImportSelector(Ident(SimpleName("status")), Ident(nme.Wildcard), EmptyTypeTree) ::
-            ImportSelector(Ident(nme.Wildcard), EmptyTree, EmptyTypeTree) :: Nil
+            ImportSelector(ImportIdent(SimpleName("status")), Some(ImportIdent(nme.Wildcard)), None) ::
+            ImportSelector(ImportIdent(nme.Wildcard), None, None) :: Nil
           ) =>
     }
     assert(containsSubtree(omittedAndWildcardExport)(clue(tree)))
@@ -283,7 +283,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case Export(
             Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("givens")),
             // A given selector has an empty name
-            ImportSelector(Ident(nme.EmptyTermName), EmptyTree, TypeIdent(TypeName(SimpleName("AnyRef")))) :: Nil
+            ImportSelector(ImportIdent(nme.EmptyTermName), None, Some(TypeIdent(TypeName(SimpleName("AnyRef"))))) :: Nil
           ) =>
     }
     assert(containsSubtree(givenExport)(clue(tree)))
