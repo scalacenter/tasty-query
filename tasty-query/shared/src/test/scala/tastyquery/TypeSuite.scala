@@ -266,10 +266,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     fTree.walkTree { tree =>
       tree match {
-        case tree: FreeIdent =>
+        case tree @ Ident(nme.Wildcard) =>
           freeIdentCount += 1
-          assert(tree.name == nme.Wildcard, clue(tree.name))
-          assert(tree.tpe.isOfClass(defn.IntClass), clue(tree.tpe))
+          assert(tree.tpe.isRef(defn.IntClass), clue(tree.tpe))
         case _ =>
           ()
       }

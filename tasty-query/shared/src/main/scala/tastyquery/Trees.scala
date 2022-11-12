@@ -90,8 +90,8 @@ object Trees {
       case Return(expr, from)                     => expr :: Nil
       case Inlined(expr, caller, bindings)        => expr :: bindings
 
-      case _: ImportIdent | _: TypeMember | _: TypeParam | _: Ident | _: ReferencedPackage | _: This | _: New |
-          _: Literal | _: SelfDef | EmptyTree =>
+      case _: ImportIdent | _: TypeMember | _: TypeParam | _: Ident | _: This | _: New | _: Literal | _: SelfDef |
+          EmptyTree =>
         Nil
     }
 
@@ -268,40 +268,11 @@ object Trees {
   }
 
   /** name */
-  abstract case class Ident(name: TermName)(span: Span) extends Tree(span)
-
-  /** A free identifier, that has no defining symbol.
-    *
-    * This seems to always be a wildcard.
-    */
-  final class FreeIdent(name: TermName, tpe: Type)(span: Span) extends Ident(name)(span) {
+  final case class Ident(name: TermName)(tpe: Type)(span: Span) extends Tree(span):
     protected final def calculateType(using Context): Type = tpe
 
-    override final def withSpan(span: Span): FreeIdent = FreeIdent(name, tpe)(span)
-  }
-
-  abstract class SimpleRef(name: TermName, tpe: Type)(span: Span) extends Ident(name)(span) {
-    protected final def calculateType(using Context): Type = tpe
-  }
-
-  final class TermRefTree(name: TermName, tpe: Type)(span: Span) extends SimpleRef(name, tpe)(span) {
-    override final def withSpan(span: Span): TermRefTree = TermRefTree(name, tpe)(span)
-  }
-
-  /** reference to a package, seen as a term */
-  final class ReferencedPackage(val fullyQualifiedName: FullyQualifiedName)(span: Span)
-      extends Ident(fullyQualifiedName.sourceName.asSimpleName)(span) {
-    protected final def calculateType(using Context): Type =
-      PackageRef(fullyQualifiedName)
-
-    override final def withSpan(span: Span): ReferencedPackage = ReferencedPackage(fullyQualifiedName)(span)
-
-    override def toString: String = s"ReferencedPackage($fullyQualifiedName)"
-  }
-
-  object ReferencedPackage {
-    def unapply(r: ReferencedPackage): Option[TermName] = Some(r.name)
-  }
+    override final def withSpan(span: Span): Ident = Ident(name)(tpe)(span)
+  end Ident
 
   /** qualifier.termName */
   case class Select(qualifier: Tree, name: TermName)(span: Span) extends Tree(span) {

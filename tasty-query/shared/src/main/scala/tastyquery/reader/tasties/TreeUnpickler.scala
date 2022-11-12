@@ -646,7 +646,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val name = readName
       val typ = readType
-      FreeIdent(name, typ)(spn)
+      Ident(name)(typ)(spn)
     case APPLY =>
       val spn = span
       reader.readByte()
@@ -837,25 +837,26 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val name = readName
       val prefix = readType
-      TermRefTree(name, TermRef(prefix, name))(spn)
+      Ident(name)(TermRef(prefix, name))(spn)
     case TERMREFpkg =>
       val spn = span
       reader.readByte()
-      val name = readFullyQualifiedName
-      // TODO: create a termref and store as a tpe
-      new ReferencedPackage(name)(spn)
+      val fullyQualifiedName = readFullyQualifiedName
+      val simpleName = fullyQualifiedName.sourceName.asSimpleName
+      val tpe = PackageRef(fullyQualifiedName)
+      Ident(simpleName)(tpe)(span)
     case TERMREFdirect =>
       val spn = span
       reader.readByte()
       val sym = readSymRef.asTerm
       val tpe = TermRef(NoPrefix, sym)
-      TermRefTree(sym.name, tpe)(spn)
+      Ident(sym.name)(tpe)(spn)
     case TERMREFsymbol =>
       val spn = span
       reader.readByte()
       val sym = readSymRef.asTerm
       val pre = readType
-      TermRefTree(sym.name, TermRef(pre, sym))(spn)
+      Ident(sym.name)(TermRef(pre, sym))(spn)
     case SHAREDtype =>
       val spn = span
       reader.readByte()

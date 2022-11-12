@@ -216,7 +216,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   testUnpickleTopLevel("multiple-imports", imports / tname"MultipleImports") { tree =>
     val importMatch: StructureCheck = {
       case Import(
-            ReferencedPackage(SimpleName("imported_files")),
+            Ident(SimpleName("imported_files")),
             List(
               ImportSelector(ImportIdent(SimpleName("A")), None, None),
               ImportSelector(ImportIdent(SimpleName("B")), None, None)
@@ -229,7 +229,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   testUnpickleTopLevel("renamed-import", imports / tname"RenamedImport") { tree =>
     val importMatch: StructureCheck = {
       case Import(
-            ReferencedPackage(SimpleName("imported_files")),
+            Ident(SimpleName("imported_files")),
             List(ImportSelector(ImportIdent(SimpleName("A")), Some(ImportIdent(SimpleName("ClassA"))), None))
           ) =>
     }
@@ -241,7 +241,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       // A given import selector has an empty name
       case Import(
             // TODO: SELECTtpt?
-            Select(ReferencedPackage(SimpleName("imported_files")), SimpleName("Givens")),
+            Select(Ident(SimpleName("imported_files")), SimpleName("Givens")),
             List(ImportSelector(ImportIdent(nme.EmptyTermName), None, None))
           ) =>
     }
@@ -253,7 +253,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       // A given import selector has an empty name
       case Import(
             // TODO: SELECTtpt?
-            Select(ReferencedPackage(SimpleName("imported_files")), SimpleName("Givens")),
+            Select(Ident(SimpleName("imported_files")), SimpleName("Givens")),
             ImportSelector(ImportIdent(nme.EmptyTermName), None, Some(TypeIdent(TypeName(SimpleName("A"))))) :: Nil
           ) =>
     }
