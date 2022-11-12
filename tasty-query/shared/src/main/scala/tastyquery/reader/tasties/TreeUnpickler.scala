@@ -810,14 +810,14 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val expr = readTerm
-      val caller: TypeIdent =
+      val caller: Option[TypeIdent] =
         reader.ifBefore(end)(
           tagFollowShared match {
             // The caller is not specified, this is a binding (or next val or def)
-            case VALDEF | DEFDEF => EmptyTypeIdent
-            case _               => readTypeTree.asInstanceOf[TypeIdent]
+            case VALDEF | DEFDEF => None
+            case _               => Some(readTypeTree.asInstanceOf[TypeIdent])
           },
-          EmptyTypeIdent
+          None
         )
       val bindings = reader.until(end)(readValOrDefDef)
       Inlined(expr, caller, bindings)(spn)

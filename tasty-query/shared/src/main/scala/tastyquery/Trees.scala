@@ -542,7 +542,7 @@ object Trees {
     *
     * { bindings; expr }
     */
-  final case class Inlined(expr: Tree, caller: TypeIdent, bindings: List[Tree])(span: Span) extends Tree(span) {
+  final case class Inlined(expr: Tree, caller: Option[TypeIdent], bindings: List[Tree])(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       // TODO? Do we need to do type avoidance on expr using the bindings, like dotc does?
       expr.tpe

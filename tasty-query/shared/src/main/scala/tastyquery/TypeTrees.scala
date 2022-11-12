@@ -32,8 +32,6 @@ object TypeTrees {
     override final def withSpan(span: Span): TypeIdent = TypeIdent(name)(tpe)(span)
   }
 
-  object EmptyTypeIdent extends TypeIdent(nme.EmptyTypeName)(NoType)(NoSpan)
-
   case class TypeWrapper(tp: Type)(span: Span) extends TypeTree(span) {
     override protected def calculateType(using Context): Type = tp
 

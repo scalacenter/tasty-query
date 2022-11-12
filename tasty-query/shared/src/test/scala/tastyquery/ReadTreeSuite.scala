@@ -1271,14 +1271,11 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case Inlined(
             // 0 + HasInlinedMethod_this.externalVal
             Apply(
-              Select(Inlined(Literal(Constant(0)), EmptyTypeIdent, Nil), SignedName(SimpleName("+"), _, _)),
-              Select(
-                Inlined(Ident(SimpleName("HasInlinedMethod_this")), EmptyTypeIdent, Nil),
-                SimpleName("externalVal")
-              ) :: Nil
+              Select(Inlined(Literal(Constant(0)), None, Nil), SignedName(SimpleName("+"), _, _)),
+              Select(Inlined(Ident(SimpleName("HasInlinedMethod_this")), None, Nil), SimpleName("externalVal")) :: Nil
             ),
             // the _toplevel_ class, method inside which is inlined
-            TypeIdent(TypeName(SimpleName("HasInlinedMethod"))),
+            Some(TypeIdent(TypeName(SimpleName("HasInlinedMethod")))),
             ValDef(
               SimpleName("HasInlinedMethod_this"),
               _,
