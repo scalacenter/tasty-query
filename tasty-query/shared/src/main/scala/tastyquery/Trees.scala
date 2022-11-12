@@ -77,8 +77,10 @@ object Trees {
       case NamedArg(name, arg)                    => arg :: Nil
       case Block(stats, expr)                     => stats :+ expr
       case If(cond, thenPart, elsePart)           => cond :: thenPart :: elsePart :: Nil
+      case InlineIf(cond, thenPart, elsePart)     => cond :: thenPart :: elsePart :: Nil
       case Lambda(meth, tpt)                      => meth :: Nil
       case Match(selector, cases)                 => selector :: cases
+      case InlineMatch(selector, cases)           => selector :: cases
       case CaseDef(pattern, guard, body)          => pattern :: guard :: body :: Nil
       case Bind(name, body, symbol)               => body :: Nil
       case Alternative(trees)                     => trees
@@ -393,18 +395,16 @@ object Trees {
   }
 
   /** if cond then thenp else elsep */
-  case class If(cond: Tree, thenPart: Tree, elsePart: Tree)(span: Span) extends Tree(span) {
-    def isInline = false
-
+  final case class If(cond: Tree, thenPart: Tree, elsePart: Tree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       OrType(thenPart.tpe, elsePart.tpe)
 
-    override def withSpan(span: Span): If = If(cond, thenPart, elsePart)(span)
+    override final def withSpan(span: Span): If = If(cond, thenPart, elsePart)(span)
   }
 
-  class InlineIf(cond: Tree, thenPart: Tree, elsePart: Tree)(span: Span) extends If(cond, thenPart, elsePart)(span) {
-    override def isInline = true
-    override def toString = s"InlineIf($cond, $thenPart, $elsePart)"
+  final case class InlineIf(cond: Tree, thenPart: Tree, elsePart: Tree)(span: Span) extends Tree(span) {
+    protected final def calculateType(using Context): Type =
+      OrType(thenPart.tpe, elsePart.tpe)
 
     override final def withSpan(span: Span): InlineIf = InlineIf(cond, thenPart, elsePart)(span)
   }
@@ -422,18 +422,16 @@ object Trees {
   }
 
   /** selector match { cases } */
-  case class Match(selector: Tree, cases: List[CaseDef])(span: Span) extends Tree(span) {
-    def isInline = false
-
+  final case class Match(selector: Tree, cases: List[CaseDef])(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       cases.map(_.tpe).reduce(OrType(_, _))
 
-    override def withSpan(span: Span): Match = Match(selector, cases)(span)
+    override final def withSpan(span: Span): Match = Match(selector, cases)(span)
   }
 
-  class InlineMatch(selector: Tree, cases: List[CaseDef])(span: Span) extends Match(selector, cases)(span) {
-    override def isInline = true
-    override def toString = s"InlineMatch($selector, $cases)"
+  final case class InlineMatch(selector: Tree, cases: List[CaseDef])(span: Span) extends Tree(span) {
+    protected final def calculateType(using Context): Type =
+      cases.map(_.tpe).reduce(OrType(_, _))
 
     override final def withSpan(span: Span): InlineMatch = InlineMatch(selector, cases)(span)
   }
