@@ -940,7 +940,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickle("return", simple_trees / tname"Return") { tree =>
-    val returnMatch: StructureCheck = { case Return(Literal(Constant(1)), Ident(SimpleName("withReturn"))) =>
+    val returnMatch: StructureCheck = {
+      case Return(Literal(Constant(1)), from) if from.name == SimpleName("withReturn") =>
     }
     assert(containsSubtree(returnMatch)(clue(tree)))
   }

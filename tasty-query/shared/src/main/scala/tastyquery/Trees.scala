@@ -87,7 +87,7 @@ object Trees {
       case While(cond, body)                      => cond :: body :: Nil
       case Throw(expr)                            => expr :: Nil
       case Try(expr, cases, finalizer)            => (expr :: cases) :+ finalizer
-      case Return(expr, from)                     => expr :: from :: Nil
+      case Return(expr, from)                     => expr :: Nil
       case Inlined(expr, caller, bindings)        => expr :: bindings
 
       case _: ImportIdent | _: TypeMember | _: TypeParam | _: Ident | _: ReferencedPackage | _: This | _: New |
@@ -557,7 +557,7 @@ object Trees {
     override final def withSpan(span: Span): Literal = Literal(constant)(span)
   }
 
-  case class Return(expr: Tree, from: Tree)(span: Span) extends Tree(span) {
+  case class Return(expr: Tree, from: TermSymbol)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       defn.NothingType
 

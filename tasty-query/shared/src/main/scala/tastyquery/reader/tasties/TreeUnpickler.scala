@@ -804,9 +804,7 @@ private[tasties] class TreeUnpickler(
       val trtSpan = spn
       val from = readSymRef.asTerm
       val expr = reader.ifBefore(end)(readTerm, EmptyTree)
-      // TODO: always just taking the name?
-      // return always returns from a method, i.e. something with a TermName
-      Return(expr, TermRefTree(from.name.asInstanceOf[TermName], TermRef(NoPrefix, from))(trtSpan))(spn)
+      Return(expr, from)(spn)
     case INLINED =>
       val spn = span
       reader.readByte()

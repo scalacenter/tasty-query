@@ -288,9 +288,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     withReturnTree.walkTree { tree =>
       tree match {
-        case Return(expr, from: Ident) =>
+        case Return(expr, from) =>
           returnCount += 1
-          assert(from.tpe.isRef(withReturnSym), clue(from.tpe))
+          assert(from == withReturnSym, clue(from))
           assert(tree.tpe.isNothing)
         case _ =>
           ()
