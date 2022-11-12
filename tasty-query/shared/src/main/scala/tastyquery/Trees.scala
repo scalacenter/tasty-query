@@ -109,7 +109,7 @@ object Trees {
       case TypeApply(fun, args)                   => args
       case New(tpt)                               => tpt :: Nil
       case Typed(expr, tpt)                       => tpt :: Nil
-      case Lambda(meth, tpt)                      => tpt :: Nil
+      case Lambda(meth, tpt)                      => tpt.toList
       case SeqLiteral(elems, elemtpt)             => elemtpt :: Nil
 
       // no type tree inside
@@ -412,13 +412,14 @@ object Trees {
   }
 
   /**  @param meth   A reference to the method.
-    *  @param tpt    Not an EmptyTree only if the lambda's type is a SAMtype rather than a function type.
+    *  @param tpt    Defined only if the lambda's type is a SAMtype rather than a function type.
     */
-  final case class Lambda(meth: Tree, tpt: TypeTree)(span: Span) extends Tree(span) {
-    protected final def calculateType(using Context): Type =
-      if tpt == EmptyTypeTree then
+  final case class Lambda(meth: Tree, tpt: Option[TypeTree])(span: Span) extends Tree(span) {
+    protected final def calculateType(using Context): Type = tpt match
+      case Some(tpt) =>
+        tpt.toType
+      case None =>
         ??? // TODO Resolve the method's type to construct the appropriate scala.FunctionN type
-      else tpt.toType
 
     override final def withSpan(span: Span): Lambda = Lambda(meth, tpt)(span)
   }

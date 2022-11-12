@@ -99,7 +99,7 @@ object TypeTrees {
   }
 
   /** [bound] selector match { cases } */
-  final case class MatchTypeTree(bound: TypeTree, selector: TypeTree, cases: List[TypeCaseDef])(span: Span)
+  final case class MatchTypeTree(bound: Option[TypeTree], selector: TypeTree, cases: List[TypeCaseDef])(span: Span)
       extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
       defn.NothingType // TODO
@@ -118,13 +118,6 @@ object TypeTrees {
     override final def withSpan(span: Span): TypeTreeBind = TypeTreeBind(name, body, symbol)(span)
   }
 
-  case object EmptyTypeTree extends TypeTree(NoSpan) {
-    override protected def calculateType(using Context): Type =
-      NoType
-
-    override final def withSpan(span: Span): TypeTree = EmptyTypeTree
-  }
-
   final case class TypeBoundsTree(low: TypeTree, high: TypeTree) {
     def toTypeBounds(using Context): TypeBounds =
       RealTypeBounds(low.toType, high.toType)
@@ -133,9 +126,9 @@ object TypeTrees {
   /** >: lo <: hi
     *  >: lo <: hi = alias  for RHS of bounded opaque type
     */
-  final case class BoundedTypeTree(bounds: TypeBoundsTree, alias: TypeTree)(span: Span) extends TypeTree(span) {
+  final case class BoundedTypeTree(bounds: TypeBoundsTree, alias: Option[TypeTree])(span: Span) extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
-      BoundedType(bounds.toTypeBounds, alias.toType)
+      BoundedType(bounds.toTypeBounds, alias.map(_.toType))
 
     override final def withSpan(span: Span): BoundedTypeTree = BoundedTypeTree(bounds, alias)(span)
   }

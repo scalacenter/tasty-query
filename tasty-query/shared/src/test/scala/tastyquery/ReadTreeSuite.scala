@@ -799,9 +799,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             _,
             Block(
               List(DefDef(SimpleName("$anonfun"), List(Left(List(ValDef(SimpleName("x"), _, _, _)))), _, _, _)),
-              // a lambda is simply a wrapper around a DefDef, defined in the same block. Its type is a function type,
-              // therefore not specified (left as EmptyTree)
-              Lambda(Ident(SimpleName("$anonfun")), EmptyTypeTree)
+              // A lambda is simply a wrapper around a DefDef, defined in the same block.
+              // Its type is a function type, therefore not specified.
+              Lambda(Ident(SimpleName("$anonfun")), None)
             ),
             _
           ) =>
@@ -817,10 +817,12 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               // the lambda's type is not just a function type, therefore specified
               Lambda(
                 Ident(SimpleName("$anonfun")),
-                TypeWrapper(
-                  TypeRefInternal(
-                    ty.PackageRef(FullyQualifiedName(List(SimpleName("java"), SimpleName("lang")))),
-                    TypeName(SimpleName("Runnable"))
+                Some(
+                  TypeWrapper(
+                    TypeRefInternal(
+                      ty.PackageRef(FullyQualifiedName(List(SimpleName("java"), SimpleName("lang")))),
+                      TypeName(SimpleName("Runnable"))
+                    )
                   )
                 )
               )
@@ -859,7 +861,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                   _
                 )
               ),
-              Lambda(Ident(SimpleName("$anonfun")), EmptyTypeTree)
+              Lambda(Ident(SimpleName("$anonfun")), None)
             ) :: Nil
           ) =>
     }
@@ -893,7 +895,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                   _
                 )
               ),
-              Lambda(Ident(SimpleName("$anonfun")), EmptyTypeTree)
+              Lambda(Ident(SimpleName("$anonfun")), None)
             ),
             _
           ) =>
@@ -986,7 +988,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
                 TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Any"))))
               ),
-              EmptyTypeTree
+              None
             ),
             _
           ) =>
@@ -999,7 +1001,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeName(SimpleName("AbstractWithBounds")),
             BoundedTypeTree(
               TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("Product")))),
-              EmptyTypeTree
+              None
             ),
             _
           ) =>
@@ -1018,7 +1020,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeName(SimpleName("OpaqueWithBounds")),
             BoundedTypeTree(
               TypeBoundsTree(TypeIdent(TypeName(SimpleName("Null"))), TypeIdent(TypeName(SimpleName("Product")))),
-              TypeIdent(TypeName(SimpleName("Null")))
+              Some(TypeIdent(TypeName(SimpleName("Null"))))
             ),
             _
           ) =>
@@ -1581,7 +1583,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               ),
               MatchTypeTree(
                 // No bound on the match result
-                EmptyTypeTree,
+                None,
                 TypeIdent(TypeName(SimpleName("X"))),
                 List(TypeCaseDef(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("String")))))
               )
@@ -1606,7 +1608,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 )
               ),
               MatchTypeTree(
-                TypeIdent(TypeName(SimpleName("Nothing"))),
+                Some(TypeIdent(TypeName(SimpleName("Nothing")))),
                 TypeIdent(TypeName(SimpleName("X"))),
                 List(TypeCaseDef(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("Nothing")))))
               )
@@ -1632,7 +1634,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               ),
               MatchTypeTree(
                 // No bound on the match result
-                EmptyTypeTree,
+                None,
                 TypeIdent(TypeName(SimpleName("X"))),
                 List(
                   TypeCaseDef(
@@ -1643,7 +1645,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                           TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
                           TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Any"))))
                         ),
-                        EmptyTypeTree
+                        None
                       ),
                       _
                     ),
@@ -1673,7 +1675,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               ),
               MatchTypeTree(
                 // No bound on the match result
-                EmptyTypeTree,
+                None,
                 TypeIdent(TypeName(SimpleName("X"))),
                 List(
                   TypeCaseDef(

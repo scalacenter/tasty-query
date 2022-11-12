@@ -390,9 +390,12 @@ private[tasties] class TreeUnpickler(
         val typeDef = typeBounds match
           case tpt: TypeTree =>
             tpt.toType match
-              case bt: BoundedType if bt.alias == NoType => TypeMemberDefinition.AbstractType(bt.bounds)
-              case bt: BoundedType                       => TypeMemberDefinition.OpaqueTypeAlias(bt.bounds, bt.alias)
-              case alias                                 => TypeMemberDefinition.TypeAlias(alias)
+              case bt: BoundedType =>
+                bt.alias match
+                  case None        => TypeMemberDefinition.AbstractType(bt.bounds)
+                  case Some(alias) => TypeMemberDefinition.OpaqueTypeAlias(bt.bounds, alias)
+              case alias =>
+                TypeMemberDefinition.TypeAlias(alias)
           case bounds: TypeBounds =>
             TypeMemberDefinition.AbstractType(bounds)
         symbol.withDefinition(typeDef)
@@ -495,7 +498,7 @@ private[tasties] class TreeUnpickler(
     val end = reader.readEnd()
     val low = readTypeTree
     val high = readTypeTree
-    val alias = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
+    val alias = reader.ifBeforeOpt(end)(readTypeTree)
     BoundedTypeTree(TypeBoundsTree(low, high), alias)(spn)
   }
 
@@ -743,7 +746,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val method = readTerm
-      val tpt = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
+      val tpt = reader.ifBeforeOpt(end)(readTypeTree)
       Lambda(method, tpt)(spn)
     case MATCH =>
       val spn = span
@@ -1138,9 +1141,8 @@ private[tasties] class TreeUnpickler(
       val end = reader.readEnd()
       val selOrBound = readTypeTree
       val (bound, selector) =
-        if (tagFollowShared == CASEDEF)
-          (EmptyTypeTree, selOrBound)
-        else (selOrBound, readTypeTree)
+        if tagFollowShared == CASEDEF then (None, selOrBound)
+        else (Some(selOrBound), readTypeTree)
       MatchTypeTree(bound, selector, readCases[TypeCaseDef](TypeCaseDefFactory, end))(spn)
     // TODO: why in TYPEAPPLY?
     // in MATCHtpt, TYPEAPPLY
@@ -1239,6 +1241,10 @@ private[tasties] class TreeUnpickler(
 }
 
 private[tasties] object TreeUnpickler {
+
+  extension (reader: TastyReader)
+    def ifBeforeOpt[T](end: Addr)(op: => T): Option[T] =
+      reader.ifBefore(end)(Some(op), None)
 
   private inline def localCtx(using ctx: LocalContext): LocalContext = ctx
 
