@@ -36,7 +36,7 @@ object Trees {
     case _            => tree
   }
 
-  abstract class Tree(val span: Span) {
+  sealed abstract class Tree(val span: Span) {
     private var myType: Type | Null = null
 
     /** Compute the actual term of this tree. */
@@ -133,7 +133,7 @@ object Trees {
 
   trait DefTree(val symbol: Symbol)
 
-  case class PackageDef(pid: PackageSymbol, stats: List[Tree])(span: Span) extends Tree(span) with DefTree(pid) {
+  final case class PackageDef(pid: PackageSymbol, stats: List[Tree])(span: Span) extends Tree(span) with DefTree(pid) {
     protected final def calculateType(using Context): Type = NoType
 
     override final def withSpan(span: Span): PackageDef = PackageDef(pid, stats)(span)
@@ -146,8 +146,9 @@ object Trees {
     override final def withSpan(span: Span): ImportIdent = ImportIdent(name)(span)
   }
 
-  case class ImportSelector(imported: ImportIdent, renamed: Option[ImportIdent], bound: Option[TypeTree])(span: Span)
-      extends Tree(span) {
+  final case class ImportSelector(imported: ImportIdent, renamed: Option[ImportIdent], bound: Option[TypeTree])(
+    span: Span
+  ) extends Tree(span) {
 
     /** It's a `given` selector */
     val isGiven: Boolean = imported.name.isEmpty
@@ -169,14 +170,14 @@ object Trees {
     override final def withSpan(span: Span): ImportSelector = ImportSelector(imported, renamed, bound)(span)
   }
 
-  case class Import(expr: Tree, selectors: List[ImportSelector])(span: Span) extends Tree(span) {
+  final case class Import(expr: Tree, selectors: List[ImportSelector])(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type = NoType
 
     override final def withSpan(span: Span): Import = Import(expr, selectors)(span)
   }
 
   /** import expr.selectors */
-  case class Export(expr: Tree, selectors: List[ImportSelector])(span: Span) extends Tree(span) {
+  final case class Export(expr: Tree, selectors: List[ImportSelector])(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type = NoType
 
     override final def withSpan(span: Span): Export = Export(expr, selectors)(span)
@@ -188,25 +189,26 @@ object Trees {
     *  mods type name >: lo <: hi,          if rhs = TypeBoundsTree(lo, hi)      or
     *  mods type name >: lo <: hi = rhs     if rhs = TypeBoundsTree(lo, hi, alias) and opaque in mods
     */
-  abstract class TypeDef(name: TypeName, override val symbol: TypeSymbol)(span: Span)
+  sealed abstract class TypeDef(name: TypeName, override val symbol: TypeSymbol)(span: Span)
       extends Tree(span)
       with DefTree(symbol) {
     protected final def calculateType(using Context): Type = NoType
   }
 
-  case class ClassDef(name: TypeName, rhs: Template, override val symbol: ClassSymbol)(span: Span)
+  final case class ClassDef(name: TypeName, rhs: Template, override val symbol: ClassSymbol)(span: Span)
       extends TypeDef(name, symbol)(span) {
     override final def withSpan(span: Span): ClassDef = ClassDef(name, rhs, symbol)(span)
   }
 
   /** A type member has a type tree rhs if the member is defined by the user, or typebounds if it's synthetic */
-  case class TypeMember(name: TypeName, rhs: TypeTree | TypeBounds, override val symbol: TypeMemberSymbol)(span: Span)
-      extends TypeDef(name, symbol)(span) {
+  final case class TypeMember(name: TypeName, rhs: TypeTree | TypeBounds, override val symbol: TypeMemberSymbol)(
+    span: Span
+  ) extends TypeDef(name, symbol)(span) {
     override final def withSpan(span: Span): TypeMember = TypeMember(name, rhs, symbol)(span)
   }
 
   /** The bounds are a type tree if the method is defined by the user and bounds-only if it's synthetic */
-  case class TypeParam(
+  final case class TypeParam(
     name: TypeName,
     bounds: TypeBoundsTree | TypeBounds | TypeLambdaTree,
     override val symbol: TypeParamSymbol
@@ -223,7 +225,7 @@ object Trees {
     *                       If the template defines a class, this is its only class parent.
     * @param parents        trait parents of the template and the class parent if the template defines a trait.
     */
-  case class Template(constr: DefDef, parents: List[Apply | Block | TypeTree], self: SelfDef, body: List[Tree])(
+  final case class Template(constr: DefDef, parents: List[Apply | Block | TypeTree], self: SelfDef, body: List[Tree])(
     span: Span
   ) extends Tree(span) {
     protected final def calculateType(using Context): Type = NoType
@@ -232,7 +234,7 @@ object Trees {
   }
 
   /** mods val name: tpt = rhs */
-  case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: TermSymbol)(span: Span)
+  final case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: TermSymbol)(span: Span)
       extends Tree(span)
       with DefTree(symbol) {
     protected final def calculateType(using Context): Type = NoType
@@ -241,7 +243,7 @@ object Trees {
   }
 
   /** Self type definition `name: tpt =>`. */
-  case class SelfDef(name: TermName, tpt: TypeTree)(span: Span) extends Tree(span):
+  final case class SelfDef(name: TermName, tpt: TypeTree)(span: Span) extends Tree(span):
     protected def calculateType(using Context): Type = NoType
 
     override def withSpan(span: Span): SelfDef = SelfDef(name, tpt)(span)
@@ -255,7 +257,7 @@ object Trees {
   type ParamsClause = Either[List[ValDef], List[TypeParam]]
 
   /** mods def name[tparams](vparams_1)...(vparams_n): tpt = rhs */
-  case class DefDef(
+  final case class DefDef(
     name: TermName,
     paramLists: List[ParamsClause],
     resultTpt: TypeTree,
@@ -292,7 +294,7 @@ object Trees {
 
   /** `qual.this` */
   // TODO: to assign the type if qualifier is empty, traverse the outer contexts to find the first enclosing class
-  case class This(qualifier: Option[TypeIdent])(span: Span) extends Tree(span) {
+  final case class This(qualifier: Option[TypeIdent])(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       qualifier.fold(NoType)(q =>
         q.toType match
@@ -304,7 +306,7 @@ object Trees {
   }
 
   /** C.super[mix], where qual = C.this */
-  case class Super(qual: Tree, mix: Option[TypeIdent])(span: Span) extends Tree(span) {
+  final case class Super(qual: Tree, mix: Option[TypeIdent])(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       qual.tpe
 
@@ -312,7 +314,7 @@ object Trees {
   }
 
   /** fun(args) */
-  case class Apply(fun: Tree, args: List[Tree])(span: Span) extends Tree(span):
+  final case class Apply(fun: Tree, args: List[Tree])(span: Span) extends Tree(span):
 
     private def resolveMethodType(funTpe: Type, args: List[Type])(using Context): Type =
       funTpe.widenOverloads match
@@ -339,7 +341,7 @@ object Trees {
     override final def withSpan(span: Span): Apply = Apply(fun, args)(span)
 
   /** fun[args] */
-  case class TypeApply(fun: Tree, args: List[TypeTree])(span: Span) extends Tree(span) {
+  final case class TypeApply(fun: Tree, args: List[TypeTree])(span: Span) extends Tree(span) {
 
     private def resolvePolyType(funTpe: Type, args: List[Type])(using Context): Type =
       funTpe.widenOverloads match
@@ -355,7 +357,7 @@ object Trees {
   }
 
   /** new tpt, but no constructor call */
-  case class New(tpt: TypeTree)(span: Span) extends Tree(span) {
+  final case class New(tpt: TypeTree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       tpt.toType
 
@@ -363,7 +365,7 @@ object Trees {
   }
 
   /** expr : tpt */
-  case class Typed(expr: Tree, tpt: TypeTree)(span: Span) extends Tree(span) {
+  final case class Typed(expr: Tree, tpt: TypeTree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       tpt.toType
 
@@ -371,7 +373,7 @@ object Trees {
   }
 
   /** name = arg, outside a parameter list */
-  case class Assign(lhs: Tree, rhs: Tree)(span: Span) extends Tree(span) {
+  final case class Assign(lhs: Tree, rhs: Tree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       defn.UnitType
 
@@ -379,7 +381,7 @@ object Trees {
   }
 
   /** name = arg, in a parameter list */
-  case class NamedArg(name: Name, arg: Tree)(span: Span) extends Tree(span) {
+  final case class NamedArg(name: Name, arg: Tree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       arg.tpe
 
@@ -387,7 +389,7 @@ object Trees {
   }
 
   /** { stats; expr } */
-  case class Block(stats: List[Tree], expr: Tree)(span: Span) extends Tree(span) {
+  final case class Block(stats: List[Tree], expr: Tree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       expr.tpe
 
@@ -412,7 +414,7 @@ object Trees {
   /**  @param meth   A reference to the method.
     *  @param tpt    Not an EmptyTree only if the lambda's type is a SAMtype rather than a function type.
     */
-  case class Lambda(meth: Tree, tpt: TypeTree)(span: Span) extends Tree(span) {
+  final case class Lambda(meth: Tree, tpt: TypeTree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       if tpt == EmptyTypeTree then
         ??? // TODO Resolve the method's type to construct the appropriate scala.FunctionN type
@@ -437,7 +439,7 @@ object Trees {
   }
 
   /** case pattern if guard => body; only appears as child of a Match and Try */
-  case class CaseDef(pattern: Tree, guard: Tree, body: Tree)(span: Span) extends Tree(span) {
+  final case class CaseDef(pattern: Tree, guard: Tree, body: Tree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       body.tpe
 
@@ -445,7 +447,7 @@ object Trees {
   }
 
   /** pattern in {@link Unapply} */
-  case class Bind(name: Name, body: Tree, override val symbol: TermSymbol)(span: Span)
+  final case class Bind(name: Name, body: Tree, override val symbol: TermSymbol)(span: Span)
       extends Tree(span)
       with DefTree(symbol) {
     protected final def calculateType(using Context): Type =
@@ -455,7 +457,7 @@ object Trees {
   }
 
   /** tree_1 | ... | tree_n */
-  case class Alternative(trees: List[Tree])(span: Span) extends Tree(span) {
+  final case class Alternative(trees: List[Tree])(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type = NoType
 
     override final def withSpan(span: Span): Alternative = Alternative(trees)(span)
@@ -473,7 +475,7 @@ object Trees {
     *    val result = fun(sel)(implicits)
     *    if (result.isDefined) "match patterns against result"
     */
-  case class Unapply(fun: Tree, implicits: List[Tree], patterns: List[Tree])(span: Span) extends Tree(span) {
+  final case class Unapply(fun: Tree, implicits: List[Tree], patterns: List[Tree])(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type = NoType
 
     override final def withSpan(span: Span): Unapply = Unapply(fun, implicits, patterns)(span)
@@ -482,7 +484,7 @@ object Trees {
   /** Seq(elems)
     *  @param  tpt  The element type of the sequence.
     */
-  case class SeqLiteral(elems: List[Tree], elemtpt: TypeTree)(span: Span) extends Tree(span) {
+  final case class SeqLiteral(elems: List[Tree], elemtpt: TypeTree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       defn.SeqTypeOf(elemtpt.toType)
 
@@ -490,7 +492,7 @@ object Trees {
   }
 
   /** while (cond) { body } */
-  case class While(cond: Tree, body: Tree)(span: Span) extends Tree(span) {
+  final case class While(cond: Tree, body: Tree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       defn.UnitType
 
@@ -498,7 +500,7 @@ object Trees {
   }
 
   /** throw expr */
-  case class Throw(expr: Tree)(span: Span) extends Tree(span) {
+  final case class Throw(expr: Tree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       defn.NothingType
 
@@ -506,21 +508,21 @@ object Trees {
   }
 
   /** try block catch cases finally finalizer */
-  case class Try(expr: Tree, cases: List[CaseDef], finalizer: Tree)(span: Span) extends Tree(span) {
+  final case class Try(expr: Tree, cases: List[CaseDef], finalizer: Tree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       cases.foldLeft(expr.tpe)((prev, caze) => OrType(prev, caze.tpe))
 
     override final def withSpan(span: Span): Try = Try(expr, cases, finalizer)(span)
   }
 
-  case class Literal(constant: Constant)(span: Span) extends Tree(span) {
+  final case class Literal(constant: Constant)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       ConstantType(constant)
 
     override final def withSpan(span: Span): Literal = Literal(constant)(span)
   }
 
-  case class Return(expr: Tree, from: TermSymbol)(span: Span) extends Tree(span) {
+  final case class Return(expr: Tree, from: TermSymbol)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       defn.NothingType
 
@@ -540,7 +542,7 @@ object Trees {
     *
     * { bindings; expr }
     */
-  case class Inlined(expr: Tree, caller: TypeIdent, bindings: List[Tree])(span: Span) extends Tree(span) {
+  final case class Inlined(expr: Tree, caller: TypeIdent, bindings: List[Tree])(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       // TODO? Do we need to do type avoidance on expr using the bindings, like dotc does?
       expr.tpe
