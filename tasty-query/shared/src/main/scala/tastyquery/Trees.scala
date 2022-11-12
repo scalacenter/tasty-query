@@ -67,8 +67,8 @@ object Trees {
       case Template(constr, parents, self, body) =>
         val parentTrees = parents.collect { case p: Tree => p }
         constr :: parentTrees ::: self.toList ::: body
-      case ValDef(name, tpt, rhs, symbol)         => rhs :: Nil
-      case DefDef(name, params, tpt, rhs, symbol) => params.flatMap(_.merge) :+ rhs
+      case ValDef(name, tpt, rhs, symbol)         => rhs.toList
+      case DefDef(name, params, tpt, rhs, symbol) => params.flatMap(_.merge) ::: rhs.toList
       case Select(qualifier, name)                => qualifier :: Nil
       case Super(qual, mix)                       => qual :: Nil
       case Apply(fun, args)                       => fun :: args
@@ -81,20 +81,19 @@ object Trees {
       case InlineIf(cond, thenPart, elsePart)     => cond :: thenPart :: elsePart :: Nil
       case Lambda(meth, tpt)                      => meth :: Nil
       case Match(selector, cases)                 => selector :: cases
-      case InlineMatch(selector, cases)           => selector :: cases
-      case CaseDef(pattern, guard, body)          => pattern :: guard :: body :: Nil
+      case InlineMatch(selector, cases)           => selector.toList ::: cases
+      case CaseDef(pattern, guard, body)          => pattern :: guard.toList ::: body :: Nil
       case Bind(name, body, symbol)               => body :: Nil
       case Alternative(trees)                     => trees
       case Unapply(fun, implicits, patterns)      => fun :: implicits ++ patterns
       case SeqLiteral(elems, elemtpt)             => elems
       case While(cond, body)                      => cond :: body :: Nil
       case Throw(expr)                            => expr :: Nil
-      case Try(expr, cases, finalizer)            => (expr :: cases) :+ finalizer
-      case Return(expr, from)                     => expr :: Nil
+      case Try(expr, cases, finalizer)            => (expr :: cases) ::: finalizer.toList
+      case Return(expr, from)                     => expr.toList
       case Inlined(expr, caller, bindings)        => expr :: bindings
 
-      case _: ImportIdent | _: TypeMember | _: TypeParam | _: Ident | _: This | _: New | _: Literal | _: SelfDef |
-          EmptyTree =>
+      case _: ImportIdent | _: TypeMember | _: TypeParam | _: Ident | _: This | _: New | _: Literal | _: SelfDef =>
         Nil
     }
 
@@ -239,7 +238,7 @@ object Trees {
   }
 
   /** mods val name: tpt = rhs */
-  final case class ValDef(name: TermName, tpt: TypeTree, rhs: Tree, override val symbol: TermSymbol)(span: Span)
+  final case class ValDef(name: TermName, tpt: TypeTree, rhs: Option[Tree], override val symbol: TermSymbol)(span: Span)
       extends Tree(span)
       with DefTree(symbol) {
     protected final def calculateType(using Context): Type = NoType
@@ -261,7 +260,7 @@ object Trees {
     name: TermName,
     paramLists: List[ParamsClause],
     resultTpt: TypeTree,
-    rhs: Tree,
+    rhs: Option[Tree],
     override val symbol: TermSymbol
   )(span: Span)
       extends Tree(span)
@@ -432,7 +431,7 @@ object Trees {
     override final def withSpan(span: Span): Match = Match(selector, cases)(span)
   }
 
-  final case class InlineMatch(selector: Tree, cases: List[CaseDef])(span: Span) extends Tree(span) {
+  final case class InlineMatch(selector: Option[Tree], cases: List[CaseDef])(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       cases.map(_.tpe).reduce(OrType(_, _))
 
@@ -440,7 +439,7 @@ object Trees {
   }
 
   /** case pattern if guard => body; only appears as child of a Match and Try */
-  final case class CaseDef(pattern: Tree, guard: Tree, body: Tree)(span: Span) extends Tree(span) {
+  final case class CaseDef(pattern: Tree, guard: Option[Tree], body: Tree)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       body.tpe
 
@@ -509,7 +508,7 @@ object Trees {
   }
 
   /** try block catch cases finally finalizer */
-  final case class Try(expr: Tree, cases: List[CaseDef], finalizer: Tree)(span: Span) extends Tree(span) {
+  final case class Try(expr: Tree, cases: List[CaseDef], finalizer: Option[Tree])(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       cases.foldLeft(expr.tpe)((prev, caze) => OrType(prev, caze.tpe))
 
@@ -523,7 +522,7 @@ object Trees {
     override final def withSpan(span: Span): Literal = Literal(constant)(span)
   }
 
-  final case class Return(expr: Tree, from: TermSymbol)(span: Span) extends Tree(span) {
+  final case class Return(expr: Option[Tree], from: TermSymbol)(span: Span) extends Tree(span) {
     protected final def calculateType(using Context): Type =
       defn.NothingType
 
@@ -549,13 +548,6 @@ object Trees {
       expr.tpe
 
     override final def withSpan(span: Span): Inlined = Inlined(expr, caller, bindings)(span)
-  }
-
-  case object EmptyTree extends Tree(NoSpan) {
-    protected final def calculateType(using Context): Type =
-      NoType
-
-    override final def withSpan(span: Span): Tree = EmptyTree
   }
 
 }

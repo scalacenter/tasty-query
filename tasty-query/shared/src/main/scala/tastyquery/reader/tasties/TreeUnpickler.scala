@@ -603,8 +603,8 @@ private[tasties] class TreeUnpickler(
     val params = readAllParams(using insideCtx)
     val tpt = readTypeTree(using insideCtx)
     val rhs =
-      if (reader.currentAddr == end || isModifierTag(reader.nextByte)) EmptyTree
-      else readTerm(using insideCtx)
+      if (reader.currentAddr == end || isModifierTag(reader.nextByte)) None
+      else Some(readTerm(using insideCtx))
     skipModifiers(end)
     tag match {
       case VALDEF | PARAM =>
@@ -715,7 +715,7 @@ private[tasties] class TreeUnpickler(
       val end = reader.readEnd()
       val expr = readTerm
       val catchCases = readCases[CaseDef](CaseDefFactory, end)
-      val finalizer = reader.ifBefore(end)(readTerm, EmptyTree)
+      val finalizer = reader.ifBeforeOpt(end)(readTerm)
       Try(expr, catchCases, finalizer)(spn)
     case ASSIGN =>
       reader.readByte()
@@ -754,10 +754,10 @@ private[tasties] class TreeUnpickler(
       val end = reader.readEnd()
       if (reader.nextByte == IMPLICIT) {
         reader.readByte()
-        new InlineMatch(EmptyTree, readCases[CaseDef](CaseDefFactory, end))(spn)
+        new InlineMatch(None, readCases[CaseDef](CaseDefFactory, end))(spn)
       } else if (reader.nextByte == INLINE) {
         reader.readByte()
-        new InlineMatch(readTerm, readCases[CaseDef](CaseDefFactory, end))(spn)
+        new InlineMatch(Some(readTerm), readCases[CaseDef](CaseDefFactory, end))(spn)
       } else Match(readTerm, readCases[CaseDef](CaseDefFactory, end))(spn)
     case BIND =>
       val spn = span
@@ -806,7 +806,7 @@ private[tasties] class TreeUnpickler(
       val end = reader.readEnd()
       val trtSpan = spn
       val from = readSymRef.asTerm
-      val expr = reader.ifBefore(end)(readTerm, EmptyTree)
+      val expr = reader.ifBeforeOpt(end)(readTerm)
       Return(expr, from)(spn)
     case INLINED =>
       val spn = span
@@ -903,7 +903,7 @@ private[tasties] class TreeUnpickler(
       case CaseDefFactory =>
         val pattern = readTerm
         val body = readTerm
-        CaseDef(pattern, reader.ifBefore(end)(readTerm, EmptyTree), body)(spn)
+        CaseDef(pattern, reader.ifBeforeOpt(end)(readTerm), body)(spn)
       case TypeCaseDefFactory =>
         TypeCaseDef(readTypeTree, readTypeTree)
     }
