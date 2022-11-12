@@ -442,7 +442,7 @@ private[tasties] class TreeUnpickler(
         assert(reader.readByte() == TYPEBOUNDStpt, posErrorMsg)
         val end = reader.readEnd()
         val low = readTypeTree
-        val high = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
+        val high = readTypeTree
         // assert atEnd: no alias for type parameters
         assert(reader.currentAddr == end, posErrorMsg)
         TypeBoundsTree(low, high)
@@ -494,7 +494,7 @@ private[tasties] class TreeUnpickler(
     val spn = span
     val end = reader.readEnd()
     val low = readTypeTree
-    val high = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
+    val high = readTypeTree
     val alias = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
     BoundedTypeTree(TypeBoundsTree(low, high), alias)(spn)
   }
@@ -505,7 +505,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val low = readTypeTree
-      val high = reader.ifBefore(end)(readTypeTree, EmptyTypeTree)
+      val high = readTypeTree
       TypeBoundsTree(low, high)
     })
   }
