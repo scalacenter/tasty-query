@@ -18,9 +18,9 @@ object Exceptions:
   final class NonMethodReferenceException(kind: String)
       extends InvalidProgramStructureException(s"reference to non method type in $kind")
 
-  final class MemberNotFoundException(val prefix: Symbol | Type, val name: Name, msg: String)
+  final class MemberNotFoundException(val prefix: Symbol | Prefix, val name: Name, msg: String)
       extends InvalidProgramStructureException(msg):
-    def this(prefix: Symbol | Type, name: Name) =
+    def this(prefix: Symbol | Prefix, name: Name) =
       this(prefix, name, s"Member ${name.toDebugString} not found in $prefix")
 
   sealed abstract class UnpickleFormatException(msg: String, cause: Throwable | Null) extends Exception(msg, cause)

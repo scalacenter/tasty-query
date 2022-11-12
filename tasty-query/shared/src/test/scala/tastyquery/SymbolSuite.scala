@@ -222,7 +222,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
     assert(simpleTreesNestedPkg.fullName.toString == "simple_trees.nested")
 
-    assert(PackageRef(simpleTreesPkg).findMember(name"nested", NoPrefix) == simpleTreesNestedPkg)
+    assert(simpleTreesPkg.packageRef.member(name"nested") == simpleTreesNestedPkg)
   }
 
   testWithContext("basic-inheritance-same-root", inheritance / tname"SameTasty" / obj, fundamentalClasses*) {

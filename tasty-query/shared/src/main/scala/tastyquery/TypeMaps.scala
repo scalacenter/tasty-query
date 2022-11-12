@@ -36,6 +36,8 @@ private[tastyquery] object TypeMaps {
         case tp2: TypeBounds =>
           val result: tp2.ThisTypeMappableType = apply(tp2)
           result.asInstanceOf[tp.ThisTypeMappableType]
+        case NoPrefix =>
+          tp.asInstanceOf[tp.ThisTypeMappableType]
 
     def apply(tp: Type): Type
 
@@ -86,8 +88,12 @@ private[tastyquery] object TypeMaps {
           // By contrast, covariance does translate to the prefix, since we have that
           // if `p <: q` then `p.A <: q.A`, and well-formedness requires that `A` is a member
           // of `p`'s upper bound.
-          val prefix1 = atVariance(variance max 0)(this(tp.prefix))
-          derivedSelect(tp, prefix1)
+          tp.prefix match
+            case NoPrefix =>
+              tp
+            case prefix: Type =>
+              val prefix1 = atVariance(variance max 0)(this(prefix))
+              derivedSelect(tp, prefix1)
 
         case tp: AppliedType =>
           tp.map(this)
@@ -104,7 +110,7 @@ private[tastyquery] object TypeMaps {
         case tp: AnnotatedType =>
           derivedAnnotatedType(tp, this(tp.typ), tp.annotation) // tp.annotation.mapWith(this)
 
-        case _: ThisType | NoPrefix =>
+        case _: ThisType =>
           tp
 
         case tp: RefinedType =>

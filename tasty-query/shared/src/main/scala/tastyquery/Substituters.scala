@@ -28,8 +28,9 @@ private[tastyquery] object Substituters:
         case tp: BoundType =>
           if tp.binders eq from then tp.copyBoundType(to.asInstanceOf[tp.BindersType]) else tp
         case tp: NamedType =>
-          if tp.prefix eq NoPrefix then tp
-          else tp.derivedSelect(apply(tp.prefix))
+          tp.prefix match
+            case NoPrefix     => tp
+            case prefix: Type => tp.derivedSelect(apply(prefix))
         case _: ThisType =>
           tp
         case tp: AppliedType =>
@@ -45,8 +46,9 @@ private[tastyquery] object Substituters:
         case tp: ParamRef =>
           if tp.binders eq from then to(tp.paramNum) else tp
         case tp: NamedType =>
-          if tp.prefix eq NoPrefix then tp
-          else tp.derivedSelect(apply(tp.prefix))
+          tp.prefix match
+            case NoPrefix     => tp
+            case prefix: Type => tp.derivedSelect(apply(prefix))
         case _: ThisType =>
           tp
         case tp: AppliedType =>
@@ -61,15 +63,17 @@ private[tastyquery] object Substituters:
     def apply(tp: Type): Type =
       tp match
         case tp: NamedType =>
-          if tp.prefix eq NoPrefix then
-            var fs = from
-            var ts = to
-            while fs.nonEmpty && ts.nonEmpty do
-              if tp.isLocalRef(fs.head) then return ts.head
-              fs = fs.tail
-              ts = ts.tail
-            tp
-          else tp.normalizedDerivedSelect(apply(tp.prefix))
+          tp.prefix match
+            case NoPrefix =>
+              var fs = from
+              var ts = to
+              while fs.nonEmpty && ts.nonEmpty do
+                if tp.isLocalRef(fs.head) then return ts.head
+                fs = fs.tail
+                ts = ts.tail
+              tp
+            case prefix: Type =>
+              tp.normalizedDerivedSelect(apply(prefix))
         case _: ThisType | _: BoundType =>
           tp
         case _ =>
@@ -81,15 +85,17 @@ private[tastyquery] object Substituters:
     def apply(tp: Type): Type =
       tp match
         case tp: NamedType =>
-          if tp.prefix == NoPrefix then
-            var fs = from
-            var ts = to
-            while fs.nonEmpty && ts.nonEmpty do
-              if tp.isLocalRef(fs.head) then return ts.head
-              fs = fs.tail
-              ts = ts.tail
-            tp
-          else tp.derivedSelect(this(tp.prefix))
+          tp.prefix match
+            case NoPrefix =>
+              var fs = from
+              var ts = to
+              while fs.nonEmpty && ts.nonEmpty do
+                if tp.isLocalRef(fs.head) then return ts.head
+                fs = fs.tail
+                ts = ts.tail
+              tp
+            case prefix: Type =>
+              tp.derivedSelect(this(prefix))
         case _: ThisType | _: BoundType =>
           tp
         case _ =>
