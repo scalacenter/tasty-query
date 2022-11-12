@@ -275,24 +275,18 @@ object Trees {
   end Ident
 
   /** qualifier.termName */
-  case class Select(qualifier: Tree, name: TermName)(span: Span) extends Tree(span) {
-    // not final because it is overridden in SelectIn
-    protected def calculateType(using Context): Type =
-      NamedType.possibleSelFromPackage(qualifier.tpe, name)
+  final case class Select(qualifier: Tree, name: TermName)(selectOwner: Option[TypeRef])(span: Span) extends Tree(span):
+    require(
+      selectOwner.isEmpty || name.isInstanceOf[SignedName],
+      s"illegal section of unsigned name '$name' in owner ${selectOwner.get}"
+    )
 
-    override def withSpan(span: Span): Select = Select(qualifier, name)(span)
-  }
+    protected final def calculateType(using Context): Type = selectOwner match
+      case Some(selOwner) => TermRef(qualifier.tpe, LookupIn(selOwner, name.asInstanceOf[SignedName]))
+      case None           => NamedType.possibleSelFromPackage(qualifier.tpe, name)
 
-  class SelectIn(qualifier: Tree, name: SignedName, selectOwner: TypeRef)(span: Span)
-      extends Select(qualifier, name)(span) {
-
-    override protected final def calculateType(using Context): Type =
-      TermRef(qualifier.tpe, LookupIn(selectOwner, name))
-
-    override final def withSpan(span: Span): SelectIn = SelectIn(qualifier, name, selectOwner)(span)
-
-    override def toString: String = s"SelectIn($qualifier, $name, $selectOwner)"
-  }
+    override def withSpan(span: Span): Select = Select(qualifier, name)(selectOwner)(span)
+  end Select
 
   /** `qual.this` */
   // TODO: to assign the type if qualifier is empty, traverse the outer contexts to find the first enclosing class

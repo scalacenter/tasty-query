@@ -669,7 +669,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val name = readName
       val qual = readTerm
-      Select(qual, name)(spn)
+      Select(qual, name)(selectOwner = None)(spn)
     case QUALTHIS =>
       val spn = span
       reader.readByte()
@@ -689,7 +689,7 @@ private[tasties] class TreeUnpickler(
       val name = readSignedName()
       val qual = readTerm
       val owner = readTypeRef()
-      SelectIn(qual, name, owner)(spn)
+      Select(qual, name)(Some(owner))(spn)
     case NEW =>
       val spn = span
       reader.readByte()
