@@ -173,7 +173,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                     // a single parent -- java.lang.Object
                     List(parent: Apply),
                     // self not specified
-                    SelfDef(nme.Wildcard, EmptyTypeTree),
+                    None,
                     // empty body
                     List()
                   ),

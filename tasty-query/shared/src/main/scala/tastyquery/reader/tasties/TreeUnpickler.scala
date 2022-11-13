@@ -577,15 +577,15 @@ private[tasties] class TreeUnpickler(
     acc.toList
   }
 
-  private def readSelf(using LocalContext): SelfDef =
+  private def readSelf(using LocalContext): Option[SelfDef] =
     if (reader.nextByte != SELFDEF) {
-      SelfDef.ReusableEmpty
+      None
     } else {
       val spn = span
       reader.readByte()
       val name = readName
       val tpt = readTypeTree
-      SelfDef(name, tpt)(tpt.span)
+      Some(SelfDef(name, tpt)(tpt.span))
     }
 
   private def readValOrDefDef(using LocalContext): Tree = {
