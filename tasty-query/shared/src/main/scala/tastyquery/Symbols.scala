@@ -25,8 +25,6 @@ import tastyquery.reader.Loaders.Loader
   * ```none
   * Symbol
   *  |
-  *  +- NoSymbol                        singleton instance used when there is no symbol
-  *  |
   *  +- PackageSymbol                   any package, including the root package, the empty package, and nested packages
   *  |
   *  +- TermOrTypeSymbol                   any term or type symbol, i.e., not a package
@@ -59,11 +57,11 @@ import tastyquery.reader.Loaders.Loader
   * often used as their primary characteristic. `ClassSymbol`s are entirely
   * defined by themselves.
   *
-  * With the exception of `NoSymbol` and the root package symbol, all symbols
-  * have an `owner` which is another `Symbol`.
+  * With the exception of the root package symbol, all symbols have an `owner`
+  * which is another `Symbol`.
   *
   * All symbols also have a `name`. It is a `TypeName` for `TypeSymbol`s, and a
-  * `TermName` for `TermSymbol`s, `PackageSymbol`s and `NoSymbol`.
+  * `TermName` for `TermSymbol`s and `PackageSymbol`s.
   */
 object Symbols {
 
@@ -142,16 +140,8 @@ object Symbols {
         case _                          => ()
       decl
 
-    private[Symbols] def maybeOuter: Symbol = owner match {
-      case owner: Symbol => owner
-      case null          => NoSymbol
-    }
-
-    private[tastyquery] final def enclosingDecls: Iterator[DeclaringSymbol] =
-      Iterator.iterate(enclosingDecl)(_.enclosingDecl).takeWhile(s => s.maybeOuter.exists)
-
     private[tastyquery] final def isStatic: Boolean =
-      if owner == null then this != NoSymbol
+      if owner == null then true
       else owner.isStaticOwner
 
     @tailrec
@@ -163,14 +153,12 @@ object Symbols {
     private def nameWithPrefix(addPrefix: Symbol => Boolean): FullyQualifiedName =
       if isRoot then FullyQualifiedName.rootPackageName
       else
-        val pre = maybeOuter
-        if addPrefix(pre) then pre.nameWithPrefix(addPrefix).mapLastOption(_.toTermName).select(name)
+        val pre = owner
+        if pre != null && addPrefix(pre) then pre.nameWithPrefix(addPrefix).mapLastOption(_.toTermName).select(name)
         else FullyQualifiedName(name :: Nil)
 
     final def fullName: FullyQualifiedName = nameWithPrefix(_.isStatic)
     private[tastyquery] final def erasedName: FullyQualifiedName = nameWithPrefix(_ => true)
-
-    final def exists: Boolean = this ne NoSymbol
 
     final def isType: Boolean = this.isInstanceOf[TypeSymbol]
     final def isTerm: Boolean = this.isInstanceOf[TermSymbol]
@@ -199,16 +187,6 @@ object Symbols {
     }
     def toDebugString = toString
   }
-
-  object NoSymbol extends Symbol(null):
-    type ThisNameType = SimpleName
-
-    val name: SimpleName = nme.EmptySimpleName
-
-    this.withFlags(EmptyFlagSet)
-
-    override def toString: String = "NoSymbol"
-  end NoSymbol
 
   sealed abstract class TermOrTypeSymbol(override val owner: Symbol) extends Symbol(owner):
     // Overriding relationships
@@ -315,7 +293,7 @@ object Symbols {
       declaredType.asSeenFrom(prefix, owner)
 
     private def isConstructor: Boolean =
-      maybeOuter.isClass && is(Method) && name == nme.Constructor
+      owner.isClass && is(Method) && name == nme.Constructor
 
     private[tastyquery] final def needsSignature(using Context): Boolean =
       declaredType match
@@ -329,7 +307,7 @@ object Symbols {
       else
         val sig = declaredType match
           case methodic: MethodicType =>
-            Some(Signature.fromMethodic(methodic, Option.when(isConstructor)(maybeOuter.asClass)))
+            Some(Signature.fromMethodic(methodic, Option.when(isConstructor)(owner.asClass)))
           case _ => None
         mySignature = sig
         sig
@@ -523,7 +501,7 @@ object Symbols {
       * - for `class C` => `object class C[$]`
       * - for `object class C[$]` => `class C`
       */
-    final def companionClass(using Context): Option[ClassSymbol] = maybeOuter match
+    final def companionClass(using Context): Option[ClassSymbol] = owner match
       case scope: DeclaringSymbol =>
         scope.getDecl(this.name.companionName).collect { case sym: ClassSymbol =>
           sym
@@ -533,7 +511,7 @@ object Symbols {
     /** Get the module value of this module class definition, if it exists:
       * - for `object class C[$]` => `object val C`
       */
-    final def moduleValue(using Context): Option[TermSymbol] = maybeOuter match
+    final def moduleValue(using Context): Option[TermSymbol] = owner match
       case scope: PackageSymbol if this.is(ModuleClass) =>
         scope.getDecl(this.name.sourceObjectName).collect { case sym: TermSymbol =>
           sym
@@ -814,7 +792,7 @@ object Symbols {
 
     /** Get the self type of this class, as if viewed from an external package */
     private[tastyquery] final def accessibleThisType: TypeRef =
-      maybeOuter match
+      owner match
         case pre: PackageSymbol => TypeRef(pre.packageRef, this)
         case pre: ClassSymbol   => TypeRef(pre.accessibleThisType, this)
         case _                  => TypeRef(NoPrefix, this)

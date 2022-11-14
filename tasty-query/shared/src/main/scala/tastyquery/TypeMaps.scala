@@ -445,8 +445,6 @@ private[tastyquery] object TypeMaps {
   final case class Range(lo: Type, hi: Type) extends CustomTransientGroundType {
     assert(!lo.isInstanceOf[Range])
     assert(!hi.isInstanceOf[Range])
-
-    def findMember(name: Name, pre: Type)(using Context): Symbol = NoSymbol
   }
 
 }
