@@ -266,10 +266,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     fTree.walkTree { tree =>
       tree match {
-        case tree: FreeIdent =>
+        case tree @ Ident(nme.Wildcard) =>
           freeIdentCount += 1
-          assert(tree.name == nme.Wildcard, clue(tree.name))
-          assert(tree.tpe.isOfClass(defn.IntClass), clue(tree.tpe))
+          assert(tree.tpe.isRef(defn.IntClass), clue(tree.tpe))
         case _ =>
           ()
       }
@@ -288,9 +287,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     withReturnTree.walkTree { tree =>
       tree match {
-        case Return(expr, from: Ident) =>
+        case Return(expr, from) =>
           returnCount += 1
-          assert(from.tpe.isRef(withReturnSym), clue(from.tpe))
+          assert(from == withReturnSym, clue(from))
           assert(tree.tpe.isNothing)
         case _ =>
           ()
@@ -544,7 +543,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val getX = JavaDefinedClass.findNonOverloadedDecl(name"getX")
     val xMethodSym = BoxedJavaClass.findNonOverloadedDecl(name"xMethod")
 
-    val Some(DefDef(_, _, _, Apply(getXSelection, _), _)) = xMethodSym.tree: @unchecked
+    val Some(DefDef(_, _, _, Some(Apply(getXSelection, _)), _)) = xMethodSym.tree: @unchecked
 
     val (getXRef @ _: TermRef) = getXSelection.tpe: @unchecked
 
@@ -558,7 +557,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val x = JavaDefinedClass.findDecl(name"x")
     val xFieldSym = BoxedJavaClass.findDecl(name"xField")
 
-    val Some(DefDef(_, _, _, xSelection, _)) = xFieldSym.tree: @unchecked
+    val Some(DefDef(_, _, _, Some(xSelection), _)) = xFieldSym.tree: @unchecked
 
     val (xRef @ _: TermRef) = xSelection.tpe: @unchecked
 
@@ -582,7 +581,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val fooSym = BoxedConsClass.findDecl(name"foo")
 
-    val Some(DefDef(_, _, _, Apply(canEqualSelection, _), _)) = fooSym.tree: @unchecked
+    val Some(DefDef(_, _, _, Some(Apply(canEqualSelection, _)), _)) = fooSym.tree: @unchecked
 
     val underlyingType = canEqualSelection.tpe match
       case termRef: TermRef => termRef.underlying
@@ -602,7 +601,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val unitVal = ConstantsClass.findDecl(name"unitVal")
     val boxedUnitValSym = BoxedConstantsClass.findDecl(name"boxedUnitVal")
 
-    val Some(DefDef(_, _, _, unitValSelection, _)) = boxedUnitValSym.tree: @unchecked
+    val Some(DefDef(_, _, _, Some(unitValSelection), _)) = boxedUnitValSym.tree: @unchecked
 
     val (unitValRef @ _: TermRef) = unitValSelection.tpe: @unchecked
 
@@ -621,7 +620,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val getX = JavaBoxClass.findNonOverloadedDecl(name"getX")
     val xMethodSym = ScalaBoxClass.findNonOverloadedDecl(name"xMethod")
 
-    val Some(DefDef(_, _, _, Apply(getXSelection, _), _)) = xMethodSym.tree: @unchecked
+    val Some(DefDef(_, _, _, Some(Apply(getXSelection, _)), _)) = xMethodSym.tree: @unchecked
 
     val (getXRef @ _: TermRef) = getXSelection.tpe: @unchecked
 
@@ -632,7 +631,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val GenClass = ctx.findTopLevelClass("simple_trees.GenericClass")
     val PolySelect = ctx.findTopLevelClass("simple_trees.PolySelect")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.findNonOverloadedDecl(name"testField").tree: @unchecked
+    val Some(DefDef(_, _, _, Some(body), _)) = PolySelect.findNonOverloadedDecl(name"testField").tree: @unchecked
 
     val Select(qual, fieldName) = body: @unchecked
 
@@ -645,7 +644,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val GenClass = ctx.findTopLevelClass("simple_trees.GenericClass")
     val PolySelect = ctx.findTopLevelClass("simple_trees.PolySelect")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.findNonOverloadedDecl(name"testGetter").tree: @unchecked
+    val Some(DefDef(_, _, _, Some(body), _)) = PolySelect.findNonOverloadedDecl(name"testGetter").tree: @unchecked
 
     val Select(qual, getterName) = body: @unchecked
 
@@ -658,7 +657,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val GenClass = ctx.findTopLevelClass("simple_trees.GenericClass")
     val PolySelect = ctx.findTopLevelClass("simple_trees.PolySelect")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.findNonOverloadedDecl(name"testMethod").tree: @unchecked
+    val Some(DefDef(_, _, _, Some(body), _)) = PolySelect.findNonOverloadedDecl(name"testMethod").tree: @unchecked
 
     val Apply(fun @ Select(qual, methodName), List(arg)) = body: @unchecked
 
@@ -679,7 +678,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val GenMethod = ctx.findTopLevelClass("simple_trees.GenericMethod")
     val PolySelect = ctx.findTopLevelClass("simple_trees.PolySelect")
 
-    val Some(DefDef(_, _, _, body, _)) = PolySelect.findNonOverloadedDecl(name"testGenericMethod").tree: @unchecked
+    val Some(DefDef(_, _, _, Some(body), _)) =
+      PolySelect.findNonOverloadedDecl(name"testGenericMethod").tree: @unchecked
 
     val Apply(tapp @ TypeApply(fun @ Select(qual, methodName), List(targ)), List(arg)) = body: @unchecked
 

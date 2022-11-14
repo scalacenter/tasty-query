@@ -345,7 +345,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val setupMethodDef = setupMethod.tree.get.asInstanceOf[DefDef]
     val Left(valDefs) = setupMethodDef.paramLists.head: @unchecked
     val List(x, y, z) = valDefs.map(valDef => TermRef(NoPrefix, valDef.symbol))
-    val xAlias = TermRef(NoPrefix, findLocalValDef(setupMethodDef.rhs, name"xAlias"))
+    val xAlias = TermRef(NoPrefix, findLocalValDef(setupMethodDef.rhs.get, name"xAlias"))
 
     val refx: SimplePaths = new SimplePaths
     val refy: SimplePaths = new SimplePaths
@@ -416,7 +416,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val setupMethodDef = setupMethod.tree.get.asInstanceOf[DefDef]
     val Left(valDefs) = setupMethodDef.paramLists.head: @unchecked
     val List(x, y, z) = valDefs.map(valDef => TermRef(NoPrefix, valDef.symbol))
-    val yAlias = TermRef(NoPrefix, findLocalValDef(setupMethodDef.rhs, name"yAlias"))
+    val yAlias = TermRef(NoPrefix, findLocalValDef(setupMethodDef.rhs.get, name"yAlias"))
 
     val refx: SimplePaths = new SimplePaths
     val refy: ConcreteSimplePathsChild = new ConcreteSimplePathsChild

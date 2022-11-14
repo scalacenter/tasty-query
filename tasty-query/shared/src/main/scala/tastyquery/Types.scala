@@ -1402,7 +1402,7 @@ object Types {
     override def toString(): String = s"TypeAlias($alias)"
   }
 
-  final class BoundedType(val bounds: TypeBounds, val alias: Type) extends Type {
+  final class BoundedType(val bounds: TypeBounds, val alias: Option[Type]) extends Type {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
       bounds.high.findMember(name, pre)
 
