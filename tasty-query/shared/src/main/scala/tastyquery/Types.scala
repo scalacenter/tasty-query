@@ -163,7 +163,53 @@ object Types {
     type ThisTypeMappableType >: this.type <: TypeMappable
   end TypeMappable
 
-  abstract class Type extends TypeMappable {
+  sealed abstract class Prefix extends TypeMappable:
+    type ThisTypeMappableType >: this.type <: Prefix
+
+    final def memberType(member: TermSymbol)(using Context): Type =
+      member.declaredType.asSeenFrom(this, member.owner)
+
+    final def memberTypeBoundsLow(member: TypeSymbolWithBounds)(using Context): Type =
+      member.lowerBound.asSeenFrom(this, member.owner)
+
+    final def memberTypeBoundsHigh(member: TypeSymbolWithBounds)(using Context): Type =
+      member.upperBound.asSeenFrom(this, member.owner)
+
+    final def select(sym: TermOrTypeSymbol)(using Context): Type =
+      NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
+
+    final def select(name: Name)(using Context): NamedType =
+      NamedType(this, name)
+
+    final def select(name: TermName)(using Context): TermRef =
+      TermRef(this, name)
+
+    final def select(name: TypeName)(using Context): TypeRef =
+      TypeRef(this, name)
+
+    /** True iff `sym` is a symbol of a class type parameter and the reference
+      * `<pre> . <sym>` is an actual argument reference, i.e., `pre` is not the
+      * ThisType of `sym`'s owner, or a reference to `sym`'s owner.'
+      */
+    private[tastyquery] final def isArgPrefixOf(sym: Symbol)(using Context): Boolean =
+      sym match
+        case sym: ClassTypeParamSymbol =>
+          this match
+            case tp: ThisType => tp.cls != sym.owner
+            case tp: TypeRef  => tp.symbol != sym.owner
+            case _            => true
+        case _ =>
+          false
+    end isArgPrefixOf
+  end Prefix
+
+  object NoPrefix extends Prefix:
+    type ThisTypeMappableType = this.type
+
+    override def toString(): String = "NoPrefix"
+  end NoPrefix
+
+  abstract class Type extends Prefix {
     type ThisTypeMappableType = Type
 
     final def isSubtype(that: Type)(using Context): Boolean =
@@ -321,7 +367,7 @@ object Types {
       * - Inherited by all other type proxies.
       * - `NoType` for all other types.
       */
-    @tailrec final def normalizedPrefix(using Context): Type = this match {
+    @tailrec final def normalizedPrefix(using Context): Prefix = this match {
       case tp: TypeRef =>
         tp.symbol match
           case sym: TypeMemberSymbol =>
@@ -357,31 +403,8 @@ object Types {
     private[Types] def lookupRefined(name: Name)(using Context): Type =
       NoType
 
-    /** True iff `sym` is a symbol of a class type parameter and the reference
-      * `<pre> . <sym>` is an actual argument reference, i.e., `pre` is not the
-      * ThisType of `sym`'s owner, or a reference to `sym`'s owner.'
-      */
-    private[tastyquery] final def isArgPrefixOf(sym: Symbol)(using Context): Boolean =
-      sym match
-        case sym: ClassTypeParamSymbol =>
-          this match
-            case tp: ThisType => tp.cls != sym.owner
-            case tp: TypeRef  => tp.symbol != sym.owner
-            case _            => true
-        case _ =>
-          false
-
-    final def asSeenFrom(pre: Type, cls: Symbol)(using Context): Type =
+    final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): Type =
       TypeOps.asSeenFrom(this, pre, cls)
-
-    final def memberType(member: TermSymbol)(using Context): Type =
-      member.declaredType.asSeenFrom(this, member.owner)
-
-    final def memberTypeBoundsLow(member: TypeSymbolWithBounds)(using Context): Type =
-      member.lowerBound.asSeenFrom(this, member.owner)
-
-    final def memberTypeBoundsHigh(member: TypeSymbolWithBounds)(using Context): Type =
-      member.upperBound.asSeenFrom(this, member.owner)
 
     final def isRef(sym: Symbol)(using Context): Boolean =
       this match {
@@ -465,18 +488,6 @@ object Types {
     final def |(that: Type)(using Context): Type =
       // TypeCompare.lub(this, that)
       OrType.make(this, that)
-
-    final def select(sym: TermOrTypeSymbol)(using Context): Type =
-      NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
-
-    final def select(name: Name)(using Context): NamedType =
-      NamedType(this, name)
-
-    final def select(name: TermName)(using Context): TermRef =
-      TermRef(this, name)
-
-    final def select(name: TypeName)(using Context): TypeRef =
-      TypeRef(this, name)
 
     final def appliedTo(tpe: Type)(using Context): Type =
       this.appliedTo(tpe :: Nil)
@@ -583,7 +594,7 @@ object Types {
     type ThisNamedType >: this.type <: NamedType
     protected type ThisDesignatorType >: ThisSymbolType <: TermOrTypeSymbol | Name | LookupIn | Scala2ExternalSymRef
 
-    val prefix: Type
+    val prefix: Prefix
 
     protected def designator: ThisDesignatorType
 
@@ -656,9 +667,11 @@ object Types {
           }
         }
       case name: Name =>
-        if prefix == NoPrefix then
-          throw new MemberNotFoundException(prefix, name, s"reference by name $name to a local symbol")
-        prefix.member(name)
+        prefix match
+          case prefix: Type =>
+            prefix.member(name)
+          case NoPrefix =>
+            throw new MemberNotFoundException(prefix, name, s"reference by name $name to a local symbol")
     end computeSymbol
 
     /** The argument corresponding to class type parameter `tparam` as seen from
@@ -747,19 +760,19 @@ object Types {
       }
     end normalizedDerivedSelect
 
-    private[tastyquery] final def derivedSelect(prefix: Type): ThisNamedType =
+    private[tastyquery] final def derivedSelect(prefix: Prefix): ThisNamedType =
       if prefix eq this.prefix then this
       else withPrefix(prefix)
 
-    private final def withPrefix(prefix: Type): ThisNamedType =
+    private final def withPrefix(prefix: Prefix): ThisNamedType =
       withPrefix(prefix, cachedSymbol = mySymbol)
 
-    protected def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): ThisNamedType
+    protected def withPrefix(prefix: Prefix, cachedSymbol: ThisSymbolType | Null): ThisNamedType
   }
 
   object NamedType {
 
-    private[tastyquery] def possibleSelFromPackage(prefix: Type, name: TermName)(using Context): Type = prefix match
+    private[tastyquery] def possibleSelFromPackage(prefix: Prefix, name: TermName)(using Context): Type = prefix match
       case prefix: PackageRef if name.isInstanceOf[SimpleName] =>
         prefix.symbol.getPackageDecl(name.asSimpleName) match
           case Some(nested) => PackageRef(nested)
@@ -767,17 +780,17 @@ object Types {
       case prefix =>
         apply(prefix, name)
 
-    def apply(prefix: Type, sym: TermOrTypeSymbol)(using Context): NamedType =
+    def apply(prefix: Prefix, sym: TermOrTypeSymbol)(using Context): NamedType =
       sym match
         case sym: TypeSymbol => TypeRef(prefix, sym)
         case sym: TermSymbol => TermRef(prefix, sym)
 
-    def apply(prefix: Type, name: Name)(using Context): NamedType =
+    def apply(prefix: Prefix, name: Name)(using Context): NamedType =
       name match
         case name: TypeName => TypeRef(prefix, name)
         case name: TermName => TermRef(prefix, name)
 
-    private[tastyquery] def apply(prefix: Type, external: Scala2ExternalSymRef)(using Context): NamedType =
+    private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef)(using Context): NamedType =
       external.name match
         case _: TypeName => TypeRef(prefix, external)
         case _: TermName => TermRef(prefix, external)
@@ -785,7 +798,7 @@ object Types {
 
   /** The singleton type for path prefix#myDesignator. */
   final class TermRef private (
-    val prefix: Type,
+    val prefix: Prefix,
     private var myDesignator: TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
   ) extends NamedType
       with SingletonType {
@@ -835,15 +848,18 @@ object Types {
         case tp =>
           tp.findMember(name, pre)
 
-    protected def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): TermRef =
+    protected def withPrefix(prefix: Prefix, cachedSymbol: ThisSymbolType | Null): TermRef =
       new TermRef(prefix, if cachedSymbol != null then cachedSymbol else designator)
   }
 
   object TermRef:
-    def apply(prefix: Type, name: TermName): TermRef = new TermRef(prefix, name)
-    def apply(prefix: Type, symbol: TermSymbol): TermRef = new TermRef(prefix, symbol)
-    private[tastyquery] def apply(prefix: Type, designator: LookupIn): TermRef = new TermRef(prefix, designator)
-    private[tastyquery] def apply(prefix: Type, external: Scala2ExternalSymRef): TermRef = new TermRef(prefix, external)
+    def apply(prefix: Prefix, name: TermName): TermRef = new TermRef(prefix, name)
+    def apply(prefix: Prefix, symbol: TermSymbol): TermRef = new TermRef(prefix, symbol)
+
+    private[tastyquery] def apply(prefix: Prefix, designator: LookupIn): TermRef = new TermRef(prefix, designator)
+
+    private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): TermRef =
+      new TermRef(prefix, external)
   end TermRef
 
   final class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends Type {
@@ -880,8 +896,10 @@ object Types {
     override def toString(): String = s"PackageRef($fullyQualifiedName)"
   }
 
-  final class TypeRef private (val prefix: Type, private var myDesignator: TypeName | TypeSymbol | Scala2ExternalSymRef)
-      extends NamedType {
+  final class TypeRef private (
+    val prefix: Prefix,
+    private var myDesignator: TypeName | TypeSymbol | Scala2ExternalSymRef
+  ) extends NamedType {
 
     type ThisName = TypeName
     type ThisSymbolType = TypeSymbol
@@ -914,22 +932,17 @@ object Types {
         case sym: TypeSymbolWithBounds =>
           sym.upperBound.findMember(name, pre)
 
-    protected def withPrefix(prefix: Type, cachedSymbol: ThisSymbolType | Null): TypeRef =
+    protected def withPrefix(prefix: Prefix, cachedSymbol: ThisSymbolType | Null): TypeRef =
       new TypeRef(prefix, if cachedSymbol != null then cachedSymbol else designator)
   }
 
   object TypeRef:
-    def apply(prefix: Type, name: TypeName): TypeRef = new TypeRef(prefix, name)
-    def apply(prefix: Type, symbol: TypeSymbol): TypeRef = new TypeRef(prefix, symbol)
-    private[tastyquery] def apply(prefix: Type, external: Scala2ExternalSymRef): TypeRef = new TypeRef(prefix, external)
+    def apply(prefix: Prefix, name: TypeName): TypeRef = new TypeRef(prefix, name)
+    def apply(prefix: Prefix, symbol: TypeSymbol): TypeRef = new TypeRef(prefix, symbol)
+
+    private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): TypeRef =
+      new TypeRef(prefix, external)
   end TypeRef
-
-  object NoPrefix extends Type {
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
-      throw new AssertionError(s"Cannot find member in NoPrefix")
-
-    override def toString(): String = "NoPrefix"
-  }
 
   final class ThisType(val tref: TypeRef) extends PathType with SingletonType {
     override def underlying(using Context): Type =

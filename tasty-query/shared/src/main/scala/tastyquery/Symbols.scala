@@ -289,7 +289,7 @@ object Symbols {
       if is(Module) then declaredType.classSymbol
       else None
 
-    private[tastyquery] final def declaredTypeAsSeenFrom(prefix: Type)(using Context): Type =
+    private[tastyquery] final def declaredTypeAsSeenFrom(prefix: Prefix)(using Context): Type =
       declaredType.asSeenFrom(prefix, owner)
 
     private def isConstructor: Boolean =
@@ -424,7 +424,7 @@ object Symbols {
     final def aliasedType(using Context): Type =
       typeDef.asInstanceOf[TypeMemberDefinition.TypeAlias].alias
 
-    private[tastyquery] def aliasedTypeAsSeenFrom(pre: Type)(using Context): Type =
+    private[tastyquery] def aliasedTypeAsSeenFrom(pre: Prefix)(using Context): Type =
       aliasedType.asSeenFrom(pre, owner)
 
     final def bounds(using Context): TypeBounds = typeDef match

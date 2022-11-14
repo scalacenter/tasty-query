@@ -50,10 +50,10 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   private type AnyDesignator = Symbol | Name | LookupIn | Scala2ExternalSymRef
 
   private object TypeRefInternal:
-    def unapply(tpe: TypeRef): Some[(Type, AnyDesignator)] = Some((tpe.prefix, tpe.designatorInternal))
+    def unapply(tpe: TypeRef): Some[(Prefix, AnyDesignator)] = Some((tpe.prefix, tpe.designatorInternal))
 
   private object TermRefInternal:
-    def unapply(tpe: TermRef): Some[(Type, AnyDesignator)] = Some((tpe.prefix, tpe.designatorInternal))
+    def unapply(tpe: TermRef): Some[(Prefix, AnyDesignator)] = Some((tpe.prefix, tpe.designatorInternal))
 
   /** Extractors for `Type`s.
     *

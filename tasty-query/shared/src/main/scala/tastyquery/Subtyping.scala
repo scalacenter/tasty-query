@@ -292,7 +292,7 @@ private[tastyquery] object Subtyping:
       false
   end isNullable
 
-  private def isSubprefix(pre1: Type, pre2: Type)(using Context): Boolean =
+  private def isSubprefix(pre1: Prefix, pre2: Prefix)(using Context): Boolean =
     pre1 match
       case NoPrefix =>
         pre2 eq NoPrefix
@@ -301,8 +301,10 @@ private[tastyquery] object Subtyping:
         pre2 match
           case pre2: PackageRef => pre1.symbol == pre2.symbol
           case _                => false
-      case _ =>
-        (pre2 ne NoPrefix) && isSubtype(pre1, pre2)
+      case pre1: Type =>
+        pre2 match
+          case pre2: Type => isSubtype(pre1, pre2)
+          case NoPrefix   => false
   end isSubprefix
 
   private def isBottom(tp: Type)(using Context): Boolean =

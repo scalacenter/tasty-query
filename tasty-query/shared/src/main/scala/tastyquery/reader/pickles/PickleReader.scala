@@ -370,10 +370,11 @@ private[pickles] class PickleReader {
     *  Package references should be TermRefs or ThisTypes but it was observed that
     *  nsc sometimes pickles them as TypeRefs instead.
     */
-  private def readPrefix()(using Context, PklStream, Entries, Index): Type = readTypeRef() match {
-    //case pre: TypeRef if pre.symbol.is(Package) => pre.symbol.thisType
-    case pre => pre
-  }
+  private def readPrefixRef()(using Context, PklStream, Entries, Index): Prefix =
+    at(pkl.readNat())(readTypeOrPrefix()) match
+      //case pre: TypeRef if pre.symbol.is(Package) => pre.symbol.thisType
+      case pre => pre
+  end readPrefixRef
 
   private def readTypeRef()(using Context, PklStream, Entries, Index): Type =
     at(pkl.readNat())(readType())
@@ -384,8 +385,13 @@ private[pickles] class PickleReader {
     *        the flag say that a type of kind * is expected, so that PolyType(tps, restpe) can be disambiguated to PolyType(tps, NullaryMethodType(restpe))
     *        (if restpe is not a ClassInfoType, a MethodType or a NullaryMethodType, which leaves TypeRef/SingletonType -- the latter would make the polytype a type constructor)
     */
-  private def readType()(using Context, PklStream, Entries, Index): Type = {
-    def select(pre: Type, sym: TermOrTypeSymbol): Type =
+  private def readType()(using Context, PklStream, Entries, Index): Type =
+    readTypeOrPrefix() match
+      case tpe: Type => tpe
+      case NoPrefix  => errorBadSignature("unexpected NoPrefix")
+
+  private def readTypeOrPrefix()(using Context, PklStream, Entries, Index): Prefix = {
+    def select(pre: Prefix, sym: TermOrTypeSymbol): Type =
       // structural members need to be selected by name, their symbols are only
       // valid in the synthetic refinement class that defines them.
       /*TODO if !pre.isInstanceOf[ThisType] && isRefinementClass(sym.owner) then pre.select(sym.name)
@@ -413,7 +419,7 @@ private[pickles] class PickleReader {
           case _: NoExternalSymbolRef =>
             throw Scala2PickleFormatException("cannot construct a THIStpe for NoSymbol")
       case SINGLEtpe =>
-        val pre = readPrefix()
+        val pre = readPrefixRef()
         val designator = readMaybeExternalSymbolRef()
         designator match
           case sym: PackageSymbol          => sym.packageRef
@@ -429,7 +435,7 @@ private[pickles] class PickleReader {
           case c: Constant => ConstantType(c)
           case tp: TermRef => tp
       case TYPEREFtpe =>
-        var pre = readPrefix()
+        var pre = readPrefixRef()
         val designator = readMaybeExternalSymbolRef()
         /*pre match {
           case thispre: ThisType =>
@@ -711,13 +717,13 @@ private[reader] object PickleReader {
   }
 
   final class ExternalSymbolRef(owner: MaybeExternalSymbol, name: Name) {
-    def toTypeRef(pre: Type)(using Context): TypeRef =
+    def toTypeRef(pre: Prefix)(using Context): TypeRef =
       toNamedType(pre).asInstanceOf[TypeRef]
 
-    def toTermRef(pre: Type)(using Context): TermRef =
+    def toTermRef(pre: Prefix)(using Context): TermRef =
       toNamedType(pre).asInstanceOf[TermRef]
 
-    def toNamedType(pre: Type)(using Context): NamedType =
+    def toNamedType(pre: Prefix)(using Context): NamedType =
       NamedType(pre, toScala2ExternalSymRef)
 
     private def toScala2ExternalSymRef: Scala2ExternalSymRef =
