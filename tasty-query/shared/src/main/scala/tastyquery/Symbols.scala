@@ -150,6 +150,15 @@ object Symbols {
       case cls: ClassSymbol => cls.is(Module) && cls.owner.isStaticOwner
       case _                => false
 
+    private[Symbols] final def staticOwnerPrefix(using Context): Type = this match
+      case pkg: PackageSymbol =>
+        pkg.packageRef
+      case cls: ClassSymbol if cls.is(Module) =>
+        cls.owner.staticOwnerPrefix.select(cls.moduleValue.get)
+      case _ =>
+        throw AssertionError(s"Cannot construct static owner prefix for non-static-owner symbol $this")
+    end staticOwnerPrefix
+
     private def nameWithPrefix(addPrefix: Symbol => Boolean): FullyQualifiedName =
       if isRoot then FullyQualifiedName.rootPackageName
       else
@@ -288,6 +297,10 @@ object Symbols {
     final def moduleClass(using Context): Option[ClassSymbol] =
       if is(Module) then declaredType.classSymbol
       else None
+
+    final def staticRef(using Context): TermRef =
+      require(isStatic, s"Cannot construct a staticRef for non-static symbol $this")
+      TermRef(owner.staticOwnerPrefix, this)
 
     private[tastyquery] final def declaredTypeAsSeenFrom(prefix: Prefix)(using Context): Type =
       declaredType.asSeenFrom(prefix, owner)

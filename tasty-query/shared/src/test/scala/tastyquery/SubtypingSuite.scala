@@ -73,10 +73,10 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     ctx.findTopLevelModuleClass("scala.Predef")
 
   def PredefPrefix(using Context): Type =
-    PredefModuleClass.accessibleThisType
+    ctx.findStaticTerm("scala.Predef").staticRef
 
   def ScalaPackageObjectPrefix(using Context): Type =
-    ctx.findTopLevelModuleClass("scala.package").accessibleThisType
+    ctx.findStaticTerm("scala.package").staticRef
 
   def javaLangPrefix(using Context): Type =
     defn.javaLangPackage.packageRef
