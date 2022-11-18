@@ -803,13 +803,6 @@ object Symbols {
       }
     end findMember
 
-    /** Get the self type of this class, as if viewed from an external package */
-    private[tastyquery] final def accessibleThisType: TypeRef =
-      owner match
-        case pre: PackageSymbol => TypeRef(pre.packageRef, this)
-        case pre: ClassSymbol   => TypeRef(pre.accessibleThisType, this)
-        case _                  => TypeRef(NoPrefix, this)
-
     private var myTypeRef: TypeRef | Null = null
 
     private[tastyquery] final def typeRef(using Context): TypeRef =
@@ -818,7 +811,7 @@ object Symbols {
       else
         val pre = owner match
           case owner: PackageSymbol => owner.packageRef
-          case owner: ClassSymbol   => owner.accessibleThisType
+          case owner: ClassSymbol   => owner.thisType
           case _                    => NoPrefix
         val typeRef = TypeRef(pre, this)
         myTypeRef = typeRef
