@@ -824,9 +824,7 @@ object Symbols {
       val local = myThisType
       if local != null then local
       else
-        val computed = owner match
-          case owner: ClassSymbol => ThisType(TypeRef(owner.thisType, this))
-          case _                  => ThisType(typeRef)
+        val computed = ThisType(typeRef)
         myThisType = computed
         computed
     end thisType
