@@ -525,7 +525,7 @@ object Symbols {
       * - for `object class C[$]` => `object val C`
       */
     final def moduleValue(using Context): Option[TermSymbol] = owner match
-      case scope: PackageSymbol if this.is(ModuleClass) =>
+      case scope: DeclaringSymbol if this.is(ModuleClass) =>
         scope.getDecl(this.name.sourceObjectName).collect { case sym: TermSymbol =>
           sym
         }
