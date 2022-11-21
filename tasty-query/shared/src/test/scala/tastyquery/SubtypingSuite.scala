@@ -18,6 +18,7 @@ import tastyquery.Trees.*
 import tastyquery.Types.*
 
 import Paths.*
+import TestUtils.*
 
 class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   object EquivResult:
@@ -95,17 +96,6 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
 
   def mutableSeqOf(tpe: Type)(using Context): Type =
     ctx.findTopLevelClass("scala.collection.mutable.Seq").typeRef.appliedTo(tpe)
-
-  def findLocalValDef(body: Tree, name: TermName)(using Context): TermSymbol =
-    var result: Option[TermSymbol] = None
-    body.walkTree {
-      case vd: ValDef if vd.name == name => result = Some(vd.symbol)
-      case _                             => ()
-    }
-    result.getOrElse {
-      throw new AssertionError(s"Could not find a local `val $name` in body\n$body")
-    }
-  end findLocalValDef
 
   testWithContext("same-monomorphic-class") {
     assertEquiv(defn.IntType, defn.IntClass.typeRef).withRef[Int, scala.Int]
