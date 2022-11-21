@@ -1252,9 +1252,13 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   def companionClassFullCycle(owner: DeclaringSymbol, baseName: String)(using Context, munit.Location): Unit = {
     val cls: ClassSymbol = owner.getDecl(typeName(baseName)).get.asClass
     val moduleClass: ClassSymbol = owner.getDecl(moduleClassName(baseName)).get.asClass
+    val moduleValue: TermSymbol = owner.getDecl(termName(baseName)).get.asTerm
 
-    assert(cls == moduleClass.companionClass.get)
-    assert(moduleClass.companionClass.get == cls)
+    assert(clue(cls.companionClass) == Some(moduleClass))
+    assert(clue(moduleClass.companionClass) == Some(cls))
+
+    assert(clue(cls.moduleValue) == None)
+    assert(clue(moduleClass.moduleValue) == Some(moduleValue))
   }
 
   testWithContext("companion-tests-module-value") {

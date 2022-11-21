@@ -150,6 +150,15 @@ object Symbols {
       case cls: ClassSymbol => cls.is(Module) && cls.owner.isStaticOwner
       case _                => false
 
+    private[Symbols] final def staticOwnerPrefix(using Context): Type = this match
+      case pkg: PackageSymbol =>
+        pkg.packageRef
+      case cls: ClassSymbol if cls.is(Module) =>
+        cls.owner.staticOwnerPrefix.select(cls.moduleValue.get)
+      case _ =>
+        throw AssertionError(s"Cannot construct static owner prefix for non-static-owner symbol $this")
+    end staticOwnerPrefix
+
     private def nameWithPrefix(addPrefix: Symbol => Boolean): FullyQualifiedName =
       if isRoot then FullyQualifiedName.rootPackageName
       else
@@ -288,6 +297,10 @@ object Symbols {
     final def moduleClass(using Context): Option[ClassSymbol] =
       if is(Module) then declaredType.classSymbol
       else None
+
+    final def staticRef(using Context): TermRef =
+      require(isStatic, s"Cannot construct a staticRef for non-static symbol $this")
+      TermRef(owner.staticOwnerPrefix, this)
 
     private[tastyquery] final def declaredTypeAsSeenFrom(prefix: Prefix)(using Context): Type =
       declaredType.asSeenFrom(prefix, owner)
@@ -512,7 +525,7 @@ object Symbols {
       * - for `object class C[$]` => `object val C`
       */
     final def moduleValue(using Context): Option[TermSymbol] = owner match
-      case scope: PackageSymbol if this.is(ModuleClass) =>
+      case scope: DeclaringSymbol if this.is(ModuleClass) =>
         scope.getDecl(this.name.sourceObjectName).collect { case sym: TermSymbol =>
           sym
         }
@@ -790,13 +803,6 @@ object Symbols {
       }
     end findMember
 
-    /** Get the self type of this class, as if viewed from an external package */
-    private[tastyquery] final def accessibleThisType: TypeRef =
-      owner match
-        case pre: PackageSymbol => TypeRef(pre.packageRef, this)
-        case pre: ClassSymbol   => TypeRef(pre.accessibleThisType, this)
-        case _                  => TypeRef(NoPrefix, this)
-
     private var myTypeRef: TypeRef | Null = null
 
     private[tastyquery] final def typeRef(using Context): TypeRef =
@@ -805,7 +811,7 @@ object Symbols {
       else
         val pre = owner match
           case owner: PackageSymbol => owner.packageRef
-          case owner: ClassSymbol   => owner.accessibleThisType
+          case owner: ClassSymbol   => owner.thisType
           case _                    => NoPrefix
         val typeRef = TypeRef(pre, this)
         myTypeRef = typeRef
@@ -818,9 +824,7 @@ object Symbols {
       val local = myThisType
       if local != null then local
       else
-        val computed = owner match
-          case owner: ClassSymbol => ThisType(TypeRef(owner.thisType, this))
-          case _                  => ThisType(typeRef)
+        val computed = ThisType(typeRef)
         myThisType = computed
         computed
     end thisType

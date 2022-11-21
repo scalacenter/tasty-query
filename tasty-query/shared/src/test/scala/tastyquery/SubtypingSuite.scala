@@ -73,10 +73,10 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     ctx.findTopLevelModuleClass("scala.Predef")
 
   def PredefPrefix(using Context): Type =
-    PredefModuleClass.accessibleThisType
+    ctx.findStaticTerm("scala.Predef").staticRef
 
   def ScalaPackageObjectPrefix(using Context): Type =
-    ctx.findTopLevelModuleClass("scala.package").accessibleThisType
+    ctx.findStaticTerm("scala.package").staticRef
 
   def javaLangPrefix(using Context): Type =
     defn.javaLangPackage.packageRef
@@ -468,5 +468,16 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       .withRef[refy.AliasOfAbstractType, refyAlias.AliasOfAbstractType]
     assertEquiv(yAlias.select(tname"AliasOfAbstractType"), defn.StringType)
       .withRef[refyAlias.AliasOfAbstractType, JString]
+  }
+
+  testWithContext("simple-paths-in-subclasses") {
+    import subtyping.paths.NestedClasses
+
+    val paths = "subtyping.paths"
+    val ParentClass = ctx.findStaticClass(s"$paths.NestedClasses.Parent")
+    val inner = ctx.findStaticTerm(s"$paths.NestedClasses.inner")
+
+    assertNeitherSubtype(inner.declaredType, defn.IntType).withRef[NestedClasses.inner.type, Int]
+    assertStrictSubtype(inner.declaredType, ParentClass.typeRef).withRef[NestedClasses.inner.type, NestedClasses.Parent]
   }
 end SubtypingSuite

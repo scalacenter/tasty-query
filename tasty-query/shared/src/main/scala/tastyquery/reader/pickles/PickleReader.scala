@@ -268,7 +268,7 @@ private[pickles] class PickleReader {
         storeResultInEntries(sym)
         val ownerPrefix = owner.asInstanceOf[DeclaringSymbol] match
           case owner: PackageSymbol => owner.packageRef
-          case owner: ClassSymbol   => owner.accessibleThisType
+          case owner: ClassSymbol   => owner.thisType
         sym.withDeclaredType(TypeRef(ownerPrefix, sym.name.withObjectSuffix.toTypeName))
         sym
       case _ =>
@@ -407,7 +407,7 @@ private[pickles] class PickleReader {
       case THIStpe =>
         readMaybeExternalSymbolRef() match
           case sym: ClassSymbol =>
-            sym.accessibleThisType
+            sym.thisType
           case sym: PackageSymbol =>
             sym.packageRef
           case sym: Symbol =>
