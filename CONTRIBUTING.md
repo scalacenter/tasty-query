@@ -85,3 +85,34 @@ sbt:root> scalafmtAll
 
 #### Edit Scalafmt Config:
 You can edit the [config](https://scalameta.org/scalafmt/docs/configuration.html) in the file [.scalafmt.conf](.scalafmt.conf)
+
+## Publishing a Release
+
+We use [sbt-ci-release] and [sbt-version-policy].
+
+1. Push a tag starting with `v` (e.g., `v1.2.3`)
+2. After the release succeeds and the artifacts are publicly available, push a
+   commit to reset the compatibility intention in `build.sbt`:
+   ~~~ scala
+   versionPolicyIntention := Compatibility.SourceAndBinaryCompatible
+   ~~~
+
+### How to Introduce Breaking Changes
+
+If you try to introduce a breaking change, the task `versionPolicyCheck` fails
+with a message like “Module xxx is not binary compatible with version x.y.z. You
+have to relax your compatibility intention by changing the value of
+`versionPolicyIntention`”.
+
+To fix the issue, configure the key `versionPolicyIntention` according to the
+nature of the breaking changes:
+
+~~~ scala
+// to introduce a source incompatibility
+versionPolicyIntention := Compatibility.BinaryCompatible
+// or, to introduce a binary incompatibility
+versionPolicyIntention := Compatibility.None
+~~~
+
+[sbt-ci-release]: https://github.com/sbt/sbt-ci-release
+[sbt-version-policy]: https://github.com/scalacenter/sbt-version-policy

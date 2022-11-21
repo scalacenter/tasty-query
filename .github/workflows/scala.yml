@@ -16,6 +16,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+      with:
+        # fetch the Git tags for sbt-dynver and sbt-version-policy to work correctly
+        fetch-depth: 0
     - name: Set up JDK ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
@@ -32,3 +35,5 @@ jobs:
       run: sbt "examples/run simple_trees.TypeMember"
     - name: Run scalafmt check
       run: sbt scalafmtCheck
+    - name: Run version policy check
+      run: sbt versionPolicyCheck
