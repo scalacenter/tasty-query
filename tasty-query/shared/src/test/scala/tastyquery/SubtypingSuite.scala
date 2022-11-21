@@ -480,4 +480,49 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertNeitherSubtype(inner.declaredType, defn.IntType).withRef[NestedClasses.inner.type, Int]
     assertStrictSubtype(inner.declaredType, ParentClass.typeRef).withRef[NestedClasses.inner.type, NestedClasses.Parent]
   }
+
+  testWithContext("intersection-types") {
+    assertStrictSubtype(
+      Types.AndType.make(defn.IntType, defn.StringType),
+      defn.IntType
+    ).withRef[Int & String, Int]
+
+    assertStrictSubtype(
+      Types.AndType.make(defn.StringType, defn.IntType),
+      defn.IntType
+    ).withRef[String & Int, Int]
+
+    assertEquiv(
+      Types.AndType.make(defn.IntType, defn.StringType),
+      Types.AndType.make(defn.StringType, defn.IntType)
+    ).withRef[Int & String, String & Int]
+
+    assertNeitherSubtype(
+      Types.AndType.make(defn.IntType, defn.StringType),
+      Types.AndType.make(defn.IntType, defn.BooleanType)
+    ).withRef[Int & String, Int & Boolean]
+  }
+
+  testWithContext("union-types") {
+    assertStrictSubtype(
+      defn.IntType,
+      Types.OrType.make(defn.IntType, defn.StringType)
+    ).withRef[Int, Int | String]
+
+    assertStrictSubtype(
+      defn.IntType,
+      Types.OrType.make(defn.StringType, defn.IntType)
+    ).withRef[Int, String | Int]
+
+    assertEquiv(
+      Types.OrType.make(defn.IntType, defn.StringType),
+      Types.OrType.make(defn.StringType, defn.IntType)
+    ).withRef[Int | String, String | Int]
+
+    assertNeitherSubtype(
+      Types.OrType.make(defn.IntType, defn.StringType),
+      Types.OrType.make(defn.IntType, defn.BooleanType)
+    ).withRef[Int | String, Int | Boolean]
+  }
+
 end SubtypingSuite
