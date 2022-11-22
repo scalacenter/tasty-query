@@ -263,7 +263,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   testUnpickle("export", simple_trees / tname"Export") { tree =>
     val simpleExport: StructureCheck = {
       case Export(
-            Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("first")),
+            Select(This(TypeIdent(TypeName(SimpleName("Export")))), SimpleName("first")),
             ImportSelector(ImportIdent(SimpleName("status")), None, None) :: Nil
           ) =>
     }
@@ -271,7 +271,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
     val omittedAndWildcardExport: StructureCheck = {
       case Export(
-            Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("second")),
+            Select(This(TypeIdent(TypeName(SimpleName("Export")))), SimpleName("second")),
             // An omitting selector is simply a rename to _
             ImportSelector(ImportIdent(SimpleName("status")), Some(ImportIdent(nme.Wildcard)), None) ::
             ImportSelector(ImportIdent(nme.Wildcard), None, None) :: Nil
@@ -281,7 +281,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
     val givenExport: StructureCheck = {
       case Export(
-            Select(This(Some(TypeIdent(TypeName(SimpleName("Export"))))), SimpleName("givens")),
+            Select(This(TypeIdent(TypeName(SimpleName("Export")))), SimpleName("givens")),
             // A given selector has an empty name
             ImportSelector(ImportIdent(nme.EmptyTermName), None, Some(TypeIdent(TypeName(SimpleName("AnyRef"))))) :: Nil
           ) =>
@@ -700,7 +700,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
     // x = 2
     val assignmentMatch: StructureCheck = {
-      case Assign(Select(This(Some(TypeIdent(TypeName(SimpleName("Var"))))), SimpleName("x")), Literal(Constant(2))) =>
+      case Assign(Select(This(TypeIdent(TypeName(SimpleName("Var")))), SimpleName("x")), Literal(Constant(2))) =>
     }
     assert(containsSubtree(assignmentMatch)(clue(tree)))
   }
@@ -763,8 +763,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     // useGiven
     val withGiven: StructureCheck = {
       case Apply(
-            Select(This(Some(TypeIdent(TypeName(SimpleName("UsingGiven"))))), SignedName(SimpleName("useGiven"), _, _)),
-            Select(This(Some(TypeIdent(TypeName(SimpleName("UsingGiven"))))), SimpleName("given_Int")) :: Nil
+            Select(This(TypeIdent(TypeName(SimpleName("UsingGiven")))), SignedName(SimpleName("useGiven"), _, _)),
+            Select(This(TypeIdent(TypeName(SimpleName("UsingGiven")))), SimpleName("given_Int")) :: Nil
           ) =>
     }
     assert(containsSubtree(withGiven)(clue(tree)))
@@ -772,7 +772,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     // useGiven(using 0)
     val explicitUsing: StructureCheck = {
       case Apply(
-            Select(This(Some(TypeIdent(TypeName(SimpleName("UsingGiven"))))), SignedName(SimpleName("useGiven"), _, _)),
+            Select(This(TypeIdent(TypeName(SimpleName("UsingGiven")))), SignedName(SimpleName("useGiven"), _, _)),
             Literal(Constant(0)) :: Nil
           ) =>
     }
@@ -864,7 +864,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val applicationMatch: StructureCheck = {
       case Apply(
             Select(
-              This(Some(TypeIdent(TypeName(SimpleName("EtaExpansion"))))),
+              This(TypeIdent(TypeName(SimpleName("EtaExpansion")))),
               SignedName(SimpleName("takesFunction"), _, _)
             ),
             Block(
@@ -876,7 +876,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                   Some(
                     Apply(
                       Select(
-                        This(Some(TypeIdent(TypeName(SimpleName("EtaExpansion"))))),
+                        This(TypeIdent(TypeName(SimpleName("EtaExpansion")))),
                         SignedName(SimpleName("intMethod"), _, _)
                       ),
                       List(Ident(SimpleName("x")))
@@ -911,7 +911,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                       Apply(
                         Apply(
                           Select(
-                            This(Some(TypeIdent(TypeName(SimpleName("PartialApplication"))))),
+                            This(TypeIdent(TypeName(SimpleName("PartialApplication")))),
                             SignedName(SimpleName("withManyParams"), _, _)
                           ),
                           Literal(Constant(0)) :: Nil
@@ -961,10 +961,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   testUnpickle("named-argument", simple_trees / tname"NamedArgument") { tree =>
     val withNamedArgumentApplication: StructureCheck = {
       case Apply(
-            Select(
-              This(Some(TypeIdent(TypeName(SimpleName("NamedArgument"))))),
-              SignedName(SimpleName("withNamed"), _, _)
-            ),
+            Select(This(TypeIdent(TypeName(SimpleName("NamedArgument")))), SignedName(SimpleName("withNamed"), _, _)),
             List(Literal(Constant(0)), NamedArg(SimpleName("second"), Literal(Constant(1))))
           ) =>
     }
@@ -979,12 +976,12 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickle("super", simple_trees / tname"Super") { tree =>
-    val superMatch: StructureCheck = { case Super(This(Some(TypeIdent(TypeName(SimpleName("Super"))))), None) =>
+    val superMatch: StructureCheck = { case Super(This(TypeIdent(TypeName(SimpleName("Super")))), None) =>
     }
     assert(containsSubtree(superMatch)(clue(tree)))
 
     val mixinSuper: StructureCheck = {
-      case Super(This(Some(TypeIdent(TypeName(SimpleName("Super"))))), Some(TypeIdent(TypeName(SimpleName("Base"))))) =>
+      case Super(This(TypeIdent(TypeName(SimpleName("Super")))), Some(TypeIdent(TypeName(SimpleName("Base"))))) =>
     }
     assert(containsSubtree(mixinSuper)(clue(tree)))
   }
@@ -1309,7 +1306,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             ValDef(
               SimpleName("HasInlinedMethod_this"),
               _,
-              Some(Select(This(Some(TypeIdent(TypeName(SimpleName("InlinedCall"))))), SimpleName("withInlineMethod"))),
+              Some(Select(This(TypeIdent(TypeName(SimpleName("InlinedCall")))), SimpleName("withInlineMethod"))),
               _
             ) :: Nil
           ) =>
@@ -1899,8 +1896,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case DefDef(
             SimpleName("m"),
             _ :: Nil,
-            SingletonTypeTree(This(Some(TypeIdent(TypeName(SimpleName("ThisType")))))),
-            Some(This(Some(TypeIdent(TypeName(SimpleName("ThisType")))))),
+            SingletonTypeTree(This(TypeIdent(TypeName(SimpleName("ThisType"))))),
+            Some(This(TypeIdent(TypeName(SimpleName("ThisType"))))),
             _
           ) =>
     }

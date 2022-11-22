@@ -284,14 +284,11 @@ object Trees {
   end Select
 
   /** `qual.this` */
-  // TODO: to assign the type if qualifier is empty, traverse the outer contexts to find the first enclosing class
-  final case class This(qualifier: Option[TypeIdent])(span: Span) extends TermTree(span) {
+  final case class This(qualifier: TypeIdent)(span: Span) extends TermTree(span) {
     protected final def calculateType(using Context): Type =
-      qualifier.fold(NoType)(q =>
-        q.toType match
-          case pkg: PackageRef => pkg
-          case tref: TypeRef   => ThisType(tref)
-      )
+      qualifier.toType match
+        case pkg: PackageRef => pkg
+        case tref: TypeRef   => ThisType(tref)
 
     override final def withSpan(span: Span): This = This(qualifier)(span)
   }

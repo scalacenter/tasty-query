@@ -725,7 +725,7 @@ private[tasties] class TreeUnpickler(
       val spn = span
       reader.readByte()
       val qualifier = readTypeTree.asInstanceOf[TypeIdent]
-      This(Some(qualifier))(spn)
+      This(qualifier)(spn)
     case SUPER =>
       val spn = span
       reader.readByte()
@@ -852,7 +852,7 @@ private[tasties] class TreeUnpickler(
       val spn = span
       reader.readByte()
       val typ = readType.asInstanceOf[TypeRef]
-      This(Some(TypeIdent(typ.name)(typ)(spn)))(spn)
+      This(TypeIdent(typ.name)(typ)(spn))(spn)
     case TERMREF =>
       val spn = span
       reader.readByte()
