@@ -787,19 +787,20 @@ object Symbols {
     end baseTypeOf
 
     private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[Symbol] =
-      def lookup(parents: List[Type]): Option[Symbol] = parents match
-        case p :: ps =>
-          p.classSymbol.flatMap { parentCls =>
-            // val inherited = parentd.membersNamedNoShadowingBasedOnFlags(name, required, excluded | Private)
-            // denots1.union(inherited.mapInherited(ownDenots, denots1, thisType))
-            parentCls.findMember(pre, name) // lookup in parents of parent
-          }.orElse(lookup(ps))
-        case nil => None
+      def lookup(lin: List[ClassSymbol]): Option[Symbol] = lin match
+        case parentCls :: linRest =>
+          parentCls.getDecl(name) match
+            case Some(sym) if !sym.is(Private) =>
+              Some(sym)
+            case _ =>
+              lookup(linRest)
+        case Nil =>
+          None
       end lookup
 
-      getDecl(name).orElse {
+      getDecl(name).filter(!_.is(ParamAccessor)).orElse {
         if name == nme.Constructor then None
-        else lookup(parents)
+        else lookup(linearization.tail)
       }
     end findMember
 

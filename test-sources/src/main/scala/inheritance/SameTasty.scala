@@ -6,13 +6,16 @@ object SameTasty:
     type FooType
     def foo: FooType
     def getFoo(): FooType = foo
+    //def maybePrivateMember: Int = 5
 
   class Child extends Parent:
     type FooType = Int
     def foo: FooType = 23
+    private def maybePrivateMember: Int = 6
 
   class Sub extends Child:
     def foo3: FooType = foo
+    def maybePrivateMember: Int = 7
 
   trait Mixin:
     type BarType

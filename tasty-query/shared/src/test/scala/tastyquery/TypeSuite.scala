@@ -10,6 +10,7 @@ import tastyquery.Trees.*
 import tastyquery.Types.*
 
 import Paths.*
+import TestUtils.*
 
 class TypeSuite extends UnrestrictedUnpicklingSuite {
   extension [T](elems: List[T])
@@ -1271,6 +1272,52 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
   testWithContext("companion-tests-class-nested-module-value") {
     companionClassFullCycle(ctx.findTopLevelClass("companions.CompanionObject"), "ClassNestedObject")
+  }
+
+  testWithContext("findMember and private members") {
+    val ParentClass = ctx.findStaticClass("inheritance.PrivateOverrides.Parent")
+    val ChildClass = ctx.findStaticClass("inheritance.PrivateOverrides.Child")
+
+    val setupMethod = ctx.findTopLevelModuleClass("inheritance.PrivateOverrides").findNonOverloadedDecl(name"testSetup")
+    val setupMethodDef = setupMethod.tree.get.asInstanceOf[DefDef]
+
+    // Direct `findMember` test (whitebox)
+    val child = findLocalValDef(setupMethodDef.rhs.get, name"child")
+    val memberSym = ChildClass.findMember(TermRef(NoPrefix, child), termName("y")).get
+    assert(clue(memberSym.owner) == ParentClass)
+
+    // Test that a Select from outside the class finds the inherited 'y'
+    val selectNode = findTree(setupMethodDef.rhs.get) { case select: Select =>
+      select
+    }
+    val selectTpe = selectNode.tpe.asInstanceOf[TermRef]
+    assert(selectTpe.name == termName("y"))
+    val selectSym = selectTpe.symbol
+    assert(clue(selectSym.owner) == ParentClass)
+    assert(!selectSym.is(ParamAccessor))
+
+    val readLocalYMethod = ChildClass.findNonOverloadedDecl(name"readLocalY")
+    val readLocalYMethodDef = readLocalYMethod.tree.get.asInstanceOf[DefDef]
+
+    // A `this.y` from inside the class finds the inherited 'y'
+    val innerSelectNode = findTree(readLocalYMethodDef.rhs.get) {
+      case select: Select if select.name == termName("y") => select
+    }
+    val innerSelectTpe = innerSelectNode.tpe.asInstanceOf[TermRef]
+    assert(innerSelectTpe.name == termName("y"))
+    val innerSelectSym = innerSelectTpe.symbol
+    assert(clue(innerSelectSym.owner) == ParentClass)
+    assert(!innerSelectSym.is(ParamAccessor))
+
+    // A `y` ident from inside the class finds the param accessor 'y'
+    val innerIdentNode = findTree(readLocalYMethodDef.rhs.get) {
+      case ident: Ident if ident.name == termName("y") => ident
+    }
+    val innerIdentTpe = innerIdentNode.tpe.asInstanceOf[TermRef]
+    assert(innerIdentTpe.name == termName("y"))
+    val innerIdentSym = innerIdentTpe.symbol
+    assert(clue(innerIdentSym.owner) == ChildClass)
+    assert(innerIdentSym.is(ParamAccessor))
   }
 
 }
