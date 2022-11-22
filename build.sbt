@@ -38,13 +38,13 @@ inThisBuild(Def.settings(
   ),
   versionPolicyIntention := Compatibility.None,
   // Ignore dependencies to internal modules whose version is like `1.2.3+4...` (see https://github.com/scalacenter/sbt-version-policy#how-to-integrate-with-sbt-dynver)
-  versionPolicyIgnoredInternalDependencyVersions := Some("^\\d+\\.\\d+\\.\\d+\\+\\d+".r),
-  // Skip `versionCheck` for snapshot releases
-  versionCheck / skip := isSnapshot.value
+  versionPolicyIgnoredInternalDependencyVersions := Some("^\\d+\\.\\d+\\.\\d+\\+\\d+".r)
 ))
 
 val commonSettings = Seq(
-  Test / parallelExecution := false
+  Test / parallelExecution := false,
+  // Skip `versionCheck` for snapshot releases
+  versionCheck / skip := isSnapshot.value
 )
 
 val strictCompileSettings = Seq(
