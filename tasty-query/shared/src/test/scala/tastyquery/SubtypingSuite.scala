@@ -472,20 +472,12 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   }
 
   testWithContext("intersection-types") {
-    assertStrictSubtype(
-      Types.AndType.make(defn.IntType, defn.StringType),
-      defn.IntType
-    ).withRef[Int & String, Int]
+    assertStrictSubtype(Types.AndType.make(defn.IntType, defn.StringType), defn.IntType).withRef[Int & String, Int]
 
-    assertStrictSubtype(
-      Types.AndType.make(defn.StringType, defn.IntType),
-      defn.IntType
-    ).withRef[String & Int, Int]
+    assertStrictSubtype(Types.AndType.make(defn.StringType, defn.IntType), defn.IntType).withRef[String & Int, Int]
 
-    assertEquiv(
-      Types.AndType.make(defn.IntType, defn.StringType),
-      Types.AndType.make(defn.StringType, defn.IntType)
-    ).withRef[Int & String, String & Int]
+    assertEquiv(Types.AndType.make(defn.IntType, defn.StringType), Types.AndType.make(defn.StringType, defn.IntType))
+      .withRef[Int & String, String & Int]
 
     assertNeitherSubtype(
       Types.AndType.make(defn.IntType, defn.StringType),
@@ -494,20 +486,12 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   }
 
   testWithContext("union-types") {
-    assertStrictSubtype(
-      defn.IntType,
-      Types.OrType.make(defn.IntType, defn.StringType)
-    ).withRef[Int, Int | String]
+    assertStrictSubtype(defn.IntType, Types.OrType.make(defn.IntType, defn.StringType)).withRef[Int, Int | String]
 
-    assertStrictSubtype(
-      defn.IntType,
-      Types.OrType.make(defn.StringType, defn.IntType)
-    ).withRef[Int, String | Int]
+    assertStrictSubtype(defn.IntType, Types.OrType.make(defn.StringType, defn.IntType)).withRef[Int, String | Int]
 
-    assertEquiv(
-      Types.OrType.make(defn.IntType, defn.StringType),
-      Types.OrType.make(defn.StringType, defn.IntType)
-    ).withRef[Int | String, String | Int]
+    assertEquiv(Types.OrType.make(defn.IntType, defn.StringType), Types.OrType.make(defn.StringType, defn.IntType))
+      .withRef[Int | String, String | Int]
 
     assertNeitherSubtype(
       Types.OrType.make(defn.IntType, defn.StringType),
