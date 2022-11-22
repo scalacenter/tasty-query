@@ -408,13 +408,19 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     }
     assert(containsSubtree(matchStructure)(clue(tree)))
 
-    val simpleGuard: StructureCheck = { case CaseDef(Literal(Constant(0)), None, body: Block) =>
+    val simpleGuard: StructureCheck = { case CaseDef(ExprPattern(Literal(Constant(0))), None, body: Block) =>
     }
     assert(containsSubtree(simpleGuard)(clue(tree)))
 
     val guardWithAlternatives: StructureCheck = {
       case CaseDef(
-            Alternative(List(Literal(Constant(1)), Literal(Constant(-1)), Literal(Constant(2)))),
+            Alternative(
+              List(
+                ExprPattern(Literal(Constant(1))),
+                ExprPattern(Literal(Constant(-1))),
+                ExprPattern(Literal(Constant(2)))
+              )
+            ),
             None,
             body: Block
           ) =>
@@ -423,7 +429,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
     val guardAndCondition: StructureCheck = {
       case CaseDef(
-            Literal(Constant(7)),
+            ExprPattern(Literal(Constant(7))),
             Some(
               Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("=="), _, _)), Literal(Constant(7)) :: Nil)
             ),
@@ -434,7 +440,13 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
     val alternativesAndCondition: StructureCheck = {
       case CaseDef(
-            Alternative(List(Literal(Constant(3)), Literal(Constant(4)), Literal(Constant(5)))),
+            Alternative(
+              List(
+                ExprPattern(Literal(Constant(3))),
+                ExprPattern(Literal(Constant(4))),
+                ExprPattern(Literal(Constant(5)))
+              )
+            ),
             Some(Apply(Select(Ident(SimpleName("x")), SignedName(SimpleName("<"), _, _)), Literal(Constant(5)) :: Nil)),
             body: Block
           ) =>
@@ -443,7 +455,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
     val defaultWithCondition: StructureCheck = {
       case CaseDef(
-            Ident(nme.Wildcard),
+            WildcardPattern(_),
             Some(
               Apply(
                 Select(
@@ -458,7 +470,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     }
     assert(containsSubtree(defaultWithCondition)(clue(tree)))
 
-    val default: StructureCheck = { case CaseDef(Ident(nme.Wildcard), None, body: Block) =>
+    val default: StructureCheck = { case CaseDef(WildcardPattern(_), None, body: Block) =>
     }
     assert(containsSubtree(default)(clue(tree)))
   }
@@ -466,11 +478,11 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   testUnpickle("match-case-class", simple_trees / tname"PatternMatchingOnCaseClass") { tree =>
     val guardWithAlternatives: StructureCheck = {
       case CaseDef(
-            Typed(
+            TypeTest(
               Unapply(
                 Select(Ident(SimpleName("FirstCase")), SignedName(SimpleName("unapply"), _, _)),
                 Nil,
-                List(Bind(SimpleName("x"), Ident(nme.Wildcard), bindSymbol))
+                List(Bind(SimpleName("x"), WildcardPattern(_), bindSymbol))
               ),
               _
             ),
@@ -513,7 +525,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val tryMatch: StructureCheck = {
       case Try(
             _,
-            CaseDef(Ident(nme.Wildcard), None, Block(Nil, Literal(Constant(0)))) :: Nil,
+            CaseDef(WildcardPattern(_), None, Block(Nil, Literal(Constant(0)))) :: Nil,
             Some(Block(Nil, Literal(Constant(()))))
           ) =>
     }
