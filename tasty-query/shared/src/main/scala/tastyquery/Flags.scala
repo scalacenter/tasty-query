@@ -16,59 +16,69 @@ object Flags:
 
     def |(otherFlags: FlagSet): FlagSet = bits | otherFlags.bits
     def &(otherFlags: FlagSet): FlagSet = bits & otherFlags.bits
+
+    def show: String =
+      val result = new java.lang.StringBuilder
+      for (flag, name) <- allFlags if is(flag) do result.append(" " + name)
+      result.toString().drop(1)
+    end show
   end extension
 
+  private val allFlags = scala.collection.mutable.ArrayBuffer.empty[(Flag, String)]
+
   private var lastFlagIdx = 0
-  private def newFlag(): Flag = {
+  private def newFlag(name: String): Flag = {
     lastFlagIdx += 1
     assert(lastFlagIdx <= 63)
-    1.toLong << lastFlagIdx
+    val flag: Flag = 1.toLong << lastFlagIdx
+    allFlags += flag -> name
+    flag
   }
 
   val EmptyFlagSet: FlagSet = 0L
 
-  val AbsOverride: Flag = newFlag()
-  val Abstract: Flag = newFlag()
-  val Accessor: Flag = newFlag()
-  val Artifact: Flag = newFlag()
-  val Case: Flag = newFlag()
-  val CaseAccessor: Flag = newFlag()
-  val Contravariant: Flag = newFlag()
-  val Covariant: Flag = newFlag()
-  val Deferred: Flag = newFlag()
-  val Enum: Flag = newFlag()
-  val Erased: Flag = newFlag()
-  val Exported: Flag = newFlag()
-  val Extension: Flag = newFlag()
-  val Final: Flag = newFlag()
-  val Given: Flag = newFlag()
-  val Implicit: Flag = newFlag()
-  val Infix: Flag = newFlag()
-  val Inline: Flag = newFlag()
-  val InlineProxy: Flag = newFlag()
-  val Lazy: Flag = newFlag()
-  val Local: Flag = newFlag()
-  val Macro: Flag = newFlag()
-  val Method: Flag = newFlag()
-  val Module: Flag = newFlag()
-  val ModuleVal: Flag = newFlag()
-  val ModuleClass: Flag = newFlag()
-  val Mutable: Flag = newFlag()
-  val NoInitsInterface: Flag = newFlag()
-  val Opaque: Flag = newFlag()
-  val Open: Flag = newFlag()
-  val Override: Flag = newFlag()
-  val ParamAccessor: Flag = newFlag()
-  val Private: Flag = newFlag()
-  val Protected: Flag = newFlag()
-  val Sealed: Flag = newFlag()
-  val SuperParamAlias: Flag = newFlag()
-  val Static: Flag = newFlag()
-  private[tastyquery] val StableRealizable: Flag = newFlag()
-  val Synthetic: Flag = newFlag()
-  val Trait: Flag = newFlag()
-  val Transparent: Flag = newFlag()
-  val TypeParameter: Flag = newFlag()
+  val AbsOverride: Flag = newFlag("AbsOverride")
+  val Abstract: Flag = newFlag("Abstract")
+  val Accessor: Flag = newFlag("Accessor")
+  val Artifact: Flag = newFlag("Artifact")
+  val Case: Flag = newFlag("Case")
+  val CaseAccessor: Flag = newFlag("CaseAccessor")
+  val Contravariant: Flag = newFlag("Contravariant")
+  val Covariant: Flag = newFlag("Covariant")
+  val Deferred: Flag = newFlag("Deferred")
+  val Enum: Flag = newFlag("Enum")
+  val Erased: Flag = newFlag("Erased")
+  val Exported: Flag = newFlag("Exported")
+  val Extension: Flag = newFlag("Extension")
+  val Final: Flag = newFlag("Final")
+  val Given: Flag = newFlag("Given")
+  val Implicit: Flag = newFlag("Implicit")
+  val Infix: Flag = newFlag("Infix")
+  val Inline: Flag = newFlag("Inline")
+  val InlineProxy: Flag = newFlag("InlineProxy")
+  val Lazy: Flag = newFlag("Lazy")
+  val Local: Flag = newFlag("Local")
+  val Macro: Flag = newFlag("Macro")
+  val Method: Flag = newFlag("Method")
+  val Module: Flag = newFlag("Module")
+  val ModuleVal: Flag = newFlag("ModuleVal")
+  val ModuleClass: Flag = newFlag("ModuleClass")
+  val Mutable: Flag = newFlag("Mutable")
+  val NoInitsInterface: Flag = newFlag("NoInitsInterface")
+  val Opaque: Flag = newFlag("Opaque")
+  val Open: Flag = newFlag("Open")
+  val Override: Flag = newFlag("Override")
+  val ParamAccessor: Flag = newFlag("ParamAccessor")
+  val Private: Flag = newFlag("Private")
+  val Protected: Flag = newFlag("Protected")
+  val Sealed: Flag = newFlag("Sealed")
+  val SuperParamAlias: Flag = newFlag("SuperParamAlias")
+  val Static: Flag = newFlag("Static")
+  private[tastyquery] val StableRealizable: Flag = newFlag("StableRealizable")
+  val Synthetic: Flag = newFlag("Synthetic")
+  val Trait: Flag = newFlag("Trait")
+  val Transparent: Flag = newFlag("Transparent")
+  val TypeParameter: Flag = newFlag("TypeParameter")
 
   val VarianceFlags: FlagSet = Covariant | Contravariant
 
