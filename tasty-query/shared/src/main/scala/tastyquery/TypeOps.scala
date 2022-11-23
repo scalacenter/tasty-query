@@ -27,11 +27,11 @@ private[tastyquery] object TypeOps:
         pre match
           case NoPrefix | NoType =>
             tp
-          case _ if cls.isPackage =>
-            tp
           //case pre: SuperType => toPrefix(pre.thistpe, cls, thiscls)
           case pre: Type =>
             cls match
+              case cls: PackageSymbol =>
+                tp
               case cls: ClassSymbol =>
                 if (thiscls.isSubclass(cls) && pre.baseType(thiscls).isDefined)
                   /*if (variance <= 0 && !isLegalPrefix(pre)) // isLegalPrefix always true?
@@ -54,7 +54,10 @@ private[tastyquery] object TypeOps:
                     case Some(normalizedPrefix) => toPrefix(normalizedPrefix, cls.owner.nn, thiscls)
                     case None                   => tp
               case _ =>
-                NoType
+                throw AssertionError(
+                  s"While computing asSeenFrom for $tp;\n"
+                    + s"found unexpected cls = $cls in toPrefix($pre, $cls, $thiscls)"
+                )
       end toPrefix
 
       tp match {
