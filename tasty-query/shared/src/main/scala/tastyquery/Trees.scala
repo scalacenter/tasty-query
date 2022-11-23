@@ -21,7 +21,7 @@ object Trees {
     *     <init>(x$2, x$1)
     *   }
     */
-  private def methPart(tree: Tree): Tree = stripApply(tree) match {
+  private def methPart(tree: TermTree): TermTree = stripApply(tree) match {
     case TypeApply(fn, _) => methPart(fn)
     // case AppliedTypeTree(fn, _) => methPart(fn) // !!! should not be needed
     case Block(stats, expr) => methPart(expr)
@@ -31,7 +31,7 @@ object Trees {
   /** If this is an application, its function part, stripping all
     *  Apply nodes (but leaving TypeApply nodes in). Otherwise the tree itself.
     */
-  private def stripApply(tree: Tree): Tree = tree match {
+  private def stripApply(tree: TermTree): TermTree = tree match {
     case Apply(fn, _) => stripApply(fn)
     case _            => tree
   }
