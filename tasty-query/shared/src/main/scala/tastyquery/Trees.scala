@@ -142,7 +142,7 @@ object Trees {
     }
   end TermTree
 
-  trait DefTree(val symbol: Symbol)
+  sealed trait DefTree(val symbol: Symbol)
 
   final case class PackageDef(pid: PackageSymbol, stats: List[TopLevelTree])(span: Span)
       extends TopLevelTree(span)
