@@ -4,7 +4,6 @@ import scala.annotation.tailrec
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.reflect.TypeTest
 import scala.util.NotGiven
 
 import dotty.tools.tasty.TastyReader
@@ -591,7 +590,7 @@ private[tasties] class TreeUnpickler(
       Some(SelfDef(name, tpt)(tpt.span))
     }
 
-  private def readValOrDefDef(using LocalContext): Tree = {
+  private def readValOrDefDef(using LocalContext): ValOrDefDef = {
     val spn = span
     val start = reader.currentAddr
     val tag = reader.readByte()
@@ -632,7 +631,7 @@ private[tasties] class TreeUnpickler(
     else rec(paramLists)
   end makeDefDefType
 
-  private def readTerms(end: Addr)(using LocalContext): List[Tree] =
+  private def readTerms(end: Addr)(using LocalContext): List[TermTree] =
     reader.until(end)(readTerm)
 
   extension [T <: DefTree](tree: T)
@@ -643,7 +642,56 @@ private[tasties] class TreeUnpickler(
       symbol.withTree(tree)
       tree
 
-  private def readTerm(using LocalContext): Tree = reader.nextByte match {
+  private def readPattern(using LocalContext): PatternTree = reader.nextByte match
+    case IDENT =>
+      val spn = span
+      reader.readByte()
+      val name = readName
+      val typ = readType
+      if name == nme.Wildcard then WildcardPattern(typ)(spn)
+      else ExprPattern(Ident(name)(typ)(spn))(spn)
+    case TYPED =>
+      reader.readByte()
+      reader.readEnd()
+      val body = readPattern
+      val tpt = readTypeTree
+      TypeTest(body, tpt)(body.span.union(tpt.span))
+    case BIND =>
+      val spn = span
+      val start = reader.currentAddr
+      reader.readByte()
+      val end = reader.readEnd()
+      val name = readName
+      val typ = readType
+      val body = readPattern
+      skipModifiers(end)
+      val symbol = localCtx.getSymbol[TermSymbol](start)
+      symbol.withDeclaredType(typ)
+      Bind(name, body, symbol)(spn).definesTreeOf(symbol)
+    case ALTERNATIVE =>
+      reader.readByte()
+      val end = reader.readEnd()
+      val alts = reader.until(end)(readPattern)
+      Alternative(alts)(spanSeq(alts))
+    case UNAPPLY =>
+      val spn = span
+      reader.readByte()
+      val end = reader.readEnd()
+      val fun = readTerm
+      val args = reader.collectWhile(reader.nextByte == IMPLICITarg)({
+        assert(reader.readByte() == IMPLICITarg, posErrorMsg)
+        readTerm
+      })
+      // TODO: use pattern type
+      val patType = readType
+      val patterns = reader.until(end)(readPattern)
+      Unapply(fun, args, patterns)(spn)
+    case _ =>
+      val expr = readTerm
+      ExprPattern(expr)(expr.span)
+  end readPattern
+
+  private def readTerm(using LocalContext): TermTree = reader.nextByte match {
     case IDENT =>
       val spn = span
       reader.readByte()
@@ -759,36 +807,6 @@ private[tasties] class TreeUnpickler(
         reader.readByte()
         new InlineMatch(Some(readTerm), readCases[CaseDef](CaseDefFactory, end))(spn)
       } else Match(readTerm, readCases[CaseDef](CaseDefFactory, end))(spn)
-    case BIND =>
-      val spn = span
-      val start = reader.currentAddr
-      reader.readByte()
-      val end = reader.readEnd()
-      val name = readName
-      val typ = readType
-      val term = readTerm
-      skipModifiers(end)
-      val symbol = localCtx.getSymbol[TermSymbol](start)
-      symbol.withDeclaredType(typ)
-      Bind(name, term, symbol)(spn).definesTreeOf(symbol)
-    case ALTERNATIVE =>
-      reader.readByte()
-      val end = reader.readEnd()
-      val terms = reader.until(end)(readTerm)
-      Alternative(terms)(spanSeq(terms))
-    case UNAPPLY =>
-      val spn = span
-      reader.readByte()
-      val end = reader.readEnd()
-      val fun = readTerm
-      val args = reader.collectWhile(reader.nextByte == IMPLICITarg)({
-        assert(reader.readByte() == IMPLICITarg, posErrorMsg)
-        readTerm
-      })
-      // TODO: use pattern type
-      val patType = readType
-      val patterns = reader.until(end)(readTerm)
-      Unapply(fun, args, patterns)(spn)
     case REPEATED =>
       val spn = span
       reader.readByte()
@@ -901,7 +919,7 @@ private[tasties] class TreeUnpickler(
     val end = reader.readEnd()
     factory match {
       case CaseDefFactory =>
-        val pattern = readTerm
+        val pattern = readPattern
         val body = readTerm
         CaseDef(pattern, reader.ifBeforeOpt(end)(readTerm), body)(spn)
       case TypeCaseDefFactory =>
@@ -1292,7 +1310,7 @@ private[tasties] object TreeUnpickler {
       localSymbols(addr) = sym
       sym
 
-    def getSymbol[T <: Symbol](addr: Addr)(using TypeTest[Symbol, T], NotGiven[T =:= Nothing]): T =
+    def getSymbol[T <: Symbol](addr: Addr)(using scala.reflect.TypeTest[Symbol, T], NotGiven[T =:= Nothing]): T =
       localSymbols(addr) match
         case sym: T => sym
         case sym =>

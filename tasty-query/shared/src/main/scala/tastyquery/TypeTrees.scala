@@ -39,7 +39,7 @@ object TypeTrees {
   }
 
   /** ref.type */
-  final case class SingletonTypeTree(ref: Tree)(span: Span) extends TypeTree(span) {
+  final case class SingletonTypeTree(ref: TermTree)(span: Span) extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
       ref.tpe
 
@@ -83,7 +83,7 @@ object TypeTrees {
   }
 
   /** qualifier.name */
-  final case class TermRefTypeTree(qualifier: Tree, name: TermName)(span: Span) extends TypeTree(span) {
+  final case class TermRefTypeTree(qualifier: TermTree, name: TermName)(span: Span) extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
       NamedType.possibleSelFromPackage(qualifier.tpe, name)
 

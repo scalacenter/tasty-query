@@ -215,10 +215,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     fTree.walkTree { tree =>
       tree match {
-        case Ident(`x`) =>
+        case tree @ Ident(`x`) =>
           xCount += 1
           assert(tree.tpe.isOfClass(defn.IntClass), clue(tree.tpe))
-        case Ident(`y`) =>
+        case tree @ Ident(`y`) =>
           yCount += 1
           assert(tree.tpe.isOfClass(defn.IntClass), clue(tree.tpe))
         case _ =>
@@ -240,7 +240,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     fTree.walkTree { tree =>
       tree match {
-        case Ident(SimpleName("BitSet")) =>
+        case tree @ Ident(SimpleName("BitSet")) =>
           bitSetIdentCount += 1
           val sym = tree.tpe.asInstanceOf[TermRef].symbol
           assert(sym.name == name"BitSet", clue(sym.name.toDebugString))
@@ -253,7 +253,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(bitSetIdentCount == 1, clue(bitSetIdentCount))
   }
 
-  testWithContext("free-ident") {
+  testWithContext("wildcard-pattern") {
     val MatchPathClass = ctx.findTopLevelClass("simple_trees.Match")
 
     val fSym = MatchPathClass.findNonOverloadedDecl(name"f")
@@ -263,19 +263,19 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     assert(xParamDef.symbol.asTerm.declaredType.isRef(defn.IntClass))
 
-    var freeIdentCount = 0
+    var wildcardPatternCount = 0
 
     fTree.walkTree { tree =>
       tree match {
-        case tree @ Ident(nme.Wildcard) =>
-          freeIdentCount += 1
-          assert(tree.tpe.isRef(defn.IntClass), clue(tree.tpe))
+        case tree @ WildcardPattern(tpe) =>
+          wildcardPatternCount += 1
+          assert(tpe.isRef(defn.IntClass), clue(tpe))
         case _ =>
           ()
       }
     }
 
-    assert(freeIdentCount == 2, clue(freeIdentCount))
+    assert(wildcardPatternCount == 2, clue(wildcardPatternCount))
   }
 
   testWithContext("return") {
@@ -288,7 +288,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     withReturnTree.walkTree { tree =>
       tree match {
-        case Return(expr, from) =>
+        case tree @ Return(expr, from) =>
           returnCount += 1
           assert(from == withReturnSym, clue(from))
           assert(tree.tpe.isNothing)
@@ -310,7 +310,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     fTree.walkTree { tree =>
       tree match {
-        case Assign(lhs, rhs) =>
+        case tree @ Assign(lhs, rhs) =>
           assignCount += 1
           assert(tree.tpe.isOfClass(defn.UnitClass), clue(tree.tpe))
         case _ =>
