@@ -25,8 +25,8 @@ private[classfiles] object JavaSignatures:
     val isClass = member.isClass
     val isMethod = member.flags.is(Method)
 
-    lazy val someEmptyType = Some(NoType)
-    lazy val emptyTypeBounds = RealTypeBounds(NoType, NoType)
+    lazy val someEmptyType = Some(defn.AnyType)
+    lazy val emptyTypeBounds = defn.NothingAnyBounds
 
     extension (env: JavaSignature)
 
