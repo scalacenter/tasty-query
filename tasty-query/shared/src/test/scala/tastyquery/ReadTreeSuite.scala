@@ -14,7 +14,6 @@ import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
-import tastyquery.TypeTrees.*
 import tastyquery.Types.*
 
 import Paths.*

@@ -12,7 +12,6 @@ import tastyquery.Signatures.*
 import tastyquery.Spans.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
-import tastyquery.TypeTrees.*
 import tastyquery.Variances.*
 
 import tastyquery.reader.Loaders.Loader

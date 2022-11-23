@@ -19,7 +19,6 @@ import tastyquery.Spans.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
-import tastyquery.TypeTrees.*
 
 import TastyUnpickler.NameTable
 

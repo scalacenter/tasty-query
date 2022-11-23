@@ -4,7 +4,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.TypeTest
 
 import tastyquery.Trees.*
-import tastyquery.TypeTrees.*
 import tastyquery.Types.*
 import tastyquery.Spans.*
 
