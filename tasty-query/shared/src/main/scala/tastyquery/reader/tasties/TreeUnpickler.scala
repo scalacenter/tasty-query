@@ -326,7 +326,7 @@ private[tasties] class TreeUnpickler(
 
   def readSignedName(): SignedName = readName.asInstanceOf[SignedName]
 
-  private def readTopLevelStat(using LocalContext): Tree = reader.nextByte match {
+  private def readTopLevelStat(using LocalContext): TopLevelTree = reader.nextByte match {
     case PACKAGE =>
       val spn = span
       reader.readByte()
@@ -339,10 +339,10 @@ private[tasties] class TreeUnpickler(
     case _ => readStat
   }
 
-  private def readStats(end: Addr)(using LocalContext): List[Tree] =
+  private def readStats(end: Addr)(using LocalContext): List[StatementTree] =
     reader.until(end)(readStat)
 
-  private def readStat(using LocalContext): Tree = reader.nextByte match {
+  private def readStat(using LocalContext): StatementTree = reader.nextByte match {
     case IMPORT | EXPORT =>
       def readSelector: ImportSelector = {
         assert(reader.nextByte == IMPORTED, posErrorMsg)
