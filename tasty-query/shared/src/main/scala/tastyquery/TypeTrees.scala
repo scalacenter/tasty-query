@@ -113,7 +113,7 @@ object TypeTrees {
       extends TypeTree(span)
       with DefTree(symbol) {
     override protected def calculateType(using Context): Type =
-      TypeRef(NoType, symbol)
+      TypeRef(NoPrefix, symbol)
 
     override final def withSpan(span: Span): TypeTreeBind = TypeTreeBind(name, body, symbol)(span)
   }
