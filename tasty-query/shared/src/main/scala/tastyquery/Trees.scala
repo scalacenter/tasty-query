@@ -38,65 +38,68 @@ object Trees {
   sealed abstract class Tree(val span: Span) {
     def withSpan(span: Span): Tree
 
-    protected def subtrees: List[Tree] = this match {
+    private def subtrees: List[Tree] = this match {
       case PackageDef(pid, stats)                   => stats
-      case ImportSelector(imported, renamed, bound) => imported :: renamed.toList
+      case ImportSelector(imported, renamed, bound) => imported :: renamed.toList ::: bound.toList
       case Import(expr, selectors)                  => expr :: selectors
       case Export(expr, selectors)                  => expr :: selectors
       case ClassDef(name, rhs, symbol)              => rhs :: Nil
+      case TypeMember(_, rhs, _) =>
+        rhs match
+          case rhs: TypeTree => rhs :: Nil
+          case _: TypeBounds => Nil
       case Template(constr, parents, self, body) =>
         val parentTrees = parents.collect { case p: Tree => p }
         constr :: parentTrees ::: self.toList ::: body
-      case ValDef(name, tpt, rhs, symbol)         => rhs.toList
-      case DefDef(name, params, tpt, rhs, symbol) => params.flatMap(_.merge) ::: rhs.toList
+      case ValDef(name, tpt, rhs, symbol)         => tpt :: rhs.toList
+      case DefDef(name, params, tpt, rhs, symbol) => params.flatMap(_.merge) ::: tpt :: rhs.toList
       case Select(qualifier, name)                => qualifier :: Nil
       case Super(qual, mix)                       => qual :: Nil
       case Apply(fun, args)                       => fun :: args
-      case TypeApply(fun, args)                   => fun :: Nil
-      case Typed(expr, tpt)                       => expr :: Nil
+      case TypeApply(fun, args)                   => fun :: args
+      case New(tpt)                               => tpt :: Nil
+      case Typed(expr, tpt)                       => expr :: tpt :: Nil
       case Assign(lhs, rhs)                       => lhs :: rhs :: Nil
       case NamedArg(name, arg)                    => arg :: Nil
       case Block(stats, expr)                     => stats :+ expr
       case If(cond, thenPart, elsePart)           => cond :: thenPart :: elsePart :: Nil
       case InlineIf(cond, thenPart, elsePart)     => cond :: thenPart :: elsePart :: Nil
-      case Lambda(meth, tpt)                      => meth :: Nil
+      case Lambda(meth, tpt)                      => meth :: tpt.toList
       case Match(selector, cases)                 => selector :: cases
       case InlineMatch(selector, cases)           => selector.toList ::: cases
       case CaseDef(pattern, guard, body)          => pattern :: guard.toList ::: body :: Nil
-      case TypeTest(body, tpt)                    => body :: Nil
+      case TypeTest(body, tpt)                    => body :: tpt :: Nil
       case Bind(name, body, symbol)               => body :: Nil
       case Alternative(trees)                     => trees
       case Unapply(fun, implicits, patterns)      => fun :: implicits ++ patterns
       case ExprPattern(expr)                      => expr :: Nil
-      case SeqLiteral(elems, elemtpt)             => elems
+      case SeqLiteral(elems, elemtpt)             => elems ::: elemtpt :: Nil
       case While(cond, body)                      => cond :: body :: Nil
       case Throw(expr)                            => expr :: Nil
       case Try(expr, cases, finalizer)            => (expr :: cases) ::: finalizer.toList
       case Return(expr, from)                     => expr.toList
       case Inlined(expr, caller, bindings)        => expr :: bindings
 
+      case SingletonTypeTree(term)                        => term :: Nil
+      case RefinedTypeTree(parent, refinements, classSym) => parent :: refinements
+      case ByNameTypeTree(result)                         => result :: Nil
+      case AppliedTypeTree(tycon, args)                   => tycon :: args
+      case TypeWrapper(tp)                                => Nil
+      case SelectTypeTree(qualifier, name)                => qualifier :: Nil
+      case TermRefTypeTree(qualifier, name)               => qualifier :: Nil
+      case AnnotatedTypeTree(tpt, annotation)             => tpt :: annotation :: Nil
+      case MatchTypeTree(bound, selector, cases)          => bound.toList ::: selector :: cases
+      case TypeCaseDef(pattern, body)                     => pattern :: body :: Nil
+      case TypeTreeBind(name, body, symbol)               => body :: Nil
+      case TypeBoundsTree(low, high)                      => low :: high :: Nil
+      case BoundedTypeTree(bounds, alias)                 => bounds :: alias.toList
+      case NamedTypeBoundsTree(name, bounds)              => Nil
+      case WildcardTypeBoundsTree(bounds)                 => bounds :: Nil
+      case TypeLambdaTree(tparams, body)                  => tparams ::: body :: Nil
+
       case _: ImportIdent | _: TypeMember | _: TypeParam | _: Ident | _: This | _: New | _: Literal | _: SelfDef |
-          _: WildcardPattern =>
+          _: WildcardPattern | _: TypeIdent =>
         Nil
-    }
-
-    protected def typeTrees: List[TypeTree] = this match {
-      case ImportSelector(imported, renamed, bound) => bound.toList
-      case TypeMember(_, rhs, _) =>
-        if (rhs.isInstanceOf[TypeTree]) rhs.asInstanceOf[TypeTree] :: Nil else Nil
-      case Template(constr, parents, self, body) =>
-        parents.collect { case p if p.isInstanceOf[TypeTree] => p.asInstanceOf[TypeTree] }
-      case ValDef(name, tpt, rhs, symbol)         => tpt :: Nil
-      case DefDef(name, params, tpt, rhs, symbol) => tpt :: Nil
-      case TypeApply(fun, args)                   => args
-      case New(tpt)                               => tpt :: Nil
-      case Typed(expr, tpt)                       => tpt :: Nil
-      case Lambda(meth, tpt)                      => tpt.toList
-      case TypeTest(body, tpt)                    => tpt :: Nil
-      case SeqLiteral(elems, elemtpt)             => elemtpt :: Nil
-
-      // no type tree inside
-      case _ => Nil
     }
 
     def walkTree[R](op: Tree => R)(reduce: (R, R) => R, default: => R): R = {
@@ -107,12 +110,6 @@ object Trees {
 
     /* If the operation does not produce a result, simply apply it to all subtrees of the tree */
     def walkTree(op: Tree => Unit): Unit = walkTree[Unit](op)((_, _) => (), ())
-
-    def walkTypeTrees[R](op: TypeTree => R)(reduce: (R, R) => R, default: => R): R =
-      // Apply the operation to all type trees of the current tree and all type trees of all subtrees
-      walkTree(_.typeTrees.foldLeft(default)((curRes, tpt) => reduce(curRes, op(tpt))))(reduce, default)
-
-    def walkTypeTrees(op: TypeTree => Unit): Unit = walkTypeTrees[Unit](op)((_, _) => (), ())
   }
 
   sealed abstract class TopLevelTree(span: Span) extends Tree(span):
@@ -558,7 +555,7 @@ object Trees {
     override final def withSpan(span: Span): Inlined = Inlined(expr, caller, bindings)(span)
   }
 
-  sealed abstract class TypeTree(val span: Span) {
+  sealed abstract class TypeTree(span: Span) extends Tree(span) {
     private var myType: Type | Null = null
 
     protected def calculateType(using Context): Type
@@ -657,7 +654,9 @@ object Trees {
     override final def withSpan(span: Span): MatchTypeTree = MatchTypeTree(bound, selector, cases)(span)
   }
 
-  final case class TypeCaseDef(pattern: TypeTree, body: TypeTree)
+  final case class TypeCaseDef(pattern: TypeTree, body: TypeTree)(span: Span) extends Tree(span):
+    def withSpan(span: Span): TypeCaseDef = TypeCaseDef(pattern, body)(span)
+  end TypeCaseDef
 
   final case class TypeTreeBind(name: TypeName, body: TypeTree, override val symbol: LocalTypeParamSymbol)(span: Span)
       extends TypeTree(span)
@@ -668,7 +667,9 @@ object Trees {
     override final def withSpan(span: Span): TypeTreeBind = TypeTreeBind(name, body, symbol)(span)
   }
 
-  final case class TypeBoundsTree(low: TypeTree, high: TypeTree) {
+  final case class TypeBoundsTree(low: TypeTree, high: TypeTree)(span: Span) extends Tree(span) {
+    def withSpan(span: Span): TypeBoundsTree = TypeBoundsTree(low, high)(span)
+
     def toTypeBounds(using Context): TypeBounds =
       RealTypeBounds(low.toType, high.toType)
   }
