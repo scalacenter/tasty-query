@@ -294,11 +294,13 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case DefDef(
             SimpleName("id"),
             // no type params, one param -- x: Int
-            List(Left(List(ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("Int"))), None, valSymbol)))),
+            List(
+              Left(List(defTree @ ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("Int"))), None, valSymbol)))
+            ),
             TypeIdent(TypeName(SimpleName("Int"))),
             Some(Ident(SimpleName("x"))),
             defSymbol
-          ) if valSymbol.tree.exists(_.isInstanceOf[ValDef]) && defSymbol.tree.exists(_.isInstanceOf[DefDef]) =>
+          ) if valSymbol.tree.contains(defTree) =>
     }
     assert(containsSubtree(identityMatch)(clue(tree)))
   }
@@ -482,13 +484,13 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               Unapply(
                 Select(Ident(SimpleName("FirstCase")), SignedName(SimpleName("unapply"), _, _)),
                 Nil,
-                List(Bind(SimpleName("x"), WildcardPattern(_), bindSymbol))
+                List(bindTree @ Bind(SimpleName("x"), WildcardPattern(_), bindSymbol))
               ),
               _
             ),
             None,
             body: Block
-          ) if bindSymbol.tree.exists(_.isInstanceOf[Bind]) =>
+          ) if bindSymbol.tree.contains(bindTree) =>
     }
     assert(containsSubtree(guardWithAlternatives)(clue(tree)))
   }
@@ -675,16 +677,12 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   testUnpickle("var", simple_trees / tname"Var") { tree =>
     // var = val with a setter
     val valDefMatch: StructureCheck = {
-      case ValDef(
+      case defTree @ ValDef(
             SimpleName("x"),
             TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Int")))),
             Some(Literal(Constant(1))),
             symbol
-          )
-          if symbol.tree.exists(_.isInstanceOf[ValDef])
-            && symbol.flags.is(Mutable)
-            && !symbol.flags.is(Method)
-            && !symbol.flags.is(Accessor) =>
+          ) if symbol.tree.contains(defTree) && symbol.flags.is(Mutable) && !symbol.flags.isAnyOf(Method | Accessor) =>
     }
     val setterMatch: StructureCheck = {
       case DefDef(
@@ -743,11 +741,11 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
   testUnpickle("call-parent-ctor-with-defaults", simple_trees / tname"ChildCallsParentWithDefaultParameter") { tree =>
     val blockParent: StructureCheck = {
-      case ClassDef(
+      case defTree @ ClassDef(
             TypeName(SimpleName("ChildCallsParentWithDefaultParameter")),
             Template(_, List(Block(_, _)), _, _),
             symbol
-          ) if symbol.tree.exists(_.isInstanceOf[ClassDef]) =>
+          ) if symbol.tree.contains(defTree) =>
     }
     assert(containsSubtree(blockParent)(clue(tree)))
   }
@@ -1001,8 +999,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   testUnpickle("type-member", simple_trees / tname"TypeMember") { tree =>
     // simple type member
     val typeMember: StructureCheck = {
-      case TypeMember(TypeName(SimpleName("TypeMember")), TypeIdent(TypeName(SimpleName("Int"))), symbol)
-          if symbol.tree.exists(_.isInstanceOf[TypeMember]) =>
+      case defTree @ TypeMember(TypeName(SimpleName("TypeMember")), TypeIdent(TypeName(SimpleName("Int"))), symbol)
+          if symbol.tree.contains(defTree) =>
     }
     assert(containsSubtree(typeMember)(clue(tree)))
 
@@ -1062,7 +1060,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     and the class's are just typebounds (no associated code location), hence the difference in structures
      */
     val genericClass: StructureCheck = {
-      case ClassDef(
+      case defTree @ ClassDef(
             TypeName(SimpleName("GenericClass")),
             Template(
               DefDef(
@@ -1070,7 +1068,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 List(
                   Right(
                     List(
-                      TypeParam(
+                      firstTypeParamTree @ TypeParam(
                         TypeName(SimpleName("T")),
                         TypeBoundsTree(
                           TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
@@ -1088,23 +1086,23 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               ),
               _,
               _,
-              TypeParam(
+              (secondTypeParamTree @ TypeParam(
                 TypeName(SimpleName("T")),
                 RealTypeBounds(
                   TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Nothing"))),
                   TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Any")))
                 ),
                 secondTypeParamSymbol
-              ) :: _
+              )) :: _
             ),
             classSymbol
           )
-          if classSymbol.tree.exists(_.isInstanceOf[ClassDef])
+          if classSymbol.tree.contains(defTree)
             && firstTypeParamSymbol.is(Flags.TypeParameter)
             && !firstTypeParamSymbol.isAllOf(ClassTypeParam)
             && secondTypeParamSymbol.isAllOf(ClassTypeParam)
-            && firstTypeParamSymbol.tree.exists(_.isInstanceOf[TypeParam])
-            && secondTypeParamSymbol.tree.exists(_.isInstanceOf[TypeParam]) =>
+            && firstTypeParamSymbol.tree.contains(firstTypeParamTree)
+            && secondTypeParamSymbol.tree.contains(secondTypeParamTree) =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
   }
@@ -1166,7 +1164,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
   testUnpickle("class-type-bounds", simple_trees / tname"TypeBoundsOnClass") { tree =>
     val genericClass: StructureCheck = {
-      case ClassDef(
+      case defTree @ ClassDef(
             TypeName(SimpleName("TypeBoundsOnClass")),
             Template(
               DefDef(
@@ -1202,7 +1200,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               ) :: _
             ),
             symbol
-          ) if symbol.tree.exists(_.isInstanceOf[ClassDef]) =>
+          ) if symbol.tree.contains(defTree) =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
   }
@@ -1211,7 +1209,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     // The type bounds of the class and its inner class are shared in the TASTy serializations.
     // This test checks that such shared type bounds are read correctly.
     val genericClass: StructureCheck = {
-      case ClassDef(
+      case outerDefTree @ ClassDef(
             TypeName(SimpleName("GenericClassWithNestedGeneric")),
             Template(
               DefDef(
@@ -1244,15 +1242,15 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                   TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Any")))
                 ),
                 _
-              ) :: ClassDef(TypeName(SimpleName("NestedGeneric")), _, innerSymbol) :: _
+              ) :: (innerDefTree @ ClassDef(TypeName(SimpleName("NestedGeneric")), _, innerSymbol)) :: _
             ),
             outerSymbol
-          ) if outerSymbol.tree.exists(_.isInstanceOf[ClassDef]) && innerSymbol.tree.exists(_.isInstanceOf[ClassDef]) =>
+          ) if outerSymbol.tree.contains(outerDefTree) && innerSymbol.tree.contains(innerDefTree) =>
     }
     assert(containsSubtree(genericClass)(clue(tree)))
 
     val nestedClass: StructureCheck = {
-      case ClassDef(
+      case defTree @ ClassDef(
             TypeName(SimpleName("NestedGeneric")),
             Template(
               DefDef(
@@ -1288,7 +1286,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               ) :: _
             ),
             symbol
-          ) if symbol.tree.exists(_.isInstanceOf[ClassDef]) =>
+          ) if symbol.tree.contains(defTree) =>
     }
     assert(containsSubtree(nestedClass)(clue(tree)))
   }

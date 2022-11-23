@@ -86,7 +86,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   ) {
     val toplevelEmptyPackage_packageClass = ctx.findTopLevelModuleClass("toplevelEmptyPackage$package")
 
-    val (tree @ _: ClassDef) = toplevelEmptyPackage_packageClass.tree.get: @unchecked
+    val tree = toplevelEmptyPackage_packageClass.tree.get
 
     assert(tree.name == termName("toplevelEmptyPackage$package").withObjectSuffix.toTypeName)
     assert(tree.symbol == toplevelEmptyPackage_packageClass)

@@ -12,6 +12,7 @@ import tastyquery.Signatures.*
 import tastyquery.Spans.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
+import tastyquery.TypeTrees.*
 import tastyquery.Variances.*
 
 import tastyquery.reader.Loaders.Loader
@@ -67,12 +68,13 @@ object Symbols {
 
   sealed abstract class Symbol protected (val owner: Symbol | Null) {
     type ThisNameType <: Name
+    type DefiningTreeType <: DefTree
 
     val name: ThisNameType
 
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
-    private var myTree: Option[DefTree] = None
+    private var myTree: Option[DefiningTreeType] = None
     private var myPrivateWithin: Option[Symbol] = None
 
     /** Checks that this `Symbol` has been completely initialized.
@@ -94,12 +96,12 @@ object Symbols {
     protected def doCheckCompleted(): Unit =
       if !isFlagsInitialized then throw failNotCompleted("flags were not initialized")
 
-    private[tastyquery] def withTree(t: DefTree): this.type =
+    private[tastyquery] def withTree(t: DefiningTreeType): this.type =
       require(!isPackage, s"Multiple trees correspond to one package, a single tree cannot be assigned")
       myTree = Some(t)
       this
 
-    final def tree(using Context): Option[DefTree] =
+    final def tree(using Context): Option[DefiningTreeType] =
       myTree
 
     private[tastyquery] final def withFlags(flags: FlagSet): this.type =
@@ -269,6 +271,7 @@ object Symbols {
 
   final class TermSymbol private (val name: TermName, owner: Symbol) extends TermOrTypeSymbol(owner):
     type ThisNameType = TermName
+    type DefiningTreeType = ValOrDefDef | Bind
 
     // Reference fields (checked in doCheckCompleted)
     private var myDeclaredType: Type | Null = null
@@ -353,6 +356,7 @@ object Symbols {
 
   sealed abstract class TypeSymbol protected (val name: TypeName, owner: Symbol) extends TermOrTypeSymbol(owner):
     type ThisNameType = TypeName
+    type DefiningTreeType <: TypeDef | TypeTreeBind
 
     final def isTypeAlias(using Context): Boolean = this match
       case sym: TypeMemberSymbol => sym.typeDef.isInstanceOf[TypeMemberDefinition.TypeAlias]
@@ -364,6 +368,8 @@ object Symbols {
   end TypeSymbol
 
   sealed abstract class TypeSymbolWithBounds protected (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner):
+    type DefiningTreeType <: TypeMember | TypeParam | TypeTreeBind
+
     def bounds(using Context): TypeBounds
 
     def lowerBound(using Context): Type
@@ -373,6 +379,8 @@ object Symbols {
 
   sealed abstract class TypeParamSymbol protected (name: TypeName, owner: Symbol)
       extends TypeSymbolWithBounds(name, owner):
+    type DefiningTreeType >: TypeParam <: TypeParam | TypeTreeBind
+
     // Reference fields (checked in doCheckCompleted)
     private var myBounds: TypeBounds | Null = null
 
@@ -398,6 +406,8 @@ object Symbols {
   final class ClassTypeParamSymbol private (name: TypeName, override val owner: ClassSymbol)
       extends TypeParamSymbol(name, owner)
       with TypeParamInfo:
+    type DefiningTreeType = TypeParam
+
     private[tastyquery] def paramVariance(using Context): Variance =
       Variance.fromFlags(flags)
 
@@ -409,7 +419,9 @@ object Symbols {
       ClassTypeParamSymbol(name, owner)
   end ClassTypeParamSymbol
 
-  final class LocalTypeParamSymbol private (name: TypeName, owner: Symbol) extends TypeParamSymbol(name, owner)
+  final class LocalTypeParamSymbol private (name: TypeName, owner: Symbol) extends TypeParamSymbol(name, owner):
+    type DefiningTreeType = TypeParam | TypeTreeBind
+  end LocalTypeParamSymbol
 
   object LocalTypeParamSymbol:
     private[tastyquery] def create(name: TypeName, owner: Symbol): LocalTypeParamSymbol =
@@ -417,6 +429,8 @@ object Symbols {
   end LocalTypeParamSymbol
 
   final class TypeMemberSymbol private (name: TypeName, owner: Symbol) extends TypeSymbolWithBounds(name, owner):
+    type DefiningTreeType = TypeMember
+
     // Reference fields (checked in doCheckCompleted)
     private var myDefinition: TypeMemberDefinition | Null = null
 
@@ -468,6 +482,7 @@ object Symbols {
   end TypeMemberDefinition
 
   sealed trait DeclaringSymbol extends Symbol {
+    type DefiningTreeType <: ClassDef // for packages, it is Nothing
     type DeclType >: TermOrTypeSymbol <: Symbol
 
     private[Symbols] def addDecl(decl: DeclType): Unit
@@ -482,6 +497,7 @@ object Symbols {
   }
 
   final class ClassSymbol private (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner) with DeclaringSymbol {
+    type DefiningTreeType = ClassDef
     type DeclType = TermOrTypeSymbol
 
     // Reference fields (checked in doCheckCompleted)
@@ -853,6 +869,7 @@ object Symbols {
       extends Symbol(owner)
       with DeclaringSymbol {
     type ThisNameType = SimpleName
+    type DefiningTreeType = Nothing
     type DeclType = Symbol
 
     // DeclaringSymbol-related fields

@@ -379,7 +379,8 @@ private[tasties] class TreeUnpickler(
       val name = readName.toTypeName
       val typedef: ClassDef | TypeMember = if (reader.nextByte == TEMPLATE) {
         val classSymbol = localCtx.getSymbol[ClassSymbol](start)
-        ClassDef(name, readTemplate(using localCtx.withOwner(classSymbol)), classSymbol)(spn).definesTreeOf(classSymbol)
+        val template = readTemplate(using localCtx.withOwner(classSymbol))
+        definingTree(classSymbol, ClassDef(name, template, classSymbol)(spn))
       } else {
         val symbol = localCtx.getSymbol[TypeMemberSymbol](start)
         val innerCtx = localCtx.withOwner(symbol)
@@ -398,7 +399,7 @@ private[tasties] class TreeUnpickler(
           case bounds: TypeBounds =>
             TypeMemberDefinition.AbstractType(bounds)
         symbol.withDefinition(typeDef)
-        TypeMember(name, typeBounds, symbol)(spn).definesTreeOf(symbol)
+        definingTree(symbol, TypeMember(name, typeBounds, symbol)(spn))
       }
       // TODO: read modifiers
       skipModifiers(end)
@@ -481,7 +482,7 @@ private[tasties] class TreeUnpickler(
         case bounds: TypeLambdaTree => defn.NothingAnyBounds
       paramSymbol.setBounds(typeBounds)
       skipModifiers(end)
-      TypeParam(name, bounds, paramSymbol)(spn).definesTreeOf(paramSymbol)
+      definingTree(paramSymbol, TypeParam(name, bounds, paramSymbol)(spn))
     }
     val acc = new ListBuffer[TypeParam]()
     while (reader.nextByte == TYPEPARAM) {
@@ -608,10 +609,10 @@ private[tasties] class TreeUnpickler(
     tag match {
       case VALDEF | PARAM =>
         symbol.withDeclaredType(tpt.toType)
-        ValDef(name, tpt, rhs, symbol)(spn).definesTreeOf(symbol)
+        definingTree(symbol, ValDef(name, tpt, rhs, symbol)(spn))
       case DEFDEF =>
         symbol.withDeclaredType(makeDefDefType(params, tpt))
-        DefDef(name, params, tpt, rhs, symbol)(spn).definesTreeOf(symbol)
+        definingTree(symbol, DefDef(name, params, tpt, rhs, symbol)(spn))
     }
   }
 
@@ -634,13 +635,9 @@ private[tasties] class TreeUnpickler(
   private def readTerms(end: Addr)(using LocalContext): List[TermTree] =
     reader.until(end)(readTerm)
 
-  extension [T <: DefTree](tree: T)
-    /** Adds `tree` to the `symbol`, returning the tree.
-      * @todo remove and assign tree to symbol in ctor of tree
-      */
-    inline def definesTreeOf[S <: Symbol](symbol: S)(using inline ev: NotGiven[T <:< PackageDef]): T =
-      symbol.withTree(tree)
-      tree
+  def definingTree(symbol: Symbol, tree: symbol.DefiningTreeType): tree.type =
+    symbol.withTree(tree)
+    tree
 
   private def readPattern(using LocalContext): PatternTree = reader.nextByte match
     case IDENT =>
@@ -667,7 +664,7 @@ private[tasties] class TreeUnpickler(
       skipModifiers(end)
       val symbol = localCtx.getSymbol[TermSymbol](start)
       symbol.withDeclaredType(typ)
-      Bind(name, body, symbol)(spn).definesTreeOf(symbol)
+      definingTree(symbol, Bind(name, body, symbol)(spn))
     case ALTERNATIVE =>
       reader.readByte()
       val end = reader.readEnd()
@@ -1185,7 +1182,7 @@ private[tasties] class TreeUnpickler(
       skipModifiers(end)
       val sym = localCtx.getSymbol[LocalTypeParamSymbol](start)
       sym.setBounds(bounds)
-      TypeTreeBind(name, body, sym)(spn).definesTreeOf(sym)
+      definingTree(sym, TypeTreeBind(name, body, sym)(spn))
     // Type tree for a type member (abstract or bounded opaque)
     case TYPEBOUNDStpt => readBoundedTypeTree
     case BYNAMEtpt =>
