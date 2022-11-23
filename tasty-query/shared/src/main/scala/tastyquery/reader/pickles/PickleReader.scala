@@ -401,7 +401,15 @@ private[pickles] class PickleReader {
     val end = pkl.readEnd()
     (tag: @switch) match {
       case NOtpe =>
-        NoType
+        /* This should not happen, but it seems to surface in complicated
+         * refinement types, such as the one in the constructor of
+         * `scala.collection.MapView`.
+         * Since we do not have a `NoType` in our model, we replace it with a
+         * reference to a fake alias of `Nothing`. This allows us not to crash,
+         * while still being able to detect these erroneous types if we really
+         * want to.
+         */
+        TypeRef(defn.scalaPackage.packageRef, typeName("<notype>"))
       case NOPREFIXtpe =>
         NoPrefix
       case THIStpe =>

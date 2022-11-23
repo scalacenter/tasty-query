@@ -1480,11 +1480,4 @@ object Types {
       if first eq second then first
       else AndType(first, second)
   }
-
-  object NoType extends GroundType {
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
-      throw new AssertionError(s"Cannot find member in NoType")
-
-    override def toString(): String = "NoType"
-  }
 }

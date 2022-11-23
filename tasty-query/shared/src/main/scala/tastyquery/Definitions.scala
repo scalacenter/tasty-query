@@ -108,6 +108,11 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val AnyRefAlias = TypeMemberSymbol.create(typeName("AnyRef"), scalaPackage)
     AnyRefAlias.withFlags(EmptyFlagSet)
     AnyRefAlias.withDefinition(TypeMemberDefinition.TypeAlias(ObjectType))
+
+    // See `case NOtpe` in `PickleReader.scala`
+    val scala2NoTypeAlias = TypeMemberSymbol.create(typeName("<notype>"), scalaPackage)
+    scala2NoTypeAlias.withFlags(Synthetic)
+    scala2NoTypeAlias.withDefinition(TypeMemberDefinition.TypeAlias(NothingType))
   }
 
   private def createSpecialPolyClass(

@@ -25,7 +25,7 @@ private[tastyquery] object TypeOps:
         */
       def toPrefix(pre: Prefix, cls: Symbol, thiscls: ClassSymbol): Type =
         pre match
-          case NoPrefix | NoType =>
+          case NoPrefix =>
             tp
           //case pre: SuperType => toPrefix(pre.thistpe, cls, thiscls)
           case pre: Type =>
