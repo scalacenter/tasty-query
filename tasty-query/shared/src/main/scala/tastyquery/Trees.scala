@@ -116,7 +116,15 @@ object Trees {
     def walkTypeTrees(op: TypeTree => Unit): Unit = walkTypeTrees[Unit](op)((_, _) => (), ())
   }
 
-  sealed abstract class TermTree(span: Span) extends Tree(span):
+  sealed abstract class TopLevelTree(span: Span) extends Tree(span):
+    def withSpan(span: Span): TopLevelTree
+  end TopLevelTree
+
+  sealed abstract class StatementTree(span: Span) extends TopLevelTree(span):
+    def withSpan(span: Span): StatementTree
+  end StatementTree
+
+  sealed abstract class TermTree(span: Span) extends StatementTree(span):
     private var myType: Type | Null = null
 
     def withSpan(span: Span): TermTree
@@ -137,7 +145,9 @@ object Trees {
 
   trait DefTree(val symbol: Symbol)
 
-  final case class PackageDef(pid: PackageSymbol, stats: List[Tree])(span: Span) extends Tree(span) with DefTree(pid) {
+  final case class PackageDef(pid: PackageSymbol, stats: List[TopLevelTree])(span: Span)
+      extends TopLevelTree(span)
+      with DefTree(pid) {
     override final def withSpan(span: Span): PackageDef = PackageDef(pid, stats)(span)
   }
 
@@ -168,12 +178,12 @@ object Trees {
     override final def withSpan(span: Span): ImportSelector = ImportSelector(imported, renamed, bound)(span)
   }
 
-  final case class Import(expr: Tree, selectors: List[ImportSelector])(span: Span) extends Tree(span) {
+  final case class Import(expr: TermTree, selectors: List[ImportSelector])(span: Span) extends StatementTree(span) {
     override final def withSpan(span: Span): Import = Import(expr, selectors)(span)
   }
 
   /** import expr.selectors */
-  final case class Export(expr: Tree, selectors: List[ImportSelector])(span: Span) extends Tree(span) {
+  final case class Export(expr: TermTree, selectors: List[ImportSelector])(span: Span) extends StatementTree(span) {
     override final def withSpan(span: Span): Export = Export(expr, selectors)(span)
   }
 
@@ -184,7 +194,7 @@ object Trees {
     *  mods type name >: lo <: hi = rhs     if rhs = TypeBoundsTree(lo, hi, alias) and opaque in mods
     */
   sealed abstract class TypeDef(name: TypeName, override val symbol: TypeSymbol)(span: Span)
-      extends Tree(span)
+      extends StatementTree(span)
       with DefTree(symbol)
 
   final case class ClassDef(name: TypeName, rhs: Template, override val symbol: ClassSymbol)(span: Span)
@@ -221,14 +231,14 @@ object Trees {
     constr: DefDef,
     parents: List[Apply | Block | TypeTree],
     self: Option[SelfDef],
-    body: List[Tree]
+    body: List[StatementTree]
   )(span: Span)
       extends Tree(span) {
     override final def withSpan(span: Span): Template = Template(constr, parents, self, body)(span)
   }
 
   sealed abstract class ValOrDefDef(override val symbol: TermSymbol)(span: Span)
-      extends Tree(span)
+      extends StatementTree(span)
       with DefTree(symbol):
     val name: TermName
 
@@ -377,7 +387,7 @@ object Trees {
   }
 
   /** { stats; expr } */
-  final case class Block(stats: List[Tree], expr: TermTree)(span: Span) extends TermTree(span) {
+  final case class Block(stats: List[StatementTree], expr: TermTree)(span: Span) extends TermTree(span) {
     protected final def calculateType(using Context): Type =
       expr.tpe
 
