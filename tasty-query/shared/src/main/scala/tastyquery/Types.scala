@@ -365,23 +365,23 @@ object Types {
       * - For a type alias, the normalized prefix of its alias.
       * - For all other named type and class infos: the prefix.
       * - Inherited by all other type proxies.
-      * - `NoType` for all other types.
+      * - `None` for all other types.
       */
-    @tailrec final def normalizedPrefix(using Context): Prefix = this match {
+    @tailrec final def normalizedPrefix(using Context): Option[Prefix] = this match {
       case tp: TypeRef =>
         tp.symbol match
           case sym: TypeMemberSymbol =>
             sym.typeDef match
               case TypeMemberDefinition.TypeAlias(alias) => alias.normalizedPrefix
-              case _                                     => tp.prefix
+              case _                                     => Some(tp.prefix)
           case _ =>
-            tp.prefix
+            Some(tp.prefix)
       case tp: TermRef =>
-        tp.prefix
+        Some(tp.prefix)
       case tp: TypeProxy =>
         tp.superType.normalizedPrefix
       case _ =>
-        NoType
+        None
     }
 
     /** The basetype of this type with given class symbol.
@@ -389,7 +389,7 @@ object Types {
       * Returns `NoType` if this type does not have `base` in any of its base
       * types.
       */
-    final def baseType(base: ClassSymbol)(using Context): Type =
+    final def baseType(base: ClassSymbol)(using Context): Option[Type] =
       base.baseTypeOf(this)
 
     /** The member with the given `name`. */
@@ -685,7 +685,7 @@ object Types {
       val cls = tparam.owner
       val base = pre.baseType(cls)
       base match {
-        case base: AppliedType =>
+        case Some(base: AppliedType) =>
           var tparams = cls.typeParams
           var args = base.args
           var idx = 0

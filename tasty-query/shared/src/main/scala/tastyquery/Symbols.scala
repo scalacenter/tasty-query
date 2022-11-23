@@ -752,15 +752,15 @@ object Symbols {
       myTypeParams != null
 
     /** Compute tp.baseType(this) */
-    private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Type =
-      def recur(tp: Type): Type = tp match
+    private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Option[Type] =
+      def recur(tp: Type): Option[Type] = tp match
         case tp: TypeRef =>
-          def combineGlb(bt1: Type, bt2: Type): Type =
-            if bt1 == NoType then bt2
-            else if bt2 == NoType then bt1
-            else bt1 & bt2
+          def combineGlb(bt1: Option[Type], bt2: Option[Type]): Option[Type] =
+            if bt1.isEmpty then bt2
+            else if bt2.isEmpty then bt1
+            else Some(bt1.get & bt2.get)
 
-          def foldGlb(bt: Type, ps: List[Type]): Type =
+          def foldGlb(bt: Option[Type], ps: List[Type]): Option[Type] =
             ps.foldLeft(bt)((bt, p) => combineGlb(bt, recur(p)))
 
           tp.symbol match
@@ -771,13 +771,13 @@ object Symbols {
                 case NoPrefix           => true
                 case _                  => false
 
-              if tpSym == this then tp
+              if tpSym == this then Some(tp)
               else if isOwnThis then
                 if tpSym.isSubclass(this) then
-                  if this.isStatic && this.typeParams.isEmpty then this.typeRef
-                  else foldGlb(NoType, tpSym.parents)
-                else NoType
-              else recur(tpSym.typeRef).asSeenFrom(tp.prefix, tpSym.owner)
+                  if this.isStatic && this.typeParams.isEmpty then Some(this.typeRef)
+                  else foldGlb(None, tpSym.parents)
+                else None
+              else recur(tpSym.typeRef).map(_.asSeenFrom(tp.prefix, tpSym.owner.asDeclaringSymbol))
             case _: TypeSymbolWithBounds =>
               recur(tp.superType)
           end match
@@ -785,18 +785,18 @@ object Symbols {
         case tp: AppliedType =>
           tp.tycon match
             case tycon: TypeRef if tycon.symbol == this =>
-              tp
+              Some(tp)
             case tycon =>
               // TODO Also handle TypeLambdas
               val typeParams = tycon.typeParams
-              recur(tycon).substClassTypeParams(typeParams.asInstanceOf[List[ClassTypeParamSymbol]], tp.args)
+              recur(tycon).map(_.substClassTypeParams(typeParams.asInstanceOf[List[ClassTypeParamSymbol]], tp.args))
 
         case tp: TypeProxy =>
           recur(tp.superType)
 
         case _ =>
           // TODO Handle AndType and OrType, and JavaArrayType
-          NoType
+          None
       end recur
 
       recur(tp)

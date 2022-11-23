@@ -33,7 +33,7 @@ private[tastyquery] object TypeOps:
           case pre: Type =>
             cls match
               case cls: ClassSymbol =>
-                if (thiscls.isSubclass(cls) && pre.baseType(thiscls) != NoType)
+                if (thiscls.isSubclass(cls) && pre.baseType(thiscls).isDefined)
                   /*if (variance <= 0 && !isLegalPrefix(pre)) // isLegalPrefix always true?
                   if (variance < 0) {
                     approximated = true
@@ -50,7 +50,9 @@ private[tastyquery] object TypeOps:
                 /*else if (pre.termSymbol.isPackage && !thiscls.isPackage)
                 toPrefix(pre.select(nme.PACKAGE), cls, thiscls)*/
                 else
-                  toPrefix(pre.baseType(cls).normalizedPrefix, cls.owner.nn, thiscls)
+                  pre.baseType(cls).flatMap(_.normalizedPrefix) match
+                    case Some(normalizedPrefix) => toPrefix(normalizedPrefix, cls.owner.nn, thiscls)
+                    case None                   => tp
               case _ =>
                 NoType
       end toPrefix
