@@ -4,7 +4,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.TypeTest
 
 import tastyquery.Trees.*
-import tastyquery.TypeTrees.*
 import tastyquery.Types.*
 import tastyquery.Spans.*
 
@@ -48,16 +47,6 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   private def collectCode[T <: Tree](tree: Tree, code: String)(using tt: TypeTest[Tree, T]): List[String] =
     tree
       .walkTree[List[(Int, String)]]({
-        case tt(t: T) => List(treeToCode(t, code))
-        case _        => Nil
-      })(_ ::: _, Nil)
-      .distinct
-      .map(_._2)
-      .filter(_ != "")
-
-  private def collectCodeT[T <: TypeTree](tree: Tree, code: String)(using tt: TypeTest[TypeTree, T]): List[String] =
-    tree
-      .walkTypeTrees[List[(Int, String)]]({
         case tt(t: T) => List(treeToCode(t, code))
         case _        => Nil
       })(_ ::: _, Nil)
@@ -277,51 +266,51 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickleWithCode("type-ident", simple_trees / tname"Typed") { (tree, code) =>
-    assertEquals(collectCodeT[TypeIdent](tree, code), List("Int"))
+    assertEquals(collectCode[TypeIdent](tree, code), List("Int"))
   }
 
   testUnpickleWithCode("singleton-type", simple_trees / tname"SingletonType") { (tree, code) =>
-    assertEquals(collectCodeT[SingletonTypeTree](tree, code), List("x.type"))
+    assertEquals(collectCode[SingletonTypeTree](tree, code), List("x.type"))
   }
 
   testUnpickleWithCode("refined-type", simple_trees / tname"RefinedType") { (tree, code) =>
-    assertEquals(collectCodeT[RefinedTypeTree](tree, code), Nil)
+    assertEquals(collectCode[RefinedTypeTree](tree, code), Nil)
   }
 
   testUnpickleWithCode("by-name-type", simple_trees / tname"ByNameParameter") { (tree, code) =>
-    assertEquals(collectCodeT[ByNameTypeTree](tree, code), List("=> Int"))
+    assertEquals(collectCode[ByNameTypeTree](tree, code), List("=> Int"))
   }
 
   testUnpickleWithCode("applied-type", simple_trees / tname"AppliedTypeAnnotation") { (tree, code) =>
-    assertEquals(collectCodeT[AppliedTypeTree](tree, code), List("Option[Int]"))
+    assertEquals(collectCode[AppliedTypeTree](tree, code), List("Option[Int]"))
   }
 
   testUnpickleWithCode("select-type", simple_trees / tname"SelectType") { (tree, code) =>
-    assertEquals(collectCodeT[SelectTypeTree](tree, code), List("util.Random"))
+    assertEquals(collectCode[SelectTypeTree](tree, code), List("util.Random"))
   }
 
   testUnpickleWithCode("annotated-type", simple_trees / tname"VarargFunction") { (tree, code) =>
-    assertEquals(collectCodeT[AnnotatedTypeTree](tree, code), List("Int*"))
+    assertEquals(collectCode[AnnotatedTypeTree](tree, code), List("Int*"))
   }
 
   testUnpickleWithCode("match-type".ignore, simple_trees / tname"MatchType") { (tree, code) =>
-    assertEquals(collectCodeT[MatchTypeTree](tree, code), List(""))
+    assertEquals(collectCode[MatchTypeTree](tree, code), List(""))
   }
 
   testUnpickleWithCode("type-tree-bind".ignore, simple_trees / tname"MatchType") { (tree, code) =>
-    assertEquals(collectCodeT[TypeTreeBind](tree, code), List(""))
+    assertEquals(collectCode[TypeTreeBind](tree, code), List(""))
   }
 
   testUnpickleWithCode("bounded-type".ignore, simple_trees / tname"TypeMember") { (tree, code) =>
-    assertEquals(collectCodeT[BoundedTypeTree](tree, code), List(""))
+    assertEquals(collectCode[BoundedTypeTree](tree, code), List(""))
   }
 
   testUnpickleWithCode("named-type-bounds".ignore, simple_trees / tname"MatchType") { (tree, code) =>
-    assertEquals(collectCodeT[NamedTypeBoundsTree](tree, code), List(""))
+    assertEquals(collectCode[NamedTypeBoundsTree](tree, code), List(""))
   }
 
   testUnpickleWithCode("type-lambda", simple_trees / tname"TypeLambda") { (tree, code) =>
-    assertEquals(collectCodeT[TypeLambdaTree](tree, code), List("[X] =>> List[X]"))
+    assertEquals(collectCode[TypeLambdaTree](tree, code), List("[X] =>> List[X]"))
   }
 
   /** Inlined */

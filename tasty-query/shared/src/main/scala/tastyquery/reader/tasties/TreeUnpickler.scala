@@ -19,7 +19,6 @@ import tastyquery.Spans.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
-import tastyquery.TypeTrees.*
 
 import TastyUnpickler.NameTable
 
@@ -442,13 +441,14 @@ private[tasties] class TreeUnpickler(
       }
 
       def readTypeBoundsTree(using LocalContext): TypeBoundsTree = {
+        val spn = span
         assert(reader.readByte() == TYPEBOUNDStpt, posErrorMsg)
         val end = reader.readEnd()
         val low = readTypeTree
         val high = readTypeTree
         // assert atEnd: no alias for type parameters
         assert(reader.currentAddr == end, posErrorMsg)
-        TypeBoundsTree(low, high)
+        TypeBoundsTree(low, high)(spn)
       }
 
       def readLambdaTpt(using LocalContext): TypeLambdaTree = {
@@ -499,17 +499,18 @@ private[tasties] class TreeUnpickler(
     val low = readTypeTree
     val high = readTypeTree
     val alias = reader.ifBeforeOpt(end)(readTypeTree)
-    BoundedTypeTree(TypeBoundsTree(low, high), alias)(spn)
+    BoundedTypeTree(TypeBoundsTree(low, high)(spn), alias)(spn)
   }
 
   private def readTypeBoundsTree(using LocalContext): TypeBoundsTree = {
     assert(tagFollowShared == TYPEBOUNDStpt, posErrorMsg)
     readPotentiallyShared({
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val low = readTypeTree
       val high = readTypeTree
-      TypeBoundsTree(low, high)
+      TypeBoundsTree(low, high)(spn)
     })
   }
 
@@ -920,7 +921,7 @@ private[tasties] class TreeUnpickler(
         val body = readTerm
         CaseDef(pattern, reader.ifBeforeOpt(end)(readTerm), body)(spn)
       case TypeCaseDefFactory =>
-        TypeCaseDef(readTypeTree, readTypeTree)
+        TypeCaseDef(readTypeTree, readTypeTree)(spn)
     }
   }
 
