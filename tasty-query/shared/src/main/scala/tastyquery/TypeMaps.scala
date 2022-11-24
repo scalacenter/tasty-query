@@ -222,41 +222,42 @@ private[tastyquery] object TypeMaps {
     /** Try to widen a named type to its info relative to given prefix `pre`, where possible.
       * The possible cases are listed inline in the code.
       */
-    def tryWiden(tp: NamedType, pre: Type): Type =
+    def tryWiden(tp: NamedType, pre: Type): Option[Type] =
       pre.member(tp.name) match
         case memberSym: TypeMemberSymbol =>
           memberSym.typeDef match
             case TypeMemberDefinition.TypeAlias(alias) =>
               // if H#T = U, then for any x in L..H, x.T =:= U,
               // hence we can replace with U under all variances
-              reapply(alias)
+              Some(reapply(alias))
             case _ =>
               // If H#T = ? >: S <: U, then for any x in L..H, S <: x.T <: U,
               // hence we can replace with S..U under all variances
-              expandBounds(memberSym.bounds)
+              Some(expandBounds(memberSym.bounds))
         case memberSym: TermSymbol =>
           memberSym.declaredType.dealias match
             case tpe: SingletonType =>
               // if H#x: y.type, then for any x in L..H, x.type =:= y.type,
               // hence we can replace with y.type under all variances
-              reapply(tpe)
+              Some(reapply(tpe))
             case _ =>
-              NoType
+              None
         case _ =>
-          NoType
+          None
     end tryWiden
 
     /** Expand parameter reference corresponding to prefix `pre`;
       * If the expansion is a wildcard parameter reference, convert its
       * underlying bounds to a range, otherwise return the expansion.
       */
-    def expandParam(tp: NamedType, pre: Type): Type =
-      tp.argForParam(pre) match {
-        case arg: TypeRef if arg.prefix.isArgPrefixOf(arg.symbol) =>
-          expandBounds(arg.symbol.asInstanceOf[ClassTypeParamSymbol].bounds)
-        case arg: WildcardTypeBounds => expandBounds(arg.bounds)
-        case arg                     => reapply(arg)
-      }
+    def expandParam(tp: NamedType, pre: Type): Option[Type] =
+      tp.argForParam(pre)
+        .map(_ match {
+          case arg: TypeRef if arg.prefix.isArgPrefixOf(arg.symbol) =>
+            expandBounds(arg.symbol.asInstanceOf[ClassTypeParamSymbol].bounds)
+          case arg: WildcardTypeBounds => expandBounds(arg.bounds)
+          case arg                     => reapply(arg)
+        })
 
     /** Derived selection.
       * @pre   the (upper bound of) prefix `pre` has a member named `tp.name`.
@@ -269,8 +270,9 @@ private[tastyquery] object TypeMaps {
             val forwarded =
               if (tp.symbol.isAllOf(ClassTypeParam)) expandParam(tp, preHi)
               else tryWiden(tp, preHi)
-            if forwarded != NoType then forwarded
-            else range(super.derivedSelect(tp, preLo).lowerBound, super.derivedSelect(tp, preHi).upperBound)
+            forwarded.getOrElse {
+              range(super.derivedSelect(tp, preLo).lowerBound, super.derivedSelect(tp, preHi).upperBound)
+            }
           case _ =>
             super.derivedSelect(tp, pre) match {
               case tp: WildcardTypeBounds => range(tp.bounds.low, tp.bounds.high)

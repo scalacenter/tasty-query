@@ -365,23 +365,23 @@ object Types {
       * - For a type alias, the normalized prefix of its alias.
       * - For all other named type and class infos: the prefix.
       * - Inherited by all other type proxies.
-      * - `NoType` for all other types.
+      * - `None` for all other types.
       */
-    @tailrec final def normalizedPrefix(using Context): Prefix = this match {
+    @tailrec final def normalizedPrefix(using Context): Option[Prefix] = this match {
       case tp: TypeRef =>
         tp.symbol match
           case sym: TypeMemberSymbol =>
             sym.typeDef match
               case TypeMemberDefinition.TypeAlias(alias) => alias.normalizedPrefix
-              case _                                     => tp.prefix
+              case _                                     => Some(tp.prefix)
           case _ =>
-            tp.prefix
+            Some(tp.prefix)
       case tp: TermRef =>
-        tp.prefix
+        Some(tp.prefix)
       case tp: TypeProxy =>
         tp.superType.normalizedPrefix
       case _ =>
-        NoType
+        None
     }
 
     /** The basetype of this type with given class symbol.
@@ -389,7 +389,7 @@ object Types {
       * Returns `NoType` if this type does not have `base` in any of its base
       * types.
       */
-    final def baseType(base: ClassSymbol)(using Context): Type =
+    final def baseType(base: ClassSymbol)(using Context): Option[Type] =
       base.baseTypeOf(this)
 
     /** The member with the given `name`. */
@@ -400,8 +400,8 @@ object Types {
     /** Find the member of this type with the given `name` when prefix `pre`. */
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol
 
-    private[Types] def lookupRefined(name: Name)(using Context): Type =
-      NoType
+    private[Types] def lookupRefined(name: Name)(using Context): Option[Type] =
+      None // TODO
 
     final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): Type =
       TypeOps.asSeenFrom(this, pre, cls)
@@ -680,26 +680,26 @@ object Types {
       * Otherwise, a typebounds argument is dropped and the original type parameter
       * reference is returned.
       */
-    private[tastyquery] final def argForParam(pre: Type, widenAbstract: Boolean = false)(using Context): Type = {
+    private[tastyquery] final def argForParam(pre: Type, widenAbstract: Boolean = false)(using Context): Option[Type] =
       val tparam = symbol.asInstanceOf[ClassTypeParamSymbol]
       val cls = tparam.owner
       val base = pre.baseType(cls)
       base match {
-        case base: AppliedType =>
+        case Some(base: AppliedType) =>
           var tparams = cls.typeParams
           var args = base.args
           var idx = 0
           while (tparams.nonEmpty && args.nonEmpty) {
             if (tparams.head.eq(tparam))
-              return args.head match {
+              return Some(args.head match {
                 case _: WildcardTypeBounds if !widenAbstract => TypeRef(pre, tparam)
                 case arg                                     => arg
-              }
+              })
             tparams = tparams.tail
             args = args.tail
             idx += 1
           }
-          NoType
+          None
         /*case base: AndOrType =>
           var tp1 = argForParam(base.tp1)
           var tp2 = argForParam(base.tp2)
@@ -713,10 +713,10 @@ object Types {
         case _ =>
           /*if (pre.termSymbol.isPackage) argForParam(pre.select(nme.PACKAGE))
           else*/
-          if (pre.isExactlyNothing) pre
-          else NoType
+          if (pre.isExactlyNothing) Some(pre)
+          else None
       }
-    }
+    end argForParam
 
     private[tastyquery] final def optSignature(using Context): Option[Signature] =
       val local = myOptSignature
@@ -742,8 +742,8 @@ object Types {
           val res =
             if (!symbol.isClass && symbol.isAllOf(ClassTypeParam)) argForParam(prefix)
             else prefix.lookupRefined(name)
-          if (res != NoType)
-            return res
+          if (res.isDefined)
+            return res.get
         }
 
         designator match
@@ -1479,12 +1479,5 @@ object Types {
       // TODO Avoid &'ing with Any
       if first eq second then first
       else AndType(first, second)
-  }
-
-  object NoType extends GroundType {
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
-      throw new AssertionError(s"Cannot find member in NoType")
-
-    override def toString(): String = "NoType"
   }
 }

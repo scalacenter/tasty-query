@@ -151,9 +151,9 @@ private[tastyquery] object Subtyping:
   end level3
 
   private def level3WithBaseType(tp1: Type, tp2: Type, cls2: ClassSymbol)(using Context): Boolean =
-    val base = tp1.baseType(cls2)
-    if base != NoType && (base ne tp1) then isSubtype(base, tp2)
-    else level4(tp1, tp2)
+    tp1.baseType(cls2) match
+      case Some(base) if base ne tp1 => isSubtype(base, tp2)
+      case _                         => level4(tp1, tp2)
   end level3WithBaseType
 
   private def compareAppliedType2(tp1: Type, tp2: AppliedType)(using Context): Boolean =
