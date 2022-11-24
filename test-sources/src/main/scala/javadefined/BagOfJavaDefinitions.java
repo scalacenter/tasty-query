@@ -1,9 +1,21 @@
 package javadefined;
 
+import mixjavascala.ScalaStaticOuter;
+import mixjavascala.ScalaOuter;
+
 public class BagOfJavaDefinitions {
   public int x;
 
   public BagOfJavaDefinitions recField;
+
+  public JavaDefined.MyInner innerClassField;
+  public JavaDefined.MyStaticInner staticInnerClassField;
+
+  public MyOwnInner outerRefToInner;
+  public MyOwnStaticInner outerRefToStaticInner;
+
+  ScalaStaticOuter.StaticInnerClass scalaStaticInnerRefFromJava;
+  ScalaOuter.InnerClass scalaInnerRefFromJava;
 
   public BagOfJavaDefinitions(int x) {
     this.x = x;
@@ -23,5 +35,19 @@ public class BagOfJavaDefinitions {
 
   public java.lang.ProcessBuilder processBuilder() {
     return new ProcessBuilder("echo");
+  }
+
+  public class MyOwnInner {
+
+    public int getX() {
+      return x;
+    }
+  }
+
+  public static class MyOwnStaticInner {
+
+    public int getX() {
+      return 0;
+    }
   }
 }

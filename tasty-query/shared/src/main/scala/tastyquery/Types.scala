@@ -175,7 +175,7 @@ object Types {
     final def memberTypeBoundsHigh(member: TypeSymbolWithBounds)(using Context): Type =
       member.upperBound.asSeenFrom(this, member.owner)
 
-    final def select(sym: TermOrTypeSymbol)(using Context): Type =
+    final def select(sym: TermOrTypeSymbol)(using Context): NamedType =
       NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
 
     final def select(name: Name)(using Context): NamedType =
@@ -614,6 +614,9 @@ object Types {
     final def isType: Boolean = isInstanceOf[TypeRef]
 
     final def isTerm: Boolean = isInstanceOf[TermRef]
+
+    private[tastyquery] final def asTerm: TermRef = this.asInstanceOf[TermRef]
+    private[tastyquery] final def asType: TypeRef = this.asInstanceOf[TypeRef]
 
     /** If designator is a name, this name. Otherwise, the original name
       * of the designator symbol.

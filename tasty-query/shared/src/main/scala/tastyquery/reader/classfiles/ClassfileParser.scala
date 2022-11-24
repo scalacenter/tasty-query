@@ -16,11 +16,88 @@ import ClassfileReader.*
 
 private[reader] object ClassfileParser {
 
+  transparent inline def innerClasses(using innerClasses: InnerClasses): innerClasses.type = innerClasses
+  transparent inline def resolver(using resolver: Resolver): resolver.type = resolver
+
   enum ClassKind:
     case Scala2(structure: Structure, runtimeAnnotStart: Forked[DataStream])
-    case Java(structure: Structure, classSig: SigOrSupers)
+    case Java(structure: Structure, classSig: SigOrSupers, inners: Option[Forked[DataStream]])
     case TASTy
     case Artifact
+
+  case class InnerClassRef(name: SimpleName, outer: SimpleName, isStatic: Boolean)
+
+  case class InnerClassDecl(classData: ClassData, name: SimpleName, owner: DeclaringSymbol)
+
+  class Resolver:
+    private val refs = mutable.HashMap.empty[SimpleName, TypeRef]
+    private val staticrefs = mutable.HashMap.empty[SimpleName, TermRef]
+
+    private def computeRef(binaryName: SimpleName, isStatic: Boolean)(using Context, InnerClasses): NamedType =
+      innerClasses.get(binaryName) match
+        case Some(InnerClassRef(name, outer, isStaticInner)) =>
+          val pre = lookup(outer, isStaticInner)
+          pre.select(if isStatic then name else name.toTypeName)
+        case None =>
+          val (pkgRef, cls) = binaryName.name.lastIndexOf('/') match
+            case -1 => (defn.RootPackage.packageRef, binaryName)
+            case i  => (computePkg(binaryName.name.take(i)), termName(binaryName.name.drop(i + 1)))
+          pkgRef.select(if isStatic then cls else cls.toTypeName)
+    end computeRef
+
+    private def computePkg(packageName: String)(using Context): PackageRef =
+      val parts = packageName.split('/').map(termName).toList
+      ctx.findPackageFromRoot(FullyQualifiedName(parts)).packageRef
+
+    private def lookup(binaryName: SimpleName, isStatic: Boolean)(using Context, InnerClasses): NamedType =
+      if isStatic then staticrefs.getOrElseUpdate(binaryName, computeRef(binaryName, isStatic = true).asTerm)
+      else refs.getOrElseUpdate(binaryName, computeRef(binaryName, isStatic = false).asType)
+
+    def resolve(binaryName: SimpleName)(using Context, InnerClasses): TypeRef =
+      lookup(binaryName, isStatic = false).asType
+
+  end Resolver
+
+  /** The inner classes local to a class file */
+  class InnerClasses private (refs: Map[SimpleName, InnerClassRef], decls: List[InnerClassDecl]):
+    def get(binaryName: SimpleName): Option[InnerClassRef] =
+      refs.get(binaryName)
+
+    /** The inner class declarations of the associated classfile */
+    def declarations: List[InnerClassDecl] =
+      decls
+
+  object InnerClasses:
+    def parse(
+      cls: ClassSymbol,
+      moduleClass: ClassSymbol,
+      structure: Structure,
+      lookup: Map[SimpleName, ClassData],
+      innerClasses: Forked[DataStream]
+    )(using Context): InnerClasses =
+      import structure.reader
+
+      def missingClass(binaryName: SimpleName) =
+        ClassfileFormatException(s"Inner class $binaryName not found, keys: ${lookup.keys.toList}")
+
+      def lookupDeclaration(isStatic: Boolean, name: SimpleName, binaryName: SimpleName): InnerClassDecl =
+        val data = lookup.getOrElse(binaryName, throw missingClass(binaryName))
+        InnerClassDecl(data, name, if isStatic then moduleClass else cls)
+
+      val refsBuf = Map.newBuilder[SimpleName, InnerClassRef]
+      val declsBuf = List.newBuilder[InnerClassDecl]
+      innerClasses.use {
+        reader.readInnerClasses { (name, innerBinaryName, outerBinaryName, flags) =>
+          val isStatic = flags.is(Flags.Static)
+          refsBuf += innerBinaryName -> InnerClassRef(name, outerBinaryName, isStatic)
+          if outerBinaryName == structure.binaryName then declsBuf += lookupDeclaration(isStatic, name, innerBinaryName)
+        }
+      }
+      InnerClasses(refsBuf.result(), declsBuf.result())
+    end parse
+
+    val Empty = InnerClasses(Map.empty, Nil)
+  end InnerClasses
 
   class Structure(
     val binaryName: SimpleName,
@@ -51,9 +128,14 @@ private[reader] object ClassfileParser {
 
   }
 
-  def loadJavaClass(classOwner: DeclaringSymbol, name: SimpleName, structure: Structure, classSig: SigOrSupers)(
-    using Context
-  ): Unit = {
+  def loadJavaClass(
+    classOwner: DeclaringSymbol,
+    name: SimpleName,
+    structure: Structure,
+    classSig: SigOrSupers,
+    innerLookup: Map[SimpleName, ClassData],
+    optInnerClasses: Option[Forked[DataStream]]
+  )(using Context, Resolver): List[InnerClassDecl] = {
     import structure.{reader, given}
 
     val allRegisteredSymbols = mutable.ListBuffer.empty[Symbol]
@@ -74,11 +156,17 @@ private[reader] object ClassfileParser {
       .withFlags(Flags.ModuleValCreationFlags)
     allRegisteredSymbols += module
 
+    def readInnerClasses(innerClasses: Forked[DataStream]): InnerClasses =
+      InnerClasses.parse(cls, moduleClass, structure, innerLookup, innerClasses)
+
+    val innerClassesStrict = optInnerClasses.map(readInnerClasses).getOrElse(InnerClasses.Empty)
+    given InnerClasses = innerClassesStrict
+
     def loadFields(fields: Forked[DataStream]): IndexedSeq[(TermSymbol, SigOrDesc)] =
       fields.use {
         val buf = IndexedSeq.newBuilder[(TermSymbol, SigOrDesc)]
-        reader.readFields { (name, sigOrDesc) =>
-          val sym = TermSymbol.create(name, cls).withFlags(Flags.EmptyFlagSet)
+        reader.readFields { (name, sigOrDesc, flags) =>
+          val sym = TermSymbol.create(name, cls).withFlags(flags)
           allRegisteredSymbols += sym
           buf += sym -> sigOrDesc
         }
@@ -88,8 +176,8 @@ private[reader] object ClassfileParser {
     def loadMethods(methods: Forked[DataStream]): IndexedSeq[(TermSymbol, SigOrDesc)] =
       methods.use {
         val buf = IndexedSeq.newBuilder[(TermSymbol, SigOrDesc)]
-        reader.readMethods { (name, sigOrDesc) =>
-          val sym = TermSymbol.create(name, cls).withFlags(Flags.Method)
+        reader.readMethods { (name, sigOrDesc, flags) =>
+          val sym = TermSymbol.create(name, cls).withFlags(flags)
           allRegisteredSymbols += sym
           buf += sym -> sigOrDesc
         }
@@ -98,7 +186,7 @@ private[reader] object ClassfileParser {
 
     def initParents(): Unit =
       def binaryName(cls: ConstantInfo.Class[pool.type]) =
-        pool.utf8(cls.nameIdx).name
+        pool.utf8(cls.nameIdx)
       val parents = classSig match
         case SigOrSupers.Sig(sig) =>
           JavaSignatures.parseSignature(cls, sig, allRegisteredSymbols) match
@@ -124,6 +212,8 @@ private[reader] object ClassfileParser {
         case SigOrDesc.Sig(sig)   => sym.withDeclaredType(JavaSignatures.parseSignature(sym, sig, allRegisteredSymbols))
 
     for sym <- allRegisteredSymbols do sym.checkCompleted()
+
+    innerClasses.declarations
   }
 
   private def parse(classRoot: ClassData, structure: Structure)(using Context): ClassKind = {
@@ -131,6 +221,7 @@ private[reader] object ClassfileParser {
 
     def process(attributesStream: Forked[DataStream]): ClassKind =
       var runtimeAnnotStart: Forked[DataStream] | Null = null
+      var innerClassesStart: Option[Forked[DataStream]] = None
       var sigOrNull: String | Null = null
       var isScala = false
       var isTASTY = false
@@ -152,6 +243,9 @@ private[reader] object ClassfileParser {
           case attr.Signature =>
             if !(isScala || isScalaRaw || isTASTY) then sigOrNull = data.fork.use(reader.readSignature)
             false
+          case attr.InnerClasses =>
+            if !(isScala || isScalaRaw || isTASTY) then innerClassesStart = Some(data.fork)
+            false
           case _ =>
             false
         }
@@ -169,7 +263,7 @@ private[reader] object ClassfileParser {
       else
         val sig = sigOrNull
         val classSig = if sig != null then SigOrSupers.Sig(sig) else SigOrSupers.Supers
-        ClassKind.Java(structure, classSig)
+        ClassKind.Java(structure, classSig, innerClassesStart)
     end process
 
     process(structure.attributes)

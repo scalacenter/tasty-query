@@ -67,6 +67,8 @@ private[classfiles] final class ClassfileReader private () {
 
     type Idx = Indexing.Index[this.type]
 
+    def cls(idx: Idx): ConstantInfo.Class[this.type] = infos(idx).asInstanceOf[ConstantInfo.Class[this.type]]
+
     def utf8(idx: Idx): SimpleName = this.apply(idx) match {
       case ConstantInfo.Utf8(name: SimpleName) => name
       case ConstantInfo.Utf8(forked: Forked[DataStream]) =>
@@ -147,23 +149,21 @@ private[classfiles] final class ClassfileReader private () {
     AccessFlags(flags)
   }
 
-  def readThisClass()(using DataStream, ConstantPool): ConstantInfo.Class[pool.type] = {
-    val entry = pool(pool.idx(data.readU2())).asInstanceOf[ConstantInfo.Class[pool.type]]
-    entry
-  }
+  def readThisClass()(using DataStream, ConstantPool): ConstantInfo.Class[pool.type] =
+    pool.cls(pool.idx(data.readU2()))
 
   def readSuperClass()(using DataStream, ConstantPool): Option[ConstantInfo.Class[pool.type]] = {
     val idx = data.readU2()
     val entry =
       if idx == 0 then None
-      else Some(pool(pool.idx(idx)).asInstanceOf[ConstantInfo.Class[pool.type]])
+      else Some(pool.cls(pool.idx(idx)))
     entry
   }
 
   def readInterfaces()(using DataStream, ConstantPool): IArray[ConstantInfo.Class[pool.type]] = {
     val count = data.readU2()
     val interfaces =
-      for i <- 0 until count yield pool(pool.idx(data.readU2())).asInstanceOf[ConstantInfo.Class[pool.type]]
+      for i <- 0 until count yield pool.cls(pool.idx(data.readU2()))
     IArray.from(interfaces)
   }
 
@@ -191,16 +191,22 @@ private[classfiles] final class ClassfileReader private () {
     reader
   }
 
-  def readFields(op: (SimpleName, SigOrDesc) => Unit)(using DataStream, ConstantPool)(using Context): Unit =
-    readMembers(op)
+  def readFields(op: (SimpleName, SigOrDesc, FlagSet) => Unit)(using DataStream, ConstantPool)(using Context): Unit =
+    readMembers(isMethod = false, op)
 
-  def readMethods(op: (SimpleName, SigOrDesc) => Unit)(using DataStream, ConstantPool)(using Context): Unit =
-    readMembers(op)
+  def readMethods(op: (SimpleName, SigOrDesc, FlagSet) => Unit)(using DataStream, ConstantPool)(using Context): Unit =
+    readMembers(isMethod = true, op)
 
-  private def readMembers(op: (SimpleName, SigOrDesc) => Unit)(using DataStream, ConstantPool)(using Context): Unit = {
+  private def readMembers(
+    isMethod: Boolean,
+    op: (SimpleName, SigOrDesc, FlagSet) => Unit
+  )(using DataStream, ConstantPool)(using Context): Unit = {
     val count = data.readU2()
     loop(count) {
       val accessFlags = data.readU2()
+      val flags =
+        val base = if isMethod then Method else EmptyFlagSet
+        base | AccessModifiers.toFlags(accessFlags)
       val nameIdx = pool.idx(data.readU2())
       val name = pool.utf8(nameIdx)
       val descriptorIdx = pool.idx(data.readU2())
@@ -215,8 +221,9 @@ private[classfiles] final class ClassfileReader private () {
         case _ => false
       }
       val sig = sigOrNull
-      if sig == null then op(name, SigOrDesc.Desc(desc))
-      else op(name, SigOrDesc.Sig(sig))
+      if !flags.is(Synthetic) then
+        if sig == null then op(name, SigOrDesc.Desc(desc), flags)
+        else op(name, SigOrDesc.Sig(sig), flags)
     }
   }
 
@@ -322,6 +329,25 @@ private[classfiles] final class ClassfileReader private () {
       }
     }
     None
+  }
+
+  def readInnerClasses(
+    op: (SimpleName, SimpleName, SimpleName, FlagSet) => Unit
+  )(using DataStream, ConstantPool): Unit = {
+    val numberOfClasses = data.readU2()
+    loop(numberOfClasses) {
+      val innerClassIdx = pool.idx(data.readU2())
+      val outerClassId = data.readU2() // 0 if a local/anonymous class
+      val innerNameId = data.readU2() // 0 if anonymous
+      val accessFlags = AccessModifiers.toFlags(data.readU2())
+
+      // We don't care about local, anonymous or synthetic classes
+      if outerClassId != 0 && innerNameId != 0 && !accessFlags.is(Synthetic) then
+        val innerClass = pool.utf8(pool.cls(innerClassIdx).nameIdx)
+        val innerName = pool.utf8(pool.idx(innerNameId))
+        val outerClass = pool.utf8(pool.cls(pool.idx(outerClassId)).nameIdx)
+        op(innerName, innerClass, outerClass, accessFlags)
+    }
   }
 
   private def acceptConstantInfo()(using DataStream, ConstantPool): ConstantInfo[pool.type] = {
@@ -465,6 +491,36 @@ private[classfiles] object ClassfileReader {
       inline val Class = 'c'
       inline val Annotation = '@'
       inline val Array = '['
+    }
+  }
+
+  object AccessModifiers {
+
+    def toFlags(mods: Int): FlagSet =
+      def isSet(mod: Int): Boolean = (mods & mod) == mod
+      import tastyquery.Flags.*
+      var flags = EmptyFlagSet
+      if isSet(Tags.Private) then flags |= Private
+      if isSet(Tags.Protected) then flags |= Protected
+      if isSet(Tags.Static) then flags |= Static
+      if isSet(Tags.Final) then flags |= Final
+      if isSet(Tags.Interface) then flags |= Trait
+      if isSet(Tags.Abstract) then flags |= Abstract
+      if isSet(Tags.Synthetic) then flags |= Synthetic
+      if isSet(Tags.Enum) then flags |= Enum
+      flags
+
+    object Tags {
+      inline val Public = 0x0001
+      inline val Private = 0x0002
+      inline val Protected = 0x0004
+      inline val Static = 0x0008
+      inline val Final = 0x0010
+      inline val Interface = 0x0200
+      inline val Abstract = 0x0400
+      inline val Synthetic = 0x1000
+      inline val Annotation = 0x2000
+      inline val Enum = 0x4000
     }
   }
 

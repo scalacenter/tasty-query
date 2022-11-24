@@ -6,17 +6,19 @@ import scala.reflect.NameTransformer
 import tastyquery.Classpaths.*
 import tastyquery.Contexts
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 
 import tastyquery.reader.classfiles.ClassfileParser
-import tastyquery.reader.classfiles.ClassfileParser.ClassKind
+import tastyquery.reader.classfiles.ClassfileParser.{ClassKind, InnerClassDecl, Resolver}
 import tastyquery.reader.tasties.TastyUnpickler
 
 private[tastyquery] object Loaders {
 
   class MissingTopLevelTasty(root: Loader.Root) extends Exception(s"Missing TASTy for ${root.fullName}")
+  class UnexpectedTasty(root: Loader.Root) extends Exception(s"Unexpected TASTy for ${root.fullName}")
 
   object Loader:
     private[Loaders] case class Root private[Loaders] (pkg: PackageSymbol, rootName: SimpleName):
@@ -26,10 +28,12 @@ private[tastyquery] object Loaders {
 
   class Loader(val classpath: Classpath) { loader =>
 
+    given Resolver = Resolver()
+
     private enum Entry:
       case ClassAndTasty(classData: ClassData, tastyData: TastyData)
       case TastyOnly(tastyData: TastyData)
-      case ClassOnly(classData: ClassData)
+      case ClassOnly(classData: ClassData, inners: IArray[ClassData])
 
     private type ByEntryMap = Map[Classpath.Entry, IArray[(PackageSymbol, IArray[SimpleName])]]
 
@@ -62,12 +66,28 @@ private[tastyquery] object Loaders {
       * after this method.
       */
     private def completeRoot(root: Loader.Root, entry: Entry)(using Context): Unit =
+
+      def innerClassLookup(nested: IArray[ClassData]): Map[SimpleName, ClassData] =
+        val mkBinaryName: String => SimpleName =
+          if root.pkg == defn.EmptyPackage then termName(_)
+          else
+            val pre = root.pkg.fullName.path.mkString("/")
+            bin => termName(s"$pre/$bin")
+        Map.from(nested.view.map(c => mkBinaryName(c.binaryName) -> c))
+      end innerClassLookup
+
       def inspectClass(root: Loader.Root, classData: ClassData, entry: Entry): Unit =
         ClassfileParser.readKind(root.pkg, classData) match
           case ClassKind.Scala2(structure, runtimeAnnotStart) =>
             ClassfileParser.loadScala2Class(structure, runtimeAnnotStart)
-          case ClassKind.Java(structure, sig) =>
-            ClassfileParser.loadJavaClass(root.pkg, root.rootName, structure, sig)
+          case ClassKind.Java(structure, sig, optInnerClasses) =>
+            entry match
+              case Entry.ClassOnly(_, nested) =>
+                val lookup = innerClassLookup(nested)
+                val innerDecls =
+                  ClassfileParser.loadJavaClass(root.pkg, root.rootName, structure, sig, lookup, optInnerClasses)
+                if innerDecls.nonEmpty then enterInners(innerDecls, lookup)
+              case _ => throw UnexpectedTasty(root)
           case ClassKind.TASTy =>
             entry match
               case Entry.ClassAndTasty(_, tasty) =>
@@ -89,6 +109,22 @@ private[tastyquery] object Loaders {
           .unpickle(tastyData.debugPath)
         topLevelTastys += root -> trees
       end enterTasty
+
+      def enterInners(explore: List[InnerClassDecl], lookup: Map[SimpleName, ClassData])(using Resolver): Unit =
+        def unexpectedClassKind(kind: ClassKind, inner: InnerClassDecl) =
+          val fullName = s"${root.pkg.fullName.path.mkString("/")}/${inner.classData.binaryName}"
+          ClassfileFormatException(s"Unexpected class kind $kind for inner class $fullName")
+
+        explore match
+          case inner :: rest =>
+            ClassfileParser.readKind(inner.owner, inner.classData) match
+              case ClassKind.Java(structure, sig, inners) =>
+                val innerDecls = ClassfileParser.loadJavaClass(inner.owner, inner.name, structure, sig, lookup, inners)
+                enterInners(rest ::: innerDecls, lookup)
+              case kind => throw unexpectedClassKind(kind, inner)
+          case nil =>
+            ()
+      end enterInners
 
       entry match
         case entry: Entry.ClassOnly =>
@@ -154,17 +190,25 @@ private[tastyquery] object Loaders {
           tData <- data.tastys
           decodedName = NameTransformer.decode(tData.binaryName)
           if !isNestedOrModuleClassName(decodedName)
-        do f(SimpleName(decodedName), Entry.TastyOnly(tData))
+        do f(termName(decodedName), Entry.TastyOnly(tData))
       else
         val tastyMap = data.tastys.map(t => t.binaryName -> t).toMap
-        for
-          cData <- data.classes
-          decodedName = NameTransformer.decode(cData.binaryName)
-          if !isNestedOrModuleClassName(decodedName)
-        do
+
+        val (topLevels, nested) = data.classes
+          .map(cData => cData -> NameTransformer.decode(cData.binaryName))
+          .partition((_, decodedName) => !isNestedOrModuleClassName(decodedName))
+
+        val nestedLookup =
+          nested.groupMap((_, decodedName) => termName(decodedName.takeWhile(_ != '$')))(_(0))
+
+        for (cData, decodedName) <- topLevels do
+          val rootName = termName(decodedName)
           val entry =
-            tastyMap.get(cData.binaryName).map(Entry.ClassAndTasty(cData, _)).getOrElse(Entry.ClassOnly(cData))
-          f(SimpleName(decodedName), entry)
+            tastyMap.get(cData.binaryName).map(Entry.ClassAndTasty(cData, _)).getOrElse {
+              // ClassOnly could be Scala 2 or Java, but we don't know yet.
+              Entry.ClassOnly(cData, nestedLookup.get(rootName).getOrElse(IArray.empty))
+            }
+          f(rootName, entry)
     end foreachEntry
 
     def scanPackage(pkg: PackageSymbol)(using Context): Unit = {

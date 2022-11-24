@@ -58,6 +58,13 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(identity.signedName, "identity", "(1,java.lang.Object):java.lang.Object")
   }
 
+  testWithContext("JavaInnerClass") {
+    val TreeMap = ctx.findTopLevelClass("java.util.TreeMap")
+
+    val getFirstEntry = TreeMap.findNonOverloadedDecl(name"getFirstEntry")
+    assertIsSignedName(getFirstEntry.signedName, "getFirstEntry", "():java.util.TreeMap.Entry")
+  }
+
   testWithContext("RichInt") {
     val RichInt = ctx.findTopLevelClass("scala.runtime.RichInt")
 

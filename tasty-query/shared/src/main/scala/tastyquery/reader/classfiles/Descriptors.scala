@@ -9,9 +9,15 @@ import tastyquery.Types.*
 import tastyquery.Symbols.*
 import tastyquery.Flags
 
+import ClassfileParser.*
+
 private[classfiles] object Descriptors:
 
-  def parseSupers(cls: ClassSymbol, superClass: Option[String], interfaces: IArray[String])(using Context): List[Type] =
+  def parseSupers(cls: ClassSymbol, superClass: Option[SimpleName], interfaces: IArray[SimpleName])(
+    using Context,
+    InnerClasses,
+    Resolver
+  ): List[Type] =
     cls.withTypeParams(Nil)
     // !!! Cannot access `defn.ObjectClass` here, because that's a cycle when initializing defn.ObjectClass itself
     if cls.owner == defn.javaLangPackage && cls.name == tpnme.Object then defn.AnyType :: defn.MatchableType :: Nil
@@ -19,26 +25,11 @@ private[classfiles] object Descriptors:
       val superRef = superClass.map(classRef).getOrElse(defn.ObjectType)
       superRef :: interfaces.map(classRef).toList
 
-  private def classRef(binaryName: String)(using Context): TypeRef =
-    def followPackages(acc: PackageSymbol, parts: List[String]): TypeRef =
-      (parts: @unchecked) match
-        case className :: Nil =>
-          TypeRef(PackageRef(acc), typeName(className))
-        case nextPackageName :: rest =>
-          acc.getPackageDecl(termName(nextPackageName)) match
-            case Some(pkg) =>
-              followPackages(pkg, rest)
-            case res =>
-              sys.error(s"cannot find package $nextPackageName in $acc")
-    end followPackages
-
-    val parts = binaryName.split('/').toList
-    val initPackage = if parts.tail.isEmpty then defn.EmptyPackage else defn.RootPackage
-    followPackages(initPackage, parts)
-  end classRef
+  def classRef(binaryName: SimpleName)(using Context, InnerClasses, Resolver): TypeRef =
+    resolver.resolve(binaryName)
 
   @throws[ClassfileFormatException]
-  def parseDescriptor(member: Symbol, desc: String)(using Context): Type =
+  def parseDescriptor(member: Symbol, desc: String)(using Context, InnerClasses, Resolver): Type =
     // TODO: once we support inner classes, decide if we merge with parseSignature
     var offset = 0
     var end = desc.length
@@ -83,7 +74,7 @@ private[classfiles] object Descriptors:
 
     def objectType: Option[Type] =
       if consume('L') then // has 'L', ';', and class name
-        val binaryName = charsUntil(';') // consume until ';', skip ';'
+        val binaryName = termName(charsUntil(';')) // consume until ';', skip ';'
         Some(classRef(binaryName))
       else None
 

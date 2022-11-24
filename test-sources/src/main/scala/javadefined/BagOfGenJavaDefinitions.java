@@ -2,6 +2,8 @@ package javadefined;
 
 import javadefined.GenericJavaClass;
 import javadefined.JavaDefined;
+import mixjavascala.ScalaGenOuter;
+import mixjavascala.ScalaStaticOuter;
 
 public class BagOfGenJavaDefinitions {
 
@@ -32,6 +34,46 @@ public class BagOfGenJavaDefinitions {
 
   public <A extends JavaInterface1 & JavaInterface2> void refInterface() {
     // <A::Ljavadefined/JavaInterface1;:Ljavadefined/JavaInterface2;>()V
+  }
+
+  public GenericJavaClass<JavaDefined>.MyInner<JavaDefined> getInner() {
+    // ()Ljavadefined/GenericJavaClass<Ljavadefined/JavaDefined;>.MyInner<Ljavadefined/JavaDefined;>;
+    return null;
+  }
+
+  public ScalaGenOuter<JavaDefined>.InnerGenClass<JavaDefined> getScalaInner() {
+    // ()Lmixjavascala.ScalaGenOuter<Ljavadefined/JavaDefined;>.InnerGenClass<Ljavadefined/JavaDefined;>;
+    return null;
+  }
+
+  public ScalaStaticOuter.StaticInnerGenClass<JavaDefined> getScalaStaticInner() {
+    // ()Lmixjavascala.ScalaStaticOuter$StaticInnerGenClass<Ljavadefined/JavaDefined;>;
+    return null;
+  }
+
+  public GenericJavaClass.MyStaticInner<JavaDefined> getStaticInner() {
+    // ()Ljavadefined/GenericJavaClass$MyStaticInner<Ljavadefined/JavaDefined;>;
+    //                                ^ note the $ in the name, aka inner class name is mangled.
+    return null;
+  }
+
+  public JavaDefined.MyInner.MyInnerInner.MyInnerInnerGenInner<JavaDefined> getAbsurdInner() {
+    // ()Ljavadefined.JavaDefined$MyInner$MyInnerInner$MyInnerInnerGenInner<Ljavadefined/JavaDefined;>;
+    //                           ^       ^            ^
+    //                           note the $ in the name, aka inner class names are mangled.
+    return null;
+  }
+
+  public JavaDefined.MyGenInner<JavaDefined>.MyInnerInner.MyInnerInnerInner getAbsurdInner2() {
+    // ()Ljavadefined.JavaDefined$MyGenInner<Ljavadefined/JavaDefined;>.MyInnerInner.MyInnerInnerInner;
+    //                                                                 ^            ^
+    //                                       note that after the first type args, switch to `.` instead of `$`.
+    return null;
+  }
+
+  public JavaDefined.MyStaticGenInner.MyStaticGenInnerInner.MyStaticGenInnerInnerInner<JavaDefined> getAbsurdInner3() {
+    // ()Ljavadefined.JavaDefined$MyStaticGenInner$MyStaticGenInnerInner$MyStaticGenInnerInnerInner<javadefined.JavaDefined>;
+    return null;
   }
 
   // public GenericJavaClass<JavaDefined>.MyInner<JavaDefined> getInner() {

@@ -42,6 +42,7 @@ object Names {
     val TASTY = termName("TASTY")
     val Scala = termName("Scala")
     val ScalaSig = termName("ScalaSig")
+    val InnerClasses = termName("InnerClasses")
     val RuntimeVisibleAnnotations = termName("RuntimeVisibleAnnotations") // RetentionPolicy.RUNTIME
     val RuntimeInvisibleAnnotations = termName("RuntimeInvisibleAnnotations") // RetentionPolicy.CLASS
     val Signature = termName("Signature")
