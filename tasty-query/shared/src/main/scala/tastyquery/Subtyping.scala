@@ -273,7 +273,7 @@ private[tastyquery] object Subtyping:
     case tp: TypeRef =>
       tp.symbol match
         case cls: ClassSymbol =>
-          !cls.isValueClass && !cls.is(ModuleClass) && cls != defn.NothingClass
+          !cls.isValueClass && !cls.is(Module) && cls != defn.NothingClass
         case _: TypeSymbolWithBounds =>
           false
     case tp: AppliedType =>

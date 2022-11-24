@@ -190,7 +190,7 @@ private[pickles] class PickleReader {
     val pickleFlags = readPickleFlags(name1.isTypeName)
     val flags = pickleFlagsToFlags(pickleFlags)
     val name =
-      if flags.is(ModuleClass) then name1.toTermName.withObjectSuffix.toTypeName
+      if pickleFlags.isType && flags.isAllOf(Module) then name1.toTermName.withObjectSuffix.toTypeName
       else if flags.is(Method) && name1 == Scala2Constructor then nme.Constructor
       else name1
 
