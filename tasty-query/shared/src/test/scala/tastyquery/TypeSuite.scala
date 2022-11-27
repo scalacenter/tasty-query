@@ -390,6 +390,44 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(recField.declaredType.isRef(BagOfJavaDefinitionsClass))
     }
 
+    testDef(name"innerClassField") { innerClassField =>
+      val JavaDefinedClass = ctx.findTopLevelClass("javadefined.JavaDefined")
+      val MyInnerClass = JavaDefinedClass.findDecl(tname"MyInner").asClass
+
+      assert(innerClassField.declaredType.isRef(MyInnerClass))
+    }
+
+    testDef(name"staticInnerClassField") { staticInnerClassField =>
+      val MyStaticInnerClass = ctx.findStaticClass("javadefined.JavaDefined.MyStaticInner")
+
+      assert(staticInnerClassField.declaredType.isRef(MyStaticInnerClass))
+    }
+
+    testDef(name"outerRefToInner") { outerRefToInner =>
+      val MyOwnInnerClass = BagOfJavaDefinitionsClass.findDecl(tname"MyOwnInner").asClass
+
+      assert(outerRefToInner.declaredType.isRef(MyOwnInnerClass))
+    }
+
+    testDef(name"outerRefToStaticInner") { outerRefToStaticInner =>
+      val MyOwnStaticInnerClass = ctx.findStaticClass("javadefined.BagOfJavaDefinitions.MyOwnStaticInner")
+
+      assert(outerRefToStaticInner.declaredType.isRef(MyOwnStaticInnerClass))
+    }
+
+    testDef(name"scalaStaticInnerRefFromJava") { scalaStaticInnerRefFromJava =>
+      val StaticInnerClass = ctx.findStaticClass("mixjavascala.ScalaStaticOuter.StaticInnerClass")
+
+      assert(scalaStaticInnerRefFromJava.declaredType.isRef(StaticInnerClass))
+    }
+
+    testDef(name"scalaInnerRefFromJava") { scalaInnerRefFromJava =>
+      val ScalaOuterClass = ctx.findTopLevelClass("mixjavascala.ScalaOuter")
+      val InnerClass = ScalaOuterClass.findDecl(tname"InnerClass").asClass
+
+      assert(scalaInnerRefFromJava.declaredType.isRef(InnerClass))
+    }
+
     testDef(name"printX") { printX =>
       val tpe = printX.declaredType.asInstanceOf[MethodType]
       assert(tpe.resultType.isRef(defn.UnitClass))
@@ -423,6 +461,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   testWithContext("bag-of-generic-java-definitions[signatures]") {
     val BagOfGenJavaDefinitionsClass = ctx.findTopLevelClass("javadefined.BagOfGenJavaDefinitions")
     val JavaDefinedClass = ctx.findTopLevelClass("javadefined.JavaDefined")
+    val ScalaGenOuterClass = ctx.findTopLevelClass("mixjavascala.ScalaGenOuter")
     val GenericJavaClass = ctx.findTopLevelClass("javadefined.GenericJavaClass")
     val JavaInterface1 = ctx.findTopLevelClass("javadefined.JavaInterface1")
     val JavaInterface2 = ctx.findTopLevelClass("javadefined.JavaInterface2")
@@ -452,6 +491,91 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     testDef(name"printX") { printX =>
       val tpe = printX.declaredType.asInstanceOf[PolyType]
       assert(tpe.paramTypeBounds.head.high.isRef(ExceptionClass))
+    }
+
+    testDef(name"getInner") { getInner =>
+      val MyInnerClass = GenericJavaClass.findDecl(tname"MyInner").asClass
+      val tpe = getInner.declaredType.asInstanceOf[MethodType]
+
+      // javadefined.GenericJavaClass[JavaDefined]#MyInner[JavaDefined]
+      val res = tpe.resultType.asInstanceOf[AppliedType]
+
+      // javadefined.GenericJavaClass[JavaDefined]
+      val pre = res.tycon.asInstanceOf[TypeRef].prefix.asInstanceOf[Type]
+
+      assert(res.isApplied(_.isRef(MyInnerClass), List(_.isRef(JavaDefinedClass))))
+      assert(pre.isGenJavaClassOf(_.isRef(JavaDefinedClass)))
+    }
+
+    testDef(name"getStaticInner") { getStaticInner =>
+      val MyStaticInnerClass = ctx.findStaticClass("javadefined.GenericJavaClass.MyStaticInner")
+      val tpe = getStaticInner.declaredType.asInstanceOf[MethodType]
+
+      // javadefined.GenericJavaClass.MyStaticInner[JavaDefined]
+      val res = tpe.resultType.asInstanceOf[AppliedType]
+
+      assert(res.isApplied(_.isRef(MyStaticInnerClass), List(_.isRef(JavaDefinedClass))))
+    }
+
+    testDef(name"getScalaInner") { getScalaInner =>
+      val InnerGenClass = ScalaGenOuterClass.findDecl(tname"InnerGenClass").asClass
+      val tpe = getScalaInner.declaredType.asInstanceOf[MethodType]
+
+      // mixjavascala.ScalaGenOuter[JavaDefined]#InnerGenClass[JavaDefined]
+      val res = tpe.resultType.asInstanceOf[AppliedType]
+
+      // mixjavascala.ScalaGenOuter[JavaDefined]
+      val pre = res.tycon.asInstanceOf[TypeRef].prefix.asInstanceOf[Type]
+
+      assert(res.isApplied(_.isRef(InnerGenClass), List(_.isRef(JavaDefinedClass))))
+      assert(pre.isApplied(_.isRef(ScalaGenOuterClass), List(_.isRef(JavaDefinedClass))))
+    }
+
+    testDef(name"getScalaStaticInner") { getScalaStaticInner =>
+      val StaticInnerGenClass = ctx.findStaticClass("mixjavascala.ScalaStaticOuter.StaticInnerGenClass")
+      val tpe = getScalaStaticInner.declaredType.asInstanceOf[MethodType]
+
+      // mixjavascala.ScalaStaticOuter#StaticInnerGenClass[JavaDefined]
+      val res = tpe.resultType.asInstanceOf[AppliedType]
+
+      assert(res.isApplied(_.isRef(StaticInnerGenClass), List(_.isRef(JavaDefinedClass))))
+    }
+
+    testDef(name"getAbsurdInner") { getAbsurdInner =>
+      val MyInnerClass = JavaDefinedClass.findDecl(tname"MyInner").asClass
+      val MyInnerInnerClass = MyInnerClass.findDecl(tname"MyInnerInner").asClass
+      val MyInnerInnerGenInnerClass = MyInnerInnerClass.findDecl(tname"MyInnerInnerGenInner").asClass
+      val tpe = getAbsurdInner.declaredType.asInstanceOf[MethodType]
+
+      // javadefined.JavaDefined.MyInner.MyInnerInner.MyInnerInnerGenInner[JavaDefined]
+      val res = tpe.resultType.asInstanceOf[AppliedType]
+
+      assert(res.isApplied(_.isRef(MyInnerInnerGenInnerClass), List(_.isRef(JavaDefinedClass))))
+    }
+
+    testDef(name"getAbsurdInner2") { getAbsurdInner2 =>
+      val MyGenInnerClass = JavaDefinedClass.findDecl(tname"MyGenInner").asClass
+      val MyInnerInnerClass = MyGenInnerClass.findDecl(tname"MyInnerInner").asClass
+      val MyInnerInnerInnerClass = MyInnerInnerClass.findDecl(tname"MyInnerInnerInner").asClass
+      val tpe = getAbsurdInner2.declaredType.asInstanceOf[MethodType]
+
+      // javadefined.JavaDefined.MyGenInner[JavaDefined]#MyInnerInner.MyInnerInnerInner
+      val res = tpe.resultType
+
+      assert(res.isRef(MyInnerInnerInnerClass))
+    }
+
+    testDef(name"getAbsurdInner3") { getAbsurdInner3 =>
+      val JavaDefinedPre = "javadefined.JavaDefined"
+      val MyStaticGenInnerInnerInnerClass =
+        ctx.findStaticClass(s"$JavaDefinedPre.MyStaticGenInner.MyStaticGenInnerInner.MyStaticGenInnerInnerInner")
+
+      val tpe = getAbsurdInner3.declaredType.asInstanceOf[MethodType]
+
+      // javadefined.JavaDefined.MyStaticGenInner.MyStaticGenInnerInner.MyStaticGenInnerInnerInner[JavaDefined]
+      val res = tpe.resultType.asInstanceOf[AppliedType]
+
+      assert(res.isApplied(_.isRef(MyStaticGenInnerInnerInnerClass), List(_.isRef(JavaDefinedClass))))
     }
 
     testDef(name"recTypeParams") { recTypeParams =>

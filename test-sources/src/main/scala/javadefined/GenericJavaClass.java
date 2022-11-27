@@ -11,11 +11,13 @@ public class GenericJavaClass<T> {
     return x;
   }
 
-  // public class MyInner<U> {
-  //   T getX() {
-  //     return x; // this will throw ClassCastException when called on the result of shadowedParam if !(T =:= U)
-  //   }
-  // }
+  public class MyInner<U> {
+    T getX() {
+      return x; // this will throw ClassCastException when called on the result of shadowedParam if !(T =:= U)
+    }
+  }
+
+  public static class MyStaticInner<U> {}
 
   // public <V> MyInner<V> getInner() {
   //   return new MyInner(); // <V:Ljava/lang/Object;>()Ljavadefined/GenericJavaClass<TT;>.MyInner<TV;>;

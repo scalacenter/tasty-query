@@ -12,13 +12,17 @@ import tastyquery.Names.*
 import tastyquery.Types.*
 import tastyquery.Symbols.*
 
+import ClassfileParser.{InnerClasses, Resolver}
+
 private[classfiles] object JavaSignatures:
 
   private type JavaSignature = Null | Binders | Map[TypeName, ClassTypeParamSymbol] | mutable.ListBuffer[TypeName]
 
   @throws[ClassfileFormatException]
   def parseSignature(member: Symbol { val owner: Symbol }, signature: String, allRegisteredSymbols: Growable[Symbol])(
-    using Context
+    using Context,
+    InnerClasses,
+    Resolver
   ): Type =
     var offset = 0
     var end = signature.length
@@ -104,15 +108,24 @@ private[classfiles] object JavaSignatures:
     inline def readWhile[T](char: Char, inline op: T): List[T] =
       accumulate(accWhile = true, consume(char))(op)
 
-    def identifier(): SimpleName =
+    inline def charsWhile(inline f: Char => Boolean): SimpleName =
       val old = offset
-      while available > 0
-        && (peek: @switch).match
-          case '.' | ';' | '[' | '/' | '<' | '>' | ':' => false
-          case _                                       => true
-      do offset += 1
+      while available > 0 && f(peek) do offset += 1
       if available == 0 then abort
       else termName(signature.slice(old, offset))
+
+    def identifier(): SimpleName =
+      charsWhile({
+        case '.' | ';' | '[' | '/' | '<' | '>' | ':' => false
+        case _                                       => true
+      })
+
+    /** same as [[identifier]], except includes '/' */
+    def binaryName(): SimpleName =
+      charsWhile({
+        case '.' | ';' | '[' | '<' | '>' | ':' => false
+        case _                                 => true
+      })
 
     def baseType: Option[Type] =
       if available >= 1 then
@@ -137,27 +150,6 @@ private[classfiles] object JavaSignatures:
 
     def classTypeSignature(env: JavaSignature): Option[Type] =
 
-      def packageSpecifierAndRawClass(): TypeRef =
-        def followPackages(acc: PackageSymbol): TypeRef =
-          val next = identifier()
-          if consume('/') then // must have '/', identifier, and terminal char.
-            acc.getPackageDecl(next) match
-              case Some(pkg) =>
-                followPackages(pkg)
-              case res =>
-                sys.error(s"cannot find package $next in $acc")
-          else TypeRef(acc.packageRef, next.toTypeName)
-        end followPackages
-
-        val firstIdent = identifier()
-        if consume('/') then // must have '/', identifier, and terminal char.
-          val firstPackage = defn.RootPackage.getPackageDecl(firstIdent).getOrElse {
-            sys.error(s"cannot find package $firstIdent in ${defn.RootPackage}")
-          }
-          followPackages(firstPackage)
-        else TypeRef(defn.EmptyPackage.packageRef, firstIdent.toTypeName)
-      end packageSpecifierAndRawClass
-
       def simpleClassTypeSignature(clsTpe: TypeRef): Type =
         if consume('<') then // must have '<', '>', and class type
           AppliedType(clsTpe, typeArgumentsRest(env))
@@ -174,7 +166,7 @@ private[classfiles] object JavaSignatures:
       end classTypeSignatureRest
 
       if consume('L') then // must have 'L', identifier, and ';'.
-        val pre = simpleClassTypeSignature(packageSpecifierAndRawClass())
+        val pre = simpleClassTypeSignature(Descriptors.classRef(binaryName()))
         Some(classTypeSignatureRest(pre))
       else None
     end classTypeSignature

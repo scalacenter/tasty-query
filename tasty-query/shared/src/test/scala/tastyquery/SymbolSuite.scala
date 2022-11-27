@@ -300,31 +300,4 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     intercept[MemberNotFoundException](ChildClass.parents)
     intercept[MemberNotFoundException](ChildClass.parents) // it's the same exception the second time
   }
-
-  testWithContext(
-    "resolve-class-mentioning-inner-class",
-    name"java" / name"util" / tname"TreeMap",
-    name"java" / name"util" / tname"AbstractMap",
-    name"java" / name"util" / tname"NavigableMap",
-    name"java" / name"util" / tname"SortedMap",
-    name"java" / name"util" / tname"Map",
-    jlObject,
-    jlCloneable,
-    javaFunction1,
-    jioSerializable
-  ) {
-    val TreeMap = ctx.findTopLevelClass("java.util.TreeMap")
-    val entrySet = TreeMap.findDecl(name"entrySet") // private field entrySet: Ljava/util/TreeMap<TK;TV;>.EntrySet;
-    val entrySetSelection = entrySet.declaredType match
-      case fieldTpe: ExprType =>
-        fieldTpe.resultType match
-          case sel: TypeRef => sel
-          case _            => fail("expected a type selection")
-      case _ => fail("entrySet is not an ExprType")
-    val expectedMessage =
-      "Cannot find member 'EntrySet' in class symbol[class TreeMap] for prefix " +
-        "AppliedType(TypeRef(PackageRef(java.util), symbol[class TreeMap]), " +
-        "List(TypeRef(NoPrefix, symbol[K]), TypeRef(NoPrefix, symbol[V])))"
-    interceptMessage[MemberNotFoundException](expectedMessage)(entrySetSelection.symbol)
-  }
 }

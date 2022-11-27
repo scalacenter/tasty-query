@@ -61,8 +61,6 @@ object Flags:
   val Macro: Flag = newFlag("Macro")
   val Method: Flag = newFlag("Method")
   val Module: Flag = newFlag("Module")
-  val ModuleVal: Flag = newFlag("ModuleVal")
-  val ModuleClass: Flag = newFlag("ModuleClass")
   val Mutable: Flag = newFlag("Mutable")
   val NoInitsInterface: Flag = newFlag("NoInitsInterface")
   val Opaque: Flag = newFlag("Opaque")
@@ -86,7 +84,7 @@ object Flags:
   val ClassTypeParam: FlagSet = Private | TypeParameter
 
   /** Modules always have these flags set */
-  val ModuleValCreationFlags: FlagSet = ModuleVal | Lazy | Final | StableRealizable
+  val ModuleValCreationFlags: FlagSet = Module | Lazy | Final | StableRealizable
 
   /** Module classes always have these flags set */
-  val ModuleClassCreationFlags: FlagSet = ModuleClass | Final
+  val ModuleClassCreationFlags: FlagSet = Module | Final
