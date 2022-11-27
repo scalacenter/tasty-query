@@ -103,18 +103,17 @@ object Symbols {
     final def tree(using Context): Option[DefiningTreeType] =
       myTree
 
-    private[tastyquery] final def withFlags(flags: FlagSet): this.type =
+    private[tastyquery] final def withFlags(flags: FlagSet, privateWithin: Option[Symbol]): this.type =
       if isFlagsInitialized then throw IllegalStateException(s"reassignment of flags to $this")
       else
         isFlagsInitialized = true
         myFlags = flags
+        myPrivateWithin = privateWithin
         this
 
-    private[tastyquery] final def withPrivateWithin(privateWithin: Symbol): this.type =
-      if myPrivateWithin.isDefined then throw new IllegalStateException(s"reassignment of privateWithin to $this")
-      else
-        myPrivateWithin = Some(privateWithin)
-        this
+    final def privateWithin: Option[Symbol] =
+      if isFlagsInitialized then myPrivateWithin
+      else throw IllegalStateException(s"flags of $this have not been initialized")
 
     final def flags: FlagSet =
       if isFlagsInitialized then myFlags
@@ -134,6 +133,13 @@ object Symbols {
       case _: Symbol | null =>
         assert(false, s"cannot access owner, ${this.name} is local or not declared within any scope")
     }
+
+    /** The closest enclosing package of this symbol.
+      * Returns this if this is a package.
+      */
+    private[tastyquery] final def closestPackage: PackageSymbol = this match
+      case pkg: PackageSymbol    => pkg
+      case sym: TermOrTypeSymbol => sym.owner.closestPackage
 
     private[Symbols] final def addDeclIfDeclaringSym(decl: TermOrTypeSymbol): decl.type =
       this match
@@ -859,7 +865,7 @@ object Symbols {
       cls
         .withTypeParams(Nil)
         .withParentsDirect(defn.ObjectType :: Nil)
-        .withFlags(EmptyFlagSet)
+        .withFlags(EmptyFlagSet, None)
       cls.checkCompleted()
       cls
   end ClassSymbol
@@ -878,7 +884,7 @@ object Symbols {
     // Cache fields
     val packageRef: PackageRef = PackageRef(this: @unchecked)
 
-    this.withFlags(EmptyFlagSet)
+    this.withFlags(EmptyFlagSet, None)
 
     private[tastyquery] def getPackageDeclOrCreate(name: SimpleName)(using Context): PackageSymbol =
       getPackageDecl(name).getOrElse {

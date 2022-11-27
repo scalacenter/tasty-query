@@ -6,6 +6,7 @@ import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags
+import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Types.*
@@ -13,6 +14,7 @@ import tastyquery.Types.*
 import tastyquery.reader.pickles.{Unpickler, PickleReader}
 
 import ClassfileReader.*
+import ClassfileReader.Access.AccessFlags
 
 private[reader] object ClassfileParser {
 
@@ -100,6 +102,7 @@ private[reader] object ClassfileParser {
   end InnerClasses
 
   class Structure(
+    val access: AccessFlags,
     val binaryName: SimpleName,
     val reader: ClassfileReader,
     val supers: Forked[DataStream],
@@ -138,22 +141,30 @@ private[reader] object ClassfileParser {
   )(using Context, Resolver): List[InnerClassDecl] = {
     import structure.{reader, given}
 
+    val pkg = classOwner.closestPackage
+
     val allRegisteredSymbols = mutable.ListBuffer.empty[Symbol]
 
     val cls = ClassSymbol.create(name.toTypeName, classOwner)
     allRegisteredSymbols += cls
 
+    def privateWithin(access: AccessFlags): Option[Symbol] =
+      if access.isPackagePrivate then Some(pkg) else None
+
+    val clsFlags = structure.access.toFlags
+    val clsPrivateWithin = privateWithin(structure.access)
+
     val moduleClass = ClassSymbol
       .create(name.withObjectSuffix.toTypeName, classOwner)
       .withTypeParams(Nil)
-      .withFlags(Flags.ModuleClassCreationFlags)
-    moduleClass.withParentsDirect(defn.ObjectType :: Nil)
+      .withFlags(clsFlags | Flags.ModuleClassCreationFlags, clsPrivateWithin)
+      .withParentsDirect(defn.ObjectType :: Nil)
     allRegisteredSymbols += moduleClass
 
     val module = TermSymbol
       .create(name.toTermName, classOwner)
       .withDeclaredType(moduleClass.typeRef)
-      .withFlags(Flags.ModuleValCreationFlags)
+      .withFlags(clsFlags | Flags.ModuleValCreationFlags, clsPrivateWithin)
     allRegisteredSymbols += module
 
     def readInnerClasses(innerClasses: Forked[DataStream]): InnerClasses =
@@ -162,27 +173,27 @@ private[reader] object ClassfileParser {
     val innerClassesStrict = optInnerClasses.map(readInnerClasses).getOrElse(InnerClasses.Empty)
     given InnerClasses = innerClassesStrict
 
-    def loadFields(fields: Forked[DataStream]): IndexedSeq[(TermSymbol, SigOrDesc)] =
-      fields.use {
-        val buf = IndexedSeq.newBuilder[(TermSymbol, SigOrDesc)]
-        reader.readFields { (name, sigOrDesc, flags) =>
-          val sym = TermSymbol.create(name, cls).withFlags(flags)
-          allRegisteredSymbols += sym
-          buf += sym -> sigOrDesc
-        }
-        buf.result()
-      }
+    def createMember(name: SimpleName, baseFlags: FlagSet, access: AccessFlags): TermSymbol =
+      val flags = baseFlags | access.toFlags
+      val owner = if flags.is(Flags.Static) then moduleClass else cls
+      val sym = TermSymbol.create(name, owner).withFlags(flags, privateWithin(access))
+      allRegisteredSymbols += sym
+      sym
 
-    def loadMethods(methods: Forked[DataStream]): IndexedSeq[(TermSymbol, SigOrDesc)] =
-      methods.use {
-        val buf = IndexedSeq.newBuilder[(TermSymbol, SigOrDesc)]
-        reader.readMethods { (name, sigOrDesc, flags) =>
-          val sym = TermSymbol.create(name, cls).withFlags(flags)
-          allRegisteredSymbols += sym
-          buf += sym -> sigOrDesc
+    def loadMembers(): IArray[(TermSymbol, SigOrDesc)] =
+      val buf = IArray.newBuilder[(TermSymbol, SigOrDesc)]
+      structure.fields.use {
+        reader.readFields { (name, sigOrDesc, access) =>
+          buf += createMember(name, EmptyFlagSet, access) -> sigOrDesc
         }
-        buf.result()
       }
+      structure.methods.use {
+        reader.readMethods { (name, sigOrDesc, access) =>
+          buf += createMember(name, Method, access) -> sigOrDesc
+        }
+      }
+      buf.result()
+    end loadMembers
 
     def initParents(): Unit =
       def binaryName(cls: ConstantInfo.Class[pool.type]) =
@@ -202,11 +213,9 @@ private[reader] object ClassfileParser {
       cls.withParentsDirect(parents)
     end initParents
 
-    // TODO: move static methods to companion object
-    cls.withFlags(Flags.EmptyFlagSet) // TODO: read flags
+    cls.withFlags(clsFlags, clsPrivateWithin)
     initParents()
-    val members = loadFields(structure.fields) ++ loadMethods(structure.methods)
-    for (sym, sigOrDesc) <- members do
+    for (sym, sigOrDesc) <- loadMembers() do
       sigOrDesc match
         case SigOrDesc.Desc(desc) => sym.withDeclaredType(Descriptors.parseDescriptor(sym, desc))
         case SigOrDesc.Sig(sig)   => sym.withDeclaredType(JavaSignatures.parseSignature(sym, sig, allRegisteredSymbols))
@@ -277,6 +286,7 @@ private[reader] object ClassfileParser {
       data.skip(2 * data.readU2()) // interfaces
     }
     Structure(
+      access = access,
       binaryName = reader.pool.utf8(thisClass.nameIdx),
       reader = reader,
       supers = supers,

@@ -274,8 +274,7 @@ private[pickles] class PickleReader {
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     }
-    sym.withFlags(flags)
-    privateWithin.foreach(sym.withPrivateWithin(_))
+    sym.withFlags(flags, privateWithin)
     sym
   }
 

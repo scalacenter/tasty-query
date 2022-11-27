@@ -144,10 +144,8 @@ private[classfiles] final class ClassfileReader private () {
       }
   }
 
-  def readAccessFlags()(using DataStream): AccessFlags = {
-    val flags = data.readU2()
-    AccessFlags(flags)
-  }
+  def readAccessFlags()(using DataStream): AccessFlags =
+    AccessFlags.read(data.readU2())
 
   def readThisClass()(using DataStream, ConstantPool): ConstantInfo.Class[pool.type] =
     pool.cls(pool.idx(data.readU2()))
@@ -191,22 +189,23 @@ private[classfiles] final class ClassfileReader private () {
     reader
   }
 
-  def readFields(op: (SimpleName, SigOrDesc, FlagSet) => Unit)(using DataStream, ConstantPool)(using Context): Unit =
+  def readFields(op: (SimpleName, SigOrDesc, AccessFlags) => Unit)(using DataStream, ConstantPool)(
+    using Context
+  ): Unit =
     readMembers(isMethod = false, op)
 
-  def readMethods(op: (SimpleName, SigOrDesc, FlagSet) => Unit)(using DataStream, ConstantPool)(using Context): Unit =
+  def readMethods(op: (SimpleName, SigOrDesc, AccessFlags) => Unit)(using DataStream, ConstantPool)(
+    using Context
+  ): Unit =
     readMembers(isMethod = true, op)
 
   private def readMembers(
     isMethod: Boolean,
-    op: (SimpleName, SigOrDesc, FlagSet) => Unit
+    op: (SimpleName, SigOrDesc, AccessFlags) => Unit
   )(using DataStream, ConstantPool)(using Context): Unit = {
     val count = data.readU2()
     loop(count) {
-      val accessFlags = data.readU2()
-      val flags =
-        val base = if isMethod then Method else EmptyFlagSet
-        base | AccessModifiers.toFlags(accessFlags)
+      val accessFlags = readAccessFlags()
       val nameIdx = pool.idx(data.readU2())
       val name = pool.utf8(nameIdx)
       val descriptorIdx = pool.idx(data.readU2())
@@ -221,9 +220,9 @@ private[classfiles] final class ClassfileReader private () {
         case _ => false
       }
       val sig = sigOrNull
-      if !flags.is(Synthetic) then
-        if sig == null then op(name, SigOrDesc.Desc(desc), flags)
-        else op(name, SigOrDesc.Sig(sig), flags)
+      if !accessFlags.isSynthetic then
+        if sig == null then op(name, SigOrDesc.Desc(desc), accessFlags)
+        else op(name, SigOrDesc.Sig(sig), accessFlags)
     }
   }
 
@@ -339,7 +338,7 @@ private[classfiles] final class ClassfileReader private () {
       val innerClassIdx = pool.idx(data.readU2())
       val outerClassId = data.readU2() // 0 if a local/anonymous class
       val innerNameId = data.readU2() // 0 if anonymous
-      val accessFlags = AccessModifiers.toFlags(data.readU2())
+      val accessFlags = readAccessFlags().toFlags
 
       // We don't care about local, anonymous or synthetic classes
       if outerClassId != 0 && innerNameId != 0 && !accessFlags.is(Synthetic) then
@@ -416,12 +415,46 @@ private[classfiles] object ClassfileReader {
 
   type ConstantPool = ClassfileReader#ConstantPool & Singleton
 
-  object Access {
+  object Access:
     opaque type AccessFlags = Int
-    object AccessFlags {
-      def apply(flags: Int): AccessFlags = flags
-    }
-  }
+
+    object AccessFlags:
+
+      def read(raw: Int): AccessFlags = raw
+
+      extension (access: AccessFlags)
+        private def isSet(flag: AccessFlags): Boolean = (access & flag) == flag
+
+        def isSynthetic: Boolean = isSet(Tags.Synthetic)
+
+        def isPackagePrivate: Boolean = !isSet(Tags.Protected) && !isSet(Tags.Private) && !isSet(Tags.Public)
+
+        def toFlags: FlagSet =
+          var flags = EmptyFlagSet
+          if isSet(Tags.Private) then flags |= Private
+          if isSet(Tags.Protected) then flags |= Protected
+          if isSet(Tags.Static) then flags |= Static
+          if isSet(Tags.Final) then flags |= Final
+          if isSet(Tags.Interface) then flags |= Trait
+          if isSet(Tags.Abstract) then flags |= Abstract
+          if isSet(Tags.Synthetic) then flags |= Synthetic
+          if isSet(Tags.Enum) then flags |= Enum
+          flags
+
+      object Tags:
+        inline val Public = 0x0001
+        inline val Private = 0x0002
+        inline val Protected = 0x0004
+        inline val Static = 0x0008
+        inline val Final = 0x0010
+        inline val Interface = 0x0200
+        inline val Abstract = 0x0400
+        inline val Synthetic = 0x1000
+        inline val Annotation = 0x2000
+        inline val Enum = 0x4000
+      end Tags
+    end AccessFlags
+  end Access
 
   object Indexing {
     opaque type Index[C <: ConstantPool] <: Int = Int
@@ -491,36 +524,6 @@ private[classfiles] object ClassfileReader {
       inline val Class = 'c'
       inline val Annotation = '@'
       inline val Array = '['
-    }
-  }
-
-  object AccessModifiers {
-
-    def toFlags(mods: Int): FlagSet =
-      def isSet(mod: Int): Boolean = (mods & mod) == mod
-      import tastyquery.Flags.*
-      var flags = EmptyFlagSet
-      if isSet(Tags.Private) then flags |= Private
-      if isSet(Tags.Protected) then flags |= Protected
-      if isSet(Tags.Static) then flags |= Static
-      if isSet(Tags.Final) then flags |= Final
-      if isSet(Tags.Interface) then flags |= Trait
-      if isSet(Tags.Abstract) then flags |= Abstract
-      if isSet(Tags.Synthetic) then flags |= Synthetic
-      if isSet(Tags.Enum) then flags |= Enum
-      flags
-
-    object Tags {
-      inline val Public = 0x0001
-      inline val Private = 0x0002
-      inline val Protected = 0x0004
-      inline val Static = 0x0008
-      inline val Final = 0x0010
-      inline val Interface = 0x0200
-      inline val Abstract = 0x0400
-      inline val Synthetic = 0x1000
-      inline val Annotation = 0x2000
-      inline val Enum = 0x4000
     }
   }
 

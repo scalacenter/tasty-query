@@ -376,21 +376,98 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(JavaDefinedRef.symbol) == JavaDefinedClass)
   }
 
+  testWithContext("package-private-class") {
+    val javadefinedPackage = ctx.findPackage("javadefined")
+    val PkgPrivateClass = ctx.findTopLevelClass("javadefined.PkgPrivate")
+    val PkgPrivateModule = ctx.findTopLevelModuleClass("javadefined.PkgPrivate")
+    val PkgPrivateModuleClass = ctx.findStaticTerm("javadefined.PkgPrivate")
+
+    def assertPrivateWithin(sym: Symbol, expected: Symbol)(using munit.Location) =
+      assert(!sym.isAnyOf(Flags.Private | Flags.Protected))
+      assert(sym.privateWithin == Some(expected))
+
+    assertPrivateWithin(PkgPrivateClass, javadefinedPackage)
+    assertPrivateWithin(PkgPrivateModule, javadefinedPackage)
+    assertPrivateWithin(PkgPrivateModuleClass, javadefinedPackage)
+  }
+
+  testWithContext("bag-of-java-definitions[static]") {
+    val BagOfJavaDefinitionsClassMod = ctx.findTopLevelModuleClass("javadefined.BagOfJavaDefinitions")
+    val javadefinedPackage = ctx.findPackage("javadefined")
+
+    def testDef(name: TermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
+      op(BagOfJavaDefinitionsClassMod.findNonOverloadedDecl(name))
+
+    def assertJavaPublic(sym: Symbol)(using munit.Location) =
+      assert(!sym.isAnyOf(Flags.Private | Flags.Protected))
+      assert(sym.privateWithin == None)
+
+    def assertPrivateWithin(sym: Symbol, expected: Symbol)(using munit.Location) =
+      assert(!sym.isAnyOf(Flags.Private | Flags.Protected))
+      assert(sym.privateWithin == Some(expected))
+
+    testDef(name"STATIC_INT") { STATIC_INT =>
+      assertJavaPublic(STATIC_INT)
+      assert(STATIC_INT.declaredType.isRef(defn.IntClass))
+    }
+
+    testDef(name"defaultInt") { defaultInt =>
+      assertJavaPublic(defaultInt)
+      assert(defaultInt.declaredType.asInstanceOf[MethodType].resultType.isRef(defn.IntClass))
+    }
+
+    testDef(name"packagePrivateIntField") { packagePrivateIntField =>
+      assertPrivateWithin(packagePrivateIntField, javadefinedPackage)
+      assert(packagePrivateIntField.declaredType.isRef(defn.IntClass))
+    }
+
+    testDef(name"packagePrivateIntMethod") { packagePrivateIntMethod =>
+      assertPrivateWithin(packagePrivateIntMethod, javadefinedPackage)
+      assert(packagePrivateIntMethod.declaredType.asInstanceOf[MethodType].resultType.isRef(defn.IntClass))
+    }
+  }
+
   testWithContext("bag-of-java-definitions") {
     val BagOfJavaDefinitionsClass = ctx.findTopLevelClass("javadefined.BagOfJavaDefinitions")
+    val javadefinedPackage = ctx.findPackage("javadefined")
 
-    def testDef(name: TermName)(op: TermSymbol => Unit): Unit =
+    def assertJavaPublic(sym: Symbol)(using munit.Location) =
+      assert(!sym.isAnyOf(Flags.Private | Flags.Protected))
+      assert(sym.privateWithin == None)
+
+    def assertPrivateWithin(sym: Symbol, expected: Symbol)(using munit.Location) =
+      assert(!sym.isAnyOf(Flags.Private | Flags.Protected))
+      assert(sym.privateWithin == Some(expected))
+
+    def testDef(name: TermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
       op(BagOfJavaDefinitionsClass.findNonOverloadedDecl(name))
 
     testDef(name"x") { x =>
+      assertJavaPublic(x)
       assert(x.declaredType.isRef(defn.IntClass))
     }
 
+    testDef(name"protectedY") { protectedY =>
+      assert(protectedY.is(Flags.Protected))
+      assert(!protectedY.is(Flags.Private))
+      assert(protectedY.privateWithin == None)
+      assert(protectedY.declaredType.isRef(defn.IntClass))
+    }
+
+    testDef(name"privateZ") { privateZ =>
+      assert(privateZ.is(Flags.Private))
+      assert(!privateZ.is(Flags.Protected))
+      assert(privateZ.privateWithin == None)
+      assert(privateZ.declaredType.isRef(defn.IntClass))
+    }
+
     testDef(name"recField") { recField =>
+      assertJavaPublic(recField)
       assert(recField.declaredType.isRef(BagOfJavaDefinitionsClass))
     }
 
     testDef(name"innerClassField") { innerClassField =>
+      assertJavaPublic(innerClassField)
       val JavaDefinedClass = ctx.findTopLevelClass("javadefined.JavaDefined")
       val MyInnerClass = JavaDefinedClass.findDecl(tname"MyInner").asClass
 
@@ -398,30 +475,35 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
 
     testDef(name"staticInnerClassField") { staticInnerClassField =>
+      assertJavaPublic(staticInnerClassField)
       val MyStaticInnerClass = ctx.findStaticClass("javadefined.JavaDefined.MyStaticInner")
 
       assert(staticInnerClassField.declaredType.isRef(MyStaticInnerClass))
     }
 
     testDef(name"outerRefToInner") { outerRefToInner =>
+      assertJavaPublic(outerRefToInner)
       val MyOwnInnerClass = BagOfJavaDefinitionsClass.findDecl(tname"MyOwnInner").asClass
 
       assert(outerRefToInner.declaredType.isRef(MyOwnInnerClass))
     }
 
     testDef(name"outerRefToStaticInner") { outerRefToStaticInner =>
+      assertJavaPublic(outerRefToStaticInner)
       val MyOwnStaticInnerClass = ctx.findStaticClass("javadefined.BagOfJavaDefinitions.MyOwnStaticInner")
 
       assert(outerRefToStaticInner.declaredType.isRef(MyOwnStaticInnerClass))
     }
 
     testDef(name"scalaStaticInnerRefFromJava") { scalaStaticInnerRefFromJava =>
+      assertPrivateWithin(scalaStaticInnerRefFromJava, javadefinedPackage)
       val StaticInnerClass = ctx.findStaticClass("mixjavascala.ScalaStaticOuter.StaticInnerClass")
 
       assert(scalaStaticInnerRefFromJava.declaredType.isRef(StaticInnerClass))
     }
 
     testDef(name"scalaInnerRefFromJava") { scalaInnerRefFromJava =>
+      assertPrivateWithin(scalaInnerRefFromJava, javadefinedPackage)
       val ScalaOuterClass = ctx.findTopLevelClass("mixjavascala.ScalaOuter")
       val InnerClass = ScalaOuterClass.findDecl(tname"InnerClass").asClass
 
@@ -429,22 +511,26 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
 
     testDef(name"printX") { printX =>
+      assertJavaPublic(printX)
       val tpe = printX.declaredType.asInstanceOf[MethodType]
       assert(tpe.resultType.isRef(defn.UnitClass))
     }
 
     testDef(name"<init>") { ctor =>
+      assertJavaPublic(ctor)
       val tpe = ctor.declaredType.asInstanceOf[MethodType]
       assert(tpe.paramTypes.head.isRef(defn.IntClass))
       assert(tpe.resultType.isRef(defn.UnitClass))
     }
 
     testDef(name"wrapXArray") { wrapXArray =>
+      assertJavaPublic(wrapXArray)
       val tpe = wrapXArray.declaredType.asInstanceOf[MethodType]
       assert(tpe.resultType.isArrayOf(_.isRef(defn.IntClass)))
     }
 
     testDef(name"arrIdentity") { arrIdentity =>
+      assertJavaPublic(arrIdentity)
       val tpe = arrIdentity.declaredType.asInstanceOf[MethodType]
       val JavaDefinedClass = ctx.findTopLevelClass("javadefined.JavaDefined")
       assert(tpe.paramInfos.head.isArrayOf(_.isRef(JavaDefinedClass)))
@@ -452,6 +538,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
 
     testDef(name"processBuilder") { processBuilder =>
+      assertJavaPublic(processBuilder)
       val tpe = processBuilder.declaredType.asInstanceOf[MethodType]
       assert(tpe.resultType.isInstanceOf[TypeRef]) // do not call isRef, as we do not have the java lib
     }
@@ -467,7 +554,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val JavaInterface2 = ctx.findTopLevelClass("javadefined.JavaInterface2")
     val ExceptionClass = ctx.findTopLevelClass("java.lang.Exception")
 
-    def testDef(name: TermName)(op: TermSymbol => Unit): Unit =
+    def testDef(name: TermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
       op(BagOfGenJavaDefinitionsClass.findNonOverloadedDecl(name))
 
     extension (tpe: Type)
