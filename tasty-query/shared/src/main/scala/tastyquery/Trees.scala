@@ -48,9 +48,7 @@ object Trees {
         rhs match
           case rhs: TypeTree => rhs :: Nil
           case _: TypeBounds => Nil
-      case Template(constr, parents, self, body) =>
-        val parentTrees = parents.collect { case p: Tree => p }
-        constr :: parentTrees ::: self.toList ::: body
+      case Template(constr, parents, self, body)  => constr :: parents ::: self.toList ::: body
       case ValDef(name, tpt, rhs, symbol)         => tpt :: rhs.toList
       case DefDef(name, params, tpt, rhs, symbol) => params.flatMap(_.merge) ::: tpt :: rhs.toList
       case Select(qualifier, name)                => qualifier :: Nil
