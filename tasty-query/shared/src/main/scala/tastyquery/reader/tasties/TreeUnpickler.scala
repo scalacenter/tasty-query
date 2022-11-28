@@ -110,7 +110,7 @@ private[tasties] class TreeUnpickler(
           if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(name.toTypeName, localCtx.owner)
           else TermSymbol.create(name, localCtx.owner)
         localCtx.registerSym(start, sym)
-        sym.withFlags(Case)
+        sym.withFlags(Case, None)
         // bind is never an owner
         reader.until(end)(createSymbols())
 
@@ -217,8 +217,7 @@ private[tasties] class TreeUnpickler(
     if !rhsIsEmpty then modsReader.skipTree()
     val (flags, privateWithin) = modsReader.readModifiers(end)
     val normalizedFlags = normalizeFlags(tag, flags, sym.name, rhsIsEmpty)
-    sym.withFlags(normalizedFlags)
-    privateWithin.foreach(sym.withPrivateWithin)
+    sym.withFlags(normalizedFlags, privateWithin)
 
   /** Read modifiers into a set of flags and a privateWithin boundary symbol. */
   private def readModifiers(end: Addr)(using LocalContext): (FlagSet, Option[Symbol]) =

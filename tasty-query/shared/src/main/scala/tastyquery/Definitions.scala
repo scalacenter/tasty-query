@@ -64,7 +64,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val cls = ClassSymbol.create(name, scalaPackage)
     cls.withTypeParams(Nil)
     cls.withParentsDirect(parents)
-    cls.withFlags(flags)
+    cls.withFlags(flags, None)
     cls
 
   val AnyClass = createSpecialClass(typeName("Any"), Nil, Abstract)
@@ -84,7 +84,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val andOrParamNames = List(typeName("A"), typeName("B"))
 
     val andTypeAlias = TypeMemberSymbol.create(typeName("&"), scalaPackage)
-    andTypeAlias.withFlags(EmptyFlagSet)
+    andTypeAlias.withFlags(EmptyFlagSet, None)
     andTypeAlias.withDefinition(
       TypeMemberDefinition.TypeAlias(
         PolyType(andOrParamNames)(
@@ -95,7 +95,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     )
 
     val orTypeAlias = TypeMemberSymbol.create(typeName("|"), scalaPackage)
-    orTypeAlias.withFlags(EmptyFlagSet)
+    orTypeAlias.withFlags(EmptyFlagSet, None)
     orTypeAlias.withDefinition(
       TypeMemberDefinition.TypeAlias(
         PolyType(andOrParamNames)(
@@ -106,12 +106,12 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     )
 
     val AnyRefAlias = TypeMemberSymbol.create(typeName("AnyRef"), scalaPackage)
-    AnyRefAlias.withFlags(EmptyFlagSet)
+    AnyRefAlias.withFlags(EmptyFlagSet, None)
     AnyRefAlias.withDefinition(TypeMemberDefinition.TypeAlias(ObjectType))
 
     // See `case NOtpe` in `PickleReader.scala`
     val scala2NoTypeAlias = TypeMemberSymbol.create(typeName("<notype>"), scalaPackage)
-    scala2NoTypeAlias.withFlags(Synthetic)
+    scala2NoTypeAlias.withFlags(Synthetic, None)
     scala2NoTypeAlias.withDefinition(TypeMemberDefinition.TypeAlias(NothingType))
   }
 
@@ -123,11 +123,11 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val cls = ClassSymbol.create(name, scalaPackage)
 
     val tparam = ClassTypeParamSymbol.create(typeName("T"), cls)
-    tparam.withFlags(ClassTypeParam)
+    tparam.withFlags(ClassTypeParam, None)
     tparam.setBounds(NothingAnyBounds)
 
     cls.withTypeParams(tparam :: Nil)
-    cls.withFlags(EmptyFlagSet | Artifact)
+    cls.withFlags(EmptyFlagSet | Artifact, None)
 
     val parents = parentConstrs(TypeRef(NoPrefix, tparam))
     cls.withParentsDirect(parents)
@@ -156,7 +156,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val name = typeName("ContextFunction" + n)
     val cls = ClassSymbol.create(name, scalaPackage)
 
-    cls.withFlags(Trait | NoInitsInterface)
+    cls.withFlags(Trait | NoInitsInterface, None)
     cls.withParentsDirect(ObjectType :: Nil)
 
     cls.withSpecialErasure { () =>
@@ -166,20 +166,20 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val inputTypeParams = List.tabulate(n) { i =>
       ClassTypeParamSymbol
         .create(typeName("T" + i), cls)
-        .withFlags(ClassTypeParam | Contravariant)
+        .withFlags(ClassTypeParam | Contravariant, None)
         .setBounds(NothingAnyBounds)
     }
     val resultTypeParam =
       ClassTypeParamSymbol
         .create(typeName("R"), cls)
-        .withFlags(ClassTypeParam | Covariant)
+        .withFlags(ClassTypeParam | Covariant, None)
         .setBounds(NothingAnyBounds)
 
     val allTypeParams = inputTypeParams :+ resultTypeParam
     cls.withTypeParams(allTypeParams)
 
     val applyMethod = TermSymbol.create(termName("apply"), cls)
-    applyMethod.withFlags(Method | Deferred)
+    applyMethod.withFlags(Method | Deferred, None)
     applyMethod.withDeclaredType(
       MethodType(List.tabulate(n)(i => termName("x" + i)))(
         mt => inputTypeParams.map(_.typeRef),

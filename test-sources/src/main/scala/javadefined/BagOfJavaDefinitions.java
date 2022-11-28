@@ -6,6 +6,20 @@ import mixjavascala.ScalaOuter;
 public class BagOfJavaDefinitions {
   public int x;
 
+  protected int protectedY;
+  private int privateZ;
+
+  public static int STATIC_INT = 1;
+
+  public static int defaultInt() {
+    return 1;
+  }
+
+  static int packagePrivateIntField = 1;
+  static int packagePrivateIntMethod() {
+    return 1;
+  }
+
   public BagOfJavaDefinitions recField;
 
   public JavaDefined.MyInner innerClassField;

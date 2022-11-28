@@ -1,0 +1,3 @@
+package javadefined;
+
+class PkgPrivate {}
