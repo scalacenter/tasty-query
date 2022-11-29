@@ -42,41 +42,23 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
       for ctx <- getUnpicklingContext(path, extraClasspath*) yield body(using ctx)
     }
 
-  def getDeclsByPrefix(prefix: Symbol)(using Context): Seq[Symbol] = {
-    def symbolsInSubtree(root: Symbol): Seq[Symbol] =
-      if (root.isInstanceOf[DeclaringSymbol]) {
-        root +: root.asInstanceOf[DeclaringSymbol].declarations.toSeq.flatMap(symbolsInSubtree(_))
-      } else {
-        Seq(root)
-      }
-    symbolsInSubtree(prefix).tail // discard prefix
-  }
+  def assertContainsExactly(
+    owner: DeclaringSymbol,
+    expectedDeclNames: Set[Name]
+  )(using Context, munit.Location): Unit = {
+    val decls = owner.declarations
+    val actualDeclNames = decls.map(_.name).toSet
 
-  def assertForallWithPrefix(prefix: Symbol, condition: Symbol => Boolean)(using Context): Unit =
+    val unexpectedDeclNames = actualDeclNames -- expectedDeclNames
     assert(
-      getDeclsByPrefix(prefix).forall(condition),
-      s"Condition does not hold for ${getDeclsByPrefix(prefix).filter(!condition(_))}"
+      unexpectedDeclNames.isEmpty,
+      unexpectedDeclNames.map(_.toDebugString).mkString("Unexpected declarations:\n", "\n", "")
     )
 
-  def assertContainsExactly(prefix: Symbol, symbolPaths: Set[DeclarationPath])(using Context): Unit = {
-    val decls = getDeclsByPrefix(prefix)
-    val expected = symbolPaths.toList.map { path =>
-      val pathList = path.toNameList
-      if pathList.sizeIs > 1 && pathList.last.isTermName then
-        ctx.findSymbolFromRoot(pathList.init).asDeclaringSymbol match
-          case cls: ClassSymbol => cls.findNonOverloadedDecl(pathList.last.toTermName)
-          case owner            => owner.getDecl(pathList.last).get
-      else ctx.findSymbolFromRoot(pathList)
-    }
-    // each declaration is in the passed set
+    val missingDeclNames = expectedDeclNames -- actualDeclNames
     assert(
-      decls.forall(decls.contains(_)),
-      s"Unexpected declarations: ${decls.filter(!expected.contains(_)).map(_.name).toDebugString}"
-    )
-    // every name in the passed set is a declaration
-    assert(
-      expected.forall(decls.contains(_)),
-      s"Declaration not found: ${expected.filter(!decls.contains(_)).map(_.name).toDebugString}"
+      missingDeclNames.isEmpty,
+      missingDeclNames.map(_.toDebugString).mkString("Missing declarations:\n", "\n", "")
     )
   }
 
@@ -135,20 +117,14 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
   testWithContext("basic-symbol-structure", empty_class / tname"EmptyClass") {
     ctx.findTopLevelClass("empty_class.EmptyClass")
-    // EmptyClass and its constructor are the only declarations in empty_class package
-    assertContainsExactly(
-      ctx.findPackage("empty_class"),
-      Set(empty_class / tname"EmptyClass", empty_class / tname"EmptyClass" / name"<init>")
-    )
+    // EmptyClass is the only declaration in the empty_class package
+    assertContainsExactly(ctx.findPackage("empty_class"), Set(tname"EmptyClass"))
   }
 
   testWithContext("basic-symbol-structure-nested", `simple_trees.nested` / tname"InNestedPackage") {
     ctx.findTopLevelClass("simple_trees.nested.InNestedPackage")
-    // EmptyClass and its constructor are the only declarations in empty_class package
-    assertContainsExactly(
-      ctx.findPackage("simple_trees.nested"),
-      Set(`simple_trees.nested` / tname"InNestedPackage", `simple_trees.nested` / tname"InNestedPackage" / name"<init>")
-    )
+    // InNestedPackage is the only declaration in the simple_trees.nested package
+    assertContainsExactly(ctx.findPackage("simple_trees.nested"), Set(tname"InNestedPackage"))
   }
 
   testWithContext("inner-class", simple_trees / tname"InnerClass") {
@@ -159,51 +135,28 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
   testWithContext("empty-package-contains-no-packages", simple_trees / tname"SharedPackageReference$$package") {
     // simple_trees is not a subpackage of empty package
-    assertForallWithPrefix(defn.EmptyPackage, s => !s.isPackage)
+    assert(!defn.EmptyPackage.declarations.exists(_.isPackage))
   }
 
   testWithContext("class-parameter-is-a-decl", simple_trees / tname"ConstructorWithParameters") {
-    val ConstructorWithParameters = simple_trees / tname"ConstructorWithParameters"
     assertContainsExactly(
       ctx.findTopLevelClass("simple_trees.ConstructorWithParameters"),
       Set(
-        ConstructorWithParameters / name"<init>",
-        ConstructorWithParameters / name"local",
-        ConstructorWithParameters / name"theVal",
-        ConstructorWithParameters / name"privateVal",
+        name"<init>",
+        name"local",
+        name"theVal",
+        name"privateVal",
         // var and the setter for it
-        ConstructorWithParameters / name"theVar",
-        ConstructorWithParameters / name"theVar_="
+        name"theVar",
+        name"theVar_="
       )
     )
   }
 
   testWithContext("class-type-parameter-is-not-a-decl", simple_trees / tname"GenericClass") {
-    val GenericClass = simple_trees / tname"GenericClass"
-    assertContainsExactly(ctx.findTopLevelClass("simple_trees.GenericClass"), Set(GenericClass / name"<init>"))
-  }
-
-  testWithContext("method-type-parameter-is-not-a-decl", simple_trees / tname"GenericMethod") {
     assertContainsExactly(
-      ctx.findTopLevelClass("simple_trees.GenericMethod").findNonOverloadedDecl(name"usesTypeParam"),
-      // No declaratiins as type parameter `T` is not a declaration of `usesTypeParam`
-      Set.empty
-    )
-  }
-
-  testWithContext("method-term-parameter-is-not-a-decl", simple_trees / tname"GenericMethod") {
-    assertContainsExactly(
-      ctx.findTopLevelClass("simple_trees.GenericMethod").findNonOverloadedDecl(name"usesTermParam"),
-      // No declaratiins as term parameter `i: Int` is not a declaration of `usesTermParam`
-      Set.empty
-    )
-  }
-
-  testWithContext("nested-method-is-not-a-decl", simple_trees / tname"NestedMethod") {
-    assertContainsExactly(
-      ctx.findTopLevelClass("simple_trees.NestedMethod").findNonOverloadedDecl(name"outerMethod"),
-      // local method `innerMethod` is not a declaration of `outerMethod`
-      Set.empty
+      ctx.findTopLevelClass("simple_trees.GenericClass"),
+      Set(name"<init>", name"value", name"field", name"method", name"getter")
     )
   }
 
