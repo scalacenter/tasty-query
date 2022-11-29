@@ -6,6 +6,12 @@ import tastyquery.Symbols.*
 import tastyquery.Trees.*
 
 object TestUtils:
+  extension (sc: StringContext)
+    def name(): SimpleName =
+      SimpleName(sc.parts.mkString)
+    def tname(): TypeName =
+      TypeName(SimpleName(sc.parts.mkString))
+
   def findLocalValDef(body: Tree, name: TermName)(using Context): TermSymbol =
     findTree(body) {
       case vd: ValDef if vd.name == name => vd.symbol

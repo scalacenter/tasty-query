@@ -16,8 +16,6 @@ import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
 
-import Paths.*
-
 class ReadTreeSuite extends RestrictedUnpicklingSuite {
   type StructureCheck = PartialFunction[Tree, Unit]
   type TypeStructureCheck = PartialFunction[Type, Unit]
@@ -32,14 +30,14 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     def unapplySeq(sym: Symbol): Option[List[Name]] = Some(sym.fullName.path)
 
   private object ScalaPackageRef:
-    def unapply(tree: PackageRef): Boolean = tree.fullyQualifiedName.path == List(SimpleName("scala"))
+    def unapply(tree: PackageRef): Boolean = tree.fullyQualifiedName.path == List(termName("scala"))
 
   private object ScalaCollImmutablePackageRef:
     def unapply(tree: PackageRef): Boolean =
-      tree.fullyQualifiedName.path == List(name"scala", name"collection", name"immutable")
+      tree.fullyQualifiedName.path == List(termName("scala"), termName("collection"), termName("immutable"))
 
   private object SimpleTreesPackageRef:
-    def unapply(tree: PackageRef): Boolean = tree.fullyQualifiedName.path == List(SimpleName("simple_trees"))
+    def unapply(tree: PackageRef): Boolean = tree.fullyQualifiedName.path == List(termName("simple_trees"))
 
   private type AnyDesignator = Symbol | Name | LookupIn | Scala2ExternalSymRef
 

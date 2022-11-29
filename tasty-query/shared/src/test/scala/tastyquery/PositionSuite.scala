@@ -8,8 +8,6 @@ import tastyquery.Trees.*
 import tastyquery.Types.*
 import tastyquery.Spans.*
 
-import Paths.*
-
 class PositionSuite extends RestrictedUnpicklingSuite {
   private def getCodeRelPath(name: String): String =
     var Array(dir, filename) = name.split('.')

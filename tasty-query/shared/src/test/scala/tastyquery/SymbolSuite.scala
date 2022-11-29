@@ -10,7 +10,7 @@ import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
 
-import Paths.*
+import TestUtils.*
 
 class SymbolSuite extends RestrictedUnpicklingSuite {
 

@@ -7,8 +7,6 @@ import tastyquery.Contexts.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 
-import Paths.*
-
 abstract class RestrictedUnpicklingSuite extends BaseUnpicklingSuite {
   def getUnpicklingContext(rootSymbolPath: String, extraRootSymbolPaths: String*): Future[Context] =
     initRestrictedContext(rootSymbolPath, extraRootSymbolPaths)

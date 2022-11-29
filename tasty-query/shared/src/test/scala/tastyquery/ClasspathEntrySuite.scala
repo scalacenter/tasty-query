@@ -1,7 +1,6 @@
 package tastyquery
 
 import Contexts.*
-import Paths.*
 import Symbols.*
 
 import tastyquery.testutil.TestPlatform
