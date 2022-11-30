@@ -589,7 +589,13 @@ object Trees {
     override final def withSpan(span: Span): SingletonTypeTree = SingletonTypeTree(ref)(span)
   }
 
-  final case class RefinedTypeTree(underlying: TypeTree, refinements: List[Tree], refinedCls: ClassSymbol)(span: Span)
+  type RefinementMemberDef = TypeMember | ValOrDefDef
+
+  final case class RefinedTypeTree(
+    underlying: TypeTree,
+    refinements: List[RefinementMemberDef],
+    refinedCls: ClassSymbol
+  )(span: Span)
       extends TypeTree(span) {
 
     override protected def calculateType(using Context): Type =

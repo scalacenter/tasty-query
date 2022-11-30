@@ -1114,7 +1114,13 @@ private[tasties] class TreeUnpickler(
       val end = reader.readEnd()
       val parent = readTypeTree
       val statements = readStats(end)(using localCtx.withOwner(cls))
-      RefinedTypeTree(parent, statements, cls)(spn)
+      val refinements = statements.map {
+        case memberDef: RefinementMemberDef =>
+          memberDef
+        case otherDef =>
+          throw TastyFormatException(s"Unexpected member $otherDef in refinement type")
+      }
+      RefinedTypeTree(parent, refinements, cls)(spn)
     case APPLIEDtpt =>
       val spn = span
       reader.readByte()
