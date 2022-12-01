@@ -77,9 +77,13 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     object AndType:
       def unapply(tpe: Types.AndType): (Type, Type) = (tpe.first, tpe.second)
 
-    object RefinedType:
-      def unapply(tpe: Types.RefinedType): (Type, Name, TypeBounds) =
-        (tpe.parent, tpe.refinedName, tpe.refinedInfo)
+    object TypeRefinement:
+      def unapply(tpe: Types.TypeRefinement): (Type, Name, TypeBounds) =
+        (tpe.parent, tpe.refinedName, tpe.refinedBounds)
+
+    object TermRefinement:
+      def unapply(tpe: Types.TermRefinement): (Type, Name, Type) =
+        (tpe.parent, tpe.refinedName, tpe.refinedType)
 
     object WildcardTypeBounds:
       def unapply(tpe: Types.WildcardTypeBounds): Some[TypeBounds] = Some(tpe.bounds)
@@ -89,6 +93,14 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
     object MatchTypeCase:
       def unapply(tpe: Types.MatchTypeCase): (Type, Type) = (tpe.pattern, tpe.result)
+
+    object PolyType:
+      def unapply(tpe: Types.PolyType): (List[(TypeName, TypeBounds)], Type) =
+        (tpe.paramNames.zip(tpe.paramTypeBounds), tpe.resultType)
+
+    object MethodType:
+      def unapply(tpe: Types.MethodType): (List[(TermName, Type)], Type) =
+        (tpe.paramNames.zip(tpe.paramTypes), tpe.resultType)
 
     object TypeLambda:
       def unapply(tpe: Types.TypeLambda): (List[Type], Type) = (tpe.paramRefs, tpe.resultType)
@@ -843,6 +855,81 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
           ) =>
     }
     assert(containsSubtree(SAMLambdaMatch)(clue(tree)))
+
+    val polyIDMatch: StructureCheck = {
+      case ValDef(
+            SimpleName("polyID"),
+            _,
+            Some(
+              Block(
+                List(
+                  ClassDef(
+                    _,
+                    Template(
+                      _,
+                      List(
+                        Apply(Select(New(TypeWrapper(_)), _), List()),
+                        TypeWrapper(TypeRefInternal(_, TypeName(SimpleName("PolyFunction"))))
+                      ),
+                      None,
+                      List(
+                        DefDef(
+                          SimpleName("apply"),
+                          List(
+                            Right(List(TypeParam(TypeName(SimpleName("T")), _, _))),
+                            Left(List(ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("T"))), None, _)))
+                          ),
+                          TypeWrapper(_),
+                          Some(Ident(SimpleName("x"))),
+                          _
+                        )
+                      )
+                    ),
+                    _
+                  )
+                ),
+                Typed(
+                  Apply(Select(New(TypeIdent(_)), _), List()),
+                  TypeWrapper(
+                    ty.TermRefinement(
+                      TypeRefInternal(_, TypeName(SimpleName("PolyFunction"))),
+                      SimpleName("apply"),
+                      polyType @ ty.PolyType(
+                        List(TypeName(SimpleName("T")) -> _),
+                        ty.MethodType(List(SimpleName("x") -> (tref1: TypeParamRef)), tref2: TypeParamRef)
+                      )
+                    )
+                  )
+                )
+              )
+            ),
+            _
+          ) if Seq(tref1, tref2).forall(tref => (tref.binders eq polyType) && tref.paramNum == 0) =>
+    }
+    assert(containsSubtree(polyIDMatch)(clue(tree)))
+
+    val dependentIDMatch: StructureCheck = {
+      case ValDef(
+            SimpleName("dependentID"),
+            _,
+            Some(
+              Block(
+                List(
+                  DefDef(
+                    _,
+                    List(Left(List(ValDef(SimpleName("x"), TypeWrapper(_), None, xSym)))),
+                    TypeWrapper(TermRefInternal(NoPrefix, xRef)),
+                    Some(Ident(SimpleName("x"))),
+                    _
+                  )
+                ),
+                Lambda(Ident(_), None)
+              )
+            ),
+            _
+          ) if xRef == xSym =>
+    }
+    assert(containsSubtree(dependentIDMatch)(clue(tree)))
   }
 
   testUnpickle("eta-expansion", "simple_trees.EtaExpansion") { tree =>
@@ -1568,8 +1655,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case Typed(
             expr,
             TypeWrapper(
-              ty.RefinedType(
-                ty.RefinedType(
+              ty.TypeRefinement(
+                ty.TypeRefinement(
                   TypeRefInternal(SimpleTreesPackageRef(), TypeName(SimpleName("TypeMember"))),
                   TypeName(SimpleName("AbstractType")),
                   TypeAlias(alias)
@@ -1581,6 +1668,26 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
           ) =>
     }
     assert(containsSubtree(refinedType)(clue(tree)))
+
+    val givenRefinementCheck: StructureCheck = {
+      case DefDef(
+            SimpleName("givenRefinement"),
+            Nil,
+            TypeWrapper(
+              ty.TermRefinement(
+                _,
+                SimpleName("foo"),
+                ty.MethodType(
+                  List(_ -> TypeRefInternal(_, TypeName(SimpleName("Int")))),
+                  TypeRefInternal(_, TypeName(SimpleName("Int")))
+                )
+              )
+            ),
+            Some(_),
+            _
+          ) =>
+    }
+    assert(containsSubtree(givenRefinementCheck)(clue(tree)))
   }
 
   testUnpickle("match-type", "simple_trees.MatchType") { tree =>

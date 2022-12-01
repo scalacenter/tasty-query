@@ -1028,7 +1028,7 @@ object Types {
     override def toString(): String = s"ExprType($resultType)"
   }
 
-  sealed trait LambdaType extends Binders with TermType {
+  sealed trait LambdaType extends ParamRefBinders with TermType {
     type ThisName <: Name
     type PInfo <: Type | TypeBounds
     type This <: LambdaType { type PInfo = LambdaType.this.PInfo }
@@ -1240,7 +1240,10 @@ object Types {
   /** Encapsulates the binders associated with a ParamRef. */
   sealed trait Binders
 
-  sealed trait TypeBinders extends Binders:
+  sealed trait ParamRefBinders extends Binders:
+    def paramRefs: List[ParamRef]
+
+  sealed trait TypeBinders extends ParamRefBinders:
     def paramRefs: List[TypeParamRef]
     def lookupRef(name: TypeName): Option[Type]
 
@@ -1340,25 +1343,57 @@ object Types {
 
   sealed abstract class RefinedOrRecType extends TypeProxy
 
-  /** A refined type `parent { type refinedName <:> refinedInfo }`
-    * @param parent      The type being refined
-    * @param refinedName The name of the refinement declaration
-    * @param refinedInfo The info of the refinement declaration
+  sealed abstract class RefinedType extends RefinedOrRecType with ValueType:
+    val parent: Type
+    val refinedName: Name
+
+    override final def underlying(using Context): Type = parent
+  end RefinedType
+
+  /** A type refinement `parent { type refinedName <:> refinedBounds }`.
+    * @param parent        The type being refined
+    * @param refinedName   The name of the refined type member
+    * @param refinedBounds The refined bounds for the given type member
     */
-  final class RefinedType(val parent: Type, val refinedName: Name, val refinedInfo: TypeBounds)
-      extends RefinedOrRecType
-      with ValueType {
-    override def underlying(using Context): Type = parent
+  final class TypeRefinement(val parent: Type, val refinedName: TypeName, val refinedBounds: TypeBounds)
+      extends RefinedType:
+    private[tastyquery] final def derivedTypeRefinement(
+      parent: Type,
+      refinedName: TypeName,
+      refinedBounds: TypeBounds
+    ): Type =
+      if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedBounds eq this.refinedBounds)) this
+      else TypeRefinement(parent, refinedName, refinedBounds)
+    end derivedTypeRefinement
 
-    private[tastyquery] final def derivedRefinedType(parent: Type, refinedName: Name, refinedInfo: TypeBounds): Type =
-      if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedInfo eq this.refinedInfo)) this
-      else RefinedType(parent, refinedName, refinedInfo)
+    override def toString(): String = s"TypeRefinement($parent, $refinedName, $refinedBounds)"
+  end TypeRefinement
 
-    override def toString(): String = s"RefinedType($parent, $refinedName, $refinedInfo)"
-  }
+  /** A term refinement `parent { val/def refinedName: refinedType }`.
+    * @param parent      The type being refined
+    * @param refinedName The name of the refined term member
+    * @param refinedType The refined type for the given term member
+    */
+  final class TermRefinement(val parent: Type, val refinedName: TermName, val refinedType: Type) extends RefinedType:
+    private[tastyquery] final def derivedTermRefinement(parent: Type, refinedName: TermName, refinedType: Type): Type =
+      if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedType eq this.refinedType)) this
+      else TermRefinement(parent, refinedName, refinedType)
+
+    override def toString(): String = s"TermRefinement($parent, $refinedName, $refinedType)"
+  end TermRefinement
 
   final class RecType private (parentExp: RecType => Type) extends RefinedOrRecType with Binders:
     val parent: Type = parentExp(this: @unchecked)
+
+    private var myRecThis: RecThis | Null = null
+
+    private[tastyquery] final def recThis: RecThis =
+      val local = myRecThis
+      if local != null then local
+      else
+        val computed = RecThis(this)
+        myRecThis = computed
+        computed
 
     def underlying(using Context): Type = parent
   end RecType
@@ -1367,6 +1402,18 @@ object Types {
     def apply(parentExp: RecType => Type): RecType =
       new RecType(parentExp) // TODO? Perform normalization like dotc?
   end RecType
+
+  final class RecThis(binder: RecType) extends BoundType with SingletonType:
+    type BindersType = RecType
+
+    final def binders: BindersType = binder
+
+    final def copyBoundType(newBinder: RecType): Type = RecThis(newBinder)
+
+    final def underlying(using Context): Type = binder
+
+    override def toString(): String = s"RecThis(<recursive>)"
+  end RecThis
 
   /** case `pattern` => `result` */
   final class MatchTypeCase(val pattern: Type, val result: Type) extends GroundType:

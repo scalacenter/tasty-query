@@ -1019,33 +1019,19 @@ private[tasties] class TreeUnpickler(
     case BYNAMEtype =>
       reader.readByte()
       ExprType(readType)
+    case POLYtype =>
+      readLambdaType(_ => PolyType, name => name.toTypeName, _.readTypeBounds)
+    case METHODtype =>
+      // TODO Record the `mods` somehow (given, implicit, erased)
+      readLambdaType(_ => MethodType, name => name, _.readType)
     case TYPELAMBDAtype =>
-      val lambdaAddr = reader.currentAddr
-      reader.readByte()
-      val end = reader.readEnd()
-      val resultUnpickler = fork // remember where the result type is
-      skipTree() // skip the result type
-      val paramTypeBoundsUnpickler = fork // remember where the params are
-      val paramNames = reader.until(end) {
-        skipTree() // skip the type bounds
-        readName.toTypeName
-      }
-      def readParamTypeBounds()(using LocalContext): List[TypeBounds] =
-        paramTypeBoundsUnpickler.reader.until(end) {
-          val bounds = paramTypeBoundsUnpickler.readTypeBounds
-          paramTypeBoundsUnpickler.reader.readNat() // skip name
-          bounds
-        }
-      TypeLambda(paramNames)(
-        tl => readParamTypeBounds()(using localCtx.withEnclosingBinders(lambdaAddr, tl)),
-        tl => resultUnpickler.readType(using localCtx.withEnclosingBinders(lambdaAddr, tl))
-      )
+      readLambdaType(_ => TypeLambda, _.toTypeName, _.readTypeBounds)
     case PARAMtype =>
       reader.readByte()
       reader.readEnd()
       val lambdaAddr = reader.readAddr()
       val num = reader.readNat()
-      localCtx.getEnclosingBinders(lambdaAddr).asInstanceOf[TypeBinders].paramRefs(num)
+      localCtx.getEnclosingBinders(lambdaAddr).asInstanceOf[ParamRefBinders].paramRefs(num)
     case REFINEDtype =>
       reader.readByte()
       val end = reader.readEnd()
@@ -1054,12 +1040,11 @@ private[tasties] class TreeUnpickler(
       if tagFollowShared == TYPEBOUNDS then
         // Type refinement with a type member of the form `Underlying { type refinementName <:> TypeBounds }`
         val refinedMemberBounds = readTypeBounds
-        RefinedType(underlying, refinementName.toTypeName, refinedMemberBounds)
+        TypeRefinement(underlying, refinementName.toTypeName, refinedMemberBounds)
       else
-        // Type refinement with a term member of the form `Underlying { def refinementName: Type }`
-        // TODO Actually take the refined member type into account
-        reader.goto(end)
-        underlying
+        // Type refinement with a term member of the form `Underlying { val/def refinementName: Type }`
+        val refinedMemberType = readType
+        TermRefinement(underlying, refinementName, refinedMemberType)
     case RECtype =>
       val start = reader.currentAddr
       reader.readByte()
@@ -1072,6 +1057,10 @@ private[tasties] class TreeUnpickler(
             recursiveTypeAtAddr(start) = rt
             readType
           }
+    case RECthis =>
+      reader.readByte()
+      val recType = recursiveTypeAtAddr(reader.readAddr()).asInstanceOf[RecType]
+      recType.recThis
     case MATCHtype =>
       val start = reader.currentAddr
       reader.readByte() // tag
@@ -1094,6 +1083,50 @@ private[tasties] class TreeUnpickler(
     case tag =>
       throw TastyFormatException(s"Unexpected type tag ${astTagToString(tag)} $posErrorMsg")
   }
+
+  private def readLambdaType[N <: Name, PInfo <: Type | TypeBounds, LT <: LambdaType](
+    companionOp: FlagSet => LambdaTypeCompanion[N, PInfo, LT],
+    nameMap: TermName => N,
+    readInfo: TreeUnpickler => PInfo
+  )(using LocalContext): LT =
+    val lambdaAddr = reader.currentAddr
+    reader.readByte()
+    val end = reader.readEnd()
+
+    val resultUnpickler = fork // remember where the result type is
+    skipTree() // skip the result type
+    val paramInfosUnpickler = fork // remember where the params are
+
+    // Read names -- skip infos, and stop if we find a modifier
+    val paramNames = reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
+      skipTree()
+      nameMap(readName)
+    }
+
+    // Read mods
+    var mods = EmptyFlagSet
+    while reader.currentAddr != end do // avoid boxing the mods
+      reader.readByte() match
+        case IMPLICIT => mods |= Implicit
+        case ERASED   => mods |= Erased
+        case GIVEN    => mods |= Given
+
+    // Read infos -- skip names
+    def readParamInfos()(using LocalContext): List[PInfo] =
+      val reader = paramInfosUnpickler.reader
+      reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
+        val bounds = readInfo(paramInfosUnpickler)
+        reader.readNat() // skip name
+        bounds
+      }
+    end readParamInfos
+
+    val factory = companionOp(mods)
+    factory(paramNames)(
+      tl => readParamInfos()(using localCtx.withEnclosingBinders(lambdaAddr, tl)),
+      tl => resultUnpickler.readType(using localCtx.withEnclosingBinders(lambdaAddr, tl))
+    )
+  end readLambdaType
 
   private def readTypeTree(using LocalContext): TypeTree = reader.nextByte match {
     case IDENTtpt =>
