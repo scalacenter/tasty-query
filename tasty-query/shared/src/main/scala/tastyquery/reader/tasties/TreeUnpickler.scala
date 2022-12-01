@@ -311,7 +311,7 @@ private[tasties] class TreeUnpickler(
           ()
     end while
 
-    sym.addAnnotations(annots)
+    sym.setAnnotations(annots)
   end readAnnotationsInModifiers
 
   private def readAnnotation()(using LocalContext): Annotation =
@@ -504,7 +504,7 @@ private[tasties] class TreeUnpickler(
         case bounds: TypeBoundsTree => bounds.toTypeBounds
         case bounds: TypeLambdaTree => defn.NothingAnyBounds
       paramSymbol.setBounds(typeBounds)
-      skipModifiers(end)
+      readAnnotationsInModifiers(paramSymbol, end)
       definingTree(paramSymbol, TypeParam(name, bounds, paramSymbol)(spn))
     }
     val acc = new ListBuffer[TypeParam]()
@@ -685,8 +685,8 @@ private[tasties] class TreeUnpickler(
       val name = readName
       val typ = readType
       val body = readPattern
-      skipModifiers(end)
       val symbol = localCtx.getSymbol[TermSymbol](start)
+      readAnnotationsInModifiers(symbol, end)
       symbol.withDeclaredType(typ)
       definingTree(symbol, Bind(name, body, symbol)(spn))
     case ALTERNATIVE =>
@@ -1203,8 +1203,8 @@ private[tasties] class TreeUnpickler(
         val typ = readTypeBounds
         NamedTypeBoundsTree(typeName, typ)(bodySpn)
       } else readTypeTree
-      skipModifiers(end)
       val sym = localCtx.getSymbol[LocalTypeParamSymbol](start)
+      readAnnotationsInModifiers(sym, end)
       sym.setBounds(bounds)
       definingTree(sym, TypeTreeBind(name, body, sym)(spn))
     // Type tree for a type member (abstract or bounded opaque)

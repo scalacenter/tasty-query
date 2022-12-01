@@ -275,6 +275,7 @@ private[pickles] class PickleReader {
         errorBadSignature("bad symbol tag: " + tag)
     }
     sym.withFlags(flags, privateWithin)
+    sym.setAnnotations(Nil) // TODO Read Scala 2 annotations
     sym
   }
 
