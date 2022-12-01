@@ -16,6 +16,8 @@ import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
 
+import TestUtils.*
+
 class ReadTreeSuite extends RestrictedUnpicklingSuite {
   type StructureCheck = PartialFunction[Tree, Unit]
   type TypeStructureCheck = PartialFunction[Type, Unit]
@@ -2000,5 +2002,73 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
           ) =>
     }
     assert(containsSubtree(thisTypeCheck)(clue(tree)))
+  }
+
+  testUnpickle("annotations", "simple_trees.Annotations") { tree =>
+    object SimpleAnnotCtorNamed:
+      def unapply(t: Select): Option[String] = t match
+        case Select(New(TypeIdent(TypeName(SimpleName(name)))), _) => Some(name)
+        case _                                                     => None
+    end SimpleAnnotCtorNamed
+
+    val inlineAnnotCheck: StructureCheck = { case Apply(SimpleAnnotCtorNamed("inline"), Nil) =>
+    }
+
+    def deprecatedAnnotCheck(msg: String, since: String): StructureCheck = {
+      case Apply(SimpleAnnotCtorNamed("deprecated"), List(Literal(Constant(`msg`)), Literal(Constant(`since`)))) =>
+    }
+
+    def deprecatedAnnotNamedCheck(msg: String, since: String): StructureCheck = {
+      case Apply(
+            SimpleAnnotCtorNamed("deprecated"),
+            List(Literal(Constant(`msg`)), NamedArg(SimpleName("since"), Literal(Constant(`since`))))
+          ) =>
+    }
+
+    def implicitNotFoundAnnotCheck(msg: String): StructureCheck = {
+      case Apply(SimpleAnnotCtorNamed("implicitNotFound"), List(Literal(Constant(`msg`)))) =>
+    }
+
+    val constructorOnlyAnnotCheck: StructureCheck = { case Apply(SimpleAnnotCtorNamed("constructorOnly"), Nil) =>
+    }
+
+    val inlineMethodSym = findTree(tree) { case DefDef(SimpleName("inlineMethod"), _, _, _, sym) =>
+      sym
+    }
+    assert(clue(inlineMethodSym.annotations).sizeIs == 1)
+    assert(containsSubtree(inlineAnnotCheck)(clue(inlineMethodSym.annotations(0).tree)))
+
+    val inlineDeprecatedMethodSym = findTree(tree) { case DefDef(SimpleName("inlineDeprecatedMethod"), _, _, _, sym) =>
+      sym
+    }
+    assert(clue(inlineDeprecatedMethodSym.annotations).sizeIs == 2)
+    assert(containsSubtree(inlineAnnotCheck)(clue(inlineDeprecatedMethodSym.annotations(0).tree)))
+    assert(
+      containsSubtree(deprecatedAnnotNamedCheck("some reason", "1.0"))(
+        clue(inlineDeprecatedMethodSym.annotations(1).tree)
+      )
+    )
+
+    val deprecatedValSym = findTree(tree) { case ValDef(SimpleName("deprecatedVal"), _, _, sym) =>
+      sym
+    }
+    assert(clue(deprecatedValSym.annotations).sizeIs == 1)
+    assert(containsSubtree(deprecatedAnnotNamedCheck("reason", "forever"))(clue(deprecatedValSym.annotations(0).tree)))
+
+    val myTypeClassSym = findTree(tree) { case ClassDef(TypeName(SimpleName("MyTypeClass")), _, sym) =>
+      sym
+    }
+    assert(clue(myTypeClassSym.annotations).sizeIs == 1)
+    assert(
+      containsSubtree(implicitNotFoundAnnotCheck("Cannot find implicit for MyTypeClass[${T}]"))(
+        clue(myTypeClassSym.annotations(0).tree)
+      )
+    )
+
+    val intAliasSym = findTree(tree) { case TypeMember(TypeName(SimpleName("IntAlias")), _, sym) =>
+      sym
+    }
+    assert(clue(intAliasSym.annotations).sizeIs == 1)
+    assert(containsSubtree(deprecatedAnnotCheck("other reason", "forever"))(clue(intAliasSym.annotations(0).tree)))
   }
 }

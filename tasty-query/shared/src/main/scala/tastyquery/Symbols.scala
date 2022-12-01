@@ -4,6 +4,7 @@ import scala.annotation.tailrec
 
 import scala.collection.mutable
 
+import tastyquery.Annotations.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
@@ -75,6 +76,7 @@ object Symbols {
     private var myFlags: FlagSet = Flags.EmptyFlagSet
     private var myTree: Option[DefiningTreeType] = None
     private var myPrivateWithin: Option[Symbol] = None
+    private var myAnnotations: List[Annotation] | Null = null
 
     /** Checks that this `Symbol` has been completely initialized.
       *
@@ -94,6 +96,7 @@ object Symbols {
       */
     protected def doCheckCompleted(): Unit =
       if !isFlagsInitialized then throw failNotCompleted("flags were not initialized")
+      if myAnnotations == null then throw failNotCompleted("annotations were not initialized")
 
     private[tastyquery] def withTree(t: DefiningTreeType): this.type =
       require(!isPackage, s"Multiple trees correspond to one package, a single tree cannot be assigned")
@@ -110,6 +113,17 @@ object Symbols {
         myFlags = flags
         myPrivateWithin = privateWithin
         this
+
+    private[tastyquery] final def setAnnotations(annots: List[Annotation]): this.type =
+      if myAnnotations != null then throw IllegalStateException(s"reassignment of annotations to $this")
+      else
+        myAnnotations = annots
+        this
+
+    final def annotations: List[Annotation] =
+      val local = myAnnotations
+      if local != null then local
+      else throw IllegalStateException(s"annotations of $this have not been initialized")
 
     final def privateWithin: Option[Symbol] =
       if isFlagsInitialized then myPrivateWithin
@@ -866,6 +880,7 @@ object Symbols {
         .withTypeParams(Nil)
         .withParentsDirect(defn.ObjectType :: Nil)
         .withFlags(EmptyFlagSet, None)
+        .setAnnotations(Nil)
       cls.checkCompleted()
       cls
   end ClassSymbol
@@ -885,6 +900,7 @@ object Symbols {
     val packageRef: PackageRef = PackageRef(this: @unchecked)
 
     this.withFlags(EmptyFlagSet, None)
+    this.setAnnotations(Nil)
 
     private[tastyquery] def getPackageDeclOrCreate(name: SimpleName)(using Context): PackageSymbol =
       getPackageDecl(name).getOrElse {

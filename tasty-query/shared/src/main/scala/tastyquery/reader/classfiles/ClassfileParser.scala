@@ -158,6 +158,7 @@ private[reader] object ClassfileParser {
       .create(name.withObjectSuffix.toTypeName, classOwner)
       .withTypeParams(Nil)
       .withFlags(clsFlags | Flags.ModuleClassCreationFlags, clsPrivateWithin)
+      .setAnnotations(Nil)
       .withParentsDirect(defn.ObjectType :: Nil)
     allRegisteredSymbols += moduleClass
 
@@ -165,6 +166,7 @@ private[reader] object ClassfileParser {
       .create(name.toTermName, classOwner)
       .withDeclaredType(moduleClass.typeRef)
       .withFlags(clsFlags | Flags.ModuleValCreationFlags, clsPrivateWithin)
+      .setAnnotations(Nil)
     allRegisteredSymbols += module
 
     def readInnerClasses(innerClasses: Forked[DataStream]): InnerClasses =
@@ -177,6 +179,7 @@ private[reader] object ClassfileParser {
       val flags = baseFlags | access.toFlags
       val owner = if flags.is(Flags.Static) then moduleClass else cls
       val sym = TermSymbol.create(name, owner).withFlags(flags, privateWithin(access))
+      sym.setAnnotations(Nil) // TODO Read Java annotations on fields and methods
       allRegisteredSymbols += sym
       sym
 
@@ -214,7 +217,9 @@ private[reader] object ClassfileParser {
     end initParents
 
     cls.withFlags(clsFlags, clsPrivateWithin)
+    cls.setAnnotations(Nil) // TODO Read Java annotations on classes
     initParents()
+
     for (sym, sigOrDesc) <- loadMembers() do
       sigOrDesc match
         case SigOrDesc.Desc(desc) => sym.withDeclaredType(Descriptors.parseDescriptor(sym, desc))
