@@ -4,6 +4,7 @@ import scala.annotation.tailrec
 
 import scala.collection.mutable
 
+import tastyquery.Annotations.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
@@ -75,6 +76,7 @@ object Symbols {
     private var myFlags: FlagSet = Flags.EmptyFlagSet
     private var myTree: Option[DefiningTreeType] = None
     private var myPrivateWithin: Option[Symbol] = None
+    private var myAnnotations: List[Annotation] = Nil
 
     /** Checks that this `Symbol` has been completely initialized.
       *
@@ -110,6 +112,14 @@ object Symbols {
         myFlags = flags
         myPrivateWithin = privateWithin
         this
+
+    private[tastyquery] final def addAnnotations(annots: List[Annotation]): this.type =
+      myAnnotations = myAnnotations ::: annots
+      this
+
+    final def annotations: List[Annotation] =
+      // TODO Prevent reading before they are initialized
+      myAnnotations
 
     final def privateWithin: Option[Symbol] =
       if isFlagsInitialized then myPrivateWithin

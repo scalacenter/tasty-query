@@ -10,6 +10,7 @@ import dotty.tools.tasty.TastyReader
 import dotty.tools.tasty.TastyBuffer.*
 import dotty.tools.tasty.TastyFormat.*
 
+import tastyquery.Annotations.*
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
@@ -296,6 +297,30 @@ private[tasties] class TreeUnpickler(
       case tpe                => throw TastyFormatException(s"unexpected type for readWithin: $tpe")
   end readWithin
 
+  private def readAnnotationsInModifiers(sym: Symbol, end: Addr)(using LocalContext): Unit =
+    val innerCtx = localCtx.withOwner(sym)
+    var annots: List[Annotation] = Nil
+
+    while reader.currentAddr != end && isModifierTag(reader.nextByte) do
+      reader.readByte() match
+        case PRIVATEqualified | PROTECTEDqualified =>
+          skipTree()
+        case ANNOTATION =>
+          annots ::= readAnnotation()(using innerCtx)
+        case _ =>
+          ()
+    end while
+
+    sym.addAnnotations(annots)
+  end readAnnotationsInModifiers
+
+  private def readAnnotation()(using LocalContext): Annotation =
+    val end = reader.readEnd()
+    skipTree() // skip the typeref to the annotation class; we only use the tree
+    val tree = readTerm
+    Annotation(tree)
+  end readAnnotation
+
   /** Performs the read action as if SHARED tags were transparent:
     *  - follows the SHARED tags to the term or type that is shared
     *  - reads the shared term or type with {@code read} action
@@ -375,7 +400,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val name = readName.toTypeName
-      val typedef: ClassDef | TypeMember = if (reader.nextByte == TEMPLATE) {
+      val typeDef: ClassDef | TypeMember = if (reader.nextByte == TEMPLATE) {
         val classSymbol = localCtx.getSymbol[ClassSymbol](start)
         val template = readTemplate(using localCtx.withOwner(classSymbol))
         definingTree(classSymbol, ClassDef(name, template, classSymbol)(spn))
@@ -399,9 +424,8 @@ private[tasties] class TreeUnpickler(
         symbol.withDefinition(typeDef)
         definingTree(symbol, TypeMember(name, typeBounds, symbol)(spn))
       }
-      // TODO: read modifiers
-      skipModifiers(end)
-      typedef
+      readAnnotationsInModifiers(typeDef.symbol, end)
+      typeDef
     case VALDEF | DEFDEF => readValOrDefDef
     case _               => readTerm
   }
@@ -605,7 +629,7 @@ private[tasties] class TreeUnpickler(
     val rhs =
       if (reader.currentAddr == end || isModifierTag(reader.nextByte)) None
       else Some(readTerm(using insideCtx))
-    skipModifiers(end)
+    readAnnotationsInModifiers(symbol, end)
     tag match {
       case VALDEF | PARAM =>
         symbol.withDeclaredType(tpt.toType)
