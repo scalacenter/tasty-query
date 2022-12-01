@@ -46,8 +46,10 @@ private[tastyquery] object TypeMaps {
 
     protected def derivedSelect(tp: NamedType, pre: Type): Type =
       tp.derivedSelect(pre)
-    protected def derivedRefinedType(tp: RefinedType, parent: Type, info: TypeBounds): Type =
-      tp.derivedRefinedType(parent, tp.refinedName, info)
+    protected def derivedTypeRefinement(tp: TypeRefinement, parent: Type, refinedBounds: TypeBounds): Type =
+      tp.derivedTypeRefinement(parent, tp.refinedName, refinedBounds)
+    protected def derivedTermRefinement(tp: TermRefinement, parent: Type, refinedType: Type): Type =
+      tp.derivedTermRefinement(parent, tp.refinedName, refinedType)
     protected def derivedWildcardTypeBounds(tp: WildcardTypeBounds, bounds: TypeBounds): Type =
       tp.derivedWildcardTypeBounds(bounds)
     protected def derivedAppliedType(tp: AppliedType, tycon: Type, args: List[Type]): Type =
@@ -113,8 +115,11 @@ private[tastyquery] object TypeMaps {
         case _: ThisType =>
           tp
 
-        case tp: RefinedType =>
-          derivedRefinedType(tp, this(tp.parent), this(tp.refinedInfo))
+        case tp: TypeRefinement =>
+          derivedTypeRefinement(tp, this(tp.parent), this(tp.refinedBounds))
+
+        case tp: TermRefinement =>
+          derivedTermRefinement(tp, this(tp.parent), this(tp.refinedType))
 
         case tp: AndType =>
           derivedAndType(tp, this(tp.first), this(tp.second))

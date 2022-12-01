@@ -122,7 +122,17 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   /** Functions */
 
   testUnpickleWithCode("def-def", "simple_trees.Function") { (tree, code) =>
-    assertEquals(collectCode[DefDef](tree, code), List("(x: Int) => x + 1", "() => ()"))
+    assertEquals(
+      collectCode[DefDef](tree, code),
+      List(
+        "(x: Int) => x + 1",
+        "() => ()",
+        "T] => T => T", // TODO Improve this
+        "T] => (x: T) => x", // TODO Improve this
+        "(x: Any) => x.type",
+        "x => x"
+      )
+    )
   }
 
   testUnpickleWithCode("def-def-nested", "simple_trees.NestedMethod") { (tree, code) =>
@@ -271,7 +281,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickleWithCode("refined-type", "simple_trees.RefinedType") { (tree, code) =>
-    assertEquals(collectCode[RefinedTypeTree](tree, code), Nil)
+    assertEquals(collectCode[RefinedTypeTree](tree, code), List("{ def foo(using Int): Int }"))
   }
 
   testUnpickleWithCode("by-name-type", "simple_trees.ByNameParameter") { (tree, code) =>

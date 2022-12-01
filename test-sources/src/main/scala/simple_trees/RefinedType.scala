@@ -13,4 +13,7 @@ class RefinedType {
     new Trait {
       def f: Int = 0
     }
+
+  // Intentionally without explicit type
+  def givenRefinement = ??? : { def foo(using Int): Int }
 }
