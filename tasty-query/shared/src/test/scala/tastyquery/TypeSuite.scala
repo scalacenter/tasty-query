@@ -86,12 +86,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(parentClasses) == List(defn.ObjectClass, ProductClass, SerializableClass))
   }
 
-  def applyOverloadedTest(name: String)(callMethod: String, paramCls: Context ?=> Symbol)(using munit.Location): Unit =
+  def applyOverloadedTest(name: String)(callMethod: String, checkParamType: Context ?=> Type => Boolean): Unit =
     testWithContext(name) {
       val OverloadedApplyClass = ctx.findTopLevelClass("simple_trees.OverloadedApply")
 
       val callSym = OverloadedApplyClass.findDecl(termName(callMethod))
-      val Acls = paramCls
 
       val Some(callTree @ _: DefDef) = callSym.tree: @unchecked
 
@@ -103,31 +102,44 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
             callCount += 1
             assert(app.tpe.isRef(defn.UnitClass), clue(app))
             val fooSym = fooRef.tpe.asInstanceOf[TermRef].symbol
-            val List(Left(List(aRef)), _*) = fooSym.paramRefss: @unchecked
-            assert(aRef.isRef(Acls), clues(Acls.fullName, aRef))
+            val mt = fooSym.declaredType.asInstanceOf[MethodType]
+            assert(clue(mt.resultType).isRef(defn.UnitClass))
+            assert(checkParamType(clue(mt.paramTypes.head)))
           case _ => ()
       }
 
       assert(callCount == 1)
     }
 
-  applyOverloadedTest("apply-overloaded-int")("callA", defn.IntClass)
+  applyOverloadedTest("apply-overloaded-int")("callA", _.isRef(defn.IntClass))
   applyOverloadedTest("apply-overloaded-gen")(
     "callB",
-    ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Box")
+    _.isApplied(
+      _.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Box")),
+      List(_.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Num")))
+    )
   )
   applyOverloadedTest("apply-overloaded-nestedObj")(
     "callC",
-    ctx
-      .findTopLevelClass("simple_trees.OverloadedApply")
-      .findDecl(moduleClassName("Foo"))
-      .asClass
-      .findDecl(termName("Bar"))
+    _.isRef(
+      ctx
+        .findTopLevelClass("simple_trees.OverloadedApply")
+        .findDecl(moduleClassName("Foo"))
+        .asClass
+        .findDecl(termName("Bar"))
+    )
   )
-  applyOverloadedTest("apply-overloaded-arrayObj")("callD", defn.ArrayClass)
+  applyOverloadedTest("apply-overloaded-arrayObj")("callD", _.isRef(defn.ArrayClass))
   applyOverloadedTest("apply-overloaded-byName")(
     "callE",
-    ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Num")
+    _.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Num"))
+  )
+  applyOverloadedTest("apply-overloaded-gen-target-name")(
+    "callG",
+    _.isApplied(
+      _.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Box")),
+      List(_.isRef(defn.IntClass))
+    )
   )
 
   testWithContext("apply-overloaded-not-method") {
