@@ -208,6 +208,15 @@ object Symbols {
       case scope: ClassSymbol => scope.hasOverloads(name)
       case _                  => false
 
+    final def hasAnnotation(annotClass: ClassSymbol)(using Context): Boolean =
+      annotations.exists(_.symbol == annotClass)
+
+    final def getAnnotations(annotClass: ClassSymbol)(using Context): List[Annotation] =
+      annotations.filter(_.symbol == annotClass)
+
+    final def getAnnotation(annotClass: ClassSymbol)(using Context): Option[Annotation] =
+      annotations.find(_.symbol == annotClass)
+
     override def toString: String = {
       val kind = this match
         case _: PackageSymbol => "package "

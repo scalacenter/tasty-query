@@ -2025,6 +2025,16 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
           ) =>
     }
 
+    def deprecatedAnnotBothNamedCheck(msg: String, since: String): StructureCheck = {
+      case Apply(
+            SimpleAnnotCtorNamed("deprecated"),
+            List(
+              NamedArg(SimpleName("message"), Literal(Constant(`msg`))),
+              NamedArg(SimpleName("since"), Literal(Constant(`since`)))
+            )
+          ) =>
+    }
+
     def implicitNotFoundAnnotCheck(msg: String): StructureCheck = {
       case Apply(SimpleAnnotCtorNamed("implicitNotFound"), List(Literal(Constant(`msg`)))) =>
     }
@@ -2053,7 +2063,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       sym
     }
     assert(clue(deprecatedValSym.annotations).sizeIs == 1)
-    assert(containsSubtree(deprecatedAnnotNamedCheck("reason", "forever"))(clue(deprecatedValSym.annotations(0).tree)))
+    assert(
+      containsSubtree(deprecatedAnnotBothNamedCheck("reason", "forever"))(clue(deprecatedValSym.annotations(0).tree))
+    )
 
     val myTypeClassSym = findTree(tree) { case ClassDef(TypeName(SimpleName("MyTypeClass")), _, sym) =>
       sym

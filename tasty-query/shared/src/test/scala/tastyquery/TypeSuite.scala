@@ -2,6 +2,7 @@ package tastyquery
 
 import scala.collection.mutable
 
+import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
@@ -1528,6 +1529,46 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val innerIdentSym = innerIdentTpe.symbol
     assert(clue(innerIdentSym.owner) == ChildClass)
     assert(innerIdentSym.is(ParamAccessor))
+  }
+
+  testWithContext("annotations") {
+    val AnnotationsClass = ctx.findTopLevelClass("simple_trees.Annotations")
+    val inlineClass = ctx.findTopLevelClass("scala.inline")
+    val deprecatedClass = ctx.findTopLevelClass("scala.deprecated")
+
+    locally {
+      val inlineMethodSym = AnnotationsClass.findNonOverloadedDecl(termName("inlineMethod"))
+      val List(inlineAnnot) = inlineMethodSym.annotations
+      assert(clue(inlineAnnot.symbol) == inlineClass)
+      assert(clue(inlineAnnot.arguments).isEmpty)
+
+      assert(inlineMethodSym.hasAnnotation(inlineClass))
+      assert(!inlineMethodSym.hasAnnotation(deprecatedClass))
+
+      assert(inlineMethodSym.getAnnotations(inlineClass) == List(inlineAnnot))
+      assert(inlineMethodSym.getAnnotations(deprecatedClass) == Nil)
+
+      assert(inlineMethodSym.getAnnotation(inlineClass) == Some(inlineAnnot))
+      assert(inlineMethodSym.getAnnotation(deprecatedClass) == None)
+    }
+
+    locally {
+      val deprecatedValSym = AnnotationsClass.findNonOverloadedDecl(termName("deprecatedVal"))
+      val List(deprecatedAnnot) = deprecatedValSym.annotations
+
+      assert(clue(deprecatedAnnot.symbol) == deprecatedClass)
+      assert(clue(deprecatedAnnot.annotConstructor) == deprecatedClass.findNonOverloadedDecl(nme.Constructor))
+      assert(clue(deprecatedAnnot.argCount) == 2)
+
+      deprecatedAnnot.arguments match
+        case List(Literal(Constant("reason")), Literal(Constant("forever"))) =>
+          () // OK
+        case args =>
+          fail("unexpected arguments", clues(args))
+
+      assert(clue(deprecatedAnnot.argIfConstant(0)) == Some(Constant("reason")))
+      assert(clue(deprecatedAnnot.argIfConstant(1)) == Some(Constant("forever")))
+    }
   }
 
 }
