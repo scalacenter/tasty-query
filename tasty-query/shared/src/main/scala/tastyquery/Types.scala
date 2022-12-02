@@ -91,15 +91,6 @@ object Types {
     final def select(sym: TermOrTypeSymbol)(using Context): NamedType =
       NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
 
-    final def select(name: Name)(using Context): NamedType =
-      NamedType(this, name)
-
-    final def select(name: TermName)(using Context): TermRef =
-      TermRef(this, name)
-
-    final def select(name: TypeName)(using Context): TypeRef =
-      TypeRef(this, name)
-
     /** True iff `sym` is a symbol of a class type parameter and the reference
       * `<pre> . <sym>` is an actual argument reference, i.e., `pre` is not the
       * ThisType of `sym`'s owner, or a reference to `sym`'s owner.'
@@ -146,6 +137,15 @@ object Types {
         tpe.superType.classSymbol
       case _ =>
         None
+
+    final def select(name: Name)(using Context): NamedType =
+      NamedType(this, name)
+
+    final def select(name: TermName)(using Context): TermRef =
+      TermRef(this, name)
+
+    final def select(name: TypeName)(using Context): TypeRef =
+      TypeRef(this, name)
 
     /** The type parameters of this type are:
       * For a ClassInfo type, the type parameters of its class.
@@ -612,7 +612,7 @@ object Types {
           case prefix: Type =>
             prefix.member(name)
           case NoPrefix =>
-            throw new MemberNotFoundException(prefix, name, s"reference by name $name to a local symbol")
+            throw new AssertionError(s"found reference by name $name without a prefix")
     end computeSymbol
 
     /** The argument corresponding to class type parameter `tparam` as seen from
@@ -713,7 +713,7 @@ object Types {
 
   object NamedType {
 
-    private[tastyquery] def possibleSelFromPackage(prefix: Prefix, name: TermName)(
+    private[tastyquery] def possibleSelFromPackage(prefix: Type, name: TermName)(
       using Context
     ): (TermRef | PackageRef) =
       prefix match
@@ -730,7 +730,7 @@ object Types {
         case sym: TypeSymbol => TypeRef(prefix, sym)
         case sym: TermSymbol => TermRef(prefix, sym)
 
-    def apply(prefix: Prefix, name: Name)(using Context): NamedType =
+    def apply(prefix: Type, name: Name)(using Context): NamedType =
       name match
         case name: TypeName => TypeRef(prefix, name)
         case name: TermName => TermRef(prefix, name)
@@ -798,10 +798,10 @@ object Types {
   }
 
   object TermRef:
-    def apply(prefix: Prefix, name: TermName): TermRef = new TermRef(prefix, name)
+    def apply(prefix: Type, name: TermName): TermRef = new TermRef(prefix, name)
     def apply(prefix: Prefix, symbol: TermSymbol): TermRef = new TermRef(prefix, symbol)
 
-    private[tastyquery] def apply(prefix: Prefix, designator: LookupIn): TermRef = new TermRef(prefix, designator)
+    private[tastyquery] def apply(prefix: Type, designator: LookupIn): TermRef = new TermRef(prefix, designator)
 
     private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): TermRef =
       new TermRef(prefix, external)
@@ -886,7 +886,7 @@ object Types {
   }
 
   object TypeRef:
-    def apply(prefix: Prefix, name: TypeName): TypeRef = new TypeRef(prefix, name)
+    def apply(prefix: Type, name: TypeName): TypeRef = new TypeRef(prefix, name)
     def apply(prefix: Prefix, symbol: TypeSymbol): TypeRef = new TypeRef(prefix, symbol)
 
     private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): TypeRef =
