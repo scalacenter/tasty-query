@@ -2,6 +2,7 @@ package tastyquery
 
 import scala.collection.mutable
 
+import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
@@ -85,12 +86,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(parentClasses) == List(defn.ObjectClass, ProductClass, SerializableClass))
   }
 
-  def applyOverloadedTest(name: String)(callMethod: String, paramCls: Context ?=> Symbol)(using munit.Location): Unit =
+  def applyOverloadedTest(name: String)(callMethod: String, checkParamType: Context ?=> Type => Boolean): Unit =
     testWithContext(name) {
       val OverloadedApplyClass = ctx.findTopLevelClass("simple_trees.OverloadedApply")
 
       val callSym = OverloadedApplyClass.findDecl(termName(callMethod))
-      val Acls = paramCls
 
       val Some(callTree @ _: DefDef) = callSym.tree: @unchecked
 
@@ -102,31 +102,44 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
             callCount += 1
             assert(app.tpe.isRef(defn.UnitClass), clue(app))
             val fooSym = fooRef.tpe.asInstanceOf[TermRef].symbol
-            val List(Left(List(aRef)), _*) = fooSym.paramRefss: @unchecked
-            assert(aRef.isRef(Acls), clues(Acls.fullName, aRef))
+            val mt = fooSym.declaredType.asInstanceOf[MethodType]
+            assert(clue(mt.resultType).isRef(defn.UnitClass))
+            assert(checkParamType(clue(mt.paramTypes.head)))
           case _ => ()
       }
 
       assert(callCount == 1)
     }
 
-  applyOverloadedTest("apply-overloaded-int")("callA", defn.IntClass)
+  applyOverloadedTest("apply-overloaded-int")("callA", _.isRef(defn.IntClass))
   applyOverloadedTest("apply-overloaded-gen")(
     "callB",
-    ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Box")
+    _.isApplied(
+      _.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Box")),
+      List(_.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Num")))
+    )
   )
   applyOverloadedTest("apply-overloaded-nestedObj")(
     "callC",
-    ctx
-      .findTopLevelClass("simple_trees.OverloadedApply")
-      .findDecl(moduleClassName("Foo"))
-      .asClass
-      .findDecl(termName("Bar"))
+    _.isRef(
+      ctx
+        .findTopLevelClass("simple_trees.OverloadedApply")
+        .findDecl(moduleClassName("Foo"))
+        .asClass
+        .findDecl(termName("Bar"))
+    )
   )
-  applyOverloadedTest("apply-overloaded-arrayObj")("callD", defn.ArrayClass)
+  applyOverloadedTest("apply-overloaded-arrayObj")("callD", _.isRef(defn.ArrayClass))
   applyOverloadedTest("apply-overloaded-byName")(
     "callE",
-    ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Num")
+    _.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Num"))
+  )
+  applyOverloadedTest("apply-overloaded-gen-target-name")(
+    "callG",
+    _.isApplied(
+      _.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Box")),
+      List(_.isRef(defn.IntClass))
+    )
   )
 
   testWithContext("apply-overloaded-not-method") {
@@ -1528,6 +1541,46 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val innerIdentSym = innerIdentTpe.symbol
     assert(clue(innerIdentSym.owner) == ChildClass)
     assert(innerIdentSym.is(ParamAccessor))
+  }
+
+  testWithContext("annotations") {
+    val AnnotationsClass = ctx.findTopLevelClass("simple_trees.Annotations")
+    val inlineClass = ctx.findTopLevelClass("scala.inline")
+    val deprecatedClass = ctx.findTopLevelClass("scala.deprecated")
+
+    locally {
+      val inlineMethodSym = AnnotationsClass.findNonOverloadedDecl(termName("inlineMethod"))
+      val List(inlineAnnot) = inlineMethodSym.annotations
+      assert(clue(inlineAnnot.symbol) == inlineClass)
+      assert(clue(inlineAnnot.arguments).isEmpty)
+
+      assert(inlineMethodSym.hasAnnotation(inlineClass))
+      assert(!inlineMethodSym.hasAnnotation(deprecatedClass))
+
+      assert(inlineMethodSym.getAnnotations(inlineClass) == List(inlineAnnot))
+      assert(inlineMethodSym.getAnnotations(deprecatedClass) == Nil)
+
+      assert(inlineMethodSym.getAnnotation(inlineClass) == Some(inlineAnnot))
+      assert(inlineMethodSym.getAnnotation(deprecatedClass) == None)
+    }
+
+    locally {
+      val deprecatedValSym = AnnotationsClass.findNonOverloadedDecl(termName("deprecatedVal"))
+      val List(deprecatedAnnot) = deprecatedValSym.annotations
+
+      assert(clue(deprecatedAnnot.symbol) == deprecatedClass)
+      assert(clue(deprecatedAnnot.annotConstructor) == deprecatedClass.findNonOverloadedDecl(nme.Constructor))
+      assert(clue(deprecatedAnnot.argCount) == 2)
+
+      deprecatedAnnot.arguments match
+        case List(Literal(Constant("reason")), Literal(Constant("forever"))) =>
+          () // OK
+        case args =>
+          fail("unexpected arguments", clues(args))
+
+      assert(clue(deprecatedAnnot.argIfConstant(0)) == Some(Constant("reason")))
+      assert(clue(deprecatedAnnot.argIfConstant(1)) == Some(Constant("forever")))
+    }
   }
 
 }

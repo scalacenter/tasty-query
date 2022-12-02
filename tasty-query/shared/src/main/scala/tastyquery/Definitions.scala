@@ -18,6 +18,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   private val javaPackage = RootPackage.getPackageDeclOrCreate(nme.javaPackageName)
   val javaLangPackage = javaPackage.getPackageDeclOrCreate(nme.langPackageName)
 
+  private val scalaAnnotationPackage =
+    scalaPackage.getPackageDeclOrCreate(termName("annotation"))
   private val scalaCollectionPackage =
     scalaPackage.getPackageDeclOrCreate(termName("collection"))
   private val scalaCollectionImmutablePackage =
@@ -199,6 +201,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   extension (pkg: PackageSymbol)
     private def requiredClass(name: String): ClassSymbol = pkg.getDecl(typeName(name)).get.asClass
+    private def optionalClass(name: String): Option[ClassSymbol] = pkg.getDecl(typeName(name)).map(_.asClass)
 
   lazy val ObjectClass = javaLangPackage.requiredClass("Object")
 
@@ -218,6 +221,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   lazy val UnitClass = scalaPackage.requiredClass("Unit")
 
   lazy val StringClass = javaLangPackage.requiredClass("String")
+
+  private[tastyquery] lazy val targetNameAnnotClass = scalaAnnotationPackage.optionalClass("targetName")
 
   def isPrimitiveValueClass(sym: ClassSymbol): Boolean =
     sym == IntClass || sym == LongClass || sym == FloatClass || sym == DoubleClass ||

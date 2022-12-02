@@ -10,7 +10,7 @@ class Annotations:
   @deprecated("some reason", since = "1.0")
   def inlineDeprecatedMethod(): Unit = ()
 
-  @deprecated("reason", since = "forever")
+  @deprecated(since = "forever", message = "reason")
   val deprecatedVal: Int = 5
 
   @implicitNotFound("Cannot find implicit for MyTypeClass[${T}]")

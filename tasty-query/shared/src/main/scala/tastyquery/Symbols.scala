@@ -208,6 +208,15 @@ object Symbols {
       case scope: ClassSymbol => scope.hasOverloads(name)
       case _                  => false
 
+    final def hasAnnotation(annotClass: ClassSymbol)(using Context): Boolean =
+      annotations.exists(_.symbol == annotClass)
+
+    final def getAnnotations(annotClass: ClassSymbol)(using Context): List[Annotation] =
+      annotations.filter(_.symbol == annotClass)
+
+    final def getAnnotation(annotClass: ClassSymbol)(using Context): Option[Annotation] =
+      annotations.find(_.symbol == annotClass)
+
     override def toString: String = {
       val kind = this match
         case _: PackageSymbol => "package "
@@ -297,6 +306,7 @@ object Symbols {
 
     // Cache fields
     private var mySignature: Option[Signature] | Null = null
+    private var myTargetName: TermName | Null = null
     private var myParamRefss: List[Either[List[TermParamRef], List[TypeParamRef]]] | Null = null
 
     protected override def doCheckCompleted(): Unit =
@@ -347,11 +357,29 @@ object Symbols {
         mySignature = sig
         sig
 
+    private[tastyquery] final def targetName(using Context): TermName =
+      val local = myTargetName
+      if local != null then local
+      else
+        val computed = computeTargetName()
+        myTargetName = computed
+        computed
+    end targetName
+
+    private def computeTargetName()(using Context): TermName =
+      if annotations.isEmpty then name
+      else
+        defn.targetNameAnnotClass match
+          case None => name
+          case Some(targetNameAnnotClass) =>
+            getAnnotation(targetNameAnnotClass) match
+              case None        => name
+              case Some(annot) => termName(annot.argIfConstant(0).get.stringValue)
+    end computeTargetName
+
     /** If this symbol has a `MethodicType`, returns a `SignedName`, otherwise a `Name`. */
     final def signedName(using Context): Name =
       signature.fold(name) { sig =>
-        val name = this.name.asSimpleName
-        val targetName = name // TODO We may have to take `@targetName` into account here, one day
         SignedName(name, sig, targetName)
       }
 
@@ -670,8 +698,10 @@ object Symbols {
       myDeclarations.get(overloaded.underlying) match
         case Some(overloads) =>
           overloads.find {
-            case decl: TermSymbol => decl.signature.exists(_ == overloaded.sig)
-            case _                => false
+            case decl: TermSymbol =>
+              decl.signature.exists(_ == overloaded.sig) && decl.targetName == overloaded.target
+            case _ =>
+              false
           }
         case None => None
     end distinguishOverloaded

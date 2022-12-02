@@ -14,10 +14,16 @@ import TestUtils.*
 class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
   def assertIsSignedName(actual: Name, simpleName: String, signature: String)(using Location): Unit =
+    assertIsSignedName(actual, simpleName, signature, simpleName)
+
+  def assertIsSignedName(actual: Name, simpleName: String, signature: String, targetName: String)(
+    using Location
+  ): Unit =
     actual match
       case name: SignedName =>
         assert(clue(name.underlying) == clue(termName(simpleName)))
         assert(clue(name.sig.toString) == clue(signature))
+        assert(clue(name.target) == clue(termName(targetName)))
       case _ =>
         fail("not a Signed name", clues(actual))
   end assertIsSignedName
@@ -56,6 +62,13 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
     val identity = GenericMethod.findNonOverloadedDecl(name"identity")
     assertIsSignedName(identity.signedName, "identity", "(1,java.lang.Object):java.lang.Object")
+  }
+
+  testWithContext("targetName") {
+    val GenericMethod = ctx.findTopLevelClass("simple_trees.GenericMethod")
+
+    val identity = GenericMethod.findNonOverloadedDecl(name"otherIdentity")
+    assertIsSignedName(identity.signedName, "otherIdentity", "(1,java.lang.Object):java.lang.Object", "otherName")
   }
 
   testWithContext("JavaInnerClass") {
