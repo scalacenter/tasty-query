@@ -655,7 +655,7 @@ object Types {
       case sym: TermOrTypeSymbol =>
         sym
       case LookupIn(pre, name) =>
-        TermRef(pre, name).symbol
+        pre.member(name)
       case Scala2ExternalSymRef(owner, path) =>
         path.foldLeft(owner) { (owner, name) =>
           /* In Scala 2 external references, (term) *modules* can appear in paths.
