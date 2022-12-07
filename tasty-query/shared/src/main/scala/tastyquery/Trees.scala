@@ -309,8 +309,7 @@ object Trees {
     private def resolveMethodType(funTpe: Type, args: List[Type])(using Context): Type =
       funTpe.widenOverloads match
         case funTpe: MethodType =>
-          // TODO: substitute parameters when dependent
-          funTpe.resultType
+          funTpe.instantiate(args)
         case tpe =>
           throw NonMethodReferenceException(s"application of args ${args.mkString} to $tpe")
 

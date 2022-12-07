@@ -1132,6 +1132,9 @@ object Types {
     private val myRes: Type = resultTypeExp(this: @unchecked)
     initialized = true
 
+    def instantiate(args: List[Type])(using Context): Type =
+      Substituters.substParams(resultType, this, args)
+
     def paramTypes: List[Type] =
       if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
       myParamTypes.nn
