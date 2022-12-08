@@ -142,6 +142,9 @@ object Symbols {
     final def isAnyOf(testFlags: FlagSet): Boolean =
       flags.isAnyOf(testFlags)
 
+    final def isAllOf(testFlags: FlagSet, butNotAnyOf: FlagSet): Boolean =
+      flags.isAllOf(testFlags, butNotAnyOf = butNotAnyOf)
+
     final def enclosingDecl: DeclaringSymbol = owner match {
       case owner: DeclaringSymbol => owner
       case _: Symbol | null =>
@@ -394,6 +397,14 @@ object Symbols {
         val refs = paramssOfType(declaredType)
         myParamRefss = refs
         refs
+    end paramRefss
+
+    /** Is this term symbol a stable member?
+      *
+      * A stable member is one that is known to be idempotent.
+      */
+    final def isStableMember(using Context): Boolean =
+      !isAnyOf(Method | Mutable) && !declaredType.isInstanceOf[ExprType]
   end TermSymbol
 
   object TermSymbol:
@@ -863,10 +874,16 @@ object Symbols {
           None
       end lookup
 
-      getDecl(name).filter(!_.is(ParamAccessor)).orElse {
-        if name == nme.Constructor then None
-        else lookup(linearization.tail)
-      }
+      def isOwnThis: Boolean = pre match
+        case pre: ThisType if pre.cls == this => true
+        case _                                => false
+
+      getDecl(name) match
+        case some @ Some(sym) if !sym.is(Local) || isOwnThis =>
+          some
+        case _ =>
+          if name == nme.Constructor then None
+          else lookup(linearization.tail)
     end findMember
 
     private var myTypeRef: TypeRef | Null = null

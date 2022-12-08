@@ -334,9 +334,9 @@ object Types {
       case tp                => tp
 
     private[tastyquery] final def widenIfUnstable(using Context): Type = this match
-      // TODO Handle unstable term refs like method calls or values
-      case tp: TermRef => tp
-      case tp          => tp.widen
+      case tp: ExprType                             => tp.resultType.widenIfUnstable
+      case tp: TermRef if !tp.symbol.isStableMember => tp.underlying.widenIfUnstable
+      case _                                        => this
 
     final def dealias(using Context): Type = dealias1(keepOpaques = false)
 

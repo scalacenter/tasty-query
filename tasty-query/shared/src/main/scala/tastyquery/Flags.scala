@@ -14,6 +14,9 @@ object Flags:
     def isAllOf(testFlags: FlagSet): Boolean = (flags & testFlags) == testFlags
     def isAnyOf(testFlags: FlagSet): Boolean = !(flags & testFlags).isEmpty
 
+    def isAllOf(testFlags: FlagSet, butNotAnyOf: FlagSet): Boolean =
+      (flags & (testFlags | butNotAnyOf)) == testFlags
+
     def |(otherFlags: FlagSet): FlagSet = bits | otherFlags.bits
     def &(otherFlags: FlagSet): FlagSet = bits & otherFlags.bits
 

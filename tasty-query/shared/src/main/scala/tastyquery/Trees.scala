@@ -267,6 +267,11 @@ object Trees {
   final case class Ident(name: TermName)(tpe: Type)(span: Span) extends TermTree(span):
     protected final def calculateType(using Context): Type = tpe
 
+    def symbolOption(using Context): Option[TermSymbol | PackageSymbol] = tpe match
+      case termRef: TermRef       => Some(termRef.symbol)
+      case packageRef: PackageRef => Some(packageRef.symbol)
+      case _                      => None
+
     override final def withSpan(span: Span): Ident = Ident(name)(tpe)(span)
   end Ident
 
@@ -281,6 +286,11 @@ object Trees {
     protected final def calculateType(using Context): Type = selectOwner match
       case Some(selOwner) => TermRef(qualifier.tpe, LookupIn(selOwner, name.asInstanceOf[SignedName]))
       case None           => NamedType.possibleSelFromPackage(qualifier.tpe, name)
+
+    def symbol(using Context): TermSymbol | PackageSymbol = tpe match
+      case termRef: TermRef       => termRef.symbol
+      case packageRef: PackageRef => packageRef.symbol
+      case tpe                    => throw AssertionError(s"unexpected type $tpe in Select node")
 
     override def withSpan(span: Span): Select = Select(qualifier, name)(selectOwner)(span)
   end Select
