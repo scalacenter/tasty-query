@@ -79,6 +79,10 @@ object Names {
     val m_isInstanceOf: SimpleName = termName("isInstanceOf")
     val m_asInstanceOf: SimpleName = termName("asInstanceOf")
     val m_getClass: SimpleName = termName("getClass")
+
+    val m_eq: SimpleName = termName("eq")
+    val m_ne: SimpleName = termName("ne")
+    val m_synchronized: SimpleName = termName("synchronized")
   }
 
   object tpnme {

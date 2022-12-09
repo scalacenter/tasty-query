@@ -180,6 +180,21 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     createSpecialMethod(AnyClass, nme.m_getClass, tpe, Final)
   end Any_getClass
 
+  private[tastyquery] def createObjectMagicMethods(cls: ClassSymbol): Unit =
+    createSpecialMethod(cls, nme.m_eq, equalityMethodType, Final)
+    createSpecialMethod(cls, nme.m_ne, equalityMethodType, Final)
+
+    val synchronizedTpe = PolyType(List(typeName("A")))(
+      pt => List(NothingAnyBounds),
+      pt => MethodType(List(termName("x")), List(pt.paramRefs.head), pt.paramRefs.head)
+    )
+    createSpecialMethod(cls, nme.m_synchronized, synchronizedTpe)
+  end createObjectMagicMethods
+
+  lazy val Object_eq: TermSymbol = ObjectClass.findNonOverloadedDecl(nme.m_eq)
+  lazy val Object_ne: TermSymbol = ObjectClass.findNonOverloadedDecl(nme.m_ne)
+  lazy val Object_synchronized: TermSymbol = ObjectClass.findNonOverloadedDecl(nme.m_synchronized)
+
   private def createSpecialPolyClass(
     name: TypeName,
     paramFlags: FlagSet,

@@ -1774,4 +1774,50 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     )
   }
 
+  testWithContext("methods on Object") {
+    val ObjectMethodsClass = ctx.findTopLevelClass("simple_trees.ObjectMethods")
+
+    def rhsOf(methodName: String): TermTree =
+      ObjectMethodsClass.findNonOverloadedDecl(termName(methodName)).tree.get.asInstanceOf[DefDef].rhs.get
+
+    def isObjectMethod(sym: Symbol, name: SimpleName): Boolean =
+      sym.owner == defn.ObjectClass && sym.name == name
+
+    def testApply(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): TermSymbol =
+      val rhs @ Apply(fun: Select, _) = rhsOf(testMethodName): @unchecked
+      assert(isObjectMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
+      assert(expectedType(clue(rhs.tpe)), testMethodName)
+      fun.symbol.asTerm
+    end testApply
+
+    def testApplyTypeApply(
+      testMethodName: String,
+      targetMethodName: SimpleName,
+      expectedType: Type => Boolean
+    ): TermSymbol =
+      val rhs @ Apply(TypeApply(fun: Select, _), _) = rhsOf(testMethodName): @unchecked
+      assert(isObjectMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
+      assert(expectedType(clue(rhs.tpe)), testMethodName)
+      fun.symbol.asTerm
+    end testApplyTypeApply
+
+    val eqSym = testApply("testEq", nme.m_eq, _.isRef(defn.BooleanClass))
+    val neSym = testApply("testNe", nme.m_ne, _.isRef(defn.BooleanClass))
+
+    val synchronizedSym = testApplyTypeApply("testSynchronized", nme.m_synchronized, _.isRef(defn.IntClass))
+
+    testApply("testNotifyAll", termName("notifyAll"), _.isRef(defn.UnitClass))
+    testApply("testWait", termName("wait"), _.isRef(defn.UnitClass))
+
+    testApply("testClone", termName("clone"), _.isRef(defn.ObjectClass))
+
+    /* Check that the symbols we found are also the ones of `defn.Object_x`.
+     * Wheck do this *after* having performed the rest of the tests, because we want to
+     * ensure that the methods exist regardless of if we access `defn.Object_x` or not.
+     */
+    assert(clue(eqSym) == clue(defn.Object_eq))
+    assert(clue(neSym) == clue(defn.Object_ne))
+    assert(clue(synchronizedSym) == clue(defn.Object_synchronized))
+  }
+
 }
