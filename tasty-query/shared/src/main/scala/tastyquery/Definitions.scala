@@ -22,6 +22,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     scalaPackage.getPackageDeclOrCreate(termName("annotation"))
   private val scalaCollectionPackage =
     scalaPackage.getPackageDeclOrCreate(termName("collection"))
+  private[tastyquery] val scalaCompiletimePackage =
+    scalaPackage.getPackageDeclOrCreate(termName("compiletime"))
   private val scalaCollectionImmutablePackage =
     scalaCollectionPackage.getPackageDeclOrCreate(termName("immutable"))
 
@@ -181,7 +183,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     cls.withTypeParams(allTypeParams)
 
     val applyMethod = TermSymbol.create(termName("apply"), cls)
-    applyMethod.withFlags(Method | Deferred, None)
+    applyMethod.withFlags(Method | Abstract, None)
     applyMethod.withDeclaredType(
       MethodType(List.tabulate(n)(i => termName("x" + i)))(
         mt => inputTypeParams.map(_.typeRef),
@@ -228,5 +230,14 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     sym == IntClass || sym == LongClass || sym == FloatClass || sym == DoubleClass ||
       sym == BooleanClass || sym == ByteClass || sym == ShortClass || sym == CharClass ||
       sym == UnitClass
+
+  lazy val uninitializedMethod: Option[TermSymbol] =
+    scalaCompiletimePackage.getDecl(moduleClassName("package$package")).flatMap { packageObjectClass =>
+      packageObjectClass.asClass.getDecl(termName("uninitialized"))
+    }
+  end uninitializedMethod
+
+  private[tastyquery] lazy val uninitializedMethodTermRef: TermRef =
+    TermRef(TermRef(PackageRef(defn.scalaCompiletimePackage), termName("package$package")), termName("uninitialized"))
 
 end Definitions
