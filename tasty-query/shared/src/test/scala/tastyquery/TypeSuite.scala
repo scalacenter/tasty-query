@@ -44,6 +44,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def isArrayOf(arg: Type => Boolean)(using Context): Boolean =
       isApplied(_.isRef(defn.ArrayClass), Seq(arg))
 
+  testWithContext("apply-dependent") {
+    val DependentMethodClass = ctx.findTopLevelClass("simple_trees.DependentMethod")
+    val testVal = DependentMethodClass.findNonOverloadedDecl(name"test")
+    val testDef = testVal.tree.get.asInstanceOf[ValDef]
+    val applyTree = testDef.rhs.get.asInstanceOf[Apply]
+    assert(applyTree.tpe.isOfClass(defn.StringClass))
+  }
+
   testWithContext("apply-recursive") {
     val RecApplyClass = ctx.findTopLevelClass("simple_trees.RecApply")
 

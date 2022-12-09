@@ -644,9 +644,8 @@ private[tasties] class TreeUnpickler(
     def rec(paramLists: List[ParamsClause]): Type =
       paramLists match
         case Left(params) :: rest =>
-          val paramNames = params.map(_.name)
-          val paramTypes = params.map(_.tpt.toType)
-          MethodType(paramNames, paramTypes, rec(rest))
+          val paramSymbols = params.map(_.symbol)
+          MethodType.fromSymbols(paramSymbols, rec(rest))
         case Right(tparams) :: rest =>
           PolyType.fromParams(tparams, rec(rest))
         case Nil =>
