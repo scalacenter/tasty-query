@@ -1506,8 +1506,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("findMember and private members") {
+    val PrivateOverridesClass = ctx.findTopLevelModuleClass("inheritance.PrivateOverrides")
     val ParentClass = ctx.findStaticClass("inheritance.PrivateOverrides.Parent")
     val ChildClass = ctx.findStaticClass("inheritance.PrivateOverrides.Child")
+    val InnerClass = ChildClass.findDecl(typeName("Inner")).asClass
 
     val setupMethod = ctx.findTopLevelModuleClass("inheritance.PrivateOverrides").findNonOverloadedDecl(name"testSetup")
     val setupMethodDef = setupMethod.tree.get.asInstanceOf[DefDef]
@@ -1517,38 +1519,134 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val memberSym = ChildClass.findMember(TermRef(NoPrefix, child), termName("y")).get
     assert(clue(memberSym.owner) == ParentClass)
 
-    // Test that a Select from outside the class finds the inherited 'y'
-    val selectNode = findTree(setupMethodDef.rhs.get) { case select: Select =>
-      select
-    }
-    val selectTpe = selectNode.tpe.asInstanceOf[TermRef]
-    assert(selectTpe.name == termName("y"))
-    val selectSym = selectTpe.symbol
-    assert(clue(selectSym.owner) == ParentClass)
-    assert(!selectSym.is(ParamAccessor))
+    val wInParent = ParentClass.findDecl(termName("w"))
+    val xInParent = ParentClass.findDecl(termName("x"))
+    val yInParent = ParentClass.findDecl(termName("y"))
+    assert(clue(ParentClass.getDecl(termName("z"))).isEmpty)
 
-    val readLocalYMethod = ChildClass.findNonOverloadedDecl(name"readLocalY")
-    val readLocalYMethodDef = readLocalYMethod.tree.get.asInstanceOf[DefDef]
+    assert(!clue(wInParent.flags).isAnyOf(Local | ParamAccessor | Private))
+    assert(clue(xInParent.flags).isAllOf(ParamAccessor, butNotAnyOf = Local | Private))
+    assert(!clue(yInParent.flags).isAnyOf(Local | ParamAccessor | Private))
 
-    // A `this.y` from inside the class finds the inherited 'y'
-    val innerSelectNode = findTree(readLocalYMethodDef.rhs.get) {
-      case select: Select if select.name == termName("y") => select
-    }
-    val innerSelectTpe = innerSelectNode.tpe.asInstanceOf[TermRef]
-    assert(innerSelectTpe.name == termName("y"))
-    val innerSelectSym = innerSelectTpe.symbol
-    assert(clue(innerSelectSym.owner) == ParentClass)
-    assert(!innerSelectSym.is(ParamAccessor))
+    assert(clue(ChildClass.getDecl(termName("w"))).isEmpty)
+    val xInChild = ChildClass.findDecl(termName("x"))
+    val yInChild = ChildClass.findDecl(termName("y"))
+    val zInChild = ChildClass.findDecl(termName("z"))
 
-    // A `y` ident from inside the class finds the param accessor 'y'
-    val innerIdentNode = findTree(readLocalYMethodDef.rhs.get) {
-      case ident: Ident if ident.name == termName("y") => ident
-    }
-    val innerIdentTpe = innerIdentNode.tpe.asInstanceOf[TermRef]
-    assert(innerIdentTpe.name == termName("y"))
-    val innerIdentSym = innerIdentTpe.symbol
-    assert(clue(innerIdentSym.owner) == ChildClass)
-    assert(innerIdentSym.is(ParamAccessor))
+    assert(clue(xInChild.flags).isAllOf(Local | ParamAccessor | Private))
+    assert(clue(yInChild.flags).isAllOf(Local | ParamAccessor | Private))
+    assert(clue(zInChild.flags).isAllOf(ParamAccessor, butNotAnyOf = Local | Private))
+
+    assert(clue(InnerClass.getDecl(termName("w"))).isEmpty)
+    assert(clue(InnerClass.getDecl(termName("x"))).isEmpty)
+    val yInInner = InnerClass.findDecl(termName("y"))
+    val zInInner = InnerClass.findDecl(termName("z"))
+
+    assert(clue(yInInner.flags).isAllOf(Local | ParamAccessor | Private))
+    assert(clue(zInInner.flags).isAllOf(Local | ParamAccessor | Private))
+
+    // Test Select from outside the class
+    for fStr <- List("w", "x", "y", "z") do
+      val fStrUp = fStr.toUpperCase()
+      val fName = termName(fStr)
+
+      def fInParent = ParentClass.findDecl(fName)
+      def fInChild = ChildClass.findDecl(fName)
+      def fInInner = InnerClass.findDecl(fName)
+
+      // Select nodes from outside the class
+      locally {
+        val selectNode = findTree(setupMethodDef.rhs.get) { case select @ Select(_, `fName`) =>
+          select
+        }
+        val selectTpe = selectNode.tpe.asInstanceOf[TermRef]
+        assert(clue(selectTpe.name) == clue(fName), fStr)
+        val selectSym = selectTpe.symbol
+
+        val expectedOwner = if fStr == "z" then ChildClass else ParentClass
+        assert(clue(selectSym.owner) == clue(expectedOwner), fStr)
+
+        val expectedParamAccessor = fStr != "w" && fStr != "y"
+        assert(selectSym.is(ParamAccessor) == clue(expectedParamAccessor), fStr)
+
+        assert(!selectSym.is(Private), fStr)
+      }
+
+      // Ident from inside the class
+      locally {
+        val methodSym = ChildClass.findNonOverloadedDecl(termName(s"readIdent$fStrUp"))
+        val selectedSymbol = findTree(methodSym.tree.get) {
+          case ident @ Ident(`fName`) if fStr != "w"      => ident.symbolOption.get
+          case select @ Select(_, `fName`) if fStr == "w" => select.symbol
+        }
+        val expectedSym = if fStr == "w" then fInParent else fInChild
+        assert(clue(selectedSymbol) == clue(expectedSym), fStr)
+      }
+
+      // Select with `this.` from inside the class
+      locally {
+        val methodSym = ChildClass.findNonOverloadedDecl(termName(s"readThis$fStrUp"))
+        val selectedSymbol = findTree(methodSym.tree.get) { case select @ Select(_, `fName`) =>
+          select.symbol
+        }
+        val expectedSym = if fStr == "w" then fInParent else fInChild
+        assert(clue(selectedSymbol) == clue(expectedSym), fStr)
+      }
+
+      // Select with `self.` from inside the class
+      locally {
+        val methodSym = ChildClass.findNonOverloadedDecl(termName(s"readSelf$fStrUp"))
+        val selectedSymbol = findTree(methodSym.tree.get) { case select @ Select(_, `fName`) =>
+          select.symbol
+        }
+        val expectedSym = if fStr == "z" then fInChild else fInParent
+        assert(clue(selectedSymbol) == clue(expectedSym), fStr)
+      }
+
+      // Select with `child.` from outside the class
+      locally {
+        val methodSym = PrivateOverridesClass.findNonOverloadedDecl(termName("testSetup"))
+        val selectedSymbol = findTree(methodSym.tree.get) { case select @ Select(_, `fName`) =>
+          select.symbol
+        }
+        val expectedSym = if fStr == "z" then fInChild else fInParent
+        assert(clue(selectedSymbol) == clue(expectedSym), fStr)
+      }
+
+      // Ident from inside an inner class
+      locally {
+        val methodSym = InnerClass.findNonOverloadedDecl(termName(s"readIdent$fStrUp"))
+        val selectedSymbol = findTree(methodSym.tree.get) {
+          case ident @ Ident(`fName`) if fStr == "y" || fStr == "z"      => ident.symbolOption.get
+          case select @ Select(_, `fName`) if fStr == "w" || fStr == "x" => select.symbol
+        }
+        val expectedSym =
+          if fStr == "w" then fInParent
+          else if fStr == "x" then fInChild
+          else fInInner
+        assert(clue(selectedSymbol) == clue(expectedSym), fStr)
+      }
+
+      // Select with `Child.this.` from an inner class
+      locally {
+        val methodSym = InnerClass.findNonOverloadedDecl(termName(s"readChildThis$fStrUp"))
+        val selectedSymbol = findTree(methodSym.tree.get) { case select @ Select(_, `fName`) =>
+          select.symbol
+        }
+        val expectedSym = if fStr == "w" then fInParent else fInChild
+        assert(clue(selectedSymbol) == clue(expectedSym), fStr)
+      }
+
+      // Select with `this.` from an inner class -- only for 'y' and 'z'
+      if fStr == "y" || fStr == "z" then
+        val methodSym = InnerClass.findNonOverloadedDecl(termName(s"readThis$fStrUp"))
+        val selectedSymbol = findTree(methodSym.tree.get) { case select @ Select(_, `fName`) =>
+          select.symbol
+        }
+        val expectedSym = fInInner
+        assert(clue(selectedSymbol) == clue(expectedSym), fStr)
+      end if
+    end for
   }
 
   testWithContext("annotations") {
