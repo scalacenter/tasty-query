@@ -2083,4 +2083,38 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(clue(intAliasSym.annotations).sizeIs == 1)
     assert(containsSubtree(deprecatedAnnotCheck("other reason", "forever"))(clue(intAliasSym.annotations(0).tree)))
   }
+
+  testUnpickle("uninitialized-var", "simple_trees.Uninitialized") { tree =>
+    val wildcardRHSCheck: StructureCheck = {
+      case ValDef(SimpleName("wildcardRHS"), TypeIdent(TypeName(SimpleName("Int"))), Some(Ident(nme.Wildcard)), sym)
+          if !sym.is(Abstract) =>
+    }
+    assert(containsSubtree(wildcardRHSCheck)(clue(tree)))
+
+    val uninitializedRHSCheck: StructureCheck = {
+      case ValDef(
+            SimpleName("uninitializedRHS"),
+            TypeIdent(TypeName(SimpleName("Product"))),
+            Some(Select(_, SimpleName("uninitialized"))),
+            sym
+          ) if !sym.is(Abstract) =>
+    }
+    assert(containsSubtree(uninitializedRHSCheck)(clue(tree)))
+
+    val renamedUninitializedRHSCheck: StructureCheck = {
+      case ValDef(
+            SimpleName("renamedUninitializedRHS"),
+            TypeIdent(TypeName(SimpleName("String"))),
+            Some(Ident(SimpleName("uninitialized"))),
+            sym
+          ) if !sym.is(Abstract) =>
+    }
+    assert(containsSubtree(renamedUninitializedRHSCheck)(clue(tree)))
+
+    // Confidence check
+    val abstractVarCheck: StructureCheck = {
+      case ValDef(SimpleName("abstractVar"), TypeIdent(TypeName(SimpleName("Int"))), None, sym) if sym.is(Abstract) =>
+    }
+    assert(containsSubtree(abstractVarCheck)(clue(tree)))
+  }
 }

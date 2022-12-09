@@ -1576,7 +1576,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       locally {
         val methodSym = ChildClass.findNonOverloadedDecl(termName(s"readIdent$fStrUp"))
         val selectedSymbol = findTree(methodSym.tree.get) {
-          case ident @ Ident(`fName`) if fStr != "w"      => ident.symbolOption.get
+          case ident @ Ident(`fName`) if fStr != "w"      => ident.symbol
           case select @ Select(_, `fName`) if fStr == "w" => select.symbol
         }
         val expectedSym = if fStr == "w" then fInParent else fInChild
@@ -1617,7 +1617,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       locally {
         val methodSym = InnerClass.findNonOverloadedDecl(termName(s"readIdent$fStrUp"))
         val selectedSymbol = findTree(methodSym.tree.get) {
-          case ident @ Ident(`fName`) if fStr == "y" || fStr == "z"      => ident.symbolOption.get
+          case ident @ Ident(`fName`) if fStr == "y" || fStr == "z"      => ident.symbol
           case select @ Select(_, `fName`) if fStr == "w" || fStr == "x" => select.symbol
         }
         val expectedSym =
@@ -1687,6 +1687,17 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(clue(deprecatedAnnot.argIfConstant(0)) == Some(Constant("reason")))
       assert(clue(deprecatedAnnot.argIfConstant(1)) == Some(Constant("forever")))
     }
+  }
+
+  testWithContext("uninitialized-var") {
+    val UninitializedClass = ctx.findTopLevelClass("simple_trees.Uninitialized")
+
+    val uninitializedMethod = defn.uninitializedMethod.get
+
+    for varName <- List("wildcardRHS", "uninitializedRHS", "renamedUninitializedRHS") do
+      val varSym = UninitializedClass.findDecl(termName(varName))
+      val ValDef(_, _, Some(rhs), _) = varSym.tree.get: @unchecked
+      assert(clue(rhs.tpe).isRef(uninitializedMethod))
   }
 
 }

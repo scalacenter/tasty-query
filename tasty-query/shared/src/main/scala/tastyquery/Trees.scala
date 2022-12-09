@@ -264,13 +264,12 @@ object Trees {
   }
 
   /** name */
-  final case class Ident(name: TermName)(tpe: Type)(span: Span) extends TermTree(span):
+  final case class Ident(name: TermName)(tpe: TermRef | PackageRef)(span: Span) extends TermTree(span):
     protected final def calculateType(using Context): Type = tpe
 
-    def symbolOption(using Context): Option[TermSymbol | PackageSymbol] = tpe match
-      case termRef: TermRef       => Some(termRef.symbol)
-      case packageRef: PackageRef => Some(packageRef.symbol)
-      case _                      => None
+    def symbol(using Context): TermSymbol | PackageSymbol = tpe match
+      case termRef: TermRef       => termRef.symbol
+      case packageRef: PackageRef => packageRef.symbol
 
     override final def withSpan(span: Span): Ident = Ident(name)(tpe)(span)
   end Ident

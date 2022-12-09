@@ -629,6 +629,7 @@ private[tasties] class TreeUnpickler(
     val tpt = readTypeTree(using insideCtx)
     val rhs =
       if (reader.currentAddr == end || isModifierTag(reader.nextByte)) None
+      else if tag == VALDEF then Some(readTermOrUninitialized())
       else Some(readTerm(using insideCtx))
     readAnnotationsInModifiers(symbol, end)
     tag match {
@@ -663,6 +664,14 @@ private[tasties] class TreeUnpickler(
     symbol.withTree(tree)
     tree
 
+  private def makeIdent(name: TermName, tpe: Type, spn: Span)(using LocalContext): Ident =
+    val tpe1: TermRef | PackageRef = tpe match
+      case tpe: TermRef    => tpe
+      case tpe: PackageRef => tpe
+      case _ => throw TastyFormatException(s"unexpected type $tpe for Ident name $name span $spn in $posErrorMsg")
+    Ident(name)(tpe1)(spn)
+  end makeIdent
+
   private def readPattern(using LocalContext): PatternTree = reader.nextByte match
     case IDENT =>
       val spn = span
@@ -670,7 +679,7 @@ private[tasties] class TreeUnpickler(
       val name = readName
       val typ = readType
       if name == nme.Wildcard then WildcardPattern(typ)(spn)
-      else ExprPattern(Ident(name)(typ)(spn))(spn)
+      else ExprPattern(makeIdent(name, typ, spn))(spn)
     case TYPED =>
       reader.readByte()
       reader.readEnd()
@@ -712,13 +721,29 @@ private[tasties] class TreeUnpickler(
       ExprPattern(expr)(expr.span)
   end readPattern
 
+  private def readTermOrUninitialized()(using LocalContext): TermTree = reader.nextByte match
+    case IDENT =>
+      val spn = span
+      reader.readByte()
+      val name = readName
+      val typ = readType
+      val typ1 =
+        if name == nme.Wildcard then defn.uninitializedMethodTermRef
+        else typ
+      makeIdent(name, typ1, spn)
+    case _ =>
+      readTerm
+  end readTermOrUninitialized
+
   private def readTerm(using LocalContext): TermTree = reader.nextByte match {
     case IDENT =>
       val spn = span
       reader.readByte()
       val name = readName
       val typ = readType
-      Ident(name)(typ)(spn)
+      if name == nme.Wildcard then
+        throw TastyFormatException(s"unexpected _ ident with type $typ span $spn $posErrorMsg")
+      else makeIdent(name, typ, spn)
     case APPLY =>
       val spn = span
       reader.readByte()
