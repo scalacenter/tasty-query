@@ -283,7 +283,7 @@ object Trees {
       s"illegal section of unsigned name '$name' in owner ${selectOwner.get}"
     )
 
-    protected final def calculateType(using Context): Type = selectOwner match
+    protected final def calculateType(using Context): TermRef | PackageRef = selectOwner match
       case Some(selOwner) => TermRef(qualifier.tpe, LookupIn(selOwner, name.asInstanceOf[SignedName]))
       case None           => NamedType.possibleSelFromPackage(qualifier.tpe, name)
 
