@@ -288,8 +288,7 @@ private[pickles] class PickleReader {
     if pickleFlags.isProtected then flags |= Protected
     if pickleFlags.isOverride then flags |= Override
     if pickleFlags.isPrivate then flags |= Private
-    if pickleFlags.isAbstract then flags |= Abstract
-    if pickleFlags.isDeferred then flags |= Deferred
+    if pickleFlags.isAbstract || pickleFlags.isDeferred then flags |= Abstract
     if pickleFlags.isFinal then flags |= Final
     if pickleFlags.isMethod then flags |= Method
     if pickleFlags.isInterface then flags |= NoInitsInterface

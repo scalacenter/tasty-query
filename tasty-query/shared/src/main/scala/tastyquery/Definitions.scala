@@ -181,7 +181,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     cls.withTypeParams(allTypeParams)
 
     val applyMethod = TermSymbol.create(termName("apply"), cls)
-    applyMethod.withFlags(Method | Deferred, None)
+    applyMethod.withFlags(Method | Abstract, None)
     applyMethod.withDeclaredType(
       MethodType(List.tabulate(n)(i => termName("x" + i)))(
         mt => inputTypeParams.map(_.typeRef),

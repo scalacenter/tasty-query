@@ -144,6 +144,7 @@ private[tasties] class TreeUnpickler(
   ): FlagSet =
     var flags = givenFlags
     if tag == DEFDEF then flags |= Method
+    if rhsIsEmpty && (tag == VALDEF || tag == DEFDEF) then flags |= Abstract
     if givenFlags.is(Module) then flags |= (if tag == VALDEF then ModuleValCreationFlags else ModuleClassCreationFlags)
     if flags.is(Enum) && !flags.is(Method) && name.isTermName then flags |= StableRealizable
     if localCtx.owner.isClass then
