@@ -1437,6 +1437,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val SuperMonoClass = ctx.findStaticClass("inheritance.Overrides.SuperMono")
     val ChildMonoClass = ctx.findStaticClass("inheritance.Overrides.ChildMono")
 
+    val anyToString = defn.AnyClass.findNonOverloadedDecl(name"toString")
     val objectToString = defn.ObjectClass.findNonOverloadedDecl(name"toString")
     val superToString = SuperMonoClass.findNonOverloadedDecl(name"toString")
     val childToString = ChildMonoClass.findNonOverloadedDecl(name"toString")
@@ -1451,8 +1452,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(objectToString.overridingSymbol(SuperMonoClass)) == Some(superToString))
     assert(clue(objectToString.overridingSymbol(ChildMonoClass)) == Some(childToString))
 
-    assert(clue(objectToString.allOverriddenSymbols.toList) == Nil)
-    assert(clue(objectToString.nextOverriddenSymbol) == None)
+    assert(clue(objectToString.allOverriddenSymbols.toList) == List(anyToString))
+    assert(clue(objectToString.nextOverriddenSymbol) == Some(anyToString))
 
     // From superToString
 
@@ -1464,7 +1465,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(superToString.overridingSymbol(SuperMonoClass)) == Some(superToString))
     assert(clue(superToString.overridingSymbol(ChildMonoClass)) == Some(childToString))
 
-    assert(clue(superToString.allOverriddenSymbols.toList) == List(objectToString))
+    assert(clue(superToString.allOverriddenSymbols.toList) == List(objectToString, anyToString))
     assert(clue(superToString.nextOverriddenSymbol) == Some(objectToString))
 
     // From childToString
@@ -1477,7 +1478,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(childToString.overridingSymbol(SuperMonoClass)) == None)
     assert(clue(childToString.overridingSymbol(ChildMonoClass)) == Some(childToString))
 
-    assert(clue(childToString.allOverriddenSymbols.toList) == List(superToString, objectToString))
+    assert(clue(childToString.allOverriddenSymbols.toList) == List(superToString, objectToString, anyToString))
     assert(clue(childToString.nextOverriddenSymbol) == Some(superToString))
   }
 
@@ -1698,6 +1699,79 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val varSym = UninitializedClass.findDecl(termName(varName))
       val ValDef(_, _, Some(rhs), _) = varSym.tree.get: @unchecked
       assert(clue(rhs.tpe).isRef(uninitializedMethod))
+  }
+
+  testWithContext("methods on Any") {
+    val AnyMethodsClass = ctx.findTopLevelClass("simple_trees.AnyMethods")
+    val ClassClass = ctx.findTopLevelClass("java.lang.Class")
+    val ProductClass = ctx.findTopLevelClass("scala.Product")
+
+    def rhsOf(methodName: String): TermTree =
+      AnyMethodsClass.findNonOverloadedDecl(termName(methodName)).tree.get.asInstanceOf[DefDef].rhs.get
+
+    def isAnyMethod(sym: Symbol, name: SimpleName): Boolean =
+      sym.owner == defn.AnyClass && sym.name == name
+
+    def testApply(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): Unit =
+      val rhs @ Apply(fun: Select, _) = rhsOf(testMethodName): @unchecked
+      assert(isAnyMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
+      assert(expectedType(clue(rhs.tpe)), testMethodName)
+
+    def testDirect(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): Unit =
+      val fun @ (_: Select) = rhsOf(testMethodName): @unchecked
+      assert(isAnyMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
+      assert(expectedType(clue(fun.tpe.widen)), testMethodName)
+
+    def testTypeApply(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): Unit =
+      val rhs @ TypeApply(fun: Select, _) = rhsOf(testMethodName): @unchecked
+      assert(isAnyMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
+      assert(expectedType(clue(rhs.tpe)), testMethodName)
+
+    def testApplyTypeApply(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): Unit =
+      val rhs @ Apply(TypeApply(fun: Select, _), _) = rhsOf(testMethodName): @unchecked
+      assert(isAnyMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
+      assert(expectedType(clue(rhs.tpe)), testMethodName)
+
+    testApply("testEqEq", nme.m_==, _.isRef(defn.BooleanClass))
+    testApply("testNEq", nme.m_!=, _.isRef(defn.BooleanClass))
+    testDirect("testHashHash", nme.m_##, _.isRef(defn.IntClass))
+
+    testApply("testEquals", nme.m_equals, _.isRef(defn.BooleanClass))
+    testApply("testHashCode", nme.m_hashCode, _.isRef(defn.IntClass))
+
+    testApply("testToString", nme.m_toString, _.isRef(defn.StringClass))
+
+    testTypeApply("testIsInstanceOfInt", nme.m_isInstanceOf, _.isRef(defn.BooleanClass))
+    testTypeApply("testIsInstanceOfProduct", nme.m_isInstanceOf, _.isRef(defn.BooleanClass))
+
+    testTypeApply("testAsInstanceOfInt", nme.m_asInstanceOf, _.isRef(defn.IntClass))
+    testTypeApply("testAsInstanceOfProduct", nme.m_asInstanceOf, _.isRef(ProductClass))
+
+    testTypeApply("testTypeCast", termName("$asInstanceOf$"), _.isRef(defn.IntClass))
+
+    testApplyTypeApply(
+      "testGetClassAny",
+      nme.m_getClass,
+      _.isApplied(_.isRef(ClassClass), List(_.isBounded(_.isRef(defn.NothingClass), _.isRef(defn.AnyClass))))
+    )
+    testApplyTypeApply(
+      "testGetClassProduct",
+      nme.m_getClass,
+      _.isApplied(_.isRef(ClassClass), List(_.isBounded(_.isRef(defn.NothingClass), _.isRef(ProductClass))))
+    )
+
+    /* `int.getClass()` should select the `Int.getClass(): Class[Int]` overload,
+     * and hence have type `Class[Int]`, not `Class[? <: Int]`.
+     * However, the TASTy contains a `SelectIn` with a `TypeRef` to `scala.Any`
+     * as selection owner, which gives the result type `Class[? <: Int]`.
+     * Despite that, Scala 3 allows to assign the result to a `Class[Int]`,
+     * so there is a bug somewhere in the compiler.
+     */
+    testApplyTypeApply(
+      "testGetClassInt",
+      nme.m_getClass,
+      _.isApplied(_.isRef(ClassClass), List(_.isBounded(_.isRef(defn.NothingClass), _.isRef(defn.IntClass))))
+    )
   }
 
 }

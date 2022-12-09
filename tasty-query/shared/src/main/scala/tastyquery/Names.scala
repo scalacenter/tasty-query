@@ -69,6 +69,16 @@ object Names {
     val scalaPackageName: SimpleName = termName("scala")
     val javaPackageName: SimpleName = termName("java")
     val langPackageName: SimpleName = termName("lang")
+
+    val m_== : SimpleName = termName("==")
+    val m_!= : SimpleName = termName("!=")
+    val m_## : SimpleName = termName("##")
+    val m_equals: SimpleName = termName("equals")
+    val m_hashCode: SimpleName = termName("hashCode")
+    val m_toString: SimpleName = termName("toString")
+    val m_isInstanceOf: SimpleName = termName("isInstanceOf")
+    val m_asInstanceOf: SimpleName = termName("asInstanceOf")
+    val m_getClass: SimpleName = termName("getClass")
   }
 
   object tpnme {

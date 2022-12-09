@@ -69,7 +69,24 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     cls.withTypeParams(Nil)
     cls.withParentsDirect(parents)
     cls.withFlags(flags, None)
+    cls.setAnnotations(Nil)
+    cls.checkCompleted()
     cls
+
+  private def createSpecialMethod(
+    owner: ClassSymbol,
+    name: TermName,
+    tpe: MethodicType,
+    flags: FlagSet = EmptyFlagSet
+  ): TermSymbol =
+    val sym = TermSymbol
+      .create(name, owner)
+      .withFlags(Method | flags, privateWithin = None)
+      .withDeclaredType(tpe)
+      .setAnnotations(Nil)
+    sym.checkCompleted()
+    sym
+  end createSpecialMethod
 
   val AnyClass = createSpecialClass(typeName("Any"), Nil, Abstract)
     .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
@@ -118,6 +135,50 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     scala2NoTypeAlias.withFlags(Synthetic, None)
     scala2NoTypeAlias.withDefinition(TypeMemberDefinition.TypeAlias(NothingType))
   }
+
+  private def equalityMethodType: MethodType =
+    MethodType(List(termName("that")), List(AnyType), BooleanType)
+
+  private def instanceTestPolyType(resultType: PolyType => Type): PolyType =
+    PolyType(List(typeName("A")))(_ => List(NothingAnyBounds), resultType)
+
+  val Any_== = createSpecialMethod(AnyClass, nme.m_==, equalityMethodType, Final)
+  val Any_!= = createSpecialMethod(AnyClass, nme.m_!=, equalityMethodType, Final)
+  val Any_## = createSpecialMethod(AnyClass, nme.m_##, ExprType(IntType), Final)
+
+  val Any_equals = createSpecialMethod(AnyClass, nme.m_equals, equalityMethodType)
+  val Any_hashCode = createSpecialMethod(AnyClass, nme.m_hashCode, MethodType(Nil, Nil, IntType))
+
+  val Any_toString = createSpecialMethod(AnyClass, nme.m_toString, MethodType(Nil, Nil, StringType))
+
+  val Any_isInstanceOf =
+    createSpecialMethod(AnyClass, nme.m_isInstanceOf, instanceTestPolyType(_ => BooleanType), Final)
+  val Any_asInstanceOf =
+    createSpecialMethod(AnyClass, nme.m_asInstanceOf, instanceTestPolyType(_.paramRefs.head), Final)
+
+  val Any_typeTest =
+    createSpecialMethod(
+      AnyClass,
+      termName("$isInstanceOf$"),
+      instanceTestPolyType(_ => BooleanType),
+      Final | Synthetic | Artifact
+    )
+  val Any_typeCast =
+    createSpecialMethod(
+      AnyClass,
+      termName("$asInstanceOf$"),
+      instanceTestPolyType(_.paramRefs.head),
+      Final | Synthetic | Artifact
+    )
+
+  val Any_getClass =
+    // def getClass[A >: this.type](): Class[? <: A]
+    val tpe = PolyType(List(typeName("A")))(
+      pt => List(RealTypeBounds(AnyClass.thisType, AnyType)),
+      pt => MethodType(Nil, Nil, ClassTypeOf(WildcardTypeBounds(RealTypeBounds(NothingType, pt.paramRefs.head))))
+    )
+    createSpecialMethod(AnyClass, nme.m_getClass, tpe, Final)
+  end Any_getClass
 
   private def createSpecialPolyClass(
     name: TypeName,
