@@ -221,11 +221,15 @@ object Symbols {
       annotations.find(_.symbol == annotClass)
 
     override def toString: String = {
+      val ownerPrefix = owner match
+        case owner: DeclaringSymbol => s"${owner.name}."
+        case owner: Symbol          => s"${owner.name}>"
+        case null                   => ""
       val kind = this match
         case _: PackageSymbol => "package "
         case _: ClassSymbol   => if name.toTypeName.wrapsObjectName then "object class " else "class "
         case _                => if isFlagsInitialized && is(Module) then "object " else ""
-      s"symbol[$kind$name]"
+      s"symbol[$kind$ownerPrefix$name]"
     }
     def toDebugString = toString
   }
