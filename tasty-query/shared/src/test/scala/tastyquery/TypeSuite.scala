@@ -1820,4 +1820,87 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(synchronizedSym) == clue(defn.Object_synchronized))
   }
 
+  testWithContext("super calls") {
+    val BaseClass = ctx.findTopLevelClass("simple_trees.Base")
+    val BaseTraitClass = ctx.findTopLevelClass("simple_trees.BaseTrait")
+    val ChildClass = ctx.findTopLevelClass("simple_trees.Super")
+
+    def rhsOf(methodName: String): TermTree =
+      ChildClass.findNonOverloadedDecl(termName(methodName)).tree.get.asInstanceOf[DefDef].rhs.get
+
+    for strPrefix <- List("Class", "Trait", "Common") do
+      val strPrefixL = strPrefix.toLowerCase().nn
+      val fName = termName(strPrefixL + "F")
+      val gName = termName(strPrefixL + "G")
+      val fTestSuffix = strPrefix + "F"
+      val gTestSuffix = strPrefix + "G"
+
+      val expectedParent = if strPrefix == "Class" then BaseClass else BaseTraitClass
+
+      val fInParent = expectedParent.findNonOverloadedDecl(fName)
+      val fInChild = ChildClass.findNonOverloadedDecl(fName)
+
+      locally {
+        val Apply(select: Select, Nil) = rhsOf(s"callMy$fTestSuffix"): @unchecked
+        assert(clue(select.symbol) == clue(fInChild))
+      }
+
+      locally {
+        val Apply(select: Select, Nil) = rhsOf(s"callBareSuper$fTestSuffix"): @unchecked
+        assert(clue(select.symbol) == clue(fInParent))
+      }
+
+      if strPrefix != "Common" then
+        locally {
+          val Apply(select: Select, Nil) = rhsOf(s"callQualifiedSuper$fTestSuffix"): @unchecked
+          assert(clue(select.symbol) == clue(fInParent))
+        }
+      else
+        locally {
+          val fInBase = BaseClass.findNonOverloadedDecl(fName)
+          val Apply(select: Select, Nil) = rhsOf(s"callQualifiedBaseSuper$fTestSuffix"): @unchecked
+          assert(clue(select.symbol) == clue(fInBase))
+        }
+
+        locally {
+          val fInBaseTrait = BaseTraitClass.findNonOverloadedDecl(fName)
+          val Apply(select: Select, Nil) = rhsOf(s"callQualifiedBaseTraitSuper$fTestSuffix"): @unchecked
+          assert(clue(select.symbol) == clue(fInBaseTrait))
+        }
+      end if
+
+      val gInParent = expectedParent.findNonOverloadedDecl(gName)
+      val gInChild = ChildClass.findNonOverloadedDecl(gName)
+
+      locally {
+        val select @ (_: Select) = rhsOf(s"callMy$gTestSuffix"): @unchecked
+        assert(clue(select.symbol) == clue(gInChild))
+      }
+
+      locally {
+        val select @ (_: Select) = rhsOf(s"callBareSuper$gTestSuffix"): @unchecked
+        select.symbol
+        assert(clue(select.symbol) == clue(gInParent))
+      }
+
+      if strPrefix != "Common" then
+        locally {
+          val select @ (_: Select) = rhsOf(s"callQualifiedSuper$gTestSuffix"): @unchecked
+          assert(clue(select.symbol) == clue(gInParent))
+        }
+      else
+        locally {
+          val gInBase = BaseClass.findNonOverloadedDecl(gName)
+          val select @ (_: Select) = rhsOf(s"callQualifiedBaseSuper$gTestSuffix"): @unchecked
+          assert(clue(select.symbol) == clue(gInBase))
+        }
+
+        locally {
+          val gInBaseTrait = BaseTraitClass.findNonOverloadedDecl(gName)
+          val select @ (_: Select) = rhsOf(s"callQualifiedBaseTraitSuper$gTestSuffix"): @unchecked
+          assert(clue(select.symbol) == clue(gInBaseTrait))
+        }
+      end if
+    end for
+  }
 }

@@ -957,6 +957,36 @@ object Types {
     override def toString(): String = s"ThisType($tref)"
   }
 
+  /** The type of a super reference cls.super where
+    * `thistpe` is cls.this and `supertpe` is the type of the value referenced
+    * by `super`.
+    */
+  final class SuperType(val thistpe: ThisType, val explicitSupertpe: Option[Type]) extends TypeProxy with SingletonType:
+    private var mySupertpe: Type | Null = explicitSupertpe.orNull
+
+    final def supertpe(using Context): Type =
+      val local = mySupertpe
+      if local != null then local
+      else
+        val computed = thistpe.cls.parents.reduceLeft(_ & _)
+        mySupertpe = computed
+        computed
+    end supertpe
+
+    override def underlying(using Context): Type = supertpe
+
+    override def superType(using Context): Type =
+      val superCls = supertpe match
+        case supertpe: TypeRef => supertpe.symbol.asClass
+        case _                 => throw AssertionError(s"Cannot compute super class for $this")
+      thistpe.baseType(superCls).getOrElse {
+        throw AssertionError(s"Cannot find baseType for $this")
+      }
+    end superType
+
+    override def toString(): String = s"SuperType($thistpe, $explicitSupertpe)"
+  end SuperType
+
   /** A constant type with single `value`. */
   final class ConstantType(val value: Constant) extends TypeProxy with SingletonType {
     override def underlying(using Context): Type =

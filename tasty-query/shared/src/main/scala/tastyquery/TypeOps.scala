@@ -27,7 +27,8 @@ private[tastyquery] object TypeOps:
         pre match
           case NoPrefix =>
             tp
-          //case pre: SuperType => toPrefix(pre.thistpe, cls, thiscls)
+          case pre: SuperType =>
+            toPrefix(pre.thistpe, cls, thiscls)
           case pre: Type =>
             cls match
               case cls: PackageSymbol =>
