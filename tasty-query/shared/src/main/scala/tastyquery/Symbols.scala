@@ -302,6 +302,14 @@ object Symbols {
       else if canMatchInheritedSymbols && inClass.isSubclass(owner.asClass) then
         matchingDecl(inClass, siteClass = inClass)
       else None
+
+    /** Returns true iff this symbol override `that` symbol. */
+    final def overrides(that: TermOrTypeSymbol)(using Context): Boolean =
+      this == that || (
+        canMatchInheritedSymbols
+          && that.canMatchInheritedSymbols
+          && this.overriddenSymbol(that.owner.asClass).contains(that)
+      )
   end TermOrTypeSymbol
 
   final class TermSymbol private (val name: TermName, owner: Symbol) extends TermOrTypeSymbol(owner):

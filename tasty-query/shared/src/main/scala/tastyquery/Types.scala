@@ -1513,7 +1513,13 @@ object Types {
 
   final class AndType(val first: Type, val second: Type) extends GroundType with ValueType {
     private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
-      first.findMember(name, pre) // TODO 'meet' with second.findMember(name, pre)
+      (first.findMember(name, pre), second.findMember(name, pre)) match
+        case (Some(left: TermOrTypeSymbol), Some(right: TermOrTypeSymbol)) =>
+          // TODO We should `meet` the two selections, but for now, pick one
+          if right.overrides(left) then Some(right)
+          else Some(left)
+        case (left, right) => left.orElse(right)
+    end findMember
 
     private[tastyquery] def derivedAndType(first: Type, second: Type): Type =
       if ((first eq this.first) && (second eq this.second)) this
