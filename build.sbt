@@ -106,7 +106,14 @@ lazy val tastyQuery =
           "TASTY_TEST_CLASSPATH" -> testClasspath,
           "TASTY_TEST_SOURCES" -> testResourcesCode,
         )
-      }
+      },
+
+      mimaBinaryIssueFilters ++= {
+        import com.typesafe.tools.mima.core.*
+        Seq(
+          ProblemFilters.exclude[ReversedMissingMethodProblem]("tastyquery.Types#Type.findMember"),
+        )
+      },
     )
     .jvmSettings(
       fork := true,
