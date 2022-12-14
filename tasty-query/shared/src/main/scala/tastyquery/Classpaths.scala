@@ -26,7 +26,7 @@ object Classpaths:
     * [[Contexts.Context]]. The latter gives semantic access to all the
     * definitions on the classpath.
     */
-  final class Classpath private (val entries: IArray[Classpath.Entry]):
+  final class Classpath(val entries: IArray[Classpath.Entry]):
 
     /** Returns the concatenation of this classpath with `other`.
       * This is useful for structural sharing of [[Classpath.Entry Classpath Entries]]. e.g. in the following example
@@ -70,23 +70,25 @@ object Classpaths:
   /** Factory object for [[Classpath]] instances. */
   object Classpath {
 
-    /** A [[Classpath.Entry]] encapsulates the package data for a single classpath entry
-      * (i.e. a given directory or jar file).
-      * Can only be created by [[Classpath.from]]. You can lookup all symbols
-      * originating from this entry
+    /** An entry (directory or jar file) of a [[Classpath]].
+      *
+      * You can lookup all symbols originating from a particular [[Classpath.Entry]]
       * with [[Contexts.Context.findSymbolsByClasspathEntry ctx.findSymbolsByClasspathEntry]].
-      * e.g.:
+      *
+      * For example:
+      *
       * ```scala
       * val classpath = ClasspathLoaders.read(myLibraryPath :: stdLibPaths)
       * given Context = Contexts.init(classpath)
       * val myLibSyms = ctx.findSymbolsByClasspathEntry(classpath.entries.head)
       * ```
       */
-    final class Entry private[Classpath] (val packages: IArray[PackageData])
+    final class Entry(val packages: IArray[PackageData])
 
     /** Creates a [[Classpath]] from a sequence of classpath entries. Each entry corresponds to a single directory
       * or jar file, and represents the various `.class` and `.tasty` files found within it.
       */
+    @deprecated("use Classpath(IArray.from(entries).map(Classpath.Entry(_)) instead", since = "0.5.2")
     def from(entries: Seq[IArray[PackageData]]): Classpath =
       Classpath(IArray.from(entries).map(Entry(_)))
   }

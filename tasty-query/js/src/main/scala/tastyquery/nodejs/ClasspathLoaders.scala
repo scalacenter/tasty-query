@@ -55,8 +55,8 @@ object ClasspathLoaders:
         }
       }
 
-    def compressPackages(allFiles: Seq[FileContent]): Iterable[PackageData] =
-      allFiles
+    def makeEntry(allFiles: Seq[FileContent]): Classpath.Entry =
+      val packageDatas = allFiles
         .groupMap[String, ClassData | TastyData](_.packagePath) { fileContent =>
           val isClassFile = fileContent.name.endsWith(".class")
           val binaryName =
@@ -73,10 +73,10 @@ object ClasspathLoaders:
           }
           PackageData(packageName, IArray.from(classes.sortBy(_.binaryName)), IArray.from(tastys.sortBy(_.binaryName)))
         }
+      Classpath.Entry(IArray.from(packageDatas))
+    end makeEntry
 
-    for allEntries <- allEntriesFuture yield
-      val compressedEntries = allEntries.map(compressPackages andThen IArray.from)
-      Classpath.from(compressedEntries)
+    for allEntries <- allEntriesFuture yield Classpath(IArray.from(allEntries).map(makeEntry))
   end read
 
   private def fromDirectory(dir: String, relPath: String)(implicit ec: ExecutionContext): Future[Seq[FileContent]] =

@@ -82,7 +82,7 @@ object ClasspathLoaders {
       IArray.from(pkgs).sorted
     end compressPackageData
 
-    def packagesOfEntry(entry: ClasspathEntry) =
+    def toEntry(entry: ClasspathEntry): Classpath.Entry =
       val map = entry.walkFiles(kinds.toSeq*) { (kind, fileWithExt, path, bytes) =>
         val (s"$file.${kind.`ext`}") = fileWithExt: @unchecked
         val bin = binaryName(file)
@@ -94,11 +94,12 @@ object ClasspathLoaders {
             packageName -> TastyData(simpleName, path, bytes)
         }
       }
-      compressPackageData(map.get(FileKind.Class).getOrElse(Nil) ++ map.get(FileKind.Tasty).getOrElse(Nil))
-    end packagesOfEntry
+      val packageDatas =
+        compressPackageData(map.get(FileKind.Class).getOrElse(Nil) ++ map.get(FileKind.Tasty).getOrElse(Nil))
+      Classpath.Entry(packageDatas)
+    end toEntry
 
-    val cp = classpathToEntries(classpath).map(packagesOfEntry)
-    Classpath.from(cp)
+    Classpath(classpathToEntries(classpath).map(toEntry))
   end read
 
   private def loadBytes(fileStream: InputStream): IArray[Byte] = {
