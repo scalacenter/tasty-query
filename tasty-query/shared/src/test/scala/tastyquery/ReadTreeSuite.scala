@@ -64,6 +64,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     object ThisType:
       def unapply(tpe: Types.ThisType): Some[TypeRef] = Some(tpe.tref)
 
+    object SuperType:
+      def unapply(tpe: Types.SuperType): (Type, Option[Type]) = (tpe.thistpe, tpe.explicitSupertpe)
+
     object ConstantType:
       def unapply(tpe: Types.ConstantType): Some[Constant] = Some(tpe.value)
 
@@ -1069,12 +1072,62 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val classWithParams: StructureCheck = {
       case Template(
             _,
-            Apply(Select(New(TypeIdent(Base @ _)), SignedName(nme.Constructor, _, _)), List()) :: Nil,
+            List(
+              Apply(Select(New(TypeIdent(Base @ _)), SignedName(nme.Constructor, _, _)), List()),
+              TypeIdent(TypeName(SimpleName("BaseTrait")))
+            ),
             _,
             _
           ) =>
     }
     assert(containsSubtree(classWithParams)(clue(tree)))
+  }
+
+  testUnpickle("super-types", "simple_trees.SuperTypes$") { tree =>
+    val treeBar = findTree(tree) { case cd @ ClassDef(TypeName(SimpleName("Bar")), _, _) =>
+      cd
+    }
+
+    val barMethodCheck: StructureCheck = {
+      case DefDef(
+            SimpleName("bar"),
+            Nil,
+            SingletonTypeTree(Select(Super(This(TypeIdent(TypeName(SimpleName("Bar")))), None), SimpleName("foo"))),
+            Some(
+              Match(
+                _,
+                List(
+                  CaseDef(
+                    Unapply(
+                      _,
+                      Nil,
+                      List(
+                        Bind(
+                          SimpleName("x"),
+                          WildcardPattern(
+                            TermRefInternal(
+                              ty.SuperType(
+                                ty.ThisType(TypeRefInternal(_, symBar: TypeSymbol)),
+                                Some(TypeRefInternal(_, symFoo: TypeSymbol))
+                              ),
+                              symFooField: TermSymbol
+                            )
+                          ),
+                          _
+                        )
+                      )
+                    ),
+                    None,
+                    _
+                  )
+                )
+              )
+            ),
+            _
+          )
+          if symBar.name == typeName("Bar") && symFoo.name == typeName("Foo") && symFooField.name == termName("foo") =>
+    }
+    assert(containsSubtree(barMethodCheck)(clue(treeBar)))
   }
 
   testUnpickle("type-member", "simple_trees.TypeMember") { tree =>

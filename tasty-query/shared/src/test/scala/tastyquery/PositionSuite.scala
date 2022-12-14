@@ -191,7 +191,25 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickleWithCode("super", "simple_trees.Super") { (tree, code) =>
-    assertEquals(collectCode[Super](tree, code), List("super", "super[Base]"))
+    assertEquals(
+      collectCode[Super](tree, code),
+      List(
+        "super",
+        "super[Base]",
+        "super",
+        "super[Base]",
+        "super",
+        "super[Base]",
+        "super[BaseTrait]",
+        "super",
+        "super[Base]",
+        "super[BaseTrait]",
+        "super",
+        "super[BaseTrait]",
+        "super",
+        "super[BaseTrait]"
+      )
+    )
   }
 
   testUnpickleWithCode("class-with-self", "simple_trees.ClassWithSelf") { (tree, code) =>

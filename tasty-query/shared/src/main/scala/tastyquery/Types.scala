@@ -395,10 +395,12 @@ object Types {
     /** The member with the given `name`. */
     final def member(name: Name)(using Context): Symbol =
       // We need a valid prefix for `asSeenFrom`
-      findMember(name, widenIfUnstable)
+      findMember(name, widenIfUnstable).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
 
     /** Find the member of this type with the given `name` when prefix `pre`. */
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol]
 
     private[Types] def lookupRefined(name: Name)(using Context): Option[Type] =
       None // TODO
@@ -528,7 +530,7 @@ object Types {
       */
     def translucentSuperType(using Context): Type = superType
 
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       underlying.findMember(name, pre)
   }
 
@@ -561,7 +563,7 @@ object Types {
     * ```
     */
   abstract class CustomTransientGroundType extends GroundType:
-    private[tastyquery] final def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] final def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       throw AssertionError(s"Trying to findMember($name, $pre) on $this")
   end CustomTransientGroundType
 
@@ -751,10 +753,10 @@ object Types {
 
         designator match
           case sym: TermSymbol =>
-            val refinedSym = prefix.findMember(sym.signedName, prefix).asTerm
+            val refinedSym = prefix.member(sym.signedName).asTerm
             TermRef(prefix, refinedSym)
           case sym: TypeMemberSymbol =>
-            val refinedSym = prefix.findMember(sym.name, prefix).asType
+            val refinedSym = prefix.member(sym.name).asType
             TypeRef(prefix, refinedSym)
           case sym: TypeSymbol =>
             TypeRef(prefix, sym)
@@ -848,7 +850,7 @@ object Types {
           pre.symbol.memberIsOverloaded(ref)
         case _ => false
 
-    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       underlying match
         case mt: MethodType if mt.paramInfos.isEmpty /*&& symbol.is(StableRealizable)*/ =>
           mt.resultType.findMember(name, pre)
@@ -885,19 +887,16 @@ object Types {
       } else local
     }
 
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
-      symbol.getDecl(name).getOrElse {
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
+      symbol.getDecl(name).orElse {
         /* #179 For some very unfortunate reason, Scala 3 emits TypeRefs
          * whose prefix is a PackageRef but the name references something in a
          * *package object*. That goes contrary to TASTy's purpose of being a
          * fully-resolved thing. We have to work around it here.
          */
-        val fallback = symbol.getDecl(tpnme.scala2PackageObjectClass) match
+        symbol.getDecl(tpnme.scala2PackageObjectClass) match
           case Some(pkgObjectClass) => pkgObjectClass.asClass.getDecl(name)
           case None                 => None
-        fallback.getOrElse {
-          throw MemberNotFoundException(symbol, name)
-        }
       }
 
     override def toString(): String = s"PackageRef($fullyQualifiedName)"
@@ -930,12 +929,10 @@ object Types {
       case sym: TypeSymbolWithBounds =>
         sym.upperBound
 
-    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       symbol match
         case sym: ClassSymbol =>
-          sym.findMember(pre, name).getOrElse {
-            throw new MemberNotFoundException(sym, name, s"Cannot find member '$name' in class $sym for prefix $pre")
-          }
+          sym.findMember(pre, name)
         case sym: TypeSymbolWithBounds =>
           sym.upperBound.findMember(name, pre)
 
@@ -959,6 +956,36 @@ object Types {
 
     override def toString(): String = s"ThisType($tref)"
   }
+
+  /** The type of a super reference cls.super where
+    * `thistpe` is cls.this and `supertpe` is the type of the value referenced
+    * by `super`.
+    */
+  final class SuperType(val thistpe: ThisType, val explicitSupertpe: Option[Type]) extends TypeProxy with SingletonType:
+    private var mySupertpe: Type | Null = explicitSupertpe.orNull
+
+    final def supertpe(using Context): Type =
+      val local = mySupertpe
+      if local != null then local
+      else
+        val computed = thistpe.cls.parents.reduceLeft(_ & _)
+        mySupertpe = computed
+        computed
+    end supertpe
+
+    override def underlying(using Context): Type = supertpe
+
+    override def superType(using Context): Type =
+      val superCls = supertpe match
+        case supertpe: TypeRef => supertpe.symbol.asClass
+        case _                 => throw AssertionError(s"Cannot compute super class for $this")
+      thistpe.baseType(superCls).getOrElse {
+        throw AssertionError(s"Cannot find baseType for $this")
+      }
+    end superType
+
+    override def toString(): String = s"SuperType($thistpe, $explicitSupertpe)"
+  end SuperType
 
   /** A constant type with single `value`. */
   final class ConstantType(val value: Constant) extends TypeProxy with SingletonType {
@@ -1004,7 +1031,7 @@ object Types {
       // TODO tycon.isLambdaSub && hasWildcardArg && !isMatchAlias
       false
 
-    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       tycon match
         case tycon: TypeRef =>
           if tycon.symbol.isClass then tycon.findMember(name, pre)
@@ -1152,7 +1179,7 @@ object Types {
 
     def companion: LambdaTypeCompanion[TermName, Type, MethodType] = MethodType
 
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
@@ -1219,7 +1246,7 @@ object Types {
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, PolyType] =
       PolyType
 
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
@@ -1424,7 +1451,7 @@ object Types {
 
   /** case `pattern` => `result` */
   final class MatchTypeCase(val pattern: Type, val result: Type) extends GroundType:
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       throw AssertionError(s"MatchTypeCase.findMember($name, $pre)")
 
     override def toString(): String = s"MatchTypeCase($pattern, $result)"
@@ -1460,14 +1487,14 @@ object Types {
   }
 
   final class BoundedType(val bounds: TypeBounds, val alias: Option[Type]) extends Type {
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       bounds.high.findMember(name, pre)
 
     override def toString(): String = s"BoundedType($bounds, $alias)"
   }
 
   final class NamedTypeBounds(val name: TypeName, val bounds: TypeBounds) extends Type {
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       bounds.high.findMember(name, pre)
 
     override def toString(): String = s"NamedTypeBounds($name, $bounds)"
@@ -1498,7 +1525,7 @@ object Types {
         computedJoin
     }
 
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       join.findMember(name, pre)
 
     private[tastyquery] def derivedOrType(first: Type, second: Type): Type =
@@ -1515,8 +1542,14 @@ object Types {
   }
 
   final class AndType(val first: Type, val second: Type) extends GroundType with ValueType {
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Symbol =
-      first.findMember(name, pre) // TODO 'meet' with second.findMember(name, pre)
+    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
+      (first.findMember(name, pre), second.findMember(name, pre)) match
+        case (Some(left: TermOrTypeSymbol), Some(right: TermOrTypeSymbol)) =>
+          // TODO We should `meet` the two selections, but for now, pick one
+          if right.overrides(left) then Some(right)
+          else Some(left)
+        case (left, right) => left.orElse(right)
+    end findMember
 
     private[tastyquery] def derivedAndType(first: Type, second: Type): Type =
       if ((first eq this.first) && (second eq this.second)) this

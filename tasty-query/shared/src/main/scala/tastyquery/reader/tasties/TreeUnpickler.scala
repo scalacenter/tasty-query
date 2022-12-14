@@ -1051,6 +1051,14 @@ private[tasties] class TreeUnpickler(
       readName
       // Type of QUALTHIS is ThisType for the type reference, which is the type of the IDENTtpt
       ThisType(readType.asInstanceOf[TypeRef])
+    case SUPERtype =>
+      reader.readByte()
+      reader.readEnd()
+      val thistpe = readType match
+        case thistpe: ThisType => thistpe
+        case thistpe           => throw TastyFormatException(s"Unexpected this type for SuperType: $thistpe")
+      val supertpe = readType
+      SuperType(thistpe, Some(supertpe))
     case ANNOTATEDtype =>
       reader.readByte()
       reader.readEnd()

@@ -307,7 +307,14 @@ object Trees {
   /** C.super[mix], where qual = C.this */
   final case class Super(qual: TermTree, mix: Option[TypeIdent])(span: Span) extends TermTree(span) {
     protected final def calculateType(using Context): Type =
-      qual.tpe
+      val thistpe = qual.tpe match
+        case qualTpe: ThisType =>
+          qualTpe.cls.thisType // is this ever different than `qualTpe`?
+        case qualTpe =>
+          throw InvalidProgramStructureException(s"Unexpected type for Super qualifier $qual: $qualTpe")
+      val supertpe = mix.map(_.toType)
+      SuperType(thistpe, supertpe)
+    end calculateType
 
     override final def withSpan(span: Span): Super = Super(qual, mix)(span)
   }

@@ -433,10 +433,12 @@ private[pickles] class PickleReader {
           case sym: TermOrTypeSymbol       => NamedType(pre, sym)
           case external: ExternalSymbolRef => external.toNamedType(pre)
           case _: NoExternalSymbolRef      => throw Scala2PickleFormatException("SINGLEtpe references NoSymbol")
-      /*case SUPERtpe =>
-        val thistpe = readTypeRef()
+      case SUPERtpe =>
+        val thistpe = readTypeRef() match
+          case thistpe: ThisType => thistpe
+          case thistpe           => throw Scala2PickleFormatException(s"Unexpected this type for SuperType: $thistpe")
         val supertpe = readTypeRef()
-        SuperType(thistpe, supertpe)*/
+        SuperType(thistpe, Some(supertpe))
       case CONSTANTtpe =>
         readConstantRef() match
           case c: Constant => ConstantType(c)

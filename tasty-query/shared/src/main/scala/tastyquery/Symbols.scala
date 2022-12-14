@@ -221,11 +221,15 @@ object Symbols {
       annotations.find(_.symbol == annotClass)
 
     override def toString: String = {
+      val ownerPrefix = owner match
+        case owner: DeclaringSymbol => s"${owner.name}."
+        case owner: Symbol          => s"${owner.name}>"
+        case null                   => ""
       val kind = this match
         case _: PackageSymbol => "package "
         case _: ClassSymbol   => if name.toTypeName.wrapsObjectName then "object class " else "class "
         case _                => if isFlagsInitialized && is(Module) then "object " else ""
-      s"symbol[$kind$name]"
+      s"symbol[$kind$ownerPrefix$name]"
     }
     def toDebugString = toString
   }
@@ -298,6 +302,14 @@ object Symbols {
       else if canMatchInheritedSymbols && inClass.isSubclass(owner.asClass) then
         matchingDecl(inClass, siteClass = inClass)
       else None
+
+    /** Returns true iff this symbol override `that` symbol. */
+    final def overrides(that: TermOrTypeSymbol)(using Context): Boolean =
+      this == that || (
+        canMatchInheritedSymbols
+          && that.canMatchInheritedSymbols
+          && this.overriddenSymbol(that.owner.asClass).contains(that)
+      )
   end TermOrTypeSymbol
 
   final class TermSymbol private (val name: TermName, owner: Symbol) extends TermOrTypeSymbol(owner):
