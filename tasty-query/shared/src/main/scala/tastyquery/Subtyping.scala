@@ -189,8 +189,10 @@ private[tastyquery] object Subtyping:
             case cls2: ClassSymbol =>
               // TODO Handle generic tuple <: TupleN
               level3WithBaseType(tp1, tp2, cls2)
+            case sym2: TypeMemberSymbol if sym2.isTypeAlias =>
+              isSubtype(tp1, tp2.superType)
             case sym2: TypeSymbolWithBounds =>
-              // TODO Handle polymorphic type aliases (compareLower in TypeComparer)
+              // TODO? Handle bounded type lambdas (compareLower in TypeComparer)
               level4(tp1, tp2)
         end if
 

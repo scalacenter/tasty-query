@@ -10,6 +10,9 @@ private[tastyquery] object Variances:
     def fromFlags(flags: FlagSet): Variance =
       flags & VarianceFlags
 
+    val Invariant: Variance = fromFlags(EmptyFlagSet)
+  end Variance
+
   extension (variance: Variance)
     /** Is this covariant or bivariant? */
     def isCovariant: Boolean = variance.is(Covariant)
