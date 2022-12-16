@@ -96,6 +96,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   def mutableSeqOf(tpe: Type)(using Context): Type =
     ctx.findTopLevelClass("scala.collection.mutable.Seq").typeRef.appliedTo(tpe)
 
+  def findTypesFromTASTyNamed(name: String)(using Context): Type =
+    ctx.findTopLevelClass("subtyping.TypesFromTASTy").findDecl(termName(name)).declaredType
+
   testWithContext("same-monomorphic-class") {
     assertEquiv(defn.IntType, defn.IntClass.typeRef).withRef[Int, scala.Int]
     assertEquiv(defn.IntType, defn.IntClass.newTypeRef)
@@ -206,6 +209,11 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       ScalaPackageObjectPrefix.select(tname"List").appliedTo(defn.IntType),
       defn.ArrayTypeOf(defn.IntType)
     ).withRef[List[Int], Array[Int]]
+
+    val listOfInt = listOf(defn.IntType)
+    assertEquiv(findTypesFromTASTyNamed("listFullyQualified"), listOfInt).withRef[IList[Int], IList[Int]]
+    assertEquiv(findTypesFromTASTyNamed("listDefaultImport"), listOfInt).withRef[List[Int], IList[Int]]
+    assertEquiv(findTypesFromTASTyNamed("listPackageAlias"), listOfInt).withRef[scala.List[Int], IList[Int]]
   }
 
   testWithContext("polymorphic-subclasses") {

@@ -859,9 +859,12 @@ object Symbols {
             case tycon: TypeRef if tycon.symbol == this =>
               Some(tp)
             case tycon =>
-              // TODO Also handle TypeLambdas
               val typeParams = tycon.typeParams
-              recur(tycon).map(_.substClassTypeParams(typeParams.asInstanceOf[List[ClassTypeParamSymbol]], tp.args))
+              typeParams match
+                case (_: TypeLambdaParam) :: _ =>
+                  recur(tp.superType)
+                case _ =>
+                  recur(tycon).map(_.substClassTypeParams(typeParams.asInstanceOf[List[ClassTypeParamSymbol]], tp.args))
 
         case tp: TypeProxy =>
           recur(tp.superType)

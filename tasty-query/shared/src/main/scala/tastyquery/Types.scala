@@ -248,6 +248,8 @@ object Types {
           self.symbol match
             case cls: ClassSymbol              => cls.typeParams
             case typeSym: TypeSymbolWithBounds => typeSym.upperBound.typeParams
+        case self: TypeLambda =>
+          self.typeLambdaParams
         case self: AppliedType =>
           self.tycon match
             case tycon: TypeRef if tycon.symbol.isClass => Nil
@@ -1289,6 +1291,11 @@ object Types {
   sealed trait ParamRef extends BoundType:
     def paramNum: Int
 
+  private[tastyquery] final class TypeLambdaParam(val typeLambda: TypeLambda, num: Int) extends TypeParamInfo:
+    override def paramVariance(using Context): Variance =
+      Variance.Invariant // TODO? Should we set structure variances?
+  end TypeLambdaParam
+
   final class TypeLambda(val paramNames: List[TypeName])(
     @constructorOnly paramTypeBoundsExp: TypeLambda => List[TypeBounds],
     @constructorOnly resultTypeExp: TypeLambda => Type
@@ -1311,6 +1318,9 @@ object Types {
       myRes.nn
 
     def paramInfos: List[PInfo] = paramTypeBounds
+
+    private[tastyquery] lazy val typeLambdaParams: List[TypeLambdaParam] =
+      List.tabulate(paramNames.size)(num => TypeLambdaParam(this, num))
 
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, TypeLambda] = TypeLambda
 
