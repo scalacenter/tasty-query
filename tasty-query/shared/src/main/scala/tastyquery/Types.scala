@@ -1429,15 +1429,8 @@ object Types {
   final class RecType private (parentExp: RecType => Type) extends RefinedOrRecType with Binders:
     val parent: Type = parentExp(this: @unchecked)
 
-    private var myRecThis: RecThis | Null = null
-
-    private[tastyquery] final def recThis: RecThis =
-      val local = myRecThis
-      if local != null then local
-      else
-        val computed = RecThis(this)
-        myRecThis = computed
-        computed
+    /** Reference to this recursive type from within itself. */
+    val recThis: RecThis = RecThis(this)
 
     def underlying(using Context): Type = parent
   end RecType
