@@ -511,4 +511,30 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertEquiv(OrType(defn.IntType, defn.StringType), findTypesFromTASTyNamed("orType"))
   }
 
+  testWithContext("by-name-params") {
+    val Function1Class = ctx.findTopLevelClass("scala.Function1")
+    def fun1Type(argType: Type, resultType: Type): Type =
+      AppliedType(Function1Class.typeRef, argType :: resultType :: Nil)
+
+    val PStringType = PredefPrefix.select(tname"String")
+
+    assertEquiv(
+      fun1Type(ExprType(defn.StringType), defn.StringType),
+      fun1Type(ExprType(defn.StringType), defn.StringType)
+    ).withRef[(=> JString) => JString, (=> JString) => JString]
+
+    assertEquiv(fun1Type(ExprType(defn.StringType), defn.StringType), fun1Type(ExprType(PStringType), PStringType))
+      .withRef[(=> JString) => JString, (=> PString) => PString]
+
+    assertNeitherSubtype(
+      fun1Type(ExprType(defn.StringType), defn.StringType),
+      fun1Type(defn.StringType, defn.StringType)
+    ).withRef[(=> JString) => JString, JString => JString]
+
+    assertNeitherSubtype(
+      fun1Type(ExprType(defn.StringType), defn.StringType),
+      fun1Type(ExprType(defn.IntType), defn.StringType)
+    ).withRef[(=> JString) => JString, (=> Int) => JString]
+  }
+
 end SubtypingSuite
