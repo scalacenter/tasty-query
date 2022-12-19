@@ -108,7 +108,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     andTypeAlias.withFlags(EmptyFlagSet, None)
     andTypeAlias.withDefinition(
       TypeMemberDefinition.TypeAlias(
-        PolyType(andOrParamNames)(
+        TypeLambda(andOrParamNames)(
           pt => List(NothingAnyBounds, NothingAnyBounds),
           pt => AndType(pt.paramRefs(0), pt.paramRefs(1))
         )
@@ -119,7 +119,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     orTypeAlias.withFlags(EmptyFlagSet, None)
     orTypeAlias.withDefinition(
       TypeMemberDefinition.TypeAlias(
-        PolyType(andOrParamNames)(
+        TypeLambda(andOrParamNames)(
           pt => List(NothingAnyBounds, NothingAnyBounds),
           pt => OrType(pt.paramRefs(0), pt.paramRefs(1))
         )

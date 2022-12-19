@@ -145,6 +145,7 @@ private[tastyquery] object Subtyping:
 
     case tp2: OrType =>
       isSubtype(tp1, tp2.first) || isSubtype(tp1, tp2.second)
+        || level4(tp1, tp2)
 
     case _ =>
       level4(tp1, tp2)
@@ -262,8 +263,7 @@ private[tastyquery] object Subtyping:
   private def compareAppliedType1(tp1: AppliedType, tp2: Type)(using Context): Boolean =
     val tycon1 = tp1.tycon
     tycon1 match
-      case tycon1: TypeRef =>
-        // TODO?
+      case tycon1: TypeRef if tycon1.symbol.isClass =>
         false
       case tycon1: TypeProxy =>
         isSubtype(tp1.superType, tp2) // TODO superTypeNormalized for match types

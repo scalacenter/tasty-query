@@ -490,6 +490,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       Types.AndType.make(defn.IntType, defn.StringType),
       Types.AndType.make(defn.IntType, defn.BooleanType)
     ).withRef[Int & String, Int & Boolean]
+
+    val SerializableClass = ctx.findTopLevelClass("java.io.Serializable")
+    assertEquiv(findTypesFromTASTyNamed("andType"), AndType(ProductClass.typeRef, SerializableClass.typeRef))
   }
 
   testWithContext("union-types") {
@@ -504,6 +507,8 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       Types.OrType.make(defn.IntType, defn.StringType),
       Types.OrType.make(defn.IntType, defn.BooleanType)
     ).withRef[Int | String, Int | Boolean]
+
+    assertEquiv(OrType(defn.IntType, defn.StringType), findTypesFromTASTyNamed("orType"))
   }
 
 end SubtypingSuite
