@@ -1475,6 +1475,13 @@ object Types {
     private[tastyquery] def derivedTypeBounds(low: Type, high: Type): TypeBounds =
       if ((low eq this.low) && (high eq this.high)) this
       else RealTypeBounds(low, high)
+
+    final def contains(tp: Type)(using Context): Boolean = tp match
+      case tp: WildcardTypeBounds =>
+        low.isSubtype(tp.bounds.low) && tp.bounds.high.isSubtype(high)
+      case _ =>
+        low.isSubtype(tp) && tp.isSubtype(high)
+    end contains
   }
 
   final case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high):

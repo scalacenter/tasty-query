@@ -69,6 +69,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   def ListClass(using Context): ClassSymbol =
     ctx.findTopLevelClass("scala.collection.immutable.List")
 
+  def OptionClass(using Context): ClassSymbol =
+    ctx.findTopLevelClass("scala.Option")
+
   def PredefModuleClass(using Context): ClassSymbol =
     ctx.findTopLevelModuleClass("scala.Predef")
 
@@ -89,6 +92,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
 
   def listOf(tpe: Type)(using Context): Type =
     ListClass.typeRef.appliedTo(tpe)
+
+  def optionOf(tpe: Type)(using Context): Type =
+    OptionClass.typeRef.appliedTo(tpe)
 
   def genSeqOf(tpe: Type)(using Context): Type =
     ctx.findTopLevelClass("scala.collection.Seq").typeRef.appliedTo(tpe)
@@ -535,6 +541,23 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       fun1Type(ExprType(defn.StringType), defn.StringType),
       fun1Type(ExprType(defn.IntType), defn.StringType)
     ).withRef[(=> JString) => JString, (=> Int) => JString]
+  }
+
+  testWithContext("wildcard-type-bounds") {
+    val seqOfWildcardProduct = mutableSeqOf(WildcardTypeBounds(RealTypeBounds(defn.NothingType, ProductClass.typeRef)))
+    val seqOfWildcardList = mutableSeqOf(WildcardTypeBounds(RealTypeBounds(defn.NothingType, listOf(defn.AnyType))))
+    val seqOfWildcardOption = mutableSeqOf(WildcardTypeBounds(RealTypeBounds(defn.NothingType, optionOf(defn.AnyType))))
+
+    assertEquiv(
+      seqOfWildcardProduct,
+      mutableSeqOf(WildcardTypeBounds(RealTypeBounds(defn.NothingType, ProductClass.typeRef)))
+    ).withRef[mutable.Seq[? <: Product], mutable.Seq[? <: Product]]
+
+    assertNeitherSubtype(seqOfWildcardProduct, seqOfWildcardList)
+      .withRef[mutable.Seq[? <: Product], mutable.Seq[? <: List[Any]]]
+
+    assertStrictSubtype(seqOfWildcardOption, seqOfWildcardProduct)
+      .withRef[mutable.Seq[? <: Option[Any]], mutable.Seq[? <: Product]]
   }
 
 end SubtypingSuite
