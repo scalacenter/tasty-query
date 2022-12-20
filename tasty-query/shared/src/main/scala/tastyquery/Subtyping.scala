@@ -181,7 +181,7 @@ private[tastyquery] object Subtyping:
                 val tycon1Sym = tycon1.symbol
                 val tycon2Sym = tycon2.symbol
                 if tycon1Sym == tycon2Sym && isSubprefix(tycon1.prefix, tycon2.prefix) then
-                  isSubArgs(tp1.args, tp2.args, tp1, tparams)
+                  isSubArgs(tp1.args, tp2.args, tparams)
                 else false
               case _ =>
                 false
@@ -210,15 +210,23 @@ private[tastyquery] object Subtyping:
         false
   end compareAppliedType2
 
-  private def isSubArgs(args1: List[Type], args2: List[Type], tp1: AppliedType, tparams2: List[TypeParamInfo])(
-    using Context
-  ): Boolean =
+  private def isSubArgs(args1: List[Type], args2: List[Type], tparams2: List[TypeParamInfo])(using Context): Boolean =
     def isSubArg(arg1: Type, arg2: Type, tparam2: TypeParamInfo): Boolean =
       val variance = tparam2.paramVariance
-      variance.sign match
-        case 1  => isSubtype(arg1, arg2)
-        case -1 => isSubtype(arg2, arg1)
-        case 0  => isSubtype(arg1, arg2) && isSubtype(arg2, arg1)
+
+      arg2 match
+        case arg2: WildcardTypeBounds =>
+          arg2.bounds.contains(arg1)
+        case _ =>
+          arg1 match
+            case arg1: WildcardTypeBounds =>
+              // TODO? Capture conversion
+              false
+            case _ =>
+              variance.sign match
+                case 1  => isSubtype(arg1, arg2)
+                case -1 => isSubtype(arg2, arg1)
+                case 0  => isSameType(arg1, arg2)
     end isSubArg
 
     if args1.sizeCompare(args2) != 0 || args2.sizeCompare(tparams2) != 0 then
