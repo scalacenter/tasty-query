@@ -946,6 +946,24 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     end for
   }
 
+  testWithContext("sealed-children") {
+    val SealedClass = ctx.findTopLevelClass("simple_trees.SealedClass")
+    val ClassCaseClass = ctx.findStaticClass("simple_trees.SealedClass.ClassCase")
+    val ObjectCaseTerm = ctx.findStaticTerm("simple_trees.SealedClass.ObjectCase")
+
+    assert(SealedClass.isAllOf(Sealed, butNotAnyOf = Enum))
+    assert(clue(SealedClass.sealedChildren) == List(ClassCaseClass, ObjectCaseTerm))
+  }
+
+  testWithContext("enum-children") {
+    val ScalaEnumClass = ctx.findTopLevelClass("simple_trees.ScalaEnum")
+    val ClassCaseClass = ctx.findStaticClass("simple_trees.ScalaEnum.ClassCase")
+    val ObjectCaseTerm = ctx.findStaticTerm("simple_trees.ScalaEnum.ObjectCase")
+
+    assert(ScalaEnumClass.isAllOf(Sealed | Enum))
+    assert(clue(ScalaEnumClass.sealedChildren) == List(ClassCaseClass, ObjectCaseTerm))
+  }
+
   testWithContext("console-outvar-issue-78") {
     val Console = ctx.findTopLevelModuleClass("scala.Console")
     val DynamicVariable = ctx.findTopLevelClass("scala.util.DynamicVariable")
