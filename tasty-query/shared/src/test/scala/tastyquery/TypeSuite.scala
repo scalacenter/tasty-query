@@ -928,6 +928,24 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(body.tpe).isOfClass(defn.IntClass))
   }
 
+  testWithContext("poly-new") {
+    val GenericClass = ctx.findTopLevelClass("simple_trees.GenericClass")
+    val GenericModuleClass = ctx.findTopLevelModuleClass("simple_trees.GenericClass")
+
+    for testMethodName <- List("new1", "new2", "new3") do
+      val DefDef(_, _, _, Some(body), _) =
+        GenericModuleClass.findNonOverloadedDecl(termName(testMethodName)).tree.get: @unchecked
+
+      val Apply(tapp @ TypeApply(fun @ Select(qual: New, ctorName), List(targ)), args) = body: @unchecked
+
+      assert(clue(targ.toType).isRef(defn.IntClass), testMethodName)
+      assert(clue(fun.symbol).name == nme.Constructor, testMethodName)
+      assert(clue(args.map(_.tpe)).forall(_.isOfClass(defn.IntClass)), testMethodName)
+      assert(clue(tapp.tpe).isInstanceOf[MethodType], testMethodName)
+      assert(clue(body.tpe).isApplied(_.isRef(GenericClass), List(_.isRef(defn.IntClass))), testMethodName)
+    end for
+  }
+
   testWithContext("console-outvar-issue-78") {
     val Console = ctx.findTopLevelModuleClass("scala.Console")
     val DynamicVariable = ctx.findTopLevelClass("scala.util.DynamicVariable")
