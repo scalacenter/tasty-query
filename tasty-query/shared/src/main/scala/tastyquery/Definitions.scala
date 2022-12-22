@@ -20,6 +20,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   private val scalaAnnotationPackage =
     scalaPackage.getPackageDeclOrCreate(termName("annotation"))
+  private val scalaAnnotationInternalPackage =
+    scalaAnnotationPackage.getPackageDeclOrCreate(termName("internal"))
   private val scalaCollectionPackage =
     scalaPackage.getPackageDeclOrCreate(termName("collection"))
   private[tastyquery] val scalaCompiletimePackage =
@@ -301,6 +303,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   lazy val StringClass = javaLangPackage.requiredClass("String")
 
   private[tastyquery] lazy val targetNameAnnotClass = scalaAnnotationPackage.optionalClass("targetName")
+
+  private[tastyquery] lazy val internalChildAnnotClass = scalaAnnotationInternalPackage.optionalClass("Child")
 
   def isPrimitiveValueClass(sym: ClassSymbol): Boolean =
     sym == IntClass || sym == LongClass || sym == FloatClass || sym == DoubleClass ||

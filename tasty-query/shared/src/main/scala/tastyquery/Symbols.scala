@@ -926,6 +926,53 @@ object Symbols {
         myThisType = computed
         computed
     end thisType
+
+    private var mySealedChildren: List[ClassSymbol | TermSymbol] | Null = null
+
+    /** The direct children of a sealed class (including enums).
+      *
+      * If `this.is(Sealed)` is false, this method returns `Nil`.
+      *
+      * Otherwise, each element of the list is either:
+      *
+      * - a non-module class that extends this class (including enum class cases), or
+      * - a module value whose module class extends this class, or
+      * - an enum val case for this enum class.
+      *
+      * The results are ordered by their declaration order in the source.
+      */
+    final def sealedChildren(using Context): List[ClassSymbol | TermSymbol] =
+      val local = mySealedChildren
+      if local != null then local
+      else
+        val computed: List[ClassSymbol | TermSymbol] =
+          if !is(Sealed) then Nil
+          else computeSealedChildren()
+        mySealedChildren = computed
+        computed
+    end sealedChildren
+
+    private def computeSealedChildren()(using Context): List[ClassSymbol | TermSymbol] =
+      defn.internalChildAnnotClass match
+        case None =>
+          Nil
+        case Some(annotClass) =>
+          getAnnotations(annotClass).map(extractSealedChildFromChildAnnot(_))
+    end computeSealedChildren
+
+    private def extractSealedChildFromChildAnnot(annot: Annotation)(using Context): ClassSymbol | TermSymbol =
+      annot.tree.tpe match
+        case tpe: AppliedType =>
+          tpe.args match
+            case (childRef: TypeRef) :: Nil if childRef.symbol.isClass =>
+              childRef.symbol.asClass
+            case (childRef: TermRef) :: Nil if childRef.symbol.isAnyOf(Module | Enum) =>
+              childRef.symbol
+            case _ =>
+              throw InvalidProgramStructureException(s"Unexpected type $tpe for $annot")
+        case tpe =>
+          throw InvalidProgramStructureException(s"Unexpected type $tpe for $annot")
+    end extractSealedChildFromChildAnnot
   }
 
   object ClassSymbol:

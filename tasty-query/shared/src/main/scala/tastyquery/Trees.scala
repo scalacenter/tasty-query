@@ -1,5 +1,7 @@
 package tastyquery
 
+import scala.annotation.tailrec
+
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
@@ -9,31 +11,6 @@ import tastyquery.Symbols.*
 import tastyquery.Types.*
 
 object Trees {
-
-  /** The method part of an application node, possibly enclosed in a block
-    *  with only valdefs as statements. the reason for also considering blocks
-    *  is that named arguments can transform a call into a block, e.g.
-    *   <init>(b = foo, a = bar)
-    * is transformed to
-    *   { val x$1 = foo
-    *     val x$2 = bar
-    *     <init>(x$2, x$1)
-    *   }
-    */
-  private def methPart(tree: TermTree): TermTree = stripApply(tree) match {
-    case TypeApply(fn, _) => methPart(fn)
-    // case AppliedTypeTree(fn, _) => methPart(fn) // !!! should not be needed
-    case Block(stats, expr) => methPart(expr)
-    case mp                 => mp
-  }
-
-  /** If this is an application, its function part, stripping all
-    *  Apply nodes (but leaving TypeApply nodes in). Otherwise the tree itself.
-    */
-  private def stripApply(tree: TermTree): TermTree = tree match {
-    case Apply(fn, _) => stripApply(fn)
-    case _            => tree
-  }
 
   sealed abstract class Tree(val span: Span) {
     def withSpan(span: Span): Tree
@@ -336,12 +313,48 @@ object Trees {
       // if it is, then the result type is the type of new.
       original match
         case partial: MethodicType => partial // Nothing to do here, it is partially applied.
-        case _ =>
-          methPart(fun) match
-            case Select(newObj @ New(_), SignedName(nme.Constructor, _, nme.Constructor)) =>
-              newObj.tpe
-            case _ =>
-              original
+        case _                     => patchNewType(fun, Nil, original)
+    end calculateType
+
+    /** Possibly patch the type of a fully-applied `New` node.
+      *
+      * When the receiver of a constructor application is a `New` node, the
+      * result type must be the (applied) class type of the `New` node, instead
+      * of the result type of the constructor method (which is `Unit`).
+      *
+      * We would like to say that we should always use the `tpe` of the `New`
+      * node. However, that is not correct when the class is polymorphic *and*
+      * the type arguments are inferred! In that situation, the `New` node will
+      * have the unapplied polymorphic type (sometimes even embedded in an
+      * eta-expansion `TypeLambda`, but that's fine).
+      *
+      * Therefore, we need to find the `New` node, collecting type arguments in
+      * the process. If we do find one, we apply the type arguments (if any) to
+      * its `tpe`. Otherwise, we return the `original` type that was computed
+      * by `resolveMethodType` above.
+      *
+      * Sometimes, wrapped applications are enclosed in a block with only
+      * ValDefs as statements. That happens because of named arguments, e.g.
+      *   <init>(b = foo, a = bar)
+      * is transformed to
+      *   { val x$1 = foo
+      *     val x$2 = bar
+      *     <init>(x$2, x$1)
+      *   }
+      */
+    @tailrec
+    private def patchNewType(tree: TermTree, targsTail: List[TypeTree], original: Type)(using Context): Type =
+      tree match
+        case Apply(fn, _)         => patchNewType(fn, targsTail, original)
+        case TypeApply(fn, targs) => patchNewType(fn, targs ::: targsTail, original)
+        case Block(stats, expr)   => patchNewType(expr, targsTail, original)
+
+        case Select(newObj @ New(_), SignedName(nme.Constructor, _, _)) =>
+          if targsTail.isEmpty then newObj.tpe
+          else newObj.tpe.appliedTo(targsTail.map(_.toType))
+
+        case _ => original
+    end patchNewType
 
     override final def withSpan(span: Span): Apply = Apply(fun, args)(span)
 
