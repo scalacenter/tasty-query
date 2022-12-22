@@ -70,6 +70,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val cls = ClassSymbol.create(name, scalaPackage)
     cls.withTypeParams(Nil)
     cls.withParentsDirect(parents)
+    cls.withGivenSelfType(None)
     cls.withFlags(flags, None)
     cls.setAnnotations(Nil)
     cls.checkCompleted()
