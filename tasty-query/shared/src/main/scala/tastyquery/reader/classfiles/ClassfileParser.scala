@@ -160,6 +160,7 @@ private[reader] object ClassfileParser {
       .withFlags(clsFlags | Flags.ModuleClassCreationFlags, clsPrivateWithin)
       .setAnnotations(Nil)
       .withParentsDirect(defn.ObjectType :: Nil)
+      .withGivenSelfType(None)
     allRegisteredSymbols += moduleClass
 
     val module = TermSymbol
@@ -216,6 +217,7 @@ private[reader] object ClassfileParser {
       cls.withParentsDirect(parents)
     end initParents
 
+    cls.withGivenSelfType(None)
     cls.withFlags(clsFlags, clsPrivateWithin)
     cls.setAnnotations(Nil) // TODO Read Java annotations on classes
     initParents()

@@ -254,8 +254,10 @@ private[pickles] class PickleReader {
               case tpe: TempClassInfoType => tpe.parentTypes
               case tpe =>
                 throw AssertionError(s"unexpected type $tpe for $cls, owner is $owner")
+        val givenSelfType = if atEnd then None else Some(readTypeRef())
         cls.withParentsDirect(parentTypes)
         cls.withTypeParams(typeParams)
+        cls.withGivenSelfType(givenSelfType)
         cls
       case VALsym =>
         val sym = TermSymbol.create(name.toTermName, owner)

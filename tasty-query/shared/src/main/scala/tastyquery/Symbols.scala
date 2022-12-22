@@ -574,6 +574,7 @@ object Symbols {
     private var myTypeParams: List[ClassTypeParamSymbol] | Null = null
     private var myParentsInit: (() => List[Type]) | Null = null
     private var myParents: List[Type] | Null = null
+    private var myGivenSelfType: Option[Type] | Null = null
 
     // Optional reference fields
     private var mySpecialErasure: Option[() => ErasedTypeRef] = None
@@ -583,12 +584,15 @@ object Symbols {
       mutable.HashMap[Name, mutable.HashSet[TermOrTypeSymbol]]()
 
     // Cache fields
+    private var myAppliedRef: Type | Null = null
+    private var mySelfType: Type | Null = null
     private var myLinearization: List[ClassSymbol] | Null = null
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
       if myTypeParams == null then failNotCompleted("typeParams not initialized")
       if myParents == null && myParentsInit == null then failNotCompleted("parents not initialized")
+      if myGivenSelfType == null then failNotCompleted("givenSelfType not initialized")
 
     private[tastyquery] def isValueClass(using Context): Boolean =
       parents.nonEmpty && parents.head.classSymbol.exists(_ == defn.AnyValClass)
@@ -658,6 +662,39 @@ object Symbols {
           throw InvalidProgramStructureException(s"Non-class type $tpe in parents of $this")
         }
       )
+
+    private[tastyquery] final def withGivenSelfType(givenSelfType: Option[Type]): this.type =
+      if myGivenSelfType != null then throw new IllegalStateException(s"reassignment of givenSelfType for $this")
+      myGivenSelfType = givenSelfType
+      this
+
+    final def givenSelfType(using Context): Option[Type] =
+      val local = myGivenSelfType
+      if local == null then throw new IllegalStateException(s"givenSelfType not initialized for $this")
+      else local
+
+    final def appliedRef(using Context): Type =
+      val local = myAppliedRef
+      if local != null then local
+      else
+        val computed = typeRef.appliedTo(typeParams.map(_.typeRef))
+        myAppliedRef = computed
+        computed
+    end appliedRef
+
+    final def selfType(using Context): Type =
+      val local = mySelfType
+      if local != null then local
+      else
+        val computed = givenSelfType match
+          case None =>
+            appliedRef
+          case Some(givenSelf) =>
+            if is(Module) then givenSelf
+            else AndType(givenSelf, appliedRef)
+        mySelfType = computed
+        computed
+    end selfType
 
     final def linearization(using Context): List[ClassSymbol] =
       val local = myLinearization
@@ -825,13 +862,13 @@ object Symbols {
 
     /** Compute tp.baseType(this) */
     private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Option[Type] =
+      def combineGlb(bt1: Option[Type], bt2: Option[Type]): Option[Type] =
+        if bt1.isEmpty then bt2
+        else if bt2.isEmpty then bt1
+        else Some(bt1.get & bt2.get)
+
       def recur(tp: Type): Option[Type] = tp match
         case tp: TypeRef =>
-          def combineGlb(bt1: Option[Type], bt2: Option[Type]): Option[Type] =
-            if bt1.isEmpty then bt2
-            else if bt2.isEmpty then bt1
-            else Some(bt1.get & bt2.get)
-
           def foldGlb(bt: Option[Type], ps: List[Type]): Option[Type] =
             ps.foldLeft(bt)((bt, p) => combineGlb(bt, recur(p)))
 
@@ -869,8 +906,20 @@ object Symbols {
         case tp: TypeProxy =>
           recur(tp.superType)
 
+        case tp: AndType =>
+          val tp1 = tp.first
+          val tp2 = tp.second
+          // TODO? Opt when this.isStatic && tp.derivesFrom(this) && this.typeParams.isEmpty then this.typeRef
+          val combined = combineGlb(recur(tp1), recur(tp2))
+          combined match
+            case Some(combined: AndType) if (combined.first eq tp1) && (combined.second eq tp2) =>
+              // Return `tp` itself to allow `Subtyping.level3WithBaseType` to cut off infinite recursions
+              Some(tp)
+            case _ =>
+              combined
+
         case _ =>
-          // TODO Handle AndType and OrType, and JavaArrayType
+          // TODO Handle OrType and JavaArrayType
           None
       end recur
 
@@ -988,6 +1037,7 @@ object Symbols {
       cls
         .withTypeParams(Nil)
         .withParentsDirect(defn.ObjectType :: Nil)
+        .withGivenSelfType(None)
         .withFlags(EmptyFlagSet, None)
         .setAnnotations(Nil)
       cls.checkCompleted()

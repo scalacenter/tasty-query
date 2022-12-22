@@ -565,6 +565,7 @@ private[tasties] class TreeUnpickler(
       }
     }
     val self = readSelf
+    cls.withGivenSelfType(self.map(_.tpt.toType))
     // The first entry is the constructor
     val cstr = readStat.asInstanceOf[DefDef]
     val body = readStats(end)

@@ -1939,4 +1939,83 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       end if
     end for
   }
+
+  testWithContext("applied-ref") {
+    val FooClass = ctx.findStaticClass("simple_trees.SelfTypes.Foo")
+    val BarClass = ctx.findStaticClass("simple_trees.SelfTypes.Bar")
+    val FooBarClass = ctx.findStaticClass("simple_trees.SelfTypes.FooBar")
+
+    val fooTArg = FooClass.typeParams.head
+    val List(barTArg1, barTArg2) = BarClass.typeParams: @unchecked
+
+    assert(clue(FooClass.appliedRef).isApplied(_.isRef(FooClass), List(_.isRef(fooTArg))))
+    assert(clue(BarClass.appliedRef).isApplied(_.isRef(BarClass), List(_.isRef(barTArg1), _.isRef(barTArg2))))
+    assert(clue(FooBarClass.appliedRef).isRef(FooBarClass))
+  }
+
+  testWithContext("self-types") {
+    val FooClass = ctx.findStaticClass("simple_trees.SelfTypes.Foo")
+    val BarClass = ctx.findStaticClass("simple_trees.SelfTypes.Bar")
+    val FooBarClass = ctx.findStaticClass("simple_trees.SelfTypes.FooBar")
+
+    val fooTArg = FooClass.typeParams.head
+    val List(barTArg1, barTArg2) = BarClass.typeParams: @unchecked
+
+    val expectedGivenSelfType: Type => Boolean =
+      tpe => tpe.isApplied(_.isRef(BarClass), List(_.isRef(fooTArg), _.isRef(defn.IntClass)))
+
+    assert(clue(FooClass.givenSelfType).exists(expectedGivenSelfType))
+    assert(
+      clue(FooClass.selfType).isIntersectionOf(
+        expectedGivenSelfType,
+        _.isApplied(_.isRef(FooClass), List(_.isRef(FooClass.typeParams.head)))
+      )
+    )
+
+    assert(clue(BarClass.givenSelfType).isEmpty)
+    assert(clue(BarClass.selfType).isApplied(_.isRef(BarClass), List(_.isRef(barTArg1), _.isRef(barTArg2))))
+
+    assert(clue(FooBarClass.givenSelfType).isEmpty)
+    assert(clue(FooBarClass.selfType).isRef(FooBarClass))
+  }
+
+  testWithContext("scala2-self-types") {
+    val ClassManifestAlias = ctx.findStaticType("scala.reflect.package.ClassManifest")
+    val ClassManifestDeprecatedApisClass = ctx.findTopLevelClass("scala.reflect.ClassManifestDeprecatedApis")
+
+    val cmDeprecatedApisTArg = ClassManifestDeprecatedApisClass.typeParams.head
+
+    val expectedGivenSelfType: Type => Boolean =
+      tpe => tpe.isApplied(_.isRef(ClassManifestAlias), List(_.isRef(cmDeprecatedApisTArg)))
+
+    assert(clue(ClassManifestDeprecatedApisClass.givenSelfType).exists(expectedGivenSelfType))
+    assert(
+      clue(ClassManifestDeprecatedApisClass.selfType).isIntersectionOf(
+        expectedGivenSelfType,
+        _.isApplied(_.isRef(ClassManifestDeprecatedApisClass), List(_.isRef(cmDeprecatedApisTArg)))
+      )
+    )
+  }
+
+  testWithContext("selections-with-self-types") {
+    val FooClass = ctx.findStaticClass("simple_trees.SelfTypes.Foo")
+    val BarClass = ctx.findStaticClass("simple_trees.SelfTypes.Bar")
+    val PairClass = ctx.findStaticClass("simple_trees.SelfTypes.Pair")
+
+    val fooTArg = FooClass.typeParams.head
+    val List(barTArg1, barTArg2) = BarClass.typeParams: @unchecked
+
+    val targetMethod = BarClass.findNonOverloadedDecl(termName("bar"))
+
+    for testMethodName <- List("throughSelf", "throughThis", "bare") do
+      val DefDef(_, _, _, Some(body), _) = FooClass.findNonOverloadedDecl(termName(testMethodName)).tree.get: @unchecked
+      val Apply(sel @ Select(ths: This, SignedName(SimpleName("bar"), _, _)), Nil) = body: @unchecked
+
+      assert(clue(ths.tpe).isInstanceOf[ThisType])
+      assert(clue(ths.tpe.asInstanceOf[ThisType].cls) == FooClass)
+      assert(clue(sel.tpe).isRef(targetMethod))
+
+      assert(clue(body.tpe).isApplied(_.isRef(PairClass), List(_.isRef(fooTArg), _.isRef(defn.IntClass))))
+    end for
+  }
 }
