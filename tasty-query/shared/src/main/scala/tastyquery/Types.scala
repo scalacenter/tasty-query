@@ -951,8 +951,19 @@ object Types {
   end TypeRef
 
   final class ThisType(val tref: TypeRef) extends PathType with SingletonType {
+    private var myUnderlying: Type | Null = null
+
     override def underlying(using Context): Type =
-      tref // TODO This is probably wrong
+      val local = myUnderlying
+      if local != null then local
+      else
+        val cls = this.cls
+        val computed =
+          if cls.isStatic then cls.selfType
+          else cls.selfType.asSeenFrom(tref.prefix, cls)
+        myUnderlying = computed
+        computed
+    end underlying
 
     final def cls(using Context): ClassSymbol = tref.symbol.asClass
 

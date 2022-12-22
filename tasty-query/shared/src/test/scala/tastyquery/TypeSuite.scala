@@ -1996,4 +1996,26 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       )
     )
   }
+
+  testWithContext("selections-with-self-types") {
+    val FooClass = ctx.findStaticClass("simple_trees.SelfTypes.Foo")
+    val BarClass = ctx.findStaticClass("simple_trees.SelfTypes.Bar")
+    val PairClass = ctx.findStaticClass("simple_trees.SelfTypes.Pair")
+
+    val fooTArg = FooClass.typeParams.head
+    val List(barTArg1, barTArg2) = BarClass.typeParams: @unchecked
+
+    val targetMethod = BarClass.findNonOverloadedDecl(termName("bar"))
+
+    for testMethodName <- List("throughSelf", "throughThis", "bare") do
+      val DefDef(_, _, _, Some(body), _) = FooClass.findNonOverloadedDecl(termName(testMethodName)).tree.get: @unchecked
+      val Apply(sel @ Select(ths: This, SignedName(SimpleName("bar"), _, _)), Nil) = body: @unchecked
+
+      assert(clue(ths.tpe).isInstanceOf[ThisType])
+      assert(clue(ths.tpe.asInstanceOf[ThisType].cls) == FooClass)
+      assert(clue(sel.tpe).isRef(targetMethod))
+
+      assert(clue(body.tpe).isApplied(_.isRef(PairClass), List(_.isRef(fooTArg), _.isRef(defn.IntClass))))
+    end for
+  }
 }
