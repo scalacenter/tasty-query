@@ -1083,6 +1083,55 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(classWithParams)(clue(tree)))
   }
 
+  testUnpickle("super-accessors", "simple_trees.SuperDoubleDiamond$") { tree =>
+    val ABTemplate = findTree(tree) { case ClassDef(TypeName(SimpleName("AB")), template, _) =>
+      template
+    }
+    val ABCheck: StructureCheck = {
+      case Template(
+            _,
+            _,
+            _,
+            List(
+              DefDef(
+                PrefixedName(
+                  NameTags.SUPERACCESSOR,
+                  ExpandedName(
+                    NameTags.EXPANDED,
+                    ExpandedName(NameTags.EXPANDPREFIX, _, SimpleName("AB")),
+                    SimpleName("foo")
+                  )
+                ),
+                _,
+                _,
+                None,
+                _
+              ),
+              DefDef(
+                SimpleName("foo"),
+                _,
+                _,
+                Some(
+                  Select(
+                    This(TypeIdent(TypeName(SimpleName("AB")))),
+                    PrefixedName(
+                      NameTags.SUPERACCESSOR,
+                      ExpandedName(
+                        NameTags.EXPANDED,
+                        ExpandedName(NameTags.EXPANDPREFIX, _, SimpleName("AB")),
+                        SimpleName("foo")
+                      )
+                    )
+                  )
+                ),
+                _
+              )
+            )
+          ) =>
+    }
+    assert(containsSubtree(ABCheck)(clue(ABTemplate)))
+  }
+
   testUnpickle("super-types", "simple_trees.SuperTypes$") { tree =>
     val treeBar = findTree(tree) { case cd @ ClassDef(TypeName(SimpleName("Bar")), _, _) =>
       cd

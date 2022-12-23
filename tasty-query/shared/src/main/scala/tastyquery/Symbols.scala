@@ -244,7 +244,7 @@ object Symbols {
       * @param siteClass
       *   The base class from which member types are computed
       */
-    private final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[Symbol] =
+    protected final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[Symbol] =
       this match
         case self: TypeSymbol =>
           inClass.getDecl(self.name).filterNot(_.is(Private))
@@ -261,7 +261,7 @@ object Symbols {
     end matchingDecl
 
     /** If false, this symbol cannot possibly participate in an override, either as overrider or overridee. */
-    private final def canMatchInheritedSymbols(using Context): Boolean =
+    protected final def canMatchInheritedSymbols(using Context): Boolean =
       owner.isClass && memberCanMatchInheritedSymbols
 
     /** If false, this class member cannot possibly participate in an override, either as overrider or overridee. */
@@ -417,6 +417,78 @@ object Symbols {
       */
     final def isStableMember(using Context): Boolean =
       !isAnyOf(Method | Mutable) && !declaredType.isInstanceOf[ExprType]
+
+    /** The symbol actually implementing this symbol for an object of class `runtimeClass`.
+      *
+      * If this symbol is private or if it is a constructor,
+      * `runtimeImplementingSymbol` returns this symbol.
+      *
+      * Otherwise, it returns the first non-abstract symbol matching this
+      * symbol in the linearization of `runtimeClass`.
+      *
+      * @throws java.lang.IllegalArgumentException
+      *   if `this.owner.isClass` is false or if
+      *   `runtimeClass.isSubclass(this.owner.asClass)` is false
+      * @throws tastyquery.Exceptions.MemberNotFoundException
+      *   if no concrete matching symbol could be found
+      */
+    final def runtimeImplementingSymbol(runtimeClass: ClassSymbol)(using Context): TermSymbol =
+      if canMatchInheritedSymbols then
+        val linearization = runtimeClass.linearization
+        if !linearization.contains(this.owner.asClass) then
+          throw IllegalArgumentException(s"Invalid run-time class $runtimeClass for dynamic super call to $this")
+        findRuntimeSymbolCommon(runtimeClass, linearization)
+      else
+        if !this.owner.isClass then
+          throw IllegalArgumentException(s"Nonsensical run-time implementation lookup for local symbol $this")
+        this
+    end runtimeImplementingSymbol
+
+    /** Resolves a dynamically bound `super` call for an object of class `runtimeClass`.
+      *
+      * This method returns the next symbol for a `super` call of the form
+      * `enclosingClass.super.foo` for an object of class `runtimeClass`.
+      * That is the first non-abstract symbol matching this symbol in the
+      * linearization of `runtimeClass`, after the occurrence of
+      * `enclosingClass`.
+      *
+      * @throws java.lang.IllegalArgumentException
+      *   if any of the following conditions happen:
+      *   `this.owner.isClass` is false;
+      *   or this symbol is private;
+      *   or this symbol is a constructor;
+      *   or `runtimeClass.isSubclass(this.owner.asClass)` is false;
+      *   or if `runtimeClass.isSubclass(enclosingClass)` is false
+      * @throws tastyquery.Exceptions.MemberNotFoundException
+      *   if no concrete matching symbol could be found
+      */
+    final def nextSuperSymbol(runtimeClass: ClassSymbol, enclosingClass: ClassSymbol)(using Context): TermSymbol =
+      if !canMatchInheritedSymbols then
+        throw IllegalArgumentException(s"Invalid dynamic super call to statically bound symbol $this")
+      val linearization = runtimeClass.linearization
+      if !linearization.contains(this.owner.asClass) then
+        throw IllegalArgumentException(s"Invalid run-time class $runtimeClass for dynamic super call to $this")
+      val suffix = linearization.dropWhile(_ != enclosingClass)
+      if suffix.isEmpty then
+        throw IllegalArgumentException(s"Invalid enclosing class $enclosingClass for dynamic super call to $this")
+      findRuntimeSymbolCommon(runtimeClass, suffix.tail)
+    end nextSuperSymbol
+
+    /** Common loop for `runtimeImplementingSymbol` and `nextSuperSymbol`. */
+    @tailrec
+    private def findRuntimeSymbolCommon(runtimeClass: ClassSymbol, linearization: List[ClassSymbol])(
+      using Context
+    ): TermSymbol =
+      linearization match
+        case inClass :: linearizationTail =>
+          matchingDecl(inClass, siteClass = runtimeClass) match
+            case Some(matchingSym) if !matchingSym.is(Abstract) =>
+              matchingSym.asTerm
+            case _ =>
+              findRuntimeSymbolCommon(runtimeClass, linearizationTail)
+        case Nil =>
+          throw MemberNotFoundException(runtimeClass, this.name, s"No concrete method matching $this in $runtimeClass")
+    end findRuntimeSymbolCommon
   end TermSymbol
 
   object TermSymbol:

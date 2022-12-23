@@ -4,6 +4,7 @@ import scala.collection.mutable
 
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
@@ -2017,5 +2018,96 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
       assert(clue(body.tpe).isApplied(_.isRef(PairClass), List(_.isRef(fooTArg), _.isRef(defn.IntClass))))
     end for
+  }
+
+  testWithContext("runtimeImplementingSymbol") {
+    val AClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.A")
+    val BClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.B")
+    val AAClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.AA")
+    val BBClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.BB")
+    val ABClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.AB")
+    val AAABBBClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.AAABBB")
+    val AABBABClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.AABBAB")
+
+    val fooName = termName("foo")
+    val AnyRefLin = defn.ObjectClass.linearization
+
+    assert(
+      clue(AAABBBClass.linearization) == List(AAABBBClass, BBClass, ABClass, BClass, AAClass, AClass) ::: AnyRefLin
+    )
+
+    val expectedForAAABBB = AAABBBClass.findDecl(fooName)
+    for cls <- List(AClass, BClass, AAClass, BBClass, AAABBBClass) do
+      assert(clue(cls.findDecl(fooName).runtimeImplementingSymbol(AAABBBClass)) == expectedForAAABBB, cls.name.toString)
+
+    assert(
+      clue(AABBABClass.linearization) == List(AABBABClass, ABClass, BBClass, BClass, AAClass, AClass) ::: AnyRefLin
+    )
+
+    val expectedForAABBAB = ABClass.findDecl(fooName)
+    for cls <- List(AClass, BClass, AAClass, BBClass) do
+      assert(clue(cls.findDecl(fooName).runtimeImplementingSymbol(AABBABClass)) == expectedForAABBAB, cls.name.toString)
+  }
+
+  testWithContext("nextSuperSymbol") {
+    val AClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.A")
+    val BClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.B")
+    val AAClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.AA")
+    val BBClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.BB")
+    val ABClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.AB")
+    val AAABBBClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.AAABBB")
+    val AABBABClass = ctx.findStaticClass("simple_trees.SuperDoubleDiamond.AABBAB")
+
+    val fooName = termName("foo")
+    val AnyRefLin = defn.ObjectClass.linearization
+
+    def test(
+      sourceOwner: ClassSymbol,
+      runtimeClass: ClassSymbol,
+      enclosingClass: ClassSymbol,
+      targetOwner: ClassSymbol
+    ): Unit =
+      val sourceFoo = sourceOwner.findDecl(fooName)
+      val expected = targetOwner.findDecl(fooName)
+      assert(
+        clue(sourceFoo.nextSuperSymbol(runtimeClass, enclosingClass)) == clue(expected),
+        s"$sourceFoo.nextSuperSymbol($runtimeClass, $enclosingClass)"
+      )
+    end test
+
+    def testNotFound(sourceOwner: ClassSymbol, runtimeClass: ClassSymbol, enclosingClass: ClassSymbol): Unit =
+      val sourceFoo = sourceOwner.findDecl(fooName)
+      intercept[MemberNotFoundException] {
+        sourceFoo.nextSuperSymbol(runtimeClass, enclosingClass)
+      }
+    end testNotFound
+
+    assert(
+      clue(AAABBBClass.linearization) == List(AAABBBClass, BBClass, ABClass, BClass, AAClass, AClass) ::: AnyRefLin
+    )
+
+    test(AClass, AAABBBClass, AAClass, AClass)
+    test(AClass, AAABBBClass, ABClass, BClass)
+    test(AClass, AAABBBClass, AAABBBClass, BBClass)
+    test(BClass, AAABBBClass, BClass, AClass)
+    test(BClass, AAABBBClass, BBClass, ABClass)
+    test(BClass, AAABBBClass, ABClass, BClass)
+    test(BClass, AAABBBClass, AAABBBClass, BBClass)
+
+    testNotFound(AClass, AAABBBClass, AClass)
+
+    assert(
+      clue(AABBABClass.linearization) == List(AABBABClass, ABClass, BBClass, BClass, AAClass, AClass) ::: AnyRefLin
+    )
+
+    test(AClass, AABBABClass, AAClass, AClass)
+    test(AClass, AABBABClass, ABClass, BBClass)
+    test(AClass, AABBABClass, AABBABClass, ABClass)
+    test(BClass, AABBABClass, BClass, AClass)
+    test(BClass, AABBABClass, BBClass, BClass)
+    test(BClass, AABBABClass, ABClass, BBClass)
+    test(BClass, AABBABClass, AABBABClass, ABClass)
+
+    testNotFound(AClass, AABBABClass, AClass)
   }
 }
