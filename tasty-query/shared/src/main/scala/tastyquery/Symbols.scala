@@ -310,6 +310,35 @@ object Symbols {
           && that.canMatchInheritedSymbols
           && this.overriddenSymbol(that.owner.asClass).contains(that)
       )
+
+    /** The symbol whose name and type matches the type of this symbol in the given class.
+      *
+      * If `inClass == this.owner`, `matchingSymbol` returns this symbol.
+      * Otherwise, private members and constructors are ignored.
+      *
+      * Unlike the override-related methods `overriddenSymbol` and
+      * `overridingSymbol`, this method can return non-empty results when
+      * `inClass` and `this.owner` are unrelated.
+      *
+      * `siteClass` must be a common subclass of `this.owner` and `inClass`.
+      *
+      * @param inClass
+      *   The class in which to look for a matching symbol
+      * @param siteClass
+      *   The base class from which member types are computed
+      * @throws java.lang.IllegalArgumentException
+      *   if `owner.isClass` is false, if `siteClass.isSubclass(owner.asClass)`
+      *   is false, or if `siteClass.isSubclass(inClass)` is false
+      */
+    final def matchingSymbol(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[Symbol] =
+      require(owner.isClass, s"illegal matchingSymbol on local symbol $this")
+      require(siteClass.isSubclass(owner.asClass), s"site class $siteClass must be a subclass of owner $owner")
+      require(siteClass.isSubclass(inClass), s"site class $siteClass must be a subclass of target class $inClass")
+
+      if inClass == owner then Some(this)
+      else if !canMatchInheritedSymbols then None
+      else matchingDecl(inClass, siteClass)
+    end matchingSymbol
   end TermOrTypeSymbol
 
   final class TermSymbol private (val name: TermName, owner: Symbol) extends TermOrTypeSymbol(owner):

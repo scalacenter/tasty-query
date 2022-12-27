@@ -41,7 +41,14 @@ object Overrides:
     def foo(x: A): A = x
     def foo(x: B): B = x
 
-  class ChildPoly[X <: Product] extends SuperPoly[X, Int]:
+  trait SecondSuperPoly[X <: Product]:
+    def foo(x: X): X
+    def foo(x: Int): Int
+
+  trait ThirdSuper:
+    def foo(x: String): String = x
+
+  class ChildPoly[X <: Product] extends SuperPoly[X, Int] with SecondSuperPoly[X] with ThirdSuper:
     override def foo(x: X): X = x
     override def foo(x: Int): Int = x
 end Overrides
