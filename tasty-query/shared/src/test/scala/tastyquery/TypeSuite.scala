@@ -2018,4 +2018,28 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(clue(body.tpe).isApplied(_.isRef(PairClass), List(_.isRef(fooTArg), _.isRef(defn.IntClass))))
     end for
   }
+
+  testWithContext("opaque-type-aliases") {
+    val TypeMemberClass = ctx.findTopLevelClass("simple_trees.TypeMember")
+
+    val opaqueNoBounds = TypeMemberClass.findDecl(typeName("Opaque")).asInstanceOf[TypeMemberSymbol]
+    assert(opaqueNoBounds.isOpaqueTypeAlias)
+    opaqueNoBounds.typeDef match
+      case TypeMemberDefinition.OpaqueTypeAlias(bounds, alias) =>
+        assert(clue(bounds.low).isNothing)
+        assert(clue(bounds.high).isAny)
+        assert(clue(alias).isRef(defn.IntClass))
+      case typeDef =>
+        fail("unexpected typeDef", clues(typeDef))
+
+    val opaqueWithBounds = TypeMemberClass.findDecl(typeName("OpaqueWithBounds")).asInstanceOf[TypeMemberSymbol]
+    assert(opaqueWithBounds.isOpaqueTypeAlias)
+    opaqueWithBounds.typeDef match
+      case TypeMemberDefinition.OpaqueTypeAlias(bounds, alias) =>
+        assert(clue(bounds.low).isRef(defn.NullClass))
+        assert(clue(bounds.high).isRef(ctx.findTopLevelClass("scala.Product")))
+        assert(clue(alias).isRef(defn.NullClass))
+      case typeDef =>
+        fail("unexpected typeDef", clues(typeDef))
+  }
 }

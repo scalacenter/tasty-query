@@ -419,9 +419,12 @@ private[tasties] class TreeUnpickler(
                   case None        => TypeMemberDefinition.AbstractType(bt.bounds)
                   case Some(alias) => TypeMemberDefinition.OpaqueTypeAlias(bt.bounds, alias)
               case alias =>
-                TypeMemberDefinition.TypeAlias(alias)
+                if symbol.is(Opaque) then TypeMemberDefinition.OpaqueTypeAlias(defn.NothingAnyBounds, alias)
+                else TypeMemberDefinition.TypeAlias(alias)
           case bounds: TypeBounds =>
             TypeMemberDefinition.AbstractType(bounds)
+        if symbol.is(Opaque) != typeDef.isInstanceOf[TypeMemberDefinition.OpaqueTypeAlias] then
+          throw TastyFormatException(s"typeDef inconsistent with Opaque flag for $symbol at $posErrorMsg")
         symbol.withDefinition(typeDef)
         definingTree(symbol, TypeMember(name, typeBounds, symbol)(spn))
       }
