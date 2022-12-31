@@ -105,6 +105,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   def findTypesFromTASTyNamed(name: String)(using Context): Type =
     ctx.findTopLevelClass("subtyping.TypesFromTASTy").findDecl(termName(name)).declaredType
 
+  def findTypesFromTASTyNamed(name: TypeName)(using Context): Type =
+    ctx.findTopLevelClass("subtyping.TypesFromTASTy").findDecl(name).asInstanceOf[TypeMemberSymbol].aliasedType
+
   testWithContext("same-monomorphic-class") {
     assertEquiv(defn.IntType, defn.IntClass.typeRef).withRef[Int, scala.Int]
     assertEquiv(defn.IntType, defn.IntClass.newTypeRef)
@@ -558,6 +561,25 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
 
     assertStrictSubtype(seqOfWildcardOption, seqOfWildcardProduct)
       .withRef[mutable.Seq[? <: Option[Any]], mutable.Seq[? <: Product]]
+  }
+
+  testWithContext("type-lambdas") {
+    val Function1Class = ctx.findTopLevelClass("scala.Function1")
+    def fun1Type(argType: Type, resultType: Type): Type =
+      AppliedType(Function1Class.typeRef, argType :: resultType :: Nil)
+
+    def makeTToTTypeLambda() = TypeLambda(typeName("T") :: Nil)(
+      _ => List(defn.NothingAnyBounds),
+      tl => fun1Type(tl.paramRefs(0), tl.paramRefs(0))
+    )
+    val tToTTypeLambda = makeTToTTypeLambda()
+
+    val fromTasty = findTypesFromTASTyNamed(typeName("TToTType"))
+
+    type TToTType = [T] => T => T
+
+    assertEquiv(tToTTypeLambda, makeTToTTypeLambda()).withRef[TToTType, TToTType]
+    assertEquiv(tToTTypeLambda, fromTasty)
   }
 
 end SubtypingSuite
