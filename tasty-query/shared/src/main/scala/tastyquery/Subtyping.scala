@@ -143,6 +143,16 @@ private[tastyquery] object Subtyping:
     case tp2: AppliedType =>
       compareAppliedType2(tp1, tp2)
 
+    case tp2: TypeLambda =>
+      tp1 match
+        case tp1: TypeLambda =>
+          // TODO Check bounds and variances
+          tp1.paramRefs.lengthCompare(tp2.paramRefs) == 0
+            && isSubtype(tp1.resultType, tp2.appliedTo(tp1.paramRefs))
+        case _ =>
+          // TODO? Eta-expand polymorphic type constructors?
+          level4(tp1, tp2)
+
     case tp2: OrType =>
       isSubtype(tp1, tp2.first) || isSubtype(tp1, tp2.second)
         || level4(tp1, tp2)
@@ -268,6 +278,14 @@ private[tastyquery] object Subtyping:
         isSubtype(tp1.underlying.widenExpr, tp2)
 
       comparePaths || proceedWithWidenedType
+
+    case tp1: TypeLambda =>
+      tp2 match
+        case tp2: TypeLambda =>
+          false // this case is already handled in level3
+        case _ =>
+          tp2.typeParams.lengthCompare(tp1.paramRefs) == 0
+            && isSubtype(tp1.resultType, tp2.appliedTo(tp1.paramRefs))
 
     case tp1: AndType =>
       // TODO Try and simplify first

@@ -7,4 +7,6 @@ class TypesFromTASTy:
 
   val orType: Int | String = 1
   val andType: Product & Serializable = Nil
+
+  type TToTType[T] = T => T
 end TypesFromTASTy
