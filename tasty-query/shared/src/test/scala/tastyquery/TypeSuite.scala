@@ -1405,9 +1405,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
   testWithContext("overrides-poly") {
     val SuperPolyClass = ctx.findStaticClass("inheritance.Overrides.SuperPoly")
+    val SecondSuperPolyClass = ctx.findStaticClass("inheritance.Overrides.SecondSuperPoly")
+    val ThirdSuperClass = ctx.findStaticClass("inheritance.Overrides.ThirdSuper")
     val ChildPolyClass = ctx.findStaticClass("inheritance.Overrides.ChildPoly")
 
     val List(superPolyA, superPolyB) = SuperPolyClass.typeParams: @unchecked
+    val List(secondSuperPolyX) = SecondSuperPolyClass.typeParams: @unchecked
     val List(childPolyX) = ChildPolyClass.typeParams: @unchecked
 
     val IntClass = defn.IntClass
@@ -1420,6 +1423,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val fooAInSuper = fooInSuper.find(_.firstParamTypeIsRef(superPolyA)).get
     val fooBInSuper = fooInSuper.find(_.firstParamTypeIsRef(superPolyB)).get
 
+    val fooInSecondSuper = SecondSuperPolyClass.findAllOverloadedDecls(name"foo")
+    val fooXInSecondSuper = fooInSecondSuper.find(_.firstParamTypeIsRef(secondSuperPolyX)).get
+    val fooIntInSecondSuper = fooInSecondSuper.find(_.firstParamTypeIsRef(IntClass)).get
+
     val fooInChild = ChildPolyClass.findAllOverloadedDecls(name"foo")
     val fooXInChild = fooInChild.find(_.firstParamTypeIsRef(childPolyX)).get
     val fooIntInChild = fooInChild.find(_.firstParamTypeIsRef(IntClass)).get
@@ -1427,10 +1434,19 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     // From fooAInSuper
 
     assert(clue(fooAInSuper.overriddenSymbol(SuperPolyClass)) == Some(fooAInSuper))
+    assert(clue(fooAInSuper.overriddenSymbol(SecondSuperPolyClass)) == None)
+    assert(clue(fooAInSuper.overriddenSymbol(ThirdSuperClass)) == None)
     assert(clue(fooAInSuper.overriddenSymbol(ChildPolyClass)) == None)
 
     assert(clue(fooAInSuper.overridingSymbol(SuperPolyClass)) == Some(fooAInSuper))
+    assert(clue(fooAInSuper.overridingSymbol(SecondSuperPolyClass)) == None)
+    assert(clue(fooAInSuper.overridingSymbol(ThirdSuperClass)) == None)
     assert(clue(fooAInSuper.overridingSymbol(ChildPolyClass)) == Some(fooXInChild))
+
+    assert(clue(fooAInSuper.matchingSymbol(SuperPolyClass, ChildPolyClass)) == Some(fooAInSuper))
+    assert(clue(fooAInSuper.matchingSymbol(SecondSuperPolyClass, ChildPolyClass)) == Some(fooXInSecondSuper))
+    assert(clue(fooAInSuper.matchingSymbol(ThirdSuperClass, ChildPolyClass)) == None)
+    assert(clue(fooAInSuper.matchingSymbol(ChildPolyClass, ChildPolyClass)) == Some(fooXInChild))
 
     assert(clue(fooAInSuper.allOverriddenSymbols.toList) == Nil)
     assert(clue(fooAInSuper.nextOverriddenSymbol) == None)
@@ -1443,8 +1459,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(fooXInChild.overridingSymbol(SuperPolyClass)) == None)
     assert(clue(fooXInChild.overridingSymbol(ChildPolyClass)) == Some(fooXInChild))
 
-    assert(clue(fooXInChild.allOverriddenSymbols.toList) == List(fooAInSuper))
-    assert(clue(fooXInChild.nextOverriddenSymbol) == Some(fooAInSuper))
+    assert(clue(fooXInChild.allOverriddenSymbols.toList) == List(fooXInSecondSuper, fooAInSuper))
+    assert(clue(fooXInChild.nextOverriddenSymbol) == Some(fooXInSecondSuper))
 
     // From fooBInSuper
 
@@ -1465,8 +1481,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(fooIntInChild.overridingSymbol(SuperPolyClass)) == None)
     assert(clue(fooIntInChild.overridingSymbol(ChildPolyClass)) == Some(fooIntInChild))
 
-    assert(clue(fooIntInChild.allOverriddenSymbols.toList) == List(fooBInSuper))
-    assert(clue(fooIntInChild.nextOverriddenSymbol) == Some(fooBInSuper))
+    assert(clue(fooIntInChild.allOverriddenSymbols.toList) == List(fooIntInSecondSuper, fooBInSuper))
+    assert(clue(fooIntInChild.nextOverriddenSymbol) == Some(fooIntInSecondSuper))
   }
 
   testWithContext("overrides-relaxed") {
