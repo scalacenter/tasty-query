@@ -931,6 +931,15 @@ object Types {
       case sym: TypeSymbolWithBounds =>
         sym.upperBound
 
+    override def translucentSuperType(using Context): Type = symbol match
+      case sym: TypeMemberSymbol =>
+        sym.typeDef match
+          case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => alias
+          case _                                              => underlying
+      case _ =>
+        underlying
+    end translucentSuperType
+
     private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       symbol match
         case sym: ClassSymbol =>
