@@ -884,7 +884,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                             Right(List(TypeParam(TypeName(SimpleName("T")), _, _))),
                             Left(List(ValDef(SimpleName("x"), TypeIdent(TypeName(SimpleName("T"))), None, _)))
                           ),
-                          TypeWrapper(_),
+                          TypeIdent(TypeName(SimpleName("T"))),
                           Some(Ident(SimpleName("x"))),
                           _
                         )
@@ -1815,22 +1815,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 // No bound on the match result
                 None,
                 TypeIdent(TypeName(SimpleName("X"))),
-                List(
-                  TypeCaseDef(
-                    TypeTreeBind(
-                      TypeName(UniqueName("_$", nme.EmptySimpleName, 1)),
-                      BoundedTypeTree(
-                        TypeBoundsTree(
-                          TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Nothing")))),
-                          TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Any"))))
-                        ),
-                        None
-                      ),
-                      _
-                    ),
-                    TypeIdent(TypeName(SimpleName("Int")))
-                  )
-                )
+                List(TypeCaseDef(TypeIdent(TypeName(nme.Wildcard)), TypeIdent(TypeName(SimpleName("Int")))))
               )
             ),
             _
