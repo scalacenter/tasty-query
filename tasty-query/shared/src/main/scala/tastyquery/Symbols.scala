@@ -464,6 +464,10 @@ object Symbols {
     final def isOpaqueTypeAlias(using Context): Boolean = this match
       case sym: TypeMemberSymbol => sym.typeDef.isInstanceOf[TypeMemberDefinition.OpaqueTypeAlias]
       case _                     => false
+
+    final def staticRef(using Context): TypeRef =
+      require(isStatic, s"Cannot construct a staticRef for non-static symbol $this")
+      TypeRef(owner.staticOwnerPrefix, this)
   end TypeSymbol
 
   sealed abstract class TypeSymbolWithBounds protected (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner):

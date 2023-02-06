@@ -102,6 +102,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   def mutableSeqOf(tpe: Type)(using Context): Type =
     ctx.findTopLevelClass("scala.collection.mutable.Seq").typeRef.appliedTo(tpe)
 
+  def iarrayOf(tpe: Type)(using Context): Type =
+    ctx.findStaticType("scala.IArray$package.IArray").staticRef.appliedTo(tpe)
+
   def findTypesFromTASTyNamed(name: String)(using Context): Type =
     ctx.findTopLevelClass("subtyping.TypesFromTASTy").findDecl(termName(name)).declaredType
 
@@ -277,6 +280,33 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     ).withRef[List[Int], ISeq[JString]]
     assertNeitherSubtype(listOf(defn.StringType), ScalaPackageObjectPrefix.select(tname"Seq").appliedTo(defn.IntType))
       .withRef[IList[JString], Seq[Int]]
+  }
+
+  testWithContext("polymorphic-opaque-type-alias") {
+    val IArraySym = ctx.findStaticType("scala.IArray$package.IArray").asInstanceOf[TypeMemberSymbol]
+
+    assertEquiv(iarrayOf(defn.IntType), iarrayOf(defn.IntType)).withRef[IArray[Int], IArray[Int]]
+    assertEquiv(iarrayOf(defn.StringType), iarrayOf(defn.StringType)).withRef[IArray[JString], IArray[JString]]
+    assertEquiv(findTypesFromTASTyNamed("iarrayOfInt"), iarrayOf(defn.IntType)).withRef[IArray[Int], IArray[Int]]
+
+    assertNeitherSubtype(iarrayOf(defn.IntType), iarrayOf(defn.StringType)).withRef[IArray[Int], IArray[JString]]
+
+    // FIXME Handle variance
+    //assertStrictSubtype(iarrayOf(defn.IntType), iarrayOf(defn.AnyValType))
+    //assertStrictSubtype(findTypesFromTASTyNamed("iarrayOfInt"), iarrayOf(defn.AnyValType))
+
+    assertStrictSubtype(iarrayOf(defn.StringType), defn.AnyType).withRef[IArray[JString], Any]
+    assertNeitherSubtype(iarrayOf(defn.StringType), defn.AnyRefType).withRef[IArray[JString], AnyRef]
+
+    val invariantOpaqueRef = ctx.findStaticType("subtyping.TypesFromTASTy.InvariantOpaque").staticRef
+
+    assertEquiv(invariantOpaqueRef.appliedTo(defn.IntType), invariantOpaqueRef.appliedTo(defn.IntType))
+    assertEquiv(findTypesFromTASTyNamed("invariantOpaqueOfInt"), invariantOpaqueRef.appliedTo(defn.IntType))
+
+    assertNeitherSubtype(invariantOpaqueRef.appliedTo(defn.IntType), invariantOpaqueRef.appliedTo(defn.AnyValType))
+    assertNeitherSubtype(findTypesFromTASTyNamed("invariantOpaqueOfInt"), invariantOpaqueRef.appliedTo(defn.AnyValType))
+
+    assertStrictSubtype(invariantOpaqueRef.appliedTo(defn.IntType), defn.AnyType)
   }
 
   testWithContext("this-type") {

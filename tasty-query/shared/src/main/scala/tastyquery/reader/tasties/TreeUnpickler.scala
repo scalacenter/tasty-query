@@ -411,20 +411,14 @@ private[tasties] class TreeUnpickler(
         val typeBounds: TypeTree | TypeBounds =
           if tagFollowShared == TYPEBOUNDS then readTypeBounds(using innerCtx)
           else readTypeTree(using innerCtx)
+        val isOpaque = symbol.is(Opaque)
         val typeDef = typeBounds match
-          case tpt: TypeTree =>
-            tpt.toType match
-              case bt: BoundedType =>
-                bt.alias match
-                  case None        => TypeMemberDefinition.AbstractType(bt.bounds)
-                  case Some(alias) => TypeMemberDefinition.OpaqueTypeAlias(bt.bounds, alias)
-              case alias =>
-                if symbol.is(Opaque) then TypeMemberDefinition.OpaqueTypeAlias(defn.NothingAnyBounds, alias)
-                else TypeMemberDefinition.TypeAlias(alias)
-          case bounds: TypeBounds =>
-            TypeMemberDefinition.AbstractType(bounds)
-        if symbol.is(Opaque) != typeDef.isInstanceOf[TypeMemberDefinition.OpaqueTypeAlias] then
-          throw TastyFormatException(s"typeDef inconsistent with Opaque flag for $symbol at $posErrorMsg")
+          case tpt: TypeTree      => makeTypeMemberDefinition(tpt.toType, forOpaque = isOpaque)
+          case bounds: TypeBounds => TypeMemberDefinition.AbstractType(bounds)
+        if isOpaque != typeDef.isInstanceOf[TypeMemberDefinition.OpaqueTypeAlias] then
+          throw TastyFormatException(
+            s"typeDef $typeDef inconsistent with Opaque flag $isOpaque for $symbol at $posErrorMsg"
+          )
         symbol.withDefinition(typeDef)
         definingTree(symbol, TypeMember(name, typeBounds, symbol)(spn))
       }
@@ -433,6 +427,42 @@ private[tasties] class TreeUnpickler(
     case VALDEF | DEFDEF => readValOrDefDef
     case _               => readTerm
   }
+
+  /** Turns a `Type` used as the rhs of a type member into a type member definition.
+    *
+    * - `BoundedType`s are turned into `AbstractType` or `OpaqueTypeAlias` definitions.
+    * - `TypeLambda`s are distributed over `BoundedType`s.
+    * - Other types are turned into `TypeAlias`es if `forOpaque` is false,
+    *   or into `OpaqueTypeAlias` with `Nothing..Any` bounds if it is true.
+    */
+  private def makeTypeMemberDefinition(tpe: Type, forOpaque: Boolean)(using LocalContext): TypeMemberDefinition =
+    import TypeMemberDefinition.*
+
+    tpe match
+      case bt: BoundedType =>
+        bt.alias match
+          case None        => AbstractType(bt.bounds)
+          case Some(alias) => OpaqueTypeAlias(bt.bounds, alias)
+
+      case tl: TypeLambda =>
+        def distributeOverType(tp: Type): Type =
+          tl.derivedLambdaType(tl.paramNames, tl.paramInfos, tp)
+
+        def distributeOverBounds(bounds: TypeBounds): TypeBounds =
+          RealTypeBounds(distributeOverType(bounds.low), distributeOverType(bounds.high))
+
+        makeTypeMemberDefinition(tl.resultType, forOpaque) match
+          case TypeAlias(alias) =>
+            TypeAlias(tl)
+          case AbstractType(bounds) =>
+            AbstractType(distributeOverBounds(bounds))
+          case OpaqueTypeAlias(bounds, alias) =>
+            OpaqueTypeAlias(distributeOverBounds(bounds), distributeOverType(alias))
+
+      case _ =>
+        if forOpaque then OpaqueTypeAlias(defn.NothingAnyBounds, tpe)
+        else TypeAlias(tpe)
+  end makeTypeMemberDefinition
 
   /** Reads type bounds for a synthetic typedef */
   private def readTypeBounds(using LocalContext): TypeBounds = {
