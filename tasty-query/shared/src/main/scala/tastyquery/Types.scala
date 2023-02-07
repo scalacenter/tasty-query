@@ -340,7 +340,7 @@ object Types {
       case tp: TermRef if !tp.symbol.isStableMember => tp.underlying.widenIfUnstable
       case _                                        => this
 
-    final def dealias(using Context): Type = dealias1(keepOpaques = false)
+    final def dealias(using Context): Type = dealias1(keepOpaques = true)
 
     private def dealias1(keepOpaques: Boolean)(using Context): Type = this match {
       case tp: TypeRef =>
