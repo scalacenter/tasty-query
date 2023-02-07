@@ -1872,6 +1872,24 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     )
   }
 
+  testWithContext("methods on String") {
+    val StringMethodsClass = ctx.findTopLevelClass("simple_trees.StringMethods")
+    val StringClass = defn.StringClass
+
+    def rhsOf(methodName: String): TermTree =
+      StringMethodsClass.findNonOverloadedDecl(termName(methodName)).tree.get.asInstanceOf[DefDef].rhs.get
+
+    def isStringMethod(sym: Symbol, name: SimpleName): Boolean =
+      sym.owner == StringClass && sym.name == name
+
+    def testApply(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): Unit =
+      val rhs @ Apply(fun: Select, _) = rhsOf(testMethodName): @unchecked
+      assert(isStringMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
+      assert(expectedType(clue(rhs.tpe)), testMethodName)
+
+    testApply("testPlusAny", nme.m_+, _.isRef(defn.StringClass))
+  }
+
   testWithContext("methods on Object") {
     val ObjectMethodsClass = ctx.findTopLevelClass("simple_trees.ObjectMethods")
 

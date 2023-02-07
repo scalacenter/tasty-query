@@ -222,8 +222,10 @@ private[reader] object ClassfileParser {
     cls.setAnnotations(Nil) // TODO Read Java annotations on classes
     initParents()
 
-    // Intercept java.lang.Object to create its magic methods
-    if cls.owner == defn.javaLangPackage && cls.name == tpnme.Object then defn.createObjectMagicMethods(cls)
+    // Intercept java.lang.Object and java.lang.String to create their magic methods
+    if cls.owner == defn.javaLangPackage then
+      if cls.name == tpnme.Object then defn.createObjectMagicMethods(cls)
+      else if cls.name == tpnme.String then defn.createStringMagicMethods(cls)
 
     for (sym, sigOrDesc) <- loadMembers() do
       sigOrDesc match

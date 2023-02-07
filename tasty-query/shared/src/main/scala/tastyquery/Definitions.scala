@@ -145,6 +145,9 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   private def instanceTestPolyType(resultType: PolyType => Type): PolyType =
     PolyType(List(typeName("A")))(_ => List(NothingAnyBounds), resultType)
 
+  private def stringConcatMethodType: MethodType =
+    MethodType(List(termName("that")), List(AnyType), StringType)
+
   val Any_== = createSpecialMethod(AnyClass, nme.m_==, equalityMethodType, Final)
   val Any_!= = createSpecialMethod(AnyClass, nme.m_!=, equalityMethodType, Final)
   val Any_## = createSpecialMethod(AnyClass, nme.m_##, ExprType(IntType), Final)
@@ -197,6 +200,12 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   lazy val Object_eq: TermSymbol = ObjectClass.findNonOverloadedDecl(nme.m_eq)
   lazy val Object_ne: TermSymbol = ObjectClass.findNonOverloadedDecl(nme.m_ne)
   lazy val Object_synchronized: TermSymbol = ObjectClass.findNonOverloadedDecl(nme.m_synchronized)
+
+  private[tastyquery] def createStringMagicMethods(cls: ClassSymbol): Unit =
+    createSpecialMethod(cls, nme.m_+, stringConcatMethodType, Final)
+  end createStringMagicMethods
+
+  lazy val String_+ : TermSymbol = StringClass.findNonOverloadedDecl(nme.m_+)
 
   private def createSpecialPolyClass(
     name: TypeName,
