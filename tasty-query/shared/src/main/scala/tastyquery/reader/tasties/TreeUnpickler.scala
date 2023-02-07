@@ -671,10 +671,38 @@ private[tasties] class TreeUnpickler(
         symbol.withDeclaredType(tpt.toType)
         definingTree(symbol, ValDef(name, tpt, rhs, symbol)(spn))
       case DEFDEF =>
-        symbol.withDeclaredType(makeDefDefType(params, tpt))
-        definingTree(symbol, DefDef(name, params, tpt, rhs, symbol)(spn))
+        val normalizedParams =
+          if name == nme.Constructor then normalizeCtorParamClauses(params)
+          else params
+        symbol.withDeclaredType(makeDefDefType(normalizedParams, tpt))
+        definingTree(symbol, DefDef(name, normalizedParams, tpt, rhs, symbol)(spn))
     }
   }
+
+  /** Normalizes the param clauses of a constructor definition.
+    *
+    * Make sure it has at least one non-implicit parameter list. This is done
+    * by adding a `()` in front of a leading old style implicit parameter,
+    * or by adding a `()` as last -- or only -- parameter list if the
+    * constructor has only using clauses as parameters.
+    */
+  private def normalizeCtorParamClauses(paramLists: List[ParamsClause]): List[ParamsClause] =
+    paramLists match
+      case (tparams @ Right(_)) :: paramListsTail =>
+        tparams :: normalizeCtorParamClauses(paramListsTail)
+
+      case Left(vparam1 :: _) :: _ if vparam1.symbol.is(Implicit) =>
+        // Found a leading `implicit` param lists -> add `()` in front
+        Left(Nil) :: paramLists
+
+      case _ =>
+        val anyNonUsingTermClause = paramLists.exists {
+          case Left(vparams)  => vparams.isEmpty || !vparams.head.symbol.is(Given)
+          case Right(tparams) => false
+        }
+        if anyNonUsingTermClause then paramLists
+        else paramLists :+ Left(Nil) // add `()` at the end
+  end normalizeCtorParamClauses
 
   private def makeDefDefType(paramLists: List[ParamsClause], resultTpt: TypeTree): Type =
     def rec(paramLists: List[ParamsClause]): Type =
