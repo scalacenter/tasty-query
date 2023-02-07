@@ -15,6 +15,14 @@ class TypesFromTASTy:
   val iarrayOfInt: IArray[Int] = IArray(1)
 
   val invariantOpaqueOfInt: InvariantOpaque[Int] = makeInvariantOpaque(5)
+
+  /* This explicit selection generates a
+   * Select(PackageRef(crosspackagetasty), TopLevelOpaqueTypeAlias)
+   * in TASTy, without any mention of the enclosing package object.
+   * So we have to find it by iterating on all the possible package objects.
+   */
+  val toplevelOpaqueTypeAlias: crosspackagetasty.TopLevelOpaqueTypeAlias =
+    crosspackagetasty.TopLevelOpaqueTypeAlias(5)
 end TypesFromTASTy
 
 object TypesFromTASTy:

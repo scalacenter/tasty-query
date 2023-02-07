@@ -1090,6 +1090,7 @@ object Symbols {
 
     // Cache fields
     val packageRef: PackageRef = PackageRef(this: @unchecked)
+    private var myAllPackageObjectDecls: List[ClassSymbol] | Null = null
 
     this.withFlags(EmptyFlagSet, None)
     this.setAnnotations(Nil)
@@ -1149,6 +1150,28 @@ object Symbols {
       ensureRootsInitialized()
       ctx.classloader.loadAllRoots(this)
       myDeclarations.values.toList
+
+    // See PackageRef.findMember
+    private[tastyquery] def allPackageObjectDecls()(using Context): List[ClassSymbol] =
+      val local = myAllPackageObjectDecls
+      if local != null then local
+      else
+        val computed = computeAllPackageObjectDecls()
+        myAllPackageObjectDecls = computed
+        computed
+    end allPackageObjectDecls
+
+    private def computeAllPackageObjectDecls()(using Context): List[ClassSymbol] =
+      def isPackageObjectClassName(name: TypeName): Boolean =
+        name.wrapsObjectName && name.toTermName.stripObjectSuffix.asSimpleName.isPackageObjectName
+
+      ensureRootsInitialized()
+      ctx.classloader.loadAllPackageObjectRoots(this)
+      myDeclarations.valuesIterator.collect {
+        case cls: ClassSymbol if isPackageObjectClassName(cls.name) => cls
+      }.toList
+        .sortBy(_.name.toTermName.stripObjectSuffix.asSimpleName) // sort for determinism
+    end computeAllPackageObjectDecls
   }
 
   object PackageSymbol:

@@ -181,6 +181,9 @@ object Names {
 
     def append(s: String): SimpleName =
       termName(s"$name$s")
+
+    private[tastyquery] def isPackageObjectName: Boolean =
+      name == "package" || name.endsWith(str.topLevelSuffix)
   }
 
   abstract class DerivedName(val underlying: TermName) extends TermName {
