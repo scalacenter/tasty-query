@@ -56,6 +56,37 @@ object Annotations:
     override def toString(): String = s"Annotation($tree)"
   end Annotation
 
+  object Annotation:
+    /** Constructs an annotation with the given underlying tree. */
+    def apply(tree: TermTree): Annotation =
+      new Annotation(tree)
+
+    /** Constructs an annotation with the no-arg constructor of the given class.
+      *
+      * The class must be static.
+      */
+    def apply(cls: ClassSymbol)(using Context): Annotation =
+      val typeRef = cls.staticRef
+
+      val ctor = cls
+        .getAllOverloadedDecls(nme.Constructor)
+        .find { ctor =>
+          ctor.declaredType match
+            case mt: MethodType => mt.paramNames.isEmpty && !mt.resultType.isInstanceOf[MethodicType]
+            case _              => false
+        }
+        .getOrElse {
+          throw InvalidProgramStructureException(s"Cannot find a no-arg constructor in $cls")
+        }
+      val ctorName = ctor.signedName.asInstanceOf[SignedName]
+
+      val ns = Spans.NoSpan
+      val tree = Apply(Select(New(TypeWrapper(typeRef)(ns))(ns), ctorName)(Some(typeRef))(ns), Nil)(ns)
+
+      new Annotation(tree)
+    end apply
+  end Annotation
+
   private def computeAnnotSymbol(tree: TermTree)(using Context): ClassSymbol =
     def invalid(): Nothing =
       throw InvalidProgramStructureException(s"Cannot find annotation class in $tree")

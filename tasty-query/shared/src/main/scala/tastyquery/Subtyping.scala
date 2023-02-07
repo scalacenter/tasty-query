@@ -64,6 +64,9 @@ private[tastyquery] object Subtyping:
         case _ =>
           level2(tp1, tp2)
 
+    case tp2: AnnotatedType =>
+      isSubtype(tp1, tp2.typ)
+
     case _ =>
       level2(tp1, tp2)
   end level1
