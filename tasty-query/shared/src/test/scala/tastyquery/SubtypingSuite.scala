@@ -10,6 +10,7 @@ import scala.util.NotGiven
 
 import scala.Predef.String as PString
 
+import tastyquery.Annotations.*
 import tastyquery.Contexts.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
@@ -610,6 +611,24 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
 
     assertEquiv(tToTTypeLambda, makeTToTTypeLambda()).withRef[TToTType, TToTType]
     assertEquiv(tToTTypeLambda, fromTasty)
+  }
+
+  testWithContext("annotated-types") {
+    import scala.annotation.unchecked.uncheckedVariance as uV
+
+    // TODO Differentiate *refining* annotations
+
+    val uncheckedVarianceClass = ctx.findTopLevelClass("scala.annotation.unchecked.uncheckedVariance")
+    val annot = Annotation(uncheckedVarianceClass).tree
+
+    assertEquiv(AnnotatedType(defn.IntType, annot), AnnotatedType(defn.IntType, annot)).withRef[Int @uV, Int @uV]
+    assertEquiv(defn.IntType, AnnotatedType(defn.IntType, annot)).withRef[Int, Int @uV]
+    assertEquiv(AnnotatedType(defn.IntType, annot), defn.IntType).withRef[Int @uV, Int]
+
+    assertStrictSubtype(AnnotatedType(defn.IntType, annot), AnnotatedType(defn.AnyValType, annot))
+      .withRef[Int @uV, AnyVal @uV]
+    assertStrictSubtype(defn.IntType, AnnotatedType(defn.AnyValType, annot)).withRef[Int, AnyVal @uV]
+    assertStrictSubtype(AnnotatedType(defn.IntType, annot), defn.AnyValType).withRef[Int @uV, AnyVal]
   }
 
 end SubtypingSuite
