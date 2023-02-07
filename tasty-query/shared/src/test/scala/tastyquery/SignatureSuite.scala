@@ -268,4 +268,14 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertIsSignedName(copy.signedName, "copy", "(java.lang.String):synthetics.CaseClass")
   }
 
+  testWithContext("union types") {
+    val UnionType = ctx.findTopLevelClass("simple_trees.UnionType")
+
+    val argWithOrType = UnionType.findNonOverloadedDecl(name"argWithOrType")
+    assertIsSignedName(argWithOrType.signedName, "argWithOrType", "(java.lang.Object):java.lang.Object")
+
+    val classesOrType = UnionType.findNonOverloadedDecl(name"classesOrType")
+    assertIsSignedName(classesOrType.signedName, "classesOrType", "(scala.collection.generic.DefaultSerializable):scala.collection.immutable.Seq")
+  }
+
 end SignatureSuite
