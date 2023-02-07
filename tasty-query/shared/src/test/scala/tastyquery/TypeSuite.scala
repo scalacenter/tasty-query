@@ -1136,6 +1136,62 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     end for
   }
 
+  testWithContext("poly constructor params normalization") {
+    val prefix = "inheritance.CtorParamsNormalization"
+
+    val PolySuperClassNoNormClass = ctx.findStaticClass(s"$prefix.PolySuperClassNoNorm")
+    val PolySuperTraitNoNormClass = ctx.findStaticClass(s"$prefix.PolySuperTraitNoNorm")
+
+    for cls <- List(PolySuperClassNoNormClass, PolySuperTraitNoNormClass) do
+      val ctor = cls.findNonOverloadedDecl(nme.Constructor)
+      ctor.declaredType match
+        case pt1: PolyType =>
+          assert(clue(pt1).paramNames.sizeIs == 1, cls)
+          pt1.resultType match
+            case mt1: MethodType =>
+              assert(clue(mt1).paramNames.isEmpty, cls)
+              mt1.resultType match
+                case mt2: MethodType =>
+                  assert(clue(mt2).paramNames.sizeIs == 1, cls)
+                case mt2 =>
+                  fail("expected MethodType", clues(cls, pt1))
+            case mt1 =>
+              fail("expected MethodType", clues(cls, pt1))
+        case pt1 =>
+          fail("expected PolyType", clues(cls, pt1))
+    end for
+
+    val PolySuperClassWithNormClass = ctx.findStaticClass(s"$prefix.PolySuperClassWithNorm")
+    val PolySuperTraitWithNormClass = ctx.findStaticClass(s"$prefix.PolySuperTraitWithNorm")
+
+    for cls <- List(PolySuperClassWithNormClass, PolySuperTraitWithNormClass) do
+      val ctor = cls.findNonOverloadedDecl(nme.Constructor)
+      ctor.declaredType match
+        case pt1: PolyType =>
+          assert(clue(pt1).paramNames.sizeIs == 1, cls)
+          pt1.resultType match
+            case mt1: MethodType =>
+              assert(clue(mt1).paramNames.sizeIs == 1, cls)
+              mt1.resultType match
+                case mt2: MethodType =>
+                  assert(clue(mt2).paramNames.isEmpty, cls)
+                case mt2 =>
+                  fail("expected MethodType", clues(cls, mt1))
+            case mt1 =>
+              fail("expected MethodType", clues(cls, mt1))
+        case pt1 =>
+          fail("expected PolyType", clues(cls, pt1))
+    end for
+
+    for n <- 1 to 4 do
+      val PolySubNClass = ctx.findStaticClass(s"$prefix.PolySub$n")
+      val expectedParentClass = if n % 2 == 1 then PolySuperClassNoNormClass else PolySuperClassWithNormClass
+      val expectedParentTrait = if n <= 2 then PolySuperTraitNoNormClass else PolySuperTraitWithNormClass
+      val expectedParents = List(expectedParentClass, expectedParentTrait)
+      assert(clue(clue(PolySubNClass).parentClasses) == clue(expectedParents))
+    end for
+  }
+
   testWithContext("overrides-mono-no-overloads") {
     val SuperMonoClass = ctx.findStaticClass("inheritance.Overrides.SuperMono")
     val SuperMonoTraitClass = ctx.findStaticClass("inheritance.Overrides.SuperMonoTrait")
