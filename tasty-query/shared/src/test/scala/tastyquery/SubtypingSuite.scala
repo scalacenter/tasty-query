@@ -136,6 +136,41 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       .withRef[PString, Cloneable]
   }
 
+  testWithContext("anykind") {
+    assertEquiv(defn.AnyKindType, defn.AnyKindClass.newTypeRef)
+
+    assertStrictSubtype(defn.AnyType, defn.AnyKindType)
+    assertStrictSubtype(defn.AnyRefType, defn.AnyKindType)
+    assertStrictSubtype(defn.IntType, defn.AnyKindType)
+    assertStrictSubtype(defn.StringType, defn.AnyKindType)
+    assertStrictSubtype(PredefPrefix.select(tname"String"), defn.AnyKindType)
+    assertStrictSubtype(defn.ArrayTypeOf(defn.IntType), defn.AnyKindType)
+    assertStrictSubtype(defn.SeqTypeOf(defn.IntType), defn.AnyKindType)
+    assertStrictSubtype(defn.NullType, defn.AnyKindType)
+    assertStrictSubtype(defn.NothingType, defn.AnyKindType)
+    assertStrictSubtype(PredefModuleClass.typeRef, defn.AnyKindType)
+
+    assertStrictSubtype(defn.UnappliedClassType, defn.AnyKindType)
+    assertStrictSubtype(ctx.findStaticType("scala.IArray$package.IArray").staticRef, defn.AnyKindType)
+  }
+
+  testWithContext("any") {
+    assertEquiv(defn.AnyType, defn.AnyClass.newTypeRef).withRef[Any, Any]
+
+    assertStrictSubtype(defn.AnyRefType, defn.AnyType).withRef[AnyRef, Any]
+    assertStrictSubtype(defn.IntType, defn.AnyType).withRef[Int, Any]
+    assertStrictSubtype(defn.StringType, defn.AnyType).withRef[JString, Any]
+    assertStrictSubtype(PredefPrefix.select(tname"String"), defn.AnyType).withRef[PString, Any]
+    assertStrictSubtype(defn.ArrayTypeOf(defn.IntType), defn.AnyType).withRef[Array[Int], Any]
+    assertStrictSubtype(defn.SeqTypeOf(defn.IntType), defn.AnyType).withRef[ISeq[Int], Any]
+    assertStrictSubtype(defn.NullType, defn.AnyType).withRef[Null, Any]
+    assertStrictSubtype(defn.NothingType, defn.AnyType).withRef[Nothing, Any]
+    assertStrictSubtype(PredefModuleClass.typeRef, defn.AnyType)
+
+    assertNeitherSubtype(defn.UnappliedClassType, defn.AnyType)
+    assertNeitherSubtype(ctx.findStaticType("scala.IArray$package.IArray").staticRef, defn.AnyType)
+  }
+
   testWithContext("nothing") {
     assertEquiv(defn.NothingType, defn.NothingClass.newTypeRef).withRef[Nothing, Nothing]
 

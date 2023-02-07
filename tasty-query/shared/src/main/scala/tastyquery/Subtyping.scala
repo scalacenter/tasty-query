@@ -131,7 +131,8 @@ private[tastyquery] object Subtyping:
       tp2.symbol match
         case cls2: ClassSymbol =>
           if cls2.typeParams.isEmpty then
-            if isBottom(tp1) then true
+            if cls2 == defn.AnyKindClass then true
+            else if isBottom(tp1) then true
             else if tp1.isLambdaSub then false // should be tp1.hasHigherKind, but the scalalib does not like that
             else if cls2 == defn.AnyClass then true
             else level3WithBaseType(tp1, tp2, cls2)

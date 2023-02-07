@@ -363,7 +363,28 @@ object Types {
     }
 
     /** Is self type bounded by a type lambda or AnyKind? */
-    private[tastyquery] final def isLambdaSub(using Context): Boolean = false // TODO hkResult.exists
+    private[tastyquery] final def isLambdaSub(using Context): Boolean = this match
+      case self: TypeRef =>
+        self.symbol match
+          case sym: ClassSymbol =>
+            sym == defn.AnyKindClass || sym.typeParams.nonEmpty
+          case sym: TypeSymbolWithBounds =>
+            sym.upperBound.isLambdaSub
+      case self: AppliedType =>
+        self.tycon match
+          case tycon: TypeRef if tycon.symbol.isClass => false
+          case _                                      => self.superType.isLambdaSub
+      case self: TypeLambda =>
+        true
+      case _: SingletonType | _: RefinedType | _: RecType =>
+        false
+      case self: WildcardTypeBounds =>
+        self.upperBound.isLambdaSub
+      case self: TypeProxy =>
+        self.superType.isLambdaSub
+      case _ =>
+        false
+    end isLambdaSub
 
     /** Is this type close enough to that type so that members with the two types would override each other?
       *
