@@ -829,10 +829,10 @@ object Types {
          * whose prefix is a PackageRef but the name references something in a
          * *package object*. That goes contrary to TASTy's purpose of being a
          * fully-resolved thing. We have to work around it here.
+         * This is very annoying because we have to load a bunch of things that
+         * may not be necessary.
          */
-        symbol.getDecl(tpnme.scala2PackageObjectClass) match
-          case Some(pkgObjectClass) => pkgObjectClass.asClass.getDecl(name)
-          case None                 => None
+        symbol.allPackageObjectDecls().iterator.flatMap(_.getDecl(name)).nextOption()
       }
 
     override def toString(): String = s"PackageRef($fullyQualifiedName)"

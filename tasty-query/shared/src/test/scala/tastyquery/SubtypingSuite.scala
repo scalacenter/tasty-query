@@ -345,6 +345,23 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(invariantOpaqueRef.appliedTo(defn.IntType), defn.AnyType)
   }
 
+  testWithContext("crosspackage-toplevel-opaque-type-alias") {
+    import crosspackagetasty.TopLevelOpaqueTypeAlias
+
+    val TopLevelOpaqueTypeAliasSym =
+      ctx
+        .findStaticType("crosspackagetasty.TopLevelOpaqueTypeAlias$package.TopLevelOpaqueTypeAlias")
+        .asInstanceOf[TypeMemberSymbol]
+
+    assertEquiv(TopLevelOpaqueTypeAliasSym.staticRef, TopLevelOpaqueTypeAliasSym.staticRef)
+      .withRef[TopLevelOpaqueTypeAlias, TopLevelOpaqueTypeAlias]
+
+    assertNeitherSubtype(TopLevelOpaqueTypeAliasSym.staticRef, defn.IntType)
+      .withRef[TopLevelOpaqueTypeAlias, Int]
+
+    assertEquiv(findTypesFromTASTyNamed("toplevelOpaqueTypeAlias"), TopLevelOpaqueTypeAliasSym.staticRef)
+  }
+
   testWithContext("this-type") {
     // No withRef's in this test because we cannot write code that refers to the `this` of an external class
 

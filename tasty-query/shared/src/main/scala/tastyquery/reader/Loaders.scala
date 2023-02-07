@@ -147,6 +147,19 @@ private[tastyquery] object Loaders {
       do completeRoot(Loader.Root(pkg, rootName), entry)
     end loadAllRoots
 
+    /** Loads all the roots of the given `pkg` that could be package objects. */
+    private[tastyquery] def loadAllPackageObjectRoots(pkg: PackageSymbol)(using Context): Unit =
+      roots.get(pkg) match
+        case Some(entries) =>
+          val candidateNames = entries.keysIterator.filter(_.isPackageObjectName).toList.sorted // sort for determinism
+          for
+            rootName <- candidateNames
+            entry <- entries.remove(rootName)
+          do completeRoot(Loader.Root(pkg, rootName), entry)
+        case None =>
+          ()
+    end loadAllPackageObjectRoots
+
     /** Loads the root of the given `pkg` that would define `name`, if there is one such root.
       *
       * When this method returns `true`, it is not guaranteed that the
