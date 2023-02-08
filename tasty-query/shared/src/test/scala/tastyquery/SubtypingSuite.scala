@@ -107,7 +107,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     ctx.findStaticType("scala.IArray$package.IArray").staticRef.appliedTo(tpe)
 
   def findTypesFromTASTyNamed(name: String)(using Context): Type =
-    ctx.findTopLevelClass("subtyping.TypesFromTASTy").findDecl(termName(name)).declaredType
+    ctx.findTopLevelClass("subtyping.TypesFromTASTy").findNonOverloadedDecl(termName(name)).declaredType
 
   def findTypesFromTASTyNamed(name: TypeName)(using Context): Type =
     ctx.findTopLevelClass("subtyping.TypesFromTASTy").findDecl(name).asInstanceOf[TypeMemberSymbol].aliasedType
@@ -663,6 +663,61 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
 
     assertEquiv(tToTTypeLambda, makeTToTTypeLambda()).withRef[TToTType, TToTType]
     assertEquiv(tToTTypeLambda, fromTasty)
+  }
+
+  testWithContext("higher-kinded-types") {
+    val higherKindedPoly =
+      PolyType(List(typeName("F"), typeName("T")))(
+        pt =>
+          List(
+            RealTypeBounds(
+              TypeLambda(List(typeName("X")))(tl => List(defn.NothingAnyBounds), tl => defn.NothingType),
+              TypeLambda(List(typeName("X")))(tl => List(defn.NothingAnyBounds), tl => defn.AnyType)
+            ),
+            defn.NothingAnyBounds
+          ),
+        pt =>
+          MethodType(List(termName("x")))(
+            mt => List(AppliedType(pt.paramRefs(0), List(pt.paramRefs(1)))),
+            mt => AppliedType(pt.paramRefs(0), List(pt.paramRefs(1)))
+          )
+      )
+
+    val fromTASTy = findTypesFromTASTyNamed("higherKinded").asInstanceOf[PolyType]
+
+    // within higherKindedPoly
+
+    assertEquiv(higherKindedPoly.paramRefs(0), higherKindedPoly.paramRefs(0))
+    assertEquiv(higherKindedPoly.paramRefs(1), higherKindedPoly.paramRefs(1))
+
+    assertNeitherSubtype(higherKindedPoly.paramRefs(0), higherKindedPoly.paramRefs(1))
+
+    assertEquiv(
+      higherKindedPoly.paramRefs(0).appliedTo(higherKindedPoly.paramRefs(1)),
+      higherKindedPoly.paramRefs(0).appliedTo(higherKindedPoly.paramRefs(1))
+    )
+
+    // within fromTASTy
+
+    assertEquiv(fromTASTy.paramRefs(0), fromTASTy.paramRefs(0))
+    assertEquiv(fromTASTy.paramRefs(1), fromTASTy.paramRefs(1))
+
+    assertNeitherSubtype(fromTASTy.paramRefs(0), fromTASTy.paramRefs(1))
+
+    assertEquiv(
+      fromTASTy.paramRefs(0).appliedTo(fromTASTy.paramRefs(1)),
+      fromTASTy.paramRefs(0).appliedTo(fromTASTy.paramRefs(1))
+    )
+
+    // between higherKindedPoly and fromTASTy
+
+    assertNeitherSubtype(higherKindedPoly.paramRefs(0), fromTASTy.paramRefs(0))
+    assertNeitherSubtype(higherKindedPoly.paramRefs(1), fromTASTy.paramRefs(1))
+
+    assertNeitherSubtype(
+      higherKindedPoly.paramRefs(0).appliedTo(higherKindedPoly.paramRefs(1)),
+      fromTASTy.paramRefs(0).appliedTo(fromTASTy.paramRefs(1))
+    )
   }
 
   testWithContext("annotated-types") {

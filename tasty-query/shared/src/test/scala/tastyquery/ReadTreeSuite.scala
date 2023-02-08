@@ -1547,6 +1547,44 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             && typeLambdaResultIsAny.isDefinedAt(tl.resultType) =>
     }
     assert(containsSubtree(typeLambda)(clue(tree)))
+
+    val fDef = findTree(tree) { case fDef @ DefDef(SimpleName("f"), _, _, _, _) =>
+      fDef
+    }
+    val fDefExpected: StructureCheck = {
+      case DefDef(
+            SimpleName("f"),
+            List(
+              Right(
+                List(
+                  TypeParam(
+                    TypeName(SimpleName("B")),
+                    TypeLambdaTree(
+                      List(TypeParam(_, NothingAnyTypeBoundsTree(), _)),
+                      BoundedTypeTree(NothingAnyTypeBoundsTree(), None)
+                    ),
+                    _
+                  ),
+                  TypeParam(TypeName(SimpleName("T")), NothingAnyTypeBoundsTree(), _)
+                )
+              ),
+              Left(
+                List(
+                  ValDef(
+                    SimpleName("x"),
+                    AppliedTypeTree(TypeIdent(TypeName(SimpleName("B"))), List(TypeIdent(TypeName(SimpleName("T"))))),
+                    None,
+                    _
+                  )
+                )
+              )
+            ),
+            AppliedTypeTree(TypeIdent(TypeName(SimpleName("B"))), List(TypeIdent(TypeName(SimpleName("T"))))),
+            None,
+            _
+          ) =>
+    }
+    assert(containsSubtree(fDefExpected)(clue(fDef)))
   }
 
   object TyParamRef:
