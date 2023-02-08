@@ -199,6 +199,12 @@ private[tastyquery] object Subtyping:
                 else false
               case _ =>
                 false
+
+          case tycon1: TypeParamRef =>
+            tycon1 == tycon2 && isSubArgs(tp1.args, tp2.args, tparams)
+
+          case _ =>
+            false
         end match
 
       case _ =>
@@ -219,6 +225,10 @@ private[tastyquery] object Subtyping:
               // TODO? Handle bounded type lambdas (compareLower in TypeComparer)
               level4(tp1, tp2)
         end if
+
+      case tycon2: TypeParamRef =>
+        // TODO Compare with the lower bound of tycon2 (compareLower in TypeComparer)
+        isMatchingApply(tp1)
 
       case _ =>
         false

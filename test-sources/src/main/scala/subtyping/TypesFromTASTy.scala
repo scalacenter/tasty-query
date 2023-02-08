@@ -23,6 +23,8 @@ class TypesFromTASTy:
    */
   val toplevelOpaqueTypeAlias: crosspackagetasty.TopLevelOpaqueTypeAlias =
     crosspackagetasty.TopLevelOpaqueTypeAlias(5)
+
+  def higherKinded[F[_], T](x: F[T]): F[T] = x
 end TypesFromTASTy
 
 object TypesFromTASTy:

@@ -523,6 +523,17 @@ private[tasties] class TreeUnpickler(
       )
     }
 
+    def toTypeParamBounds(tpt: TypeTree): TypeBounds = tpt match
+      case TypeLambdaTree(tparams, body) =>
+        val span = tpt.span
+        val bodyBounds = toTypeParamBounds(body)
+        bodyBounds.mapBounds(bound => TypeLambdaTree(tparams, TypeWrapper(bound)(span))(span).toType)
+      case BoundedTypeTree(bounds, None) =>
+        bounds.toTypeBounds
+      case _ =>
+        throw TastyFormatException(s"unexpected type param bounds tree $tpt at $posErrorMsg")
+    end toTypeParamBounds
+
     def readTypeParam: TypeParam = {
       val spn = span
       val start = reader.currentAddr
@@ -536,11 +547,12 @@ private[tasties] class TreeUnpickler(
       val typeBounds = bounds match
         case bounds: TypeBounds     => bounds
         case bounds: TypeBoundsTree => bounds.toTypeBounds
-        case bounds: TypeLambdaTree => defn.NothingAnyBounds
+        case bounds: TypeLambdaTree => toTypeParamBounds(bounds)
       paramSymbol.setBounds(typeBounds)
       readAnnotationsInModifiers(paramSymbol, end)
       definingTree(paramSymbol, TypeParam(name, bounds, paramSymbol)(spn))
     }
+
     val acc = new ListBuffer[TypeParam]()
     while (reader.nextByte == TYPEPARAM) {
       acc += readTypeParam

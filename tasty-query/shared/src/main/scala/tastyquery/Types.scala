@@ -1436,6 +1436,11 @@ object Types {
       case _ =>
         low.isSubtype(tp) && tp.isSubtype(high)
     end contains
+
+    private[tastyquery] def mapBounds(f: Type => Type): TypeBounds = this match
+      case RealTypeBounds(low, high) => derivedTypeBounds(f(low), f(high))
+      case self @ TypeAlias(alias)   => self.derivedTypeAlias(f(alias))
+    end mapBounds
   }
 
   final case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high):
