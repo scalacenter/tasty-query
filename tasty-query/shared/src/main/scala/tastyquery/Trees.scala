@@ -323,15 +323,17 @@ object Trees {
       * of the result type of the constructor method (which is `Unit`).
       *
       * We would like to say that we should always use the `tpe` of the `New`
-      * node. However, that is not correct when the class is polymorphic *and*
-      * the type arguments are inferred! In that situation, the `New` node will
-      * have the unapplied polymorphic type (sometimes even embedded in an
-      * eta-expansion `TypeLambda`, but that's fine).
+      * node. However, that is not always the case. In *some* situations,
+      * (apparently when type arguments are inferred, but not always), the
+      * `New` node has the unapplied, polymorphic type! (Sometimes it is even
+      * embedded in an eta-expansion `TypeLambda`, but that's fine.)
       *
       * Therefore, we need to find the `New` node, collecting type arguments in
       * the process. If we do find one, we apply the type arguments (if any) to
-      * its `tpe`. Otherwise, we return the `original` type that was computed
-      * by `resolveMethodType` above.
+      * its `tpe` as long as the latter is polymorphic.
+      *
+      * If we do not find a `New` node, we return the `original` type that was
+      * computed by `resolveMethodType` above.
       *
       * Sometimes, wrapped applications are enclosed in a block with only
       * ValDefs as statements. That happens because of named arguments, e.g.
@@ -343,15 +345,17 @@ object Trees {
       *   }
       */
     @tailrec
-    private def patchNewType(tree: TermTree, targsTail: List[TypeTree], original: Type)(using Context): Type =
+    private def patchNewType(tree: TermTree, targssTail: List[List[TypeTree]], original: Type)(using Context): Type =
       tree match
-        case Apply(fn, _)         => patchNewType(fn, targsTail, original)
-        case TypeApply(fn, targs) => patchNewType(fn, targs ::: targsTail, original)
-        case Block(stats, expr)   => patchNewType(expr, targsTail, original)
+        case Apply(fn, _)         => patchNewType(fn, targssTail, original)
+        case TypeApply(fn, targs) => patchNewType(fn, targs :: targssTail, original)
+        case Block(stats, expr)   => patchNewType(expr, targssTail, original)
 
         case Select(newObj @ New(_), SignedName(nme.Constructor, _, _)) =>
-          if targsTail.isEmpty then newObj.tpe
-          else newObj.tpe.appliedTo(targsTail.map(_.toType))
+          targssTail.foldLeft(newObj.tpe) { (newTpe, targs) =>
+            if targs.nonEmpty && newTpe.typeParams.nonEmpty then newTpe.appliedTo(targs.map(_.toType))
+            else newTpe
+          }
 
         case _ => original
     end patchNewType
