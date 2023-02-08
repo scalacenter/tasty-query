@@ -790,6 +790,10 @@ private[tasties] class TreeUnpickler(
       val patType = readType
       val patterns = reader.until(end)(readPattern)
       Unapply(fun, args, patterns)(spn)
+    case SHAREDterm =>
+      val spn = span
+      reader.readByte()
+      forkAt(reader.readAddr()).readPattern.withSpan(spn)
     case _ =>
       val expr = readTerm
       ExprPattern(expr)(expr.span)
