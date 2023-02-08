@@ -2178,4 +2178,26 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case typeDef =>
         fail("unexpected typeDef", clues(typeDef))
   }
+
+  testWithContext("evil-class-names-1") {
+    val EvilClassClass = ctx.findTopLevelClass("simple_trees.evil_$_class")
+    assert(clue(EvilClassClass).name == typeName("evil_$_class"))
+
+    val EvilTraitClass = ctx.findTopLevelClass("simple_trees.evil_$_trait")
+    assert(clue(EvilTraitClass).name == typeName("evil_$_trait"))
+
+    val EvilClassInnerClass = EvilClassClass.findDecl(typeName("evil_$_inner"))
+    assert(clue(EvilClassInnerClass).name == typeName("evil_$_inner"))
+
+    val EvilTraitInnerClass = EvilTraitClass.findDecl(typeName("evil_$_inner"))
+    assert(clue(EvilTraitInnerClass).name == typeName("evil_$_inner"))
+  }
+
+  testWithContext("evil-class-names-2") {
+    val SubEvilClassClass = ctx.findStaticClass("simple_trees.EvilClassNames.SubEvilClass")
+    assert(clue(SubEvilClassClass.parentClasses.head).name == typeName("evil_$_class"))
+
+    val SubEvilTraitClass = ctx.findStaticClass("simple_trees.EvilClassNames.SubEvilTrait")
+    assert(clue(SubEvilTraitClass.parentClasses(1)).name == typeName("evil_$_trait"))
+  }
 }

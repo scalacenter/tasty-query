@@ -188,40 +188,27 @@ private[tastyquery] object Loaders {
     end loadRoot
 
     private def foreachEntry(data: PackageData)(f: (SimpleName, Entry) => Unit): Unit =
-      def isNestedOrModuleClassName(name: String): Boolean =
-        def isNested =
-          val idx = name.lastIndexOf('$', name.length - 2)
-          idx >= 0 &&
-          !(idx + str.topLevelSuffix.length == name.length && name.endsWith(str.topLevelSuffix))
-        def isModule =
-          name.last == '$' && name.length > 1
-        isNested || isModule
-      end isNestedOrModuleClassName
-
       if data.classes.isEmpty then
-        for
-          tData <- data.tastys
-          decodedName = NameTransformer.decode(tData.binaryName)
-          if !isNestedOrModuleClassName(decodedName)
-        do f(termName(decodedName), Entry.TastyOnly(tData))
+        for tData <- data.tastys do f(termName(NameTransformer.decode(tData.binaryName)), Entry.TastyOnly(tData))
       else
         val tastyMap = data.tastys.map(t => t.binaryName -> t).toMap
+        val nestedPrefixes = data.classes.map(_.binaryName + "$")
 
-        val (topLevels, nested) = data.classes
-          .map(cData => cData -> NameTransformer.decode(cData.binaryName))
-          .partition((_, decodedName) => !isNestedOrModuleClassName(decodedName))
-
-        val nestedLookup =
-          nested.groupMap((_, decodedName) => termName(decodedName.takeWhile(_ != '$')))(_(0))
-
-        for (cData, decodedName) <- topLevels do
-          val rootName = termName(decodedName)
-          val entry =
-            tastyMap.get(cData.binaryName).map(Entry.ClassAndTasty(cData, _)).getOrElse {
-              // ClassOnly could be Scala 2 or Java, but we don't know yet.
-              Entry.ClassOnly(cData, nestedLookup.get(rootName).getOrElse(IArray.empty))
-            }
-          f(rootName, entry)
+        for cData <- data.classes do
+          val binaryName = cData.binaryName
+          val isTopLevel = !nestedPrefixes.exists(binaryName.startsWith(_))
+          if isTopLevel then
+            val rootName = termName(NameTransformer.decode(binaryName))
+            val entry = tastyMap.get(binaryName) match
+              case Some(tastyData) =>
+                Entry.ClassAndTasty(cData, tastyData)
+              case None =>
+                // ClassOnly could be Scala 2 or Java, but we don't know yet, so we have to include nested classes.
+                val nestedPrefix = binaryName + "$"
+                val nestedData = data.classes.filter(_.binaryName.startsWith(nestedPrefix))
+                Entry.ClassOnly(cData, nestedData)
+            end entry
+            f(rootName, entry)
     end foreachEntry
 
     def scanPackage(pkg: PackageSymbol)(using Context): Unit = {
