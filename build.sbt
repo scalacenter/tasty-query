@@ -111,6 +111,7 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
+          ProblemFilters.exclude[ReversedMissingMethodProblem]("tastyquery.Trees#PatternTree.withSpan"),
           ProblemFilters.exclude[ReversedMissingMethodProblem]("tastyquery.Types#Type.findMember"),
         )
       },

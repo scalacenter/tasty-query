@@ -565,6 +565,28 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(tryMatch)(clue(tree)))
   }
 
+  testUnpickle("for-expressions", "simple_trees.ForExpressions") { tree =>
+    val test1Def = findTree(tree) { case test1Def @ DefDef(SimpleName("test1"), _, _, _, _) =>
+      test1Def
+    }
+
+    val forExpressionMatch1: StructureCheck = {
+      case CaseDef(
+            Unapply(
+              TypeApply(Select(Ident(SimpleName("Tuple2")), SignedName(SimpleName("unapply"), _, _)), _),
+              Nil,
+              List(
+                Bind(i, WildcardPattern(TypeRefInternal(_, TypeName(SimpleName("Int")))), _),
+                WildcardPattern(TypeRefInternal(_, TypeName(SimpleName("String"))))
+              )
+            ),
+            None,
+            Literal(Constant(true))
+          ) =>
+    }
+    assert(containsSubtree(forExpressionMatch1)(clue(test1Def)))
+  }
+
   testUnpickle("singletonType", "simple_trees.SingletonType") { tree =>
     val defDefWithSingleton: StructureCheck = {
       case DefDef(

@@ -467,7 +467,9 @@ object Trees {
     override final def withSpan(span: Span): CaseDef = CaseDef(pattern, guard, body)(span)
   }
 
-  sealed abstract class PatternTree(span: Span) extends Tree(span)
+  sealed abstract class PatternTree(span: Span) extends Tree(span):
+    def withSpan(span: Span): PatternTree
+  end PatternTree
 
   /** Wildcard pattern `_`. */
   final case class WildcardPattern(tpe: Type)(span: Span) extends PatternTree(span):
