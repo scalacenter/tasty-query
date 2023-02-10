@@ -280,6 +280,9 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
       "classesOrType",
       "(scala.collection.generic.DefaultSerializable):scala.collection.immutable.Seq"
     )
+
+    val arrayOfUnion = UnionType.findNonOverloadedDecl(name"arrayOfUnion")
+    assertIsSignedName(arrayOfUnion.signedName, "arrayOfUnion", "(java.lang.Object[]):java.lang.Object[]")
   }
 
 end SignatureSuite

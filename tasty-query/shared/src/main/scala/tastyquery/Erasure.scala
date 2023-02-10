@@ -35,10 +35,14 @@ private[tastyquery] object Erasure:
 
     def arrayOf(tpe: Type): ErasedTypeRef = tpe match
       case tpe: AppliedType =>
-        if tpe.tycon.isRef(defn.ArrayClass) then
-          val List(targ) = tpe.args: @unchecked
-          arrayOf(targ).arrayOf()
-        else arrayOf(tpe.tycon)
+        tpe.tycon match
+          case TypeRef.OfClass(cls) =>
+            if cls == defn.ArrayClass then
+              val List(targ) = tpe.args: @unchecked
+              arrayOf(targ).arrayOf()
+            else ClassRef(cls).arrayOf()
+          case _ =>
+            arrayOf(tpe.translucentSuperType)
       case tpe: TypeRef =>
         tpe.symbol match
           case cls: ClassSymbol     => ClassRef(cls).arrayOf()
@@ -56,16 +60,14 @@ private[tastyquery] object Erasure:
 
     tpe.widen match
       case tpe: AppliedType =>
-        if tpe.tycon.isRef(defn.ArrayClass) then
-          val List(targ) = tpe.args: @unchecked
-          arrayOf(targ)
-        else
-          tpe.tycon match
-            case tycon: TypeRef if tycon.symbol.isClass =>
-              // Fast path
-              ClassRef(tycon.symbol.asClass)
-            case _ =>
-              preErase(tpe.translucentSuperType)
+        tpe.tycon match
+          case TypeRef.OfClass(cls) =>
+            if cls == defn.ArrayClass then
+              val List(targ) = tpe.args: @unchecked
+              arrayOf(targ)
+            else ClassRef(cls)
+          case _ =>
+            preErase(tpe.translucentSuperType)
       case tpe: TypeRef =>
         tpe.symbol match
           case cls: ClassSymbol =>
