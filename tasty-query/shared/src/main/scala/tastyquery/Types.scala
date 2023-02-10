@@ -891,6 +891,13 @@ object Types {
 
     private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): TypeRef =
       new TypeRef(prefix, external)
+
+    private[tastyquery] object OfClass:
+      def unapply(typeRef: TypeRef)(using Context): Option[ClassSymbol] =
+        val symbol = typeRef.symbol
+        if symbol.isClass then Some(symbol.asClass)
+        else None
+    end OfClass
   end TypeRef
 
   final class ThisType(val tref: TypeRef) extends PathType with SingletonType {
