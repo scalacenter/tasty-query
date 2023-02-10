@@ -7,6 +7,7 @@ import scala.compiletime.uninitialized
 
 import dotty.tools.tasty.TastyFormat.NameTags
 
+import tastyquery.Annotations.*
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
@@ -1336,10 +1337,10 @@ object Types {
   }
 
   /** typ @ annot */
-  final class AnnotatedType(val typ: Type, val annotation: Tree) extends TypeProxy with ValueType {
+  final class AnnotatedType(val typ: Type, val annotation: Annotation) extends TypeProxy with ValueType {
     override def underlying(using Context): Type = typ
 
-    private[tastyquery] final def derivedAnnotatedType(typ: Type, annotation: Tree): AnnotatedType =
+    private[tastyquery] final def derivedAnnotatedType(typ: Type, annotation: Annotation): AnnotatedType =
       if ((typ eq this.typ) && (annotation eq this.annotation)) this
       else AnnotatedType(typ, annotation)
 

@@ -2,6 +2,7 @@ package tastyquery
 
 import scala.annotation.tailrec
 
+import tastyquery.Annotations.*
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
@@ -677,9 +678,9 @@ object Trees {
   }
 
   /** arg @annot */
-  final case class AnnotatedTypeTree(tpt: TypeTree, annotation: Tree)(span: Span) extends TypeTree(span) {
+  final case class AnnotatedTypeTree(tpt: TypeTree, annotation: TermTree)(span: Span) extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
-      AnnotatedType(tpt.toType, annotation)
+      AnnotatedType(tpt.toType, Annotation(annotation))
 
     override final def withSpan(span: Span): AnnotatedTypeTree = AnnotatedTypeTree(tpt, annotation)(span)
   }

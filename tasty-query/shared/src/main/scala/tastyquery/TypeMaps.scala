@@ -2,6 +2,7 @@ package tastyquery
 
 import scala.collection.mutable
 
+import tastyquery.Annotations.*
 import tastyquery.Contexts.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
@@ -58,7 +59,7 @@ private[tastyquery] object TypeMaps {
       tp.derivedAndType(tp1, tp2)
     protected def derivedOrType(tp: OrType, tp1: Type, tp2: Type): Type =
       tp.derivedOrType(tp1, tp2)
-    protected def derivedAnnotatedType(tp: AnnotatedType, underlying: Type, annot: Tree): Type =
+    protected def derivedAnnotatedType(tp: AnnotatedType, underlying: Type, annot: Annotation): Type =
       tp.derivedAnnotatedType(underlying, annot)
     protected def derivedExprType(tp: ExprType, restpe: Type): Type =
       tp.derivedExprType(restpe)

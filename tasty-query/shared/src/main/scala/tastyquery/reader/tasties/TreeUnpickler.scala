@@ -1142,7 +1142,7 @@ private[tasties] class TreeUnpickler(
       reader.readEnd()
       val typ = readType
       val annot = readTerm
-      AnnotatedType(typ, annot)
+      AnnotatedType(typ, Annotation(annot))
     case ANDtype =>
       reader.readByte()
       reader.readEnd()
