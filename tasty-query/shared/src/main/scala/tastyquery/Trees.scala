@@ -277,6 +277,9 @@ object Trees {
       qualifier.toType match
         case pkg: PackageRef => pkg
         case tref: TypeRef   => ThisType(tref)
+        case qualTpe =>
+          throw InvalidProgramStructureException(s"Unexpected type for This qualifier $qualifier: $qualTpe")
+    end calculateType
 
     override final def withSpan(span: Span): This = This(qualifier)(span)
   }

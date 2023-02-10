@@ -113,7 +113,7 @@ object Types {
     override def toString(): String = "NoPrefix"
   end NoPrefix
 
-  abstract class Type extends Prefix {
+  sealed abstract class Type extends Prefix {
     type ThisTypeMappableType = Type
 
     final def isSubtype(that: Type)(using Context): Boolean =

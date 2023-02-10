@@ -897,7 +897,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     methodName match {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"method")
     }
-    fun.tpe.widen match {
+    (fun.tpe.widen: @unchecked) match {
       case mt: MethodType =>
         assert(clue(mt.paramNames) == List(name"x"))
         assert(clue(mt.paramTypes.head).isOfClass(defn.IntClass))
@@ -919,7 +919,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     methodName match {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"identity")
     }
-    tapp.tpe.widen match {
+    (tapp.tpe.widen: @unchecked) match {
       case mt: MethodType =>
         assert(clue(mt.paramNames) == List(name"x"))
         assert(clue(mt.paramTypes.head).isOfClass(defn.IntClass))
