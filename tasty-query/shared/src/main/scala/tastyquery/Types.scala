@@ -1440,20 +1440,6 @@ object Types {
     override def toString(): String = s"TypeAlias($alias)"
   }
 
-  final class BoundedType(val bounds: TypeBounds, val alias: Option[Type]) extends Type {
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
-      bounds.high.findMember(name, pre)
-
-    override def toString(): String = s"BoundedType($bounds, $alias)"
-  }
-
-  final class NamedTypeBounds(val name: TypeName, val bounds: TypeBounds) extends Type {
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
-      bounds.high.findMember(name, pre)
-
-    override def toString(): String = s"NamedTypeBounds($name, $bounds)"
-  }
-
   final class WildcardTypeBounds(val bounds: TypeBounds) extends TypeProxy {
     override def underlying(using Context): Type = bounds.high
 
