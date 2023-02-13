@@ -280,7 +280,7 @@ private[tastyquery] object Subtyping:
       def comparePaths: Boolean =
         tp2 match
           case tp2: TermRef =>
-            tp2.symbol.declaredTypeAsSeenFrom(tp2.prefix).widenExpr.dealias match
+            tp2.symbol.declaredTypeAsSeenFrom(tp2.prefix).dealias match
               case tp2Singleton: SingletonType =>
                 isSubtype(tp1, tp2Singleton)
               case _ =>
@@ -289,7 +289,7 @@ private[tastyquery] object Subtyping:
             false
 
       def proceedWithWidenedType: Boolean =
-        isSubtype(tp1.underlying.widenExpr, tp2)
+        isSubtype(tp1.underlying, tp2)
 
       comparePaths || proceedWithWidenedType
 

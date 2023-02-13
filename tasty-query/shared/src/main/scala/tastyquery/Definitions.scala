@@ -80,7 +80,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   private def createSpecialMethod(
     owner: ClassSymbol,
     name: TermName,
-    tpe: MethodicType,
+    tpe: Type,
     flags: FlagSet = EmptyFlagSet
   ): TermSymbol =
     val sym = TermSymbol
@@ -154,7 +154,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   val Any_== = createSpecialMethod(AnyClass, nme.m_==, equalityMethodType, Final)
   val Any_!= = createSpecialMethod(AnyClass, nme.m_!=, equalityMethodType, Final)
-  val Any_## = createSpecialMethod(AnyClass, nme.m_##, ExprType(IntType), Final)
+  val Any_## = createSpecialMethod(AnyClass, nme.m_##, IntType, Final)
 
   val Any_equals = createSpecialMethod(AnyClass, nme.m_equals, equalityMethodType)
   val Any_hashCode = createSpecialMethod(AnyClass, nme.m_hashCode, MethodType(Nil, Nil, IntType))

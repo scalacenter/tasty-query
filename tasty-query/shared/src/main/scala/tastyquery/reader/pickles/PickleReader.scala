@@ -528,8 +528,8 @@ private[pickles] class PickleReader {
         //   - PT => register at index
         val restpe = readTypeRef()
         val typeParams = pkl.until(end, () => readLocalSymbolRef().asInstanceOf[TypeParamSymbol])
-        if typeParams.nonEmpty then TempPolyType(typeParams, restpe.widenExpr)
-        else ExprType(restpe)
+        if typeParams.nonEmpty then TempPolyType(typeParams, restpe)
+        else restpe
       case EXISTENTIALtpe =>
         val restpe = readTypeRef()
         // TODO Should these be LocalTypeParamSymbols?

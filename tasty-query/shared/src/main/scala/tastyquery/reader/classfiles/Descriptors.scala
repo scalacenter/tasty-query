@@ -114,7 +114,7 @@ private[classfiles] object Descriptors:
 
     val parsedDescriptor =
       if isMethod then methodDescriptor
-      else ExprType(fieldDescriptor)
+      else fieldDescriptor
 
     if available > 0 then unconsumed
 

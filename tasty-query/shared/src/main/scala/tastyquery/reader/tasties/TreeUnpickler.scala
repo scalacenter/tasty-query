@@ -727,8 +727,7 @@ private[tasties] class TreeUnpickler(
         case Nil =>
           resultTpt.toType
 
-    if paramLists.isEmpty then ExprType(resultTpt.toType)
-    else rec(paramLists)
+    rec(paramLists)
   end makeDefDefType
 
   private def readTerms(end: Addr)(using LocalContext): List[TermTree] =
