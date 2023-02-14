@@ -526,7 +526,6 @@ object Types {
 
     private var myName: ThisName | Null = null
     private var mySymbol: ThisSymbolType | Null = null
-    private var myOptSignature: Option[Signature] | Null = null
 
     private[tastyquery] final def isLocalRef(sym: Symbol): Boolean =
       prefix == NoPrefix && designator == sym
@@ -641,17 +640,6 @@ object Types {
       }
     end argForParam
 
-    private[tastyquery] final def optSignature(using Context): Option[Signature] =
-      val local = myOptSignature
-      if local != null then local
-      else
-        val computed = this match
-          case termRef: TermRef => termRef.symbol.signature
-          case _: TypeRef       => None
-        myOptSignature = computed
-        computed
-    end optSignature
-
     /** A selection of the same kind, but with potentially a different prefix.
       * The following normalization is performed for type selections T#A:
       *
@@ -735,6 +723,9 @@ object Types {
     type ThisNamedType = TermRef
     protected type ThisDesignatorType = TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
 
+    // Cache fields
+    private var mySignature: Signature | Null = null
+
     protected def designator: ThisDesignatorType = myDesignator
 
     protected def storeComputedSymbol(sym: ThisSymbolType): Unit =
@@ -761,6 +752,15 @@ object Types {
       val termSymbol = symbol
       termSymbol.declaredType.asSeenFrom(prefix, termSymbol.owner)
     }
+
+    private[tastyquery] final def signature(using Context): Signature =
+      val local = mySignature
+      if local != null then local
+      else
+        val computed = symbol.signature
+        mySignature = computed
+        computed
+    end signature
 
     final def isOverloaded(using Context): Boolean =
       myDesignator match

@@ -349,8 +349,9 @@ object Symbols {
     private var myDeclaredType: Type | Null = null
 
     // Cache fields
-    private var mySignature: Option[Signature] | Null = null
+    private var mySignature: Signature | Null = null
     private var myTargetName: TermName | Null = null
+    private var mySignedName: TermName | Null = null
     private var myParamRefss: List[Either[List[TermParamRef], List[TypeParamRef]]] | Null = null
 
     protected override def doCheckCompleted(): Unit =
@@ -385,22 +386,18 @@ object Symbols {
       owner.isClass && is(Method) && name == nme.Constructor
 
     private[tastyquery] final def needsSignature(using Context): Boolean =
-      declaredType match
-        case _: MethodType | _: PolyType => true
-        case _                           => false
-    end needsSignature
+      declaredType.isInstanceOf[MethodicType]
 
-    private[tastyquery] final def signature(using Context): Option[Signature] =
+    final def signature(using Context): Signature =
       val local = mySignature
       if local != null then local
       else
-        val sig =
-          if is(Method) then Some(Signature.fromMethodType(declaredType, Option.when(isConstructor)(owner.asClass)))
-          else None
+        val sig = Signature.fromType(declaredType, Option.when(isConstructor)(owner.asClass))
         mySignature = sig
         sig
+    end signature
 
-    private[tastyquery] final def targetName(using Context): TermName =
+    final def targetName(using Context): TermName =
       val local = myTargetName
       if local != null then local
       else
@@ -420,11 +417,24 @@ object Symbols {
               case Some(annot) => termName(annot.argIfConstant(0).get.stringValue)
     end computeTargetName
 
-    /** If this symbol has a `MethodicType`, returns a `SignedName`, otherwise a `Name`. */
-    final def signedName(using Context): Name =
-      signature.fold(name) { sig =>
-        SignedName(name, sig, targetName)
-      }
+    /** Returns the possibly signed name of this symbol.
+      *
+      * For methods with at least one term or type parameter list, this returns a `SignedName`.
+      * For other terms, the returned name is not a `SignedName`.
+      *
+      * If the `owner` of this symbol is a `DeclaringSymbol`, then `owner.getDecl(signedName)`
+      * will return this symbol. This is not always the case with `name`.
+      */
+    final def signedName(using Context): TermName =
+      val local = mySignedName
+      if local != null then local
+      else
+        val computed =
+          if needsSignature then SignedName(name, signature, targetName)
+          else name
+        mySignedName = computed
+        computed
+    end signedName
 
     final def paramRefss(using Context): List[Either[List[TermParamRef], List[TypeParamRef]]] =
       def paramssOfType(tp: Type): List[Either[List[TermParamRef], List[TypeParamRef]]] = tp match
@@ -791,7 +801,7 @@ object Symbols {
         case Some(overloads) =>
           overloads.find {
             case decl: TermSymbol =>
-              decl.signature.exists(_ == overloaded.sig) && decl.targetName == overloaded.target
+              overloaded == decl.signedName
             case _ =>
               false
           }
