@@ -293,9 +293,9 @@ private[tasties] class TreeUnpickler(
 
   private def readWithin(using LocalContext): Symbol =
     readType match
-      case typeRef: TypeRef   => typeRef.symbol
-      case pkgRef: PackageRef => pkgRef.symbol
-      case tpe                => throw TastyFormatException(s"unexpected type for readWithin: $tpe")
+      case TypeRef.OfClass(cls) => cls
+      case pkgRef: PackageRef   => pkgRef.symbol
+      case tpe                  => throw TastyFormatException(s"unexpected type for readWithin: $tpe")
   end readWithin
 
   private def readAnnotationsInModifiers(sym: Symbol, end: Addr)(using LocalContext): Unit =

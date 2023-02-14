@@ -321,7 +321,7 @@ private[tastyquery] object Subtyping:
   private def compareAppliedType1(tp1: AppliedType, tp2: Type)(using Context): Boolean =
     val tycon1 = tp1.tycon
     tycon1 match
-      case tycon1: TypeRef if tycon1.symbol.isClass =>
+      case TypeRef.OfClass(_) =>
         false
       case tycon1: TypeProxy =>
         isSubtype(tp1.superType, tp2) // TODO superTypeNormalized for match types
@@ -330,12 +330,10 @@ private[tastyquery] object Subtyping:
   end compareAppliedType1
 
   private def isNullable(tp: Type)(using Context): Boolean = tp match
+    case TypeRef.OfClass(cls) =>
+      !cls.isValueClass && !cls.is(Module) && cls != defn.NothingClass
     case tp: TypeRef =>
-      tp.symbol match
-        case cls: ClassSymbol =>
-          !cls.isValueClass && !cls.is(Module) && cls != defn.NothingClass
-        case _: TypeSymbolWithBounds =>
-          false
+      false
     case tp: AppliedType =>
       isNullable(tp.tycon)
     case tp: RefinedType =>

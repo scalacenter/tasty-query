@@ -156,18 +156,19 @@ object Types {
       *
       * For any *-kinded type, returns `Nil`.
       */
+    @tailrec
     private[tastyquery] final def typeParams(using Context): List[TypeParamInfo] =
       this match
+        case TypeRef.OfClass(cls) =>
+          cls.typeParams
         case self: TypeRef =>
-          self.symbol match
-            case cls: ClassSymbol              => cls.typeParams
-            case typeSym: TypeSymbolWithBounds => typeSym.upperBound.typeParams
+          self.underlying.typeParams
         case self: TypeLambda =>
           self.typeLambdaParams
         case self: AppliedType =>
           self.tycon match
-            case tycon: TypeRef if tycon.symbol.isClass => Nil
-            case _                                      => self.superType.typeParams
+            case TypeRef.OfClass(_) => Nil
+            case _                  => self.superType.typeParams
         case _: SingletonType | _: RefinedType =>
           Nil
         case self: WildcardTypeBounds =>
@@ -349,16 +350,14 @@ object Types {
 
     /** Is self type bounded by a type lambda or AnyKind? */
     private[tastyquery] final def isLambdaSub(using Context): Boolean = this match
+      case TypeRef.OfClass(cls) =>
+        cls == defn.AnyKindClass || cls.typeParams.nonEmpty
       case self: TypeRef =>
-        self.symbol match
-          case sym: ClassSymbol =>
-            sym == defn.AnyKindClass || sym.typeParams.nonEmpty
-          case sym: TypeSymbolWithBounds =>
-            sym.upperBound.isLambdaSub
+        self.underlying.isLambdaSub
       case self: AppliedType =>
         self.tycon match
-          case tycon: TypeRef if tycon.symbol.isClass => false
-          case _                                      => self.superType.isLambdaSub
+          case TypeRef.OfClass(_) => false
+          case _                  => self.superType.isLambdaSub
       case self: TypeLambda =>
         true
       case _: SingletonType | _: RefinedType | _: RecType =>
@@ -934,9 +933,9 @@ object Types {
     override def superType(using Context): Type =
       tycon match
         //case tycon: HKTypeLambda => defn.AnyType
-        case tycon: TypeRef if tycon.symbol.isClass => tycon
-        case tycon: TypeProxy                       => tycon.superType.applyIfParameterized(args)
-        case _                                      => defn.AnyType
+        case TypeRef.OfClass(_) => tycon
+        case tycon: TypeProxy   => tycon.superType.applyIfParameterized(args)
+        case _                  => defn.AnyType
 
     override def translucentSuperType(using Context): Type = tycon match
       case tycon: TypeRef if tycon.symbol.isOpaqueTypeAlias =>
@@ -963,9 +962,8 @@ object Types {
 
     private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       tycon match
-        case tycon: TypeRef =>
-          if tycon.symbol.isClass then tycon.findMember(name, pre)
-          else ???
+        case tycon @ TypeRef.OfClass(_) =>
+          tycon.findMember(name, pre)
         case _ =>
           ???
 

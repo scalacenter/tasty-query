@@ -927,32 +927,27 @@ object Symbols {
         else Some(bt1.get & bt2.get)
 
       def recur(tp: Type): Option[Type] = tp match
-        case tp: TypeRef =>
+        case tp @ TypeRef.OfClass(tpSym) =>
           def foldGlb(bt: Option[Type], ps: List[Type]): Option[Type] =
             ps.foldLeft(bt)((bt, p) => combineGlb(bt, recur(p)))
 
-          tp.symbol match
-            case tpSym: ClassSymbol =>
-              def isOwnThis = tp.prefix match
-                case prefix: ThisType   => prefix.cls == tpSym.owner
-                case prefix: PackageRef => prefix.symbol == tpSym.owner
-                case NoPrefix           => true
-                case _                  => false
+          def isOwnThis = tp.prefix match
+            case prefix: ThisType   => prefix.cls == tpSym.owner
+            case prefix: PackageRef => prefix.symbol == tpSym.owner
+            case NoPrefix           => true
+            case _                  => false
 
-              if tpSym == this then Some(tp)
-              else if isOwnThis then
-                if tpSym.isSubclass(this) then
-                  if this.isStatic && this.typeParams.isEmpty then Some(this.typeRef)
-                  else foldGlb(None, tpSym.parents)
-                else None
-              else recur(tpSym.typeRef).map(_.asSeenFrom(tp.prefix, tpSym.owner.asDeclaringSymbol))
-            case _: TypeSymbolWithBounds =>
-              recur(tp.superType)
-          end match
+          if tpSym == this then Some(tp)
+          else if isOwnThis then
+            if tpSym.isSubclass(this) then
+              if this.isStatic && this.typeParams.isEmpty then Some(this.typeRef)
+              else foldGlb(None, tpSym.parents)
+            else None
+          else recur(tpSym.typeRef).map(_.asSeenFrom(tp.prefix, tpSym.owner.asDeclaringSymbol))
 
         case tp: AppliedType =>
           tp.tycon match
-            case tycon: TypeRef if tycon.symbol == this =>
+            case TypeRef.OfClass(cls) if cls == this =>
               Some(tp)
             case tycon =>
               val typeParams = tycon.typeParams
@@ -1072,8 +1067,8 @@ object Symbols {
       annot.tree.tpe match
         case tpe: AppliedType =>
           tpe.args match
-            case (childRef: TypeRef) :: Nil if childRef.symbol.isClass =>
-              childRef.symbol.asClass
+            case TypeRef.OfClass(childCls) :: Nil =>
+              childCls
             case (childRef: TermRef) :: Nil if childRef.symbol.isAnyOf(Module | Enum) =>
               childRef.symbol
             case _ =>
