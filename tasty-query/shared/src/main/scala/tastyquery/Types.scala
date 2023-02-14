@@ -99,7 +99,7 @@ object Types {
     private[tastyquery] final def isArgPrefixOf(sym: ClassTypeParamSymbol)(using Context): Boolean =
       this match
         case tp: ThisType => tp.cls != sym.owner
-        case tp: TypeRef  => tp.symbol != sym.owner
+        case tp: TypeRef  => !tp.optSymbol.exists(_ == sym.owner)
         case _            => true
     end isArgPrefixOf
   end Prefix
@@ -120,16 +120,14 @@ object Types {
       Subtyping.isSameType(this, that)
 
     /** The class symbol of this type, None if reduction is not possible */
+    @tailrec
     private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this.widen match
+      case TypeRef.OfClass(cls) =>
+        Some(cls)
       case tpe: TypeRef =>
-        tpe.symbol match
-          case cls: ClassSymbol =>
-            Some(cls)
-          case typeSym: TypeMemberSymbol =>
-            typeSym.typeDef match
-              case TypeMemberDefinition.TypeAlias(alias) => alias.classSymbol
-              case _                                     => None
-          case _: TypeParamSymbol => None
+        tpe.optAliasedType match
+          case Some(alias) => alias.classSymbol
+          case None        => None
       case tpe: TypeProxy =>
         tpe.superType.classSymbol
       case _ =>
@@ -240,14 +238,16 @@ object Types {
 
     private def dealias1(keepOpaques: Boolean)(using Context): Type = this match {
       case tp: TypeRef =>
-        tp.symbol match
-          case tpSym: TypeMemberSymbol =>
+        tp.optSymbol match
+          case Some(tpSym: TypeMemberSymbol) =>
             tpSym.typeDef match
               case TypeMemberDefinition.TypeAlias(alias)                          => alias.dealias1(keepOpaques)
               case TypeMemberDefinition.OpaqueTypeAlias(_, alias) if !keepOpaques => alias.dealias1(keepOpaques)
               case _                                                              => tp
           case _ =>
-            tp
+            tp.optAliasedType match
+              case Some(alias) => alias.dealias1(keepOpaques)
+              case None        => tp
       case tp: AppliedType =>
         val tycon1 = tp.tycon.dealias1(keepOpaques)
         if (tycon1 ne tp.tycon) tp.superType.dealias1(keepOpaques)
@@ -267,13 +267,9 @@ object Types {
       */
     @tailrec final def normalizedPrefix(using Context): Option[Prefix] = this match {
       case tp: TypeRef =>
-        tp.symbol match
-          case sym: TypeMemberSymbol =>
-            sym.typeDef match
-              case TypeMemberDefinition.TypeAlias(alias) => alias.normalizedPrefix
-              case _                                     => Some(tp.prefix)
-          case _ =>
-            Some(tp.prefix)
+        tp.optAliasedType match
+          case Some(alias) => alias.normalizedPrefix
+          case None        => Some(tp.prefix)
       case tp: TermRef =>
         Some(tp.prefix)
       case tp: TypeProxy =>
@@ -308,7 +304,7 @@ object Types {
 
     final def isRef(sym: Symbol)(using Context): Boolean =
       this match {
-        case tpe: NamedType    => tpe.symbol == sym
+        case tpe: NamedType    => tpe.optSymbol.contains(sym)
         case tpe: AppliedType  => tpe.underlying.isRef(sym)
         case tpe: TermParamRef => tpe.underlying.isRef(sym)
         case tpe: TypeParamRef => tpe.bounds.high.isRef(sym)
@@ -318,7 +314,7 @@ object Types {
     /** Is this type exactly Nothing (no vars, aliases, refinements etc allowed)? */
     final def isExactlyNothing(using Context): Boolean = this match
       case tp: TypeRef =>
-        tp.name == tpnme.Nothing && (tp.symbol eq defn.NothingClass)
+        tp.name == tpnme.Nothing && tp.isSpecificClass(defn.NothingClass)
       case _ =>
         false
 
@@ -554,6 +550,8 @@ object Types {
         storeComputedSymbol(computed)
         computed
 
+    def optSymbol(using Context): Option[ThisSymbolType]
+
     protected def asThisSymbolType(sym: Symbol): ThisSymbolType
 
     private def computeSymbol()(using Context): Symbol = designator match
@@ -569,7 +567,7 @@ object Types {
            * module class.
            * Terms cannot otherwise appear in paths.
            */
-          val cls = if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].symbol else owner
+          val cls = if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].asClass else owner
           cls.asDeclaringSymbol.getDecl(name).getOrElse {
             throw new MemberNotFoundException(owner, name)
           }
@@ -592,9 +590,9 @@ object Types {
       else if (prefix.isExactlyNothing) prefix
       else {
         if (isType) {
-          val res = symbol match
-            case sym: ClassTypeParamSymbol => sym.argForParam(prefix)
-            case _                         => prefix.lookupRefined(name)
+          val res = optSymbol match
+            case Some(sym: ClassTypeParamSymbol) => sym.argForParam(prefix)
+            case _                               => prefix.lookupRefined(name)
           if (res.isDefined)
             return res.get
         }
@@ -675,6 +673,9 @@ object Types {
 
     override def toString(): String =
       s"TermRef($prefix, $myDesignator)"
+
+    final def optSymbol(using Context): Option[TermSymbol] =
+      Some(symbol)
 
     protected def asThisSymbolType(sym: Symbol): ThisSymbolType =
       sym.asInstanceOf[TermSymbol]
@@ -774,17 +775,53 @@ object Types {
     override def toString(): String =
       s"TypeRef($prefix, $myDesignator)"
 
+    final def optSymbol(using Context): Option[TypeSymbol] =
+      Some(symbol)
+
+    final def isClass(using Context): Boolean =
+      optSymbol.exists(_.isClass)
+
+    private[tastyquery] final def asClass(using Context): ClassSymbol =
+      optSymbol.get.asClass
+
+    private[tastyquery] final def isSpecificClass(cls: ClassSymbol)(using Context): Boolean =
+      optSymbol.contains(cls)
+
     protected def asThisSymbolType(sym: Symbol): ThisSymbolType =
       sym.asInstanceOf[TypeSymbol]
 
-    override def underlying(using Context): Type = symbol match
-      case cls: ClassSymbol =>
+    override def underlying(using Context): Type = optSymbol match
+      case Some(cls: ClassSymbol) =>
         throw AssertionError(s"TypeRef $this has no `underlying` because it refers to a `ClassSymbol`")
-      case sym: TypeSymbolWithBounds =>
-        sym.upperBound
+      case Some(sym: TypeSymbolWithBounds) =>
+        if prefix == NoPrefix then sym.upperBound
+        else sym.upperBound.asSeenFrom(prefix, sym.owner)
+      case None =>
+        ???
 
-    override def translucentSuperType(using Context): Type = symbol match
-      case sym: TypeMemberSymbol =>
+    final def bounds(using Context): TypeBounds = optSymbol match
+      case Some(cls: ClassSymbol) =>
+        throw AssertionError(s"TypeRef $this has no `underlying` because it refers to a `ClassSymbol`")
+      case Some(sym: TypeSymbolWithBounds) =>
+        if prefix == NoPrefix then sym.bounds
+        else sym.bounds.mapBounds(_.asSeenFrom(prefix, sym.owner))
+      case None =>
+        ???
+
+    def typeDef(using Context): TypeMemberDefinition = optSymbol match
+      case Some(sym: TypeMemberSymbol) => sym.typeDef
+      case _ =>
+        throw AssertionError(s"No typeDef for $this")
+
+    def optAliasedType(using Context): Option[Type] = optSymbol match
+      case Some(sym: TypeMemberSymbol) =>
+        if sym.isTypeAlias then Some(sym.aliasedType.asSeenFrom(prefix, sym.owner))
+        else None
+      case _ =>
+        None
+
+    override def translucentSuperType(using Context): Type = optSymbol match
+      case Some(sym: TypeMemberSymbol) =>
         sym.typeDef match
           case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => alias
           case _                                              => underlying
@@ -793,11 +830,11 @@ object Types {
     end translucentSuperType
 
     private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
-      symbol match
-        case sym: ClassSymbol =>
+      optSymbol match
+        case Some(sym: ClassSymbol) =>
           sym.findMember(pre, name)
-        case sym: TypeSymbolWithBounds =>
-          sym.upperBound.findMember(name, pre)
+        case _ =>
+          underlying.findMember(name, pre)
 
     protected def withPrefix(prefix: Prefix, cachedSymbol: ThisSymbolType | Null): TypeRef =
       new TypeRef(prefix, if cachedSymbol != null then cachedSymbol else designator)
@@ -812,9 +849,9 @@ object Types {
 
     private[tastyquery] object OfClass:
       def unapply(typeRef: TypeRef)(using Context): Option[ClassSymbol] =
-        val symbol = typeRef.symbol
-        if symbol.isClass then Some(symbol.asClass)
-        else None
+        typeRef.optSymbol match
+          case Some(cls: ClassSymbol) => Some(cls)
+          case _                      => None
     end OfClass
   end TypeRef
 
@@ -833,7 +870,7 @@ object Types {
         computed
     end underlying
 
-    final def cls(using Context): ClassSymbol = tref.symbol.asClass
+    final def cls(using Context): ClassSymbol = tref.asClass
 
     override def toString(): String = s"ThisType($tref)"
   }
@@ -858,7 +895,7 @@ object Types {
 
     override def superType(using Context): Type =
       val superCls = supertpe match
-        case supertpe: TypeRef => supertpe.symbol.asClass
+        case supertpe: TypeRef => supertpe.asClass
         case _                 => throw AssertionError(s"Cannot compute super class for $this")
       thistpe.baseType(superCls).getOrElse {
         throw AssertionError(s"Cannot find baseType for $this")
@@ -890,7 +927,7 @@ object Types {
         case _                  => defn.AnyType
 
     override def translucentSuperType(using Context): Type = tycon match
-      case tycon: TypeRef if tycon.symbol.isOpaqueTypeAlias =>
+      case tycon: TypeRef if tycon.optSymbol.exists(_.isOpaqueTypeAlias) =>
         tycon.translucentSuperType.applyIfParameterized(args)
       case _ =>
         // tryNormalize.orElse(superType) // TODO for match types

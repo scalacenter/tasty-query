@@ -395,7 +395,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val (JavaDefinedRef @ _: TypeRef) = boxedSym.declaredType: @unchecked
 
-    assert(clue(JavaDefinedRef.symbol) == JavaDefinedClass)
+    assert(clue(JavaDefinedRef.optSymbol) == Some(JavaDefinedClass))
   }
 
   testWithContext("package-private-class") {

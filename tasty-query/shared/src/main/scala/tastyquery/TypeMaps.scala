@@ -261,8 +261,8 @@ private[tastyquery] object TypeMaps {
         .argForParam(pre)
         .map(_ match {
           case arg: TypeRef =>
-            arg.symbol match
-              case argSym: ClassTypeParamSymbol if arg.prefix.isArgPrefixOf(argSym) =>
+            arg.optSymbol match
+              case Some(argSym: ClassTypeParamSymbol) if arg.prefix.isArgPrefixOf(argSym) =>
                 expandBounds(argSym.bounds)
               case _ =>
                 reapply(arg)
@@ -278,9 +278,9 @@ private[tastyquery] object TypeMaps {
       else
         pre match {
           case Range(preLo, preHi) =>
-            val forwarded = tp.symbol match
-              case sym: ClassTypeParamSymbol => expandParam(sym, preHi)
-              case _                         => tryWiden(tp, preHi)
+            val forwarded = tp.optSymbol match
+              case Some(sym: ClassTypeParamSymbol) => expandParam(sym, preHi)
+              case _                               => tryWiden(tp, preHi)
             forwarded.getOrElse {
               range(super.derivedSelect(tp, preLo).lowerBound, super.derivedSelect(tp, preHi).upperBound)
             }
