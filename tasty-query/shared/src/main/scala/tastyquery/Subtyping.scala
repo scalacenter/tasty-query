@@ -161,10 +161,10 @@ private[tastyquery] object Subtyping:
       isSubtype(tp1, tp2.first) || isSubtype(tp1, tp2.second)
         || level4(tp1, tp2)
 
-    case tp2: ExprType =>
+    case tp2: ByNameType =>
       tp1 match
-        case tp1: ExprType => isSubtype(tp1.resultType, tp2.resultType)
-        case _             => level4(tp1, tp2)
+        case tp1: ByNameType => isSubtype(tp1.resultType, tp2.resultType)
+        case _               => level4(tp1, tp2)
 
     case _ =>
       level4(tp1, tp2)
@@ -177,7 +177,7 @@ private[tastyquery] object Subtyping:
   end level3WithBaseType
 
   private def nonExprBaseType(tp1: Type, cls2: ClassSymbol)(using Context): Option[Type] =
-    if tp1.isInstanceOf[ExprType] then None
+    if tp1.isInstanceOf[ByNameType] then None
     else tp1.baseType(cls2)
 
   private def compareAppliedType2(tp1: Type, tp2: AppliedType)(using Context): Boolean =

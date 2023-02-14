@@ -43,8 +43,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     def isByName(arg: Type => Boolean)(using Context): Boolean =
       tpe match
-        case tpe: ExprType => arg(tpe.resultType)
-        case _             => false
+        case tpe: ByNameType => arg(tpe.resultType)
+        case _               => false
 
     def isArrayOf(arg: Type => Boolean)(using Context): Boolean =
       isApplied(_.isRef(defn.ArrayClass), Seq(arg))

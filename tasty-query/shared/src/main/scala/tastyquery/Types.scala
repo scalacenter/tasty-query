@@ -228,19 +228,19 @@ object Types {
         case tp: TermRef => tp.underlying.widenOverloads
         case tp          => tp
 
-    /** Widen singleton types, ExprTypes, AnnotatedTypes and RefinedTypes. */
+    /** Widen singleton types, ByNameTypes, AnnotatedTypes and RefinedTypes. */
     final def widen(using Context): Type = this match
       case _: TypeRef | _: MethodType | _: PolyType => this // fast path for most frequent cases
       case tp: TermRef => // fast path for next most frequent case
         if tp.isOverloaded then tp else tp.underlying.widen
       case tp: SingletonType => tp.underlying.widen
-      case tp: ExprType      => tp.resultType.widen
+      case tp: ByNameType    => tp.resultType.widen
       case tp: AnnotatedType => tp.typ.widen
       case tp: RefinedType   => tp.parent.widen
       case tp                => tp
 
     private[tastyquery] final def widenIfUnstable(using Context): Type = this match
-      case tp: ExprType                             => tp.resultType.widenIfUnstable
+      case tp: ByNameType                           => tp.resultType.widenIfUnstable
       case tp: TermRef if !tp.symbol.isStableMember => tp.underlying.widenIfUnstable
       case _                                        => this
 
@@ -994,13 +994,13 @@ object Types {
   }
 
   /** A by-name parameter type of the form `=> T`. */
-  final class ExprType(val resultType: Type) extends TypeProxy with TermType {
+  final class ByNameType(val resultType: Type) extends TypeProxy with TermType {
     override def underlying(using Context): Type = resultType
 
-    private[tastyquery] final def derivedExprType(resultType: Type): ExprType =
-      if (resultType eq this.resultType) this else ExprType(resultType)
+    private[tastyquery] final def derivedByNameType(resultType: Type): ByNameType =
+      if (resultType eq this.resultType) this else ByNameType(resultType)
 
-    override def toString(): String = s"ExprType($resultType)"
+    override def toString(): String = s"ByNameType($resultType)"
   }
 
   sealed trait LambdaType extends ParamRefBinders with TermType {

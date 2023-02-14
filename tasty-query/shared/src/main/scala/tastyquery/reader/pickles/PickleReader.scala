@@ -474,7 +474,7 @@ private[pickles] class PickleReader {
           case external: ExternalSymbolRef => external.toNamedType(pre)
           case _: NoExternalSymbolRef      => throw Scala2PickleFormatException("TYPEREFtpe references NoSymbol")
         val args = pkl.until(end, () => readTypeRef())
-        /*if (sym == defn.ByNameParamClass2x) ExprType(args.head)
+        /*if (sym == defn.ByNameParamClass2x) ByNameType(args.head)
         else if (ctx.settings.scalajs.value && args.length == 2 &&
             sym.owner == JSDefinitions.jsdefn.ScalaJSJSPackageClass && sym == JSDefinitions.jsdefn.PseudoUnionClass) {
           // Treat Scala.js pseudo-unions as real unions, this requires a

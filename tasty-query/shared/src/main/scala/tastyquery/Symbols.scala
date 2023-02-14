@@ -444,7 +444,7 @@ object Symbols {
       * A stable member is one that is known to be idempotent.
       */
     final def isStableMember(using Context): Boolean =
-      !isAnyOf(Method | Mutable) && !declaredType.isInstanceOf[ExprType]
+      !isAnyOf(Method | Mutable) && !declaredType.isInstanceOf[ByNameType]
   end TermSymbol
 
   object TermSymbol:

@@ -1152,7 +1152,7 @@ private[tasties] class TreeUnpickler(
       OrType(readType, readType)
     case BYNAMEtype =>
       reader.readByte()
-      ExprType(readType)
+      ByNameType(readType)
     case POLYtype =>
       readLambdaType(_ => PolyType, name => name.toTypeName, _.readTypeBounds)
     case METHODtype =>
