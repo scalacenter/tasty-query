@@ -557,21 +557,10 @@ object Types {
     private def computeSymbol()(using Context): Symbol = designator match
       case sym: TermOrTypeSymbol =>
         sym
-      case LookupIn(pre, name) =>
-        pre.member(name)
-      case Scala2ExternalSymRef(owner, path) =>
-        path.foldLeft(owner) { (owner, name) =>
-          /* In Scala 2 external references, (term) *modules* can appear in paths.
-           * When we find one, in our system, we must follow through to their module class
-           * instead. The `declaredType` will in that case always be a `TypeRef` to the
-           * module class.
-           * Terms cannot otherwise appear in paths.
-           */
-          val cls = if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].asClass else owner
-          cls.asDeclaringSymbol.getDecl(name).getOrElse {
-            throw new MemberNotFoundException(owner, name)
-          }
-        }
+      case lookupIn: LookupIn =>
+        TermRef.resolveLookupIn(lookupIn)
+      case externalRef: Scala2ExternalSymRef =>
+        NamedType.resolveScala2ExternalRef(externalRef)
       case name: Name =>
         prefix match
           case prefix: Type =>
@@ -649,6 +638,21 @@ object Types {
       external.name match
         case _: TypeName => TypeRef(prefix, external)
         case _: TermName => TermRef(prefix, external)
+
+    private[tastyquery] def resolveScala2ExternalRef(externalRef: Scala2ExternalSymRef)(using Context): Symbol =
+      externalRef.path.foldLeft(externalRef.owner) { (owner, name) =>
+        /* In Scala 2 external references, (term) *modules* can appear in paths.
+         * When we find one, in our system, we must follow through to their module class
+         * instead. The `declaredType` will in that case always be a `TypeRef` to the
+         * module class.
+         * Terms cannot otherwise appear in paths.
+         */
+        val cls = if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].asClass else owner
+        cls.asDeclaringSymbol.getDecl(name).getOrElse {
+          throw new MemberNotFoundException(owner, name)
+        }
+      }
+    end resolveScala2ExternalRef
   }
 
   /** The singleton type for path prefix#myDesignator. */
@@ -724,6 +728,9 @@ object Types {
 
     private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): TermRef =
       new TermRef(prefix, external)
+
+    private[tastyquery] def resolveLookupIn(designator: LookupIn)(using Context): TermSymbol =
+      designator.pre.member(designator.sel).asTerm
   end TermRef
 
   final class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends Type {
