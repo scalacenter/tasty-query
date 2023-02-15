@@ -556,9 +556,6 @@ object Types {
       case designator: Scala2ExternalSymRef => designator.name
     }).asInstanceOf[ThisName]
 
-    final def selectIn(name: SignedName, in: TypeRef): TermRef =
-      TermRef(this, LookupIn(in, name))
-
     final def symbol(using Context): ThisSymbolType =
       val local = mySymbol
       if local != null then local.asInstanceOf[ThisSymbolType] // Cast needed for expression evaluator
