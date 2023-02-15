@@ -327,7 +327,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickleWithCode("bounded-type".ignore, "simple_trees.TypeMember") { (tree, code) =>
-    assertEquals(collectCode[BoundedTypeTree](tree, code), List(""))
+    assertEquals(collectCode[TypeDefinitionTree](tree, code), List(""))
   }
 
   testUnpickleWithCode("named-type-bounds".ignore, "simple_trees.MatchType") { (tree, code) =>
@@ -335,7 +335,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickleWithCode("type-lambda", "simple_trees.TypeLambda") { (tree, code) =>
-    assertEquals(collectCode[TypeLambdaTree](tree, code), List("[X] =>> List[X]"))
+    assertEquals(collectCode[PolyTypeDefinitionTree](tree, code), List("[X] =>> List[X]"))
   }
 
   /** Inlined */

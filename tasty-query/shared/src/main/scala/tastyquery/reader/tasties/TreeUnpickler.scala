@@ -408,19 +408,15 @@ private[tasties] class TreeUnpickler(
       } else {
         val symbol = localCtx.getSymbol[TypeMemberSymbol](start)
         val innerCtx = localCtx.withOwner(symbol)
-        val typeBounds: TypeTree | TypeBounds =
-          if tagFollowShared == TYPEBOUNDS then readTypeBounds(using innerCtx)
-          else readTypeTree(using innerCtx)
         val isOpaque = symbol.is(Opaque)
-        val typeDef = typeBounds match
-          case tpt: TypeTree      => makeTypeMemberDefinition(tpt.toType, forOpaque = isOpaque)
-          case bounds: TypeBounds => TypeMemberDefinition.AbstractType(bounds)
+        val typeDefTree = readTypeDefinition(forOpaque = isOpaque)(using innerCtx)
+        val typeDef = makeTypeMemberDefinition(typeDefTree)
         if isOpaque != typeDef.isInstanceOf[TypeMemberDefinition.OpaqueTypeAlias] then
           throw TastyFormatException(
             s"typeDef $typeDef inconsistent with Opaque flag $isOpaque for $symbol at $posErrorMsg"
           )
         symbol.withDefinition(typeDef)
-        definingTree(symbol, TypeMember(name, typeBounds, symbol)(spn))
+        definingTree(symbol, TypeMember(name, typeDefTree, symbol)(spn))
       }
       readAnnotationsInModifiers(typeDef.symbol, end)
       typeDef
@@ -428,41 +424,93 @@ private[tasties] class TreeUnpickler(
     case _               => readTerm
   }
 
-  /** Turns a `Type` used as the rhs of a type member into a type member definition.
+  /** Turns a `TypeDefinitionTree` used as the rhs of a type member into a type member definition.
     *
-    * - `BoundedType`s are turned into `AbstractType` or `OpaqueTypeAlias` definitions.
-    * - `TypeLambda`s are distributed over `BoundedType`s.
-    * - Other types are turned into `TypeAlias`es if `forOpaque` is false,
-    *   or into `OpaqueTypeAlias` with `Nothing..Any` bounds if it is true.
+    * `PolyTypeDefinitionTree`s are distributed over the components of the
+    * recursively transformed body.
     */
-  private def makeTypeMemberDefinition(tpe: Type, forOpaque: Boolean)(using LocalContext): TypeMemberDefinition =
+  private def makeTypeMemberDefinition(tpt: TypeDefinitionTree)(using LocalContext): TypeMemberDefinition =
     import TypeMemberDefinition.*
 
-    tpe match
-      case bt: BoundedType =>
-        bt.alias match
-          case None        => AbstractType(bt.bounds)
-          case Some(alias) => OpaqueTypeAlias(bt.bounds, alias)
+    tpt match
+      case tpt: TypeBoundsTree =>
+        AbstractType(tpt.toTypeBounds)
 
-      case tl: TypeLambda =>
-        def distributeOverType(tp: Type): Type =
-          tl.derivedLambdaType(tl.paramNames, tl.paramInfos, tp)
+      case TypeAliasDefinitionTree(alias) =>
+        TypeAlias(alias.toType)
 
-        def distributeOverBounds(bounds: TypeBounds): TypeBounds =
-          RealTypeBounds(distributeOverType(bounds.low), distributeOverType(bounds.high))
+      case OpaqueTypeAliasDefinitionTree(bounds, alias) =>
+        OpaqueTypeAlias(bounds.toTypeBounds, alias.toType)
 
-        makeTypeMemberDefinition(tl.resultType, forOpaque) match
+      case tpt @ PolyTypeDefinitionTree(_, body) =>
+        makeTypeMemberDefinition(body) match
           case TypeAlias(alias) =>
-            TypeAlias(tl)
+            TypeAlias(tpt.integrateInto(alias))
           case AbstractType(bounds) =>
-            AbstractType(distributeOverBounds(bounds))
+            AbstractType(bounds.mapBounds(tpt.integrateInto(_)))
           case OpaqueTypeAlias(bounds, alias) =>
-            OpaqueTypeAlias(distributeOverBounds(bounds), distributeOverType(alias))
+            OpaqueTypeAlias(bounds.mapBounds(tpt.integrateInto(_)), tpt.integrateInto(alias))
 
-      case _ =>
-        if forOpaque then OpaqueTypeAlias(defn.NothingAnyBounds, tpe)
-        else TypeAlias(tpe)
+      case _: NamedTypeBoundsTree =>
+        throw TastyFormatException(s"Unexpected type member definition $tpt at $posErrorMsg")
   end makeTypeMemberDefinition
+
+  private def readTypeDefinition(forOpaque: Boolean)(using LocalContext): TypeDefinitionTree =
+    readPotentiallyShared {
+      reader.nextByte match
+        case TYPEBOUNDS =>
+          val bounds = readTypeBounds
+          if forOpaque then throw TastyFormatException(s"Unexpected abstract type bounds $bounds at $posErrorMsg")
+          InferredTypeBoundsTree(bounds)(NoSpan)
+
+        case TYPEBOUNDStpt =>
+          val spn = span
+          reader.readByte()
+          val end = reader.readEnd()
+          val low = readTypeTree
+          val high = readTypeTree
+          val bounds = ExplicitTypeBoundsTree(low, high)(spn)
+          val result = reader.ifBefore(end)(OpaqueTypeAliasDefinitionTree(bounds, readTypeTree)(spn), bounds)
+          if forOpaque != result.isInstanceOf[OpaqueTypeAliasDefinitionTree] then
+            if forOpaque then throw TastyFormatException(s"Unexpected abstract type bounds $bounds at $posErrorMsg")
+            else throw TastyFormatException(s"Unexpected opaque type alias definition $result at $posErrorMsg")
+          end if
+          result
+
+        case LAMBDAtpt =>
+          val spn = span
+          reader.readByte()
+          reader.readEnd()
+          PolyTypeDefinitionTree(readTypeParams, readTypeDefinition(forOpaque))(spn)
+
+        case _ =>
+          val alias = readTypeTree
+          if forOpaque then
+            OpaqueTypeAliasDefinitionTree(InferredTypeBoundsTree(defn.NothingAnyBounds)(NoSpan), alias)(alias.span)
+          else TypeAliasDefinitionTree(alias)(alias.span)
+    }
+  end readTypeDefinition
+
+  private def readTypeOrWildcard()(using LocalContext): Type =
+    readPotentiallyShared {
+      reader.nextByte match
+        case TYPEBOUNDS =>
+          WildcardTypeBounds(readTypeBounds)
+        case _ =>
+          readType
+    }
+  end readTypeOrWildcard
+
+  private def readTypeOrWildcardTree(span: Span)(using LocalContext): TypeTree =
+    readPotentiallyShared {
+      reader.nextByte match
+        case TYPEBOUNDS | TYPEBOUNDStpt =>
+          val bounds = readTypeDefinition(forOpaque = false).asInstanceOf[TypeBoundsTree]
+          WildcardTypeBoundsTree(bounds)(span)
+        case _ =>
+          readTypeTree
+    }
+  end readTypeOrWildcardTree
 
   /** Reads type bounds for a synthetic typedef */
   private def readTypeBounds(using LocalContext): TypeBounds = {
@@ -484,52 +532,11 @@ private[tasties] class TreeUnpickler(
   }
 
   private def readTypeParams(using LocalContext): List[TypeParam] = {
-    def readTypeParamType(using LocalContext): TypeBounds | TypeBoundsTree | TypeLambdaTree = {
-      def readTypeBoundsType(using LocalContext): TypeBounds = {
-        assert(reader.readByte() == TYPEBOUNDS, posErrorMsg)
-        val end = reader.readEnd()
-        val low = readType
-        // type bounds for type parameters have to be bounds, not an alias
-        assert(reader.currentAddr != end && !isModifierTag(reader.nextByte), posErrorMsg)
-        val high = readType
-        // TODO: read variance (a modifier)
-        skipModifiers(end)
-        RealTypeBounds(low, high)
-      }
-
-      def readTypeBoundsTree(using LocalContext): TypeBoundsTree = {
-        val spn = span
-        assert(reader.readByte() == TYPEBOUNDStpt, posErrorMsg)
-        val end = reader.readEnd()
-        val low = readTypeTree
-        val high = readTypeTree
-        // assert atEnd: no alias for type parameters
-        assert(reader.currentAddr == end, posErrorMsg)
-        TypeBoundsTree(low, high)(spn)
-      }
-
-      def readLambdaTpt(using LocalContext): TypeLambdaTree = {
-        assert(reader.nextByte == LAMBDAtpt, posErrorMsg)
-        readTypeTree.asInstanceOf[TypeLambdaTree]
-      }
-
-      readPotentiallyShared(
-        if (tagFollowShared == TYPEBOUNDS)
-          readTypeBoundsType
-        else if (tagFollowShared == TYPEBOUNDStpt)
-          readTypeBoundsTree
-        else
-          readLambdaTpt
-      )
-    }
-
-    def toTypeParamBounds(tpt: TypeTree): TypeBounds = tpt match
-      case TypeLambdaTree(tparams, body) =>
-        val span = tpt.span
-        val bodyBounds = toTypeParamBounds(body)
-        bodyBounds.mapBounds(bound => TypeLambdaTree(tparams, TypeWrapper(bound)(span))(span).toType)
-      case BoundedTypeTree(bounds, None) =>
-        bounds.toTypeBounds
+    def toTypeParamBounds(tpt: TypeDefinitionTree): TypeBounds = tpt match
+      case tpt: TypeBoundsTree =>
+        tpt.toTypeBounds
+      case tpt @ PolyTypeDefinitionTree(_, body) =>
+        toTypeParamBounds(body).mapBounds(tpt.integrateInto(_))
       case _ =>
         throw TastyFormatException(s"unexpected type param bounds tree $tpt at $posErrorMsg")
     end toTypeParamBounds
@@ -543,14 +550,11 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val name = readName.toTypeName
-      val bounds = readTypeParamType(using localCtx.withOwner(paramSymbol))
-      val typeBounds = bounds match
-        case bounds: TypeBounds     => bounds
-        case bounds: TypeBoundsTree => bounds.toTypeBounds
-        case bounds: TypeLambdaTree => toTypeParamBounds(bounds)
+      val typeDefTree = readTypeDefinition(forOpaque = false)(using localCtx.withOwner(paramSymbol))
+      val typeBounds = toTypeParamBounds(typeDefTree)
       paramSymbol.setBounds(typeBounds)
       readAnnotationsInModifiers(paramSymbol, end)
-      definingTree(paramSymbol, TypeParam(name, bounds, paramSymbol)(spn))
+      definingTree(paramSymbol, TypeParam(name, typeDefTree, paramSymbol)(spn))
     }
 
     val acc = new ListBuffer[TypeParam]()
@@ -558,29 +562,6 @@ private[tasties] class TreeUnpickler(
       acc += readTypeParam
     }
     acc.toList
-  }
-
-  /** Reads TYPEBOUNDStpt of a typedef */
-  private def readBoundedTypeTree(using LocalContext): BoundedTypeTree = {
-    assert(reader.readByte() == TYPEBOUNDStpt, posErrorMsg)
-    val spn = span
-    val end = reader.readEnd()
-    val low = readTypeTree
-    val high = readTypeTree
-    val alias = reader.ifBeforeOpt(end)(readTypeTree)
-    BoundedTypeTree(TypeBoundsTree(low, high)(spn), alias)(spn)
-  }
-
-  private def readTypeBoundsTree(using LocalContext): TypeBoundsTree = {
-    assert(tagFollowShared == TYPEBOUNDStpt, posErrorMsg)
-    readPotentiallyShared({
-      val spn = span
-      reader.readByte()
-      val end = reader.readEnd()
-      val low = readTypeTree
-      val high = readTypeTree
-      TypeBoundsTree(low, high)(spn)
-    })
   }
 
   // TODO: classinfo of the owner
@@ -854,7 +835,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val qual = readTerm
-      val mixin = reader.ifBefore(end)(Some(readTypeTree.asInstanceOf[TypeIdent]), None)
+      val mixin = reader.ifBeforeOpt(end)(readTypeTree.asInstanceOf[TypeIdent])
       Super(qual, mixin)(spn)
     case SELECTin =>
       val spn = span
@@ -1106,11 +1087,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val tycon = readType
-      // TODO: type operations can be much more complicated
-      AppliedType(
-        tycon,
-        reader.until(end)(if (tagFollowShared == TYPEBOUNDS) WildcardTypeBounds(readTypeBounds) else readType)
-      )
+      AppliedType(tycon, reader.until(end)(readTypeOrWildcard()))
     case THIS =>
       reader.readByte()
       readType match
@@ -1293,14 +1270,7 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val end = reader.readEnd()
       val tycon = readTypeTree
-      AppliedTypeTree(
-        tycon,
-        reader.until(end)(
-          if (tagFollowShared == TYPEBOUNDS) TypeWrapper(WildcardTypeBounds(readTypeBounds))(spn)
-          else if (tagFollowShared == TYPEBOUNDStpt) WildcardTypeBoundsTree(readTypeBoundsTree)(spn)
-          else readTypeTree
-        )
-      )(spn)
+      AppliedTypeTree(tycon, reader.until(end)(readTypeOrWildcardTree(spn)))(spn)
     case LAMBDAtpt =>
       val spn = span
       reader.readByte()
@@ -1345,19 +1315,17 @@ private[tasties] class TreeUnpickler(
        * example: case List[t] => t
        * Such a bind has IDENT(_) as its body, which is not a type tree and therefore not expected.
        * Treat it as if it were an IDENTtpt. */
-      val body: TypeTree = if (reader.nextByte == IDENT) {
+      val body: TypeDefinitionTree = if (reader.nextByte == IDENT) {
         val bodySpn = span
         reader.readByte()
         val typeName = readName.toTypeName
         val typ = readTypeBounds
         NamedTypeBoundsTree(typeName, typ)(bodySpn)
-      } else readTypeTree
+      } else readTypeDefinition(forOpaque = false)
       val sym = localCtx.getSymbol[LocalTypeParamSymbol](start)
       readAnnotationsInModifiers(sym, end)
       sym.setBounds(bounds)
       definingTree(sym, TypeTreeBind(name, body, sym)(spn))
-    // Type tree for a type member (abstract or bounded opaque)
-    case TYPEBOUNDStpt => readBoundedTypeTree
     case BYNAMEtpt =>
       val spn = span
       reader.readByte()
