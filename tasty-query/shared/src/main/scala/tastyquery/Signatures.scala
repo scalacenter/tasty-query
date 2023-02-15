@@ -24,7 +24,7 @@ object Signatures:
   end Signature
 
   object Signature {
-    private[tastyquery] def fromMethodType(info: Type, optCtorReturn: Option[ClassSymbol])(using Context): Signature =
+    private[tastyquery] def fromType(info: Type, optCtorReturn: Option[ClassSymbol])(using Context): Signature =
       def rec(info: Type, acc: List[ParamSig]): Signature =
         info match {
           case info: MethodType =>
@@ -38,6 +38,6 @@ object Signatures:
         }
 
       rec(info, Nil)
-    end fromMethodType
+    end fromType
   }
 end Signatures

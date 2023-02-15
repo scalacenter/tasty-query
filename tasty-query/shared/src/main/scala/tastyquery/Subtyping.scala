@@ -83,11 +83,20 @@ private[tastyquery] object Subtyping:
       /* When the symbols are not the same, we could still have a subtyping
        * relationship if they are defined in different classes of the same hierarchy.
        */
+
+      def sameTermSignature: Boolean =
+        // TODO? dotc does this but in my (sjrd) opinion, this should be !sym1.needsSignature && !sym2.needsSignature
+        val sym1Term = sym1.asTerm
+        val sym2Term = sym2.asTerm
+        if sym1Term.needsSignature then sym2Term.needsSignature && tp1.asTerm.signature == tp2.asTerm.signature
+        else !sym2Term.needsSignature
+
       val trueBecauseOverriddenMembers =
         sym1.name == sym2.name
           && isSubprefix(tp1.prefix, tp2.prefix)
-          && tp1.optSignature == tp2.optSignature
+          && (sym1.isType || sameTermSignature)
           && !(sym1.isClass && sym2.isClass) // classes can shadow each other without being subtypes
+
       trueBecauseOverriddenMembers || level2(tp1, tp2)
   end level1NamedNamed
 
