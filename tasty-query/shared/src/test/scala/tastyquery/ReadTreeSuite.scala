@@ -6,6 +6,7 @@ import dotty.tools.tasty.TastyFormat.NameTags
 
 import munit.{Location, TestOptions}
 
+import tastyquery.Annotations.*
 import tastyquery.Contexts
 import tastyquery.Contexts.Context
 import tastyquery.Constants.{ClazzTag, Constant, IntTag, NullTag}
@@ -93,7 +94,10 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       def unapply(tpe: Types.ConstantType): Some[Constant] = Some(tpe.value)
 
     object AnnotatedType:
-      def unapply(tpe: Types.AnnotatedType): (Type, Tree) = (tpe.typ, tpe.annotation)
+      def unapply(tpe: Types.AnnotatedType): (Type, Annotation) = (tpe.typ, tpe.annotation)
+
+    object Annotation:
+      def unapply(annot: Annotations.Annotation): Some[Tree] = Some(annot.tree)
 
     object ByNameType:
       def unapply(tpe: Types.ByNameType): Some[Type] = Some(tpe.resultType)
@@ -1071,7 +1075,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                   TypeWrapper(
                     ty.AnnotatedType(
                       TermRefInternal(NoPrefix, SymbolWithName(SimpleName("x$1"))),
-                      New(TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("unchecked")))))
+                      ty.Annotation(
+                        New(TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("unchecked")))))
+                      )
                     )
                   )
                 ),

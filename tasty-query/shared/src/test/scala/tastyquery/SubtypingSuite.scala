@@ -726,7 +726,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     // TODO Differentiate *refining* annotations
 
     val uncheckedVarianceClass = ctx.findTopLevelClass("scala.annotation.unchecked.uncheckedVariance")
-    val annot = Annotation(uncheckedVarianceClass).tree
+    val annot = Annotation(uncheckedVarianceClass)
 
     assertEquiv(AnnotatedType(defn.IntType, annot), AnnotatedType(defn.IntType, annot)).withRef[Int @uV, Int @uV]
     assertEquiv(defn.IntType, AnnotatedType(defn.IntType, annot)).withRef[Int, Int @uV]
