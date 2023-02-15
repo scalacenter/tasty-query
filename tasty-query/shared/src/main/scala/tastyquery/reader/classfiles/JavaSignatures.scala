@@ -274,7 +274,7 @@ private[classfiles] object JavaSignatures:
         classRest(null)
 
     def fieldSignature: Type =
-      ExprType(referenceType(null))
+      referenceType(null)
 
     def cookFailure(tname: TypeName, reason: String): Nothing =
       val path = if !isClass then s"${member.owner.erasedName}#${member.name}" else member.erasedName

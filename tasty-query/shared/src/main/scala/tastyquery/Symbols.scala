@@ -256,7 +256,7 @@ object Symbols {
             val targetType = self.declaredTypeAsSeenFrom(site)
             candidates.find { candidate =>
               // TODO Also check targetName here
-              candidate.declaredTypeAsSeenFrom(site).matchesLoosely(targetType)
+              candidate.declaredTypeAsSeenFrom(site).matches(targetType)
             }
     end matchingDecl
 
@@ -394,10 +394,9 @@ object Symbols {
       val local = mySignature
       if local != null then local
       else
-        val sig = declaredType match
-          case methodic: MethodicType =>
-            Some(Signature.fromMethodic(methodic, Option.when(isConstructor)(owner.asClass)))
-          case _ => None
+        val sig =
+          if is(Method) then Some(Signature.fromMethodType(declaredType, Option.when(isConstructor)(owner.asClass)))
+          else None
         mySignature = sig
         sig
 
@@ -445,7 +444,7 @@ object Symbols {
       * A stable member is one that is known to be idempotent.
       */
     final def isStableMember(using Context): Boolean =
-      !isAnyOf(Method | Mutable) && !declaredType.isInstanceOf[ExprType]
+      !isAnyOf(Method | Mutable) && !declaredType.isInstanceOf[ByNameType]
   end TermSymbol
 
   object TermSymbol:

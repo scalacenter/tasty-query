@@ -228,28 +228,19 @@ object Types {
         case tp: TermRef => tp.underlying.widenOverloads
         case tp          => tp
 
-    /** Widen from ExprType type to its result type.
-      *
-      * For all other types, return `this`.
-      */
-    final def widenExpr: Type = this match {
-      case tp: ExprType => tp.resultType
-      case _            => this
-    }
-
-    /** Widen singleton types, ExprTypes, AnnotatedTypes and RefinedTypes. */
+    /** Widen singleton types, ByNameTypes, AnnotatedTypes and RefinedTypes. */
     final def widen(using Context): Type = this match
       case _: TypeRef | _: MethodType | _: PolyType => this // fast path for most frequent cases
       case tp: TermRef => // fast path for next most frequent case
         if tp.isOverloaded then tp else tp.underlying.widen
       case tp: SingletonType => tp.underlying.widen
-      case tp: ExprType      => tp.resultType.widen
+      case tp: ByNameType    => tp.resultType.widen
       case tp: AnnotatedType => tp.typ.widen
       case tp: RefinedType   => tp.parent.widen
       case tp                => tp
 
     private[tastyquery] final def widenIfUnstable(using Context): Type = this match
-      case tp: ExprType                             => tp.resultType.widenIfUnstable
+      case tp: ByNameType                           => tp.resultType.widenIfUnstable
       case tp: TermRef if !tp.symbol.isStableMember => tp.underlying.widenIfUnstable
       case _                                        => this
 
@@ -327,7 +318,6 @@ object Types {
       this match {
         case tpe: NamedType    => tpe.symbol == sym
         case tpe: AppliedType  => tpe.underlying.isRef(sym)
-        case tpe: ExprType     => tpe.underlying.isRef(sym)
         case tpe: TermParamRef => tpe.underlying.isRef(sym)
         case tpe: TypeParamRef => tpe.bounds.high.isRef(sym)
         case _                 => false // todo: add ProxyType (need to fill in implementations of underlying)
@@ -407,15 +397,6 @@ object Types {
       */
     final def matches(that: Type)(using Context): Boolean =
       TypeOps.matchesType(this, that)
-
-    /** This is the same as `matches` except that it also matches `=> T` with `T` and vice versa. */
-    final def matchesLoosely(that: Type)(using Context): Boolean =
-      this.matches(that) || {
-        val thisResult = this.widenExpr
-        val thatResult = that.widenExpr
-        (this eq thisResult) != (that eq thatResult) && thisResult.matches(thatResult)
-      }
-    end matchesLoosely
 
     // Combinators
 
@@ -1012,14 +993,14 @@ object Types {
     override def toString(): String = s"AppliedType($tycon, $args)"
   }
 
-  /** A by-name parameter type of the form `=> T`, or the type of a method with no parameter list. */
-  final class ExprType(val resultType: Type) extends TypeProxy with MethodicType {
+  /** A by-name parameter type of the form `=> T`. */
+  final class ByNameType(val resultType: Type) extends TypeProxy with TermType {
     override def underlying(using Context): Type = resultType
 
-    private[tastyquery] final def derivedExprType(resultType: Type): ExprType =
-      if (resultType eq this.resultType) this else ExprType(resultType)
+    private[tastyquery] final def derivedByNameType(resultType: Type): ByNameType =
+      if (resultType eq this.resultType) this else ByNameType(resultType)
 
-    override def toString(): String = s"ExprType($resultType)"
+    override def toString(): String = s"ByNameType($resultType)"
   }
 
   sealed trait LambdaType extends ParamRefBinders with TermType {
@@ -1162,14 +1143,10 @@ object Types {
       *   - add @inlineParam to inline parameters
       */
     private[tastyquery] def fromSymbols(params: List[TermSymbol], resultType: Type)(using Context): MethodType = {
-      // def translateInline(tp: Type): Type = tp match {
-      //   case ExprType(resType) => ExprType(AnnotatedType(resType, Annotation(defn.InlineParamAnnot)))
-      //   case _ => AnnotatedType(tp, Annotation(defn.InlineParamAnnot))
-      // }
-      // def translateErased(tp: Type): Type = tp match {
-      //   case ExprType(resType) => ExprType(AnnotatedType(resType, Annotation(defn.ErasedParamAnnot)))
-      //   case _ => AnnotatedType(tp, Annotation(defn.ErasedParamAnnot))
-      // }
+      // def translateInline(tp: Type): Type =
+      //   AnnotatedType(tp, Annotation(defn.InlineParamAnnot))
+      // def translateErased(tp: Type): Type =
+      //   AnnotatedType(tp, Annotation(defn.ErasedParamAnnot))
       def paramInfo(param: TermSymbol) = {
         var paramType = param.declaredType //.annotatedToRepeated
         // if (param.is(Inline)) paramType = translateInline(paramType)

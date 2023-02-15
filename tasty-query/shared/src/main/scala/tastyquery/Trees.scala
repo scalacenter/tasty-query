@@ -642,7 +642,7 @@ object Trees {
   /** => T */
   final case class ByNameTypeTree(result: TypeTree)(span: Span) extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
-      ExprType(result.toType)
+      ByNameType(result.toType)
 
     override final def withSpan(span: Span): ByNameTypeTree = ByNameTypeTree(result)(span)
   }

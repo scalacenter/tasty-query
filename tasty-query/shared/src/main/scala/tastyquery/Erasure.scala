@@ -16,8 +16,8 @@ private[tastyquery] object Erasure:
 
   def erase(tpe: Type)(using Context): ErasedTypeRef =
     tpe match
-      case _: ExprType => ClassRef(defn.Function0Class)
-      case _           => finishErase(preErase(tpe))
+      case _: ByNameType => ClassRef(defn.Function0Class)
+      case _             => finishErase(preErase(tpe))
   end erase
 
   /** First pass of erasure, where some special types are preserved as is.

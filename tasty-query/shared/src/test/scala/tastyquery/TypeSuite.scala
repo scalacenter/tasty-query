@@ -41,6 +41,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
           app.args.corresponds(argRefs)((arg, argRef) => argRef(arg))
         case _ => false
 
+    def isByName(arg: Type => Boolean)(using Context): Boolean =
+      tpe match
+        case tpe: ByNameType => arg(tpe.resultType)
+        case _               => false
+
     def isArrayOf(arg: Type => Boolean)(using Context): Boolean =
       isApplied(_.isRef(defn.ArrayClass), Seq(arg))
 
@@ -140,7 +145,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   applyOverloadedTest("apply-overloaded-arrayObj")("callD", _.isRef(defn.ArrayClass))
   applyOverloadedTest("apply-overloaded-byName")(
     "callE",
-    _.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Num"))
+    _.isByName(_.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Num")))
   )
   applyOverloadedTest("apply-overloaded-gen-target-name")(
     "callG",
@@ -349,17 +354,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     // val start: Int
     val startSym = RangeClass.findDecl(name"start")
     assert(startSym.declaredType.isOfClass(defn.IntClass), clue(startSym.declaredType))
-    assert(startSym.declaredType.isInstanceOf[ExprType], clue(startSym.declaredType)) // should this be TypeRef?
 
     // val isEmpty: Boolean
     val isEmptySym = RangeClass.findDecl(name"isEmpty")
     assert(isEmptySym.declaredType.isOfClass(defn.BooleanClass), clue(isEmptySym.declaredType))
-    assert(isEmptySym.declaredType.isInstanceOf[ExprType], clue(isEmptySym.declaredType)) // should this be TypeRef?
 
     // def isInclusive: Boolean
     val isInclusiveSym = RangeClass.findDecl(name"isInclusive")
     assert(isInclusiveSym.declaredType.isOfClass(defn.BooleanClass), clue(isInclusiveSym.declaredType))
-    assert(isInclusiveSym.declaredType.isInstanceOf[ExprType], clue(isInclusiveSym.declaredType))
 
     // def by(step: Int): Range
     locally {

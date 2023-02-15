@@ -60,8 +60,8 @@ private[tastyquery] object TypeMaps {
       tp.derivedOrType(tp1, tp2)
     protected def derivedAnnotatedType(tp: AnnotatedType, underlying: Type, annot: Tree): Type =
       tp.derivedAnnotatedType(underlying, annot)
-    protected def derivedExprType(tp: ExprType, restpe: Type): Type =
-      tp.derivedExprType(restpe)
+    protected def derivedByNameType(tp: ByNameType, restpe: Type): Type =
+      tp.derivedByNameType(restpe)
     protected def derivedLambdaType(tp: LambdaType, formals: List[tp.PInfo], restpe: Type): Type =
       tp.derivedLambdaType(tp.paramNames, formals, restpe)
 
@@ -106,8 +106,8 @@ private[tastyquery] object TypeMaps {
         case tp: WildcardTypeBounds =>
           derivedWildcardTypeBounds(tp, this(tp.bounds))
 
-        case tp: ExprType =>
-          derivedExprType(tp, this(tp.resultType))
+        case tp: ByNameType =>
+          derivedByNameType(tp, this(tp.resultType))
 
         case tp: AnnotatedType =>
           derivedAnnotatedType(tp, this(tp.typ), tp.annotation) // tp.annotation.mapWith(this)

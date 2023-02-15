@@ -36,7 +36,7 @@ inThisBuild(Def.settings(
     Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd/")),
     Developer("bishabosha", "Jamie Thompson", "bishbashboshjt@gmail.com", url("https://github.com/bishabosha")),
   ),
-  versionPolicyIntention := Compatibility.BinaryCompatible,
+  versionPolicyIntention := Compatibility.None,
   // Ignore dependencies to internal modules whose version is like `1.2.3+4...` (see https://github.com/scalacenter/sbt-version-policy#how-to-integrate-with-sbt-dynver)
   versionPolicyIgnoredInternalDependencyVersions := Some("^\\d+\\.\\d+\\.\\d+\\+\\d+".r)
 ))
@@ -111,8 +111,6 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
-          ProblemFilters.exclude[ReversedMissingMethodProblem]("tastyquery.Trees#PatternTree.withSpan"),
-          ProblemFilters.exclude[ReversedMissingMethodProblem]("tastyquery.Types#Type.findMember"),
         )
       },
     )

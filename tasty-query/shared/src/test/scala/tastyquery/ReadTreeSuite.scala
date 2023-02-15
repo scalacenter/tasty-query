@@ -95,8 +95,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     object AnnotatedType:
       def unapply(tpe: Types.AnnotatedType): (Type, Tree) = (tpe.typ, tpe.annotation)
 
-    object ExprType:
-      def unapply(tpe: Types.ExprType): Some[Type] = Some(tpe.resultType)
+    object ByNameType:
+      def unapply(tpe: Types.ByNameType): Some[Type] = Some(tpe.resultType)
 
     object OrType:
       def unapply(tpe: Types.OrType): (Type, Type) = (tpe.first, tpe.second)
@@ -1459,7 +1459,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val byName: StructureCheck = {
       case ValDef(
             SimpleName("byNameParam"),
-            TypeWrapper(ty.ExprType(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Int"))))),
+            TypeWrapper(ty.ByNameType(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Int"))))),
             None,
             _
           ) =>
