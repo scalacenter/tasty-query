@@ -256,11 +256,16 @@ private[tastyquery] object TypeMaps {
       * If the expansion is a wildcard parameter reference, convert its
       * underlying bounds to a range, otherwise return the expansion.
       */
-    def expandParam(tp: NamedType, pre: Type): Option[Type] =
-      tp.argForParam(pre)
+    def expandParam(sym: ClassTypeParamSymbol, pre: Type): Option[Type] =
+      sym
+        .argForParam(pre)
         .map(_ match {
-          case arg: TypeRef if arg.prefix.isArgPrefixOf(arg.symbol) =>
-            expandBounds(arg.symbol.asInstanceOf[ClassTypeParamSymbol].bounds)
+          case arg: TypeRef =>
+            arg.symbol match
+              case argSym: ClassTypeParamSymbol if arg.prefix.isArgPrefixOf(argSym) =>
+                expandBounds(argSym.bounds)
+              case _ =>
+                reapply(arg)
           case arg: WildcardTypeBounds => expandBounds(arg.bounds)
           case arg                     => reapply(arg)
         })
@@ -273,9 +278,9 @@ private[tastyquery] object TypeMaps {
       else
         pre match {
           case Range(preLo, preHi) =>
-            val forwarded =
-              if (tp.symbol.isAllOf(ClassTypeParam)) expandParam(tp, preHi)
-              else tryWiden(tp, preHi)
+            val forwarded = tp.symbol match
+              case sym: ClassTypeParamSymbol => expandParam(sym, preHi)
+              case _                         => tryWiden(tp, preHi)
             forwarded.getOrElse {
               range(super.derivedSelect(tp, preLo).lowerBound, super.derivedSelect(tp, preHi).upperBound)
             }

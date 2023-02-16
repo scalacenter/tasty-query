@@ -96,15 +96,11 @@ object Types {
       * `<pre> . <sym>` is an actual argument reference, i.e., `pre` is not the
       * ThisType of `sym`'s owner, or a reference to `sym`'s owner.'
       */
-    private[tastyquery] final def isArgPrefixOf(sym: Symbol)(using Context): Boolean =
-      sym match
-        case sym: ClassTypeParamSymbol =>
-          this match
-            case tp: ThisType => tp.cls != sym.owner
-            case tp: TypeRef  => tp.symbol != sym.owner
-            case _            => true
-        case _ =>
-          false
+    private[tastyquery] final def isArgPrefixOf(sym: ClassTypeParamSymbol)(using Context): Boolean =
+      this match
+        case tp: ThisType => tp.cls != sym.owner
+        case tp: TypeRef  => tp.symbol != sym.owner
+        case _            => true
     end isArgPrefixOf
   end Prefix
 
@@ -586,50 +582,6 @@ object Types {
             throw new AssertionError(s"found reference by name $name without a prefix")
     end computeSymbol
 
-    /** The argument corresponding to class type parameter `tparam` as seen from
-      * prefix `pre`. Can produce a TypeBounds type if `widenAbstract` is true,
-      * or prefix is an & or | type and parameter is non-variant.
-      * Otherwise, a typebounds argument is dropped and the original type parameter
-      * reference is returned.
-      */
-    private[tastyquery] final def argForParam(pre: Type, widenAbstract: Boolean = false)(using Context): Option[Type] =
-      val tparam = symbol.asInstanceOf[ClassTypeParamSymbol]
-      val cls = tparam.owner
-      val base = pre.baseType(cls)
-      base match {
-        case Some(base: AppliedType) =>
-          var tparams = cls.typeParams
-          var args = base.args
-          var idx = 0
-          while (tparams.nonEmpty && args.nonEmpty) {
-            if (tparams.head.eq(tparam))
-              return Some(args.head match {
-                case _: WildcardTypeBounds if !widenAbstract => TypeRef(pre, tparam)
-                case arg                                     => arg
-              })
-            tparams = tparams.tail
-            args = args.tail
-            idx += 1
-          }
-          None
-        /*case base: AndOrType =>
-          var tp1 = argForParam(base.tp1)
-          var tp2 = argForParam(base.tp2)
-          val variance = tparam.paramVarianceSign
-          if (isBounds(tp1) || isBounds(tp2) || variance == 0) {
-            // compute argument as a type bounds instead of a point type
-            tp1 = tp1.bounds
-            tp2 = tp2.bounds
-          }
-          if (base.isAnd == variance >= 0) tp1 & tp2 else tp1 | tp2*/
-        case _ =>
-          /*if (pre.termSymbol.isPackage) argForParam(pre.select(nme.PACKAGE))
-          else*/
-          if (pre.isExactlyNothing) Some(pre)
-          else None
-      }
-    end argForParam
-
     /** A selection of the same kind, but with potentially a different prefix.
       * The following normalization is performed for type selections T#A:
       *
@@ -640,9 +592,9 @@ object Types {
       else if (prefix.isExactlyNothing) prefix
       else {
         if (isType) {
-          val res =
-            if (!symbol.isClass && symbol.isAllOf(ClassTypeParam)) argForParam(prefix)
-            else prefix.lookupRefined(name)
+          val res = symbol match
+            case sym: ClassTypeParamSymbol => sym.argForParam(prefix)
+            case _                         => prefix.lookupRefined(name)
           if (res.isDefined)
             return res.get
         }
