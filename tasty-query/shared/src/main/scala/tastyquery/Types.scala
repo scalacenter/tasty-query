@@ -706,7 +706,16 @@ object Types {
       new TermRef(prefix, external)
 
     private[tastyquery] def resolveLookupIn(designator: LookupIn)(using Context): TermSymbol =
-      designator.pre.member(designator.sel).asTerm
+      val cls = designator.pre.classSymbol.getOrElse {
+        throw InvalidProgramStructureException(s"Owner of SelectIn($designator) does not refer a class")
+      }
+      cls
+        .findMember(cls.thisType, designator.sel)
+        .getOrElse {
+          throw MemberNotFoundException(cls, designator.sel)
+        }
+        .asTerm
+    end resolveLookupIn
   end TermRef
 
   final class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends Type {
