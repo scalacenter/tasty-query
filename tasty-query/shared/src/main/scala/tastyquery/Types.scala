@@ -685,9 +685,8 @@ object Types {
 
     protected final def normalizedDerivedSelectImpl(prefix: Type)(using Context): TermRef =
       designator match
-        case sym: TermSymbol =>
-          val refinedSym = prefix.member(sym.signedName).asTerm
-          TermRef(prefix, refinedSym)
+        case sym: TermSymbol if !sym.is(Private) =>
+          TermRef(prefix, sym.signedName)
         case desig =>
           withPrefix(prefix)
     end normalizedDerivedSelectImpl
@@ -858,11 +857,8 @@ object Types {
           res
         case None =>
           designator match
-            case sym: TypeMemberSymbol =>
-              val refinedSym = prefix.member(sym.name).asType
-              TypeRef(prefix, refinedSym)
-            case sym: TypeSymbol =>
-              TypeRef(prefix, sym)
+            case sym: TypeMemberSymbol if !sym.is(Private) =>
+              TypeRef(prefix, sym.name)
             case desig =>
               withPrefix(prefix)
     end normalizedDerivedSelectImpl
