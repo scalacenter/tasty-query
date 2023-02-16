@@ -541,7 +541,7 @@ object Types {
       case designator: Scala2ExternalSymRef => designator.name
     }).asInstanceOf[ThisName]
 
-    final def symbol(using Context): ThisSymbolType =
+    protected final def symbol0(using Context): ThisSymbolType =
       val local = mySymbol
       if local != null then local.asInstanceOf[ThisSymbolType] // Cast needed for expression evaluator
       else
@@ -678,6 +678,9 @@ object Types {
     override def toString(): String =
       s"TermRef($prefix, $myDesignator)"
 
+    final def symbol(using Context): TermSymbol =
+      symbol0
+
     final def optSymbol(using Context): Option[TermSymbol] =
       Some(symbol)
 
@@ -783,7 +786,7 @@ object Types {
       s"TypeRef($prefix, $myDesignator)"
 
     final def optSymbol(using Context): Option[TypeSymbol] =
-      Some(symbol)
+      Some(symbol0)
 
     final def isClass(using Context): Boolean =
       optSymbol.exists(_.isClass)
