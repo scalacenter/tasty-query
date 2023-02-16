@@ -110,8 +110,6 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("array types") {
     val TypeRefIn = ctx.findTopLevelClass("simple_trees.TypeRefIn")
 
-    // TODO The erasure is not actually correct here, but at least we don't crash
-
     val withArray = TypeRefIn.findNonOverloadedDecl(name"withArray")
     assertSigned(withArray, "(1,java.lang.Object):scala.Unit")
 
