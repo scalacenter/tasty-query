@@ -1388,6 +1388,17 @@ object Types {
     val refinedName: Name
 
     override final def underlying(using Context): Type = parent
+
+    private[tastyquery] override def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      val parentMember = parent.resolveMember(name, pre)
+
+      if name != refinedName then parentMember
+      else
+        val myResult = makeResolveMemberResult(pre)
+        ResolveMemberResult.merge(parentMember, myResult)
+    end resolveMember
+
+    protected def makeResolveMemberResult(pre: Type)(using Context): ResolveMemberResult
   end RefinedType
 
   /** A type refinement `parent { type refinedName <:> refinedBounds }`.
@@ -1397,6 +1408,9 @@ object Types {
     */
   final class TypeRefinement(val parent: Type, val refinedName: TypeName, val refinedBounds: TypeBounds)
       extends RefinedType:
+    protected def makeResolveMemberResult(pre: Type)(using Context): ResolveMemberResult =
+      ResolveMemberResult.TypeMember(Nil, refinedBounds)
+
     private[tastyquery] final def derivedTypeRefinement(
       parent: Type,
       refinedName: TypeName,
@@ -1415,6 +1429,9 @@ object Types {
     * @param refinedType The refined type for the given term member
     */
   final class TermRefinement(val parent: Type, val refinedName: TermName, val refinedType: Type) extends RefinedType:
+    protected def makeResolveMemberResult(pre: Type)(using Context): ResolveMemberResult =
+      ResolveMemberResult.TermMember(Nil, refinedType)
+
     private[tastyquery] final def derivedTermRefinement(parent: Type, refinedName: TermName, refinedType: Type): Type =
       if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedType eq this.refinedType)) this
       else TermRefinement(parent, refinedName, refinedType)
