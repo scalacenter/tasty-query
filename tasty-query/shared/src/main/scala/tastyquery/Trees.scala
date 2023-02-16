@@ -303,7 +303,7 @@ object Trees {
   final case class Apply(fun: TermTree, args: List[TermTree])(span: Span) extends TermTree(span):
 
     private def resolveMethodType(funTpe: Type, args: List[Type])(using Context): Type =
-      funTpe.widenOverloads match
+      funTpe.widen match
         case funTpe: MethodType =>
           funTpe.instantiate(args)
         case tpe =>
@@ -369,7 +369,7 @@ object Trees {
   final case class TypeApply(fun: TermTree, args: List[TypeTree])(span: Span) extends TermTree(span) {
 
     private def resolvePolyType(funTpe: Type, args: List[Type])(using Context): Type =
-      funTpe.widenOverloads match
+      funTpe.widen match
         case funTpe: PolyType =>
           funTpe.instantiate(args)
         case tpe =>

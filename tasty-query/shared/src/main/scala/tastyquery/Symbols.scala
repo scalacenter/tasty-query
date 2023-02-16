@@ -207,10 +207,6 @@ object Symbols {
     final def asClass: ClassSymbol = this.asInstanceOf[ClassSymbol]
     final def asPackage: PackageSymbol = this.asInstanceOf[PackageSymbol]
 
-    private[tastyquery] final def memberIsOverloaded(name: SignedName): Boolean = this match
-      case scope: ClassSymbol => scope.hasOverloads(name)
-      case _                  => false
-
     final def hasAnnotation(annotClass: ClassSymbol)(using Context): Boolean =
       annotations.exists(_.symbol == annotClass)
 
@@ -769,11 +765,6 @@ object Symbols {
       val set = myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet)
       if decl.isType then assert(set.isEmpty, s"trying to add a second entry $decl for type name ${decl.name} in $this")
       set += decl
-
-    private[Symbols] final def hasOverloads(name: SignedName): Boolean =
-      myDeclarations.get(name.underlying) match
-        case Some(decls) => decls.sizeIs > 1
-        case _           => false
 
     @deprecated("use getAllOverloadedDecls", "0.4.0")
     final def getDecls(name: Name)(using Context): List[TermOrTypeSymbol] =

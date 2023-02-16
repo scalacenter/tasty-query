@@ -224,21 +224,15 @@ object Types {
     ): Type =
       Substituters.substClassTypeParams(this, from, to)
 
-    private[tastyquery] final def widenOverloads(using Context): Type =
-      this.widen match
-        case tp: TermRef => tp.underlying.widenOverloads
-        case tp          => tp
-
     /** Widen singleton types, ByNameTypes, AnnotatedTypes and RefinedTypes. */
     final def widen(using Context): Type = this match
-      case _: TypeRef | _: MethodType | _: PolyType => this // fast path for most frequent cases
-      case tp: TermRef => // fast path for next most frequent case
-        if tp.isOverloaded then tp else tp.underlying.widen
-      case tp: SingletonType => tp.underlying.widen
-      case tp: ByNameType    => tp.resultType.widen
-      case tp: AnnotatedType => tp.typ.widen
-      case tp: RefinedType   => tp.parent.widen
-      case tp                => tp
+      case _: TypeRef | _: MethodicType => this // fast path for most frequent cases
+      case tp: TermRef                  => tp.underlying.widen // fast path for next most frequent case
+      case tp: SingletonType            => tp.underlying.widen
+      case tp: ByNameType               => tp.resultType.widen
+      case tp: AnnotatedType            => tp.typ.widen
+      case tp: RefinedType              => tp.parent.widen
+      case tp                           => tp
 
     private[tastyquery] final def widenIfUnstable(using Context): Type = this match
       case tp: ByNameType                           => tp.resultType.widenIfUnstable
@@ -758,12 +752,6 @@ object Types {
         mySignature = computed
         computed
     end signature
-
-    final def isOverloaded(using Context): Boolean =
-      myDesignator match
-        case LookupIn(pre, ref) =>
-          pre.symbol.memberIsOverloaded(ref)
-        case _ => false
 
     private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
       underlying match
