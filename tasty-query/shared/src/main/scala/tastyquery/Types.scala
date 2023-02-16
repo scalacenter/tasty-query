@@ -300,7 +300,7 @@ object Types {
       base.baseTypeOf(this)
 
     /** The member with the given `name`. */
-    final def member(name: Name)(using Context): Symbol =
+    private[tastyquery] final def member(name: Name)(using Context): Symbol =
       // We need a valid prefix for `asSeenFrom`
       findMember(name, widenIfUnstable).getOrElse {
         throw MemberNotFoundException(this, name)

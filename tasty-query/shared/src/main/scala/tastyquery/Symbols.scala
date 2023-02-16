@@ -897,6 +897,32 @@ object Symbols {
     final def declarations(using Context): List[TermOrTypeSymbol] =
       myDeclarations.values.toList.flatten
 
+    // Member lookup, including inherited members
+
+    final def getMember(name: Name)(using Context): Option[TermOrTypeSymbol] =
+      findMember(appliedRef, name)
+
+    final def getMember(name: TermName)(using Context): Option[TermSymbol] =
+      getMember(name: Name).map(_.asTerm)
+
+    final def getMember(name: TypeName)(using Context): Option[TypeSymbol] =
+      getMember(name: Name).map(_.asType)
+
+    final def findMember(name: Name)(using Context): TermOrTypeSymbol =
+      getMember(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
+    final def findMember(name: TermName)(using Context): TermSymbol =
+      getMember(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
+    final def findMember(name: TypeName)(using Context): TypeSymbol =
+      getMember(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
     // Type-related things
 
     private[tastyquery] final def initParents: Boolean =
@@ -968,8 +994,8 @@ object Symbols {
       recur(tp)
     end baseTypeOf
 
-    private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[Symbol] =
-      def lookup(lin: List[ClassSymbol]): Option[Symbol] = lin match
+    private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[TermOrTypeSymbol] =
+      def lookup(lin: List[ClassSymbol]): Option[TermOrTypeSymbol] = lin match
         case parentCls :: linRest =>
           parentCls.getDecl(name) match
             case Some(sym) if !sym.is(Private) =>
