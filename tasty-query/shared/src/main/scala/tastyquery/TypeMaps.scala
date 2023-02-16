@@ -229,19 +229,19 @@ private[tastyquery] object TypeMaps {
       * The possible cases are listed inline in the code.
       */
     def tryWiden(tp: NamedType, pre: Type): Option[Type] =
-      pre.member(tp.name) match
-        case memberSym: TypeMemberSymbol =>
-          memberSym.typeDef match
-            case TypeMemberDefinition.TypeAlias(alias) =>
+      pre.resolveMember(tp.name, pre) match
+        case ResolveMemberResult.TypeMember(_, bounds) =>
+          bounds match
+            case TypeAlias(alias) =>
               // if H#T = U, then for any x in L..H, x.T =:= U,
               // hence we can replace with U under all variances
               Some(reapply(alias))
             case _ =>
               // If H#T = ? >: S <: U, then for any x in L..H, S <: x.T <: U,
               // hence we can replace with S..U under all variances
-              Some(expandBounds(memberSym.bounds))
-        case memberSym: TermSymbol =>
-          memberSym.declaredType.dealias match
+              Some(expandBounds(bounds))
+        case ResolveMemberResult.TermMember(symbols, tpe) =>
+          tpe.dealias match
             case tpe: SingletonType =>
               // if H#x: y.type, then for any x in L..H, x.type =:= y.type,
               // hence we can replace with y.type under all variances

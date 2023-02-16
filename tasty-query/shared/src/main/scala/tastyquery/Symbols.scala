@@ -480,6 +480,9 @@ object Symbols {
 
     def bounds(using Context): TypeBounds
 
+    private[tastyquery] def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
+      bounds.mapBounds(_.asSeenFrom(prefix, owner))
+
     def lowerBound(using Context): Type
 
     def upperBound(using Context): Type
@@ -1047,6 +1050,18 @@ object Symbols {
           if name == nme.Constructor then None
           else lookup(linearization.tail)
     end findMember
+
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      findMember(pre, name) match
+        case Some(sym: TermSymbol) =>
+          ResolveMemberResult.TermMember(sym :: Nil, sym.declaredTypeAsSeenFrom(pre))
+        case Some(sym: ClassSymbol) =>
+          ResolveMemberResult.ClassMember(sym)
+        case Some(sym: TypeSymbolWithBounds) =>
+          ResolveMemberResult.TypeMember(sym :: Nil, sym.boundsAsSeenFrom(pre))
+        case None =>
+          ResolveMemberResult.NotFound
+    end resolveMember
 
     private var myTypeRef: TypeRef | Null = null
 
