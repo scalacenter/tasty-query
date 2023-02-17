@@ -16,29 +16,28 @@ private[tastyquery] object Subtyping:
     (tp1 eq tp2) || level1(tp1, tp2)
 
   private def level1(tp1: Type, tp2: Type)(using Context): Boolean = tp2 match
-    case tp2: NamedType =>
-      // Try follow type alias
-      val sym2 = tp2.symbol
-      sym2 match
-        case sym2: TypeMemberSymbol if sym2.isTypeAlias =>
-          if isSubtype(tp1, sym2.aliasedTypeAsSeenFrom(tp2.prefix)) then return true
-        case _ =>
+    case tp2: TypeRef =>
+      tp2.optAliasedType match
+        case Some(alias) =>
+          if isSubtype(tp1, alias) then return true
+        case None =>
           ()
-      end match
 
       tp1 match
-        case tp1: NamedType =>
-          val sym1 = tp1.symbol
-          sym1 match
-            case sym1: TypeMemberSymbol if sym1.isTypeAlias =>
-              if isSubtype(sym1.aliasedTypeAsSeenFrom(tp1.prefix), tp2) then return true
-            case _ =>
+        case tp1: TypeRef =>
+          tp1.optAliasedType match
+            case Some(alias) =>
+              if isSubtype(alias, tp2) then return true
+            case None =>
               ()
-          end match
           level1NamedNamed(tp1, tp2)
-
         case _ =>
           level2(tp1, tp2)
+
+    case tp2: TermRef =>
+      tp1 match
+        case tp1: TermRef => level1NamedNamed(tp1, tp2)
+        case _            => level2(tp1, tp2)
 
     case tp2: WildcardTypeBounds =>
       isSubtype(tp1, tp2.bounds.high)
@@ -48,7 +47,7 @@ private[tastyquery] object Subtyping:
       tp1 match
         case tp1: ThisType =>
           tp1.cls == cls2
-        case tp1: NamedType if cls2.is(Module) && cls2 == tp1.symbol =>
+        case tp1: TypeRef if cls2.is(Module) && tp1.isSpecificClass(cls2) =>
           (cls2.isStatic || isSubprefix(tp1.prefix, cls2.typeRef.prefix))
             || level2(tp1, tp2)
         case _ =>
@@ -72,11 +71,11 @@ private[tastyquery] object Subtyping:
   end level1
 
   private def level1NamedNamed(tp1: NamedType, tp2: NamedType)(using Context): Boolean =
-    val sym1 = tp1.symbol
-    val sym2 = tp2.symbol
+    val sym1 = tp1.optSymbol
+    val sym2 = tp2.optSymbol
 
-    if sym1 == sym2 then
-      sym1.isStatic
+    if sym1.isDefined && sym1 == sym2 then
+      sym1.get.isStatic
       || isSubprefix(tp1.prefix, tp2.prefix)
       || level2(tp1, tp2)
     else
@@ -86,31 +85,39 @@ private[tastyquery] object Subtyping:
 
       def sameTermSignature: Boolean =
         // TODO? dotc does this but in my (sjrd) opinion, this should be !sym1.needsSignature && !sym2.needsSignature
-        val sym1Term = sym1.asTerm
-        val sym2Term = sym2.asTerm
+        // If we get here, both are terms, and terms always have symbols
+        val sym1Term = sym1.get.asTerm
+        val sym2Term = sym2.get.asTerm
         if sym1Term.needsSignature then sym2Term.needsSignature && tp1.asTerm.signature == tp2.asTerm.signature
         else !sym2Term.needsSignature
 
+      def areBothClasses: Boolean =
+        tp1.isType && tp1.asType.isClass && tp2.asType.isClass
+
       val trueBecauseOverriddenMembers =
-        sym1.name == sym2.name
+        tp1.name == tp2.name
           && isSubprefix(tp1.prefix, tp2.prefix)
-          && (sym1.isType || sameTermSignature)
-          && !(sym1.isClass && sym2.isClass) // classes can shadow each other without being subtypes
+          && (tp1.isType || sameTermSignature)
+          && !areBothClasses // classes can shadow each other without being subtypes
 
       trueBecauseOverriddenMembers || level2(tp1, tp2)
   end level1NamedNamed
 
   private def level2(tp1: Type, tp2: Type)(using Context): Boolean = tp1 match
-    case tp1: NamedType =>
-      val sym1 = tp1.symbol
-      sym1 match
-        case sym1: TypeMemberSymbol if sym1.isTypeAlias =>
-          if isSubtype(sym1.aliasedTypeAsSeenFrom(tp1.prefix), tp2) then true
-          else level3(tp1, tp2)
+    case tp1: TypeRef =>
+      tp1.optAliasedType match
+        case Some(alias) =>
+          isSubtype(alias, tp2)
+            || level3(tp1, tp2)
         case _ =>
-          (sym1 == defn.NothingClass || isBottom(tp1))
+          tp1.isSpecificClass(defn.NothingClass)
+            || isBottom(tp1)
             || level3(tp1, tp2)
       end match
+
+    case tp1: TermRef =>
+      isBottom(tp1)
+        || level3(tp1, tp2)
 
     case tp1: ThisType =>
       val cls1 = tp1.cls
@@ -136,22 +143,20 @@ private[tastyquery] object Subtyping:
   end level2
 
   private def level3(tp1: Type, tp2: Type)(using Context): Boolean = tp2 match
+    case TypeRef.OfClass(cls2) =>
+      if cls2.typeParams.isEmpty then
+        if cls2 == defn.AnyKindClass then true
+        else if isBottom(tp1) then true
+        else if tp1.isLambdaSub then false // should be tp1.hasHigherKind, but the scalalib does not like that
+        else if cls2 == defn.AnyClass then true
+        else level3WithBaseType(tp1, tp2, cls2)
+      else
+        // TODO Try eta-expansion if tp1.isLambdaSub && !tp1.isAnyKind
+        level4(tp1, tp2)
+
     case tp2: TypeRef =>
-      tp2.symbol match
-        case cls2: ClassSymbol =>
-          if cls2.typeParams.isEmpty then
-            if cls2 == defn.AnyKindClass then true
-            else if isBottom(tp1) then true
-            else if tp1.isLambdaSub then false // should be tp1.hasHigherKind, but the scalalib does not like that
-            else if cls2 == defn.AnyClass then true
-            else level3WithBaseType(tp1, tp2, cls2)
-          else
-            // TODO Try eta-expansion if tp1.isLambdaSub && !tp1.isAnyKind
-            level4(tp1, tp2)
-        case sym2: TypeSymbolWithBounds =>
-          isSubtype(tp1, tp2.prefix.memberTypeBoundsLow(sym2))
-            || level4(tp1, tp2)
-      end match
+      isSubtype(tp1, tp2.bounds.low)
+        || level4(tp1, tp2)
 
     case tp2: AppliedType =>
       compareAppliedType2(tp1, tp2)
@@ -201,9 +206,9 @@ private[tastyquery] object Subtyping:
           case tycon1: TypeRef =>
             tp2.tycon match
               case tycon2: TypeRef =>
-                val tycon1Sym = tycon1.symbol
-                val tycon2Sym = tycon2.symbol
-                if tycon1Sym == tycon2Sym && isSubprefix(tycon1.prefix, tycon2.prefix) then
+                val tycon1Sym = tycon1.optSymbol
+                val tycon2Sym = tycon2.optSymbol
+                if tycon1Sym.isDefined && tycon1Sym == tycon2Sym && isSubprefix(tycon1.prefix, tycon2.prefix) then
                   isSubArgs(tp1.args, tp2.args, tparams)
                 else false
               case _ =>
@@ -224,13 +229,13 @@ private[tastyquery] object Subtyping:
       case tycon2: TypeRef =>
         if isMatchingApply(tp1) then true
         else
-          tycon2.symbol match
-            case cls2: ClassSymbol =>
+          tycon2.optSymbol match
+            case Some(cls2: ClassSymbol) =>
               // TODO Handle generic tuple <: TupleN
               level3WithBaseType(tp1, tp2, cls2)
-            case sym2: TypeMemberSymbol if sym2.isTypeAlias =>
+            case Some(sym2: TypeMemberSymbol) if sym2.isTypeAlias =>
               isSubtype(tp1, tp2.superType)
-            case sym2: TypeSymbolWithBounds =>
+            case _ =>
               // TODO? Handle bounded type lambdas (compareLower in TypeComparer)
               level4(tp1, tp2)
         end if
@@ -271,16 +276,13 @@ private[tastyquery] object Subtyping:
   end isSubArgs
 
   private def level4(tp1: Type, tp2: Type)(using Context): Boolean = tp1 match
-    case tp1: TypeRef =>
-      tp1.symbol match
-        case cls1: ClassSymbol =>
-          if cls1 == defn.NothingClass then true
-          else if cls1 == defn.NullClass then isNullable(tp2)
-          else false
+    case TypeRef.OfClass(cls1) =>
+      if cls1 == defn.NothingClass then true
+      else if cls1 == defn.NullClass then isNullable(tp2)
+      else false
 
-        case sym1: TypeSymbolWithBounds =>
-          isSubtype(tp1.prefix.memberTypeBoundsHigh(sym1), tp2)
-      end match
+    case tp1: TypeRef =>
+      isSubtype(tp1.bounds.high, tp2)
 
     case tp1: AppliedType =>
       compareAppliedType1(tp1, tp2)
@@ -321,7 +323,7 @@ private[tastyquery] object Subtyping:
   private def compareAppliedType1(tp1: AppliedType, tp2: Type)(using Context): Boolean =
     val tycon1 = tp1.tycon
     tycon1 match
-      case tycon1: TypeRef if tycon1.symbol.isClass =>
+      case TypeRef.OfClass(_) =>
         false
       case tycon1: TypeProxy =>
         isSubtype(tp1.superType, tp2) // TODO superTypeNormalized for match types
@@ -330,12 +332,10 @@ private[tastyquery] object Subtyping:
   end compareAppliedType1
 
   private def isNullable(tp: Type)(using Context): Boolean = tp match
+    case TypeRef.OfClass(cls) =>
+      !cls.isValueClass && !cls.is(Module) && cls != defn.NothingClass
     case tp: TypeRef =>
-      tp.symbol match
-        case cls: ClassSymbol =>
-          !cls.isValueClass && !cls.is(Module) && cls != defn.NothingClass
-        case _: TypeSymbolWithBounds =>
-          false
+      false
     case tp: AppliedType =>
       isNullable(tp.tycon)
     case tp: RefinedType =>

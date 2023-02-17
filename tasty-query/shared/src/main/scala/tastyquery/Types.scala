@@ -65,6 +65,56 @@ object Types {
       Erasure.erase(tpe)
   end ErasedTypeRef
 
+  private[tastyquery] enum ResolveMemberResult:
+    case NotFound
+    case TermMember(symbols: List[TermSymbol], tpe: Type)
+    case ClassMember(cls: ClassSymbol)
+    case TypeMember(symbols: List[TypeSymbolWithBounds], bounds: TypeBounds)
+  end ResolveMemberResult
+
+  private[tastyquery] object ResolveMemberResult:
+    def merge(leftResult: ResolveMemberResult, rightResult: ResolveMemberResult)(using Context): ResolveMemberResult =
+      def mergeSyms[T <: TermOrTypeSymbol](leftSyms: List[T], rightSyms: List[T]): List[T] =
+        val rightSyms1 = rightSyms.filter(sym => !leftSyms.exists(_.overrides(sym)))
+        val leftSyms1 = leftSyms.filter(sym => !rightSyms1.exists(_.overrides(sym)))
+        leftSyms1 ::: rightSyms1
+
+      (leftResult, rightResult) match
+        // When either side is NotFound, take the other side
+        case (ResolveMemberResult.NotFound, right) =>
+          right
+        case (left, ResolveMemberResult.NotFound) =>
+          left
+
+        // Both cases are term members
+        case (ResolveMemberResult.TermMember(leftSyms, leftTpe), ResolveMemberResult.TermMember(rightSyms, rightTpe)) =>
+          val syms = mergeSyms(leftSyms, rightSyms)
+          val tpe = leftTpe & rightTpe
+          ResolveMemberResult.TermMember(syms, tpe)
+
+        // When either side is a Class, take it
+        case (left: ResolveMemberResult.ClassMember, _) =>
+          left
+        case (_, right: ResolveMemberResult.ClassMember) =>
+          right
+
+        // Both sides are type members
+        case (
+              ResolveMemberResult.TypeMember(leftSyms, leftBounds),
+              ResolveMemberResult.TypeMember(rightSyms, rightBounds)
+            ) =>
+          val syms = mergeSyms(leftSyms, rightSyms)
+          val bounds = leftBounds.intersect(rightBounds)
+          ResolveMemberResult.TypeMember(syms, bounds)
+
+        // Cases that cannot happen -- list them to preserve exhaustivity checking of every other case
+        case unexpected @ (_: ResolveMemberResult.TermMember, _: ResolveMemberResult.TypeMember) =>
+          throw MatchError(unexpected)
+        case unexpected @ (_: ResolveMemberResult.TypeMember, _: ResolveMemberResult.TermMember) =>
+          throw MatchError(unexpected)
+    end merge
+  end ResolveMemberResult
+
   /** A common super trait of Symbol and LambdaParam.
     * Used to capture the attributes of type parameters which can be implemented as either.
     */
@@ -96,15 +146,11 @@ object Types {
       * `<pre> . <sym>` is an actual argument reference, i.e., `pre` is not the
       * ThisType of `sym`'s owner, or a reference to `sym`'s owner.'
       */
-    private[tastyquery] final def isArgPrefixOf(sym: Symbol)(using Context): Boolean =
-      sym match
-        case sym: ClassTypeParamSymbol =>
-          this match
-            case tp: ThisType => tp.cls != sym.owner
-            case tp: TypeRef  => tp.symbol != sym.owner
-            case _            => true
-        case _ =>
-          false
+    private[tastyquery] final def isArgPrefixOf(sym: ClassTypeParamSymbol)(using Context): Boolean =
+      this match
+        case tp: ThisType => tp.cls != sym.owner
+        case tp: TypeRef  => !tp.optSymbol.exists(_ == sym.owner)
+        case _            => true
     end isArgPrefixOf
   end Prefix
 
@@ -124,16 +170,14 @@ object Types {
       Subtyping.isSameType(this, that)
 
     /** The class symbol of this type, None if reduction is not possible */
+    @tailrec
     private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this.widen match
+      case TypeRef.OfClass(cls) =>
+        Some(cls)
       case tpe: TypeRef =>
-        tpe.symbol match
-          case cls: ClassSymbol =>
-            Some(cls)
-          case typeSym: TypeMemberSymbol =>
-            typeSym.typeDef match
-              case TypeMemberDefinition.TypeAlias(alias) => alias.classSymbol
-              case _                                     => None
-          case _: TypeParamSymbol => None
+        tpe.optAliasedType match
+          case Some(alias) => alias.classSymbol
+          case None        => None
       case tpe: TypeProxy =>
         tpe.superType.classSymbol
       case _ =>
@@ -156,18 +200,19 @@ object Types {
       *
       * For any *-kinded type, returns `Nil`.
       */
+    @tailrec
     private[tastyquery] final def typeParams(using Context): List[TypeParamInfo] =
       this match
+        case TypeRef.OfClass(cls) =>
+          cls.typeParams
         case self: TypeRef =>
-          self.symbol match
-            case cls: ClassSymbol              => cls.typeParams
-            case typeSym: TypeSymbolWithBounds => typeSym.upperBound.typeParams
+          self.underlying.typeParams
         case self: TypeLambda =>
           self.typeLambdaParams
         case self: AppliedType =>
           self.tycon match
-            case tycon: TypeRef if tycon.symbol.isClass => Nil
-            case _                                      => self.superType.typeParams
+            case TypeRef.OfClass(_) => Nil
+            case _                  => self.superType.typeParams
         case _: SingletonType | _: RefinedType =>
           Nil
         case self: WildcardTypeBounds =>
@@ -224,21 +269,15 @@ object Types {
     ): Type =
       Substituters.substClassTypeParams(this, from, to)
 
-    private[tastyquery] final def widenOverloads(using Context): Type =
-      this.widen match
-        case tp: TermRef => tp.underlying.widenOverloads
-        case tp          => tp
-
     /** Widen singleton types, ByNameTypes, AnnotatedTypes and RefinedTypes. */
     final def widen(using Context): Type = this match
-      case _: TypeRef | _: MethodType | _: PolyType => this // fast path for most frequent cases
-      case tp: TermRef => // fast path for next most frequent case
-        if tp.isOverloaded then tp else tp.underlying.widen
-      case tp: SingletonType => tp.underlying.widen
-      case tp: ByNameType    => tp.resultType.widen
-      case tp: AnnotatedType => tp.typ.widen
-      case tp: RefinedType   => tp.parent.widen
-      case tp                => tp
+      case _: TypeRef | _: MethodicType => this // fast path for most frequent cases
+      case tp: TermRef                  => tp.underlying.widen // fast path for next most frequent case
+      case tp: SingletonType            => tp.underlying.widen
+      case tp: ByNameType               => tp.resultType.widen
+      case tp: AnnotatedType            => tp.typ.widen
+      case tp: RefinedType              => tp.parent.widen
+      case tp                           => tp
 
     private[tastyquery] final def widenIfUnstable(using Context): Type = this match
       case tp: ByNameType                           => tp.resultType.widenIfUnstable
@@ -249,14 +288,16 @@ object Types {
 
     private def dealias1(keepOpaques: Boolean)(using Context): Type = this match {
       case tp: TypeRef =>
-        tp.symbol match
-          case tpSym: TypeMemberSymbol =>
+        tp.optSymbol match
+          case Some(tpSym: TypeMemberSymbol) =>
             tpSym.typeDef match
               case TypeMemberDefinition.TypeAlias(alias)                          => alias.dealias1(keepOpaques)
               case TypeMemberDefinition.OpaqueTypeAlias(_, alias) if !keepOpaques => alias.dealias1(keepOpaques)
               case _                                                              => tp
           case _ =>
-            tp
+            tp.optAliasedType match
+              case Some(alias) => alias.dealias1(keepOpaques)
+              case None        => tp
       case tp: AppliedType =>
         val tycon1 = tp.tycon.dealias1(keepOpaques)
         if (tycon1 ne tp.tycon) tp.superType.dealias1(keepOpaques)
@@ -276,13 +317,9 @@ object Types {
       */
     @tailrec final def normalizedPrefix(using Context): Option[Prefix] = this match {
       case tp: TypeRef =>
-        tp.symbol match
-          case sym: TypeMemberSymbol =>
-            sym.typeDef match
-              case TypeMemberDefinition.TypeAlias(alias) => alias.normalizedPrefix
-              case _                                     => Some(tp.prefix)
-          case _ =>
-            Some(tp.prefix)
+        tp.optAliasedType match
+          case Some(alias) => alias.normalizedPrefix
+          case None        => Some(tp.prefix)
       case tp: TermRef =>
         Some(tp.prefix)
       case tp: TypeProxy =>
@@ -299,15 +336,8 @@ object Types {
     final def baseType(base: ClassSymbol)(using Context): Option[Type] =
       base.baseTypeOf(this)
 
-    /** The member with the given `name`. */
-    final def member(name: Name)(using Context): Symbol =
-      // We need a valid prefix for `asSeenFrom`
-      findMember(name, widenIfUnstable).getOrElse {
-        throw MemberNotFoundException(this, name)
-      }
-
     /** Find the member of this type with the given `name` when prefix `pre`. */
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol]
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult
 
     private[Types] def lookupRefined(name: Name)(using Context): Option[Type] =
       None // TODO
@@ -317,7 +347,7 @@ object Types {
 
     final def isRef(sym: Symbol)(using Context): Boolean =
       this match {
-        case tpe: NamedType    => tpe.symbol == sym
+        case tpe: NamedType    => tpe.optSymbol.contains(sym)
         case tpe: AppliedType  => tpe.underlying.isRef(sym)
         case tpe: TermParamRef => tpe.underlying.isRef(sym)
         case tpe: TypeParamRef => tpe.bounds.high.isRef(sym)
@@ -327,7 +357,7 @@ object Types {
     /** Is this type exactly Nothing (no vars, aliases, refinements etc allowed)? */
     final def isExactlyNothing(using Context): Boolean = this match
       case tp: TypeRef =>
-        tp.name == tpnme.Nothing && (tp.symbol eq defn.NothingClass)
+        tp.name == tpnme.Nothing && tp.isSpecificClass(defn.NothingClass)
       case _ =>
         false
 
@@ -355,16 +385,14 @@ object Types {
 
     /** Is self type bounded by a type lambda or AnyKind? */
     private[tastyquery] final def isLambdaSub(using Context): Boolean = this match
+      case TypeRef.OfClass(cls) =>
+        cls == defn.AnyKindClass || cls.typeParams.nonEmpty
       case self: TypeRef =>
-        self.symbol match
-          case sym: ClassSymbol =>
-            sym == defn.AnyKindClass || sym.typeParams.nonEmpty
-          case sym: TypeSymbolWithBounds =>
-            sym.upperBound.isLambdaSub
+        self.underlying.isLambdaSub
       case self: AppliedType =>
         self.tycon match
-          case tycon: TypeRef if tycon.symbol.isClass => false
-          case _                                      => self.superType.isLambdaSub
+          case TypeRef.OfClass(_) => false
+          case _                  => self.superType.isLambdaSub
       case self: TypeLambda =>
         true
       case _: SingletonType | _: RefinedType | _: RecType =>
@@ -448,8 +476,8 @@ object Types {
       */
     def translucentSuperType(using Context): Type = superType
 
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
-      underlying.findMember(name, pre)
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      underlying.resolveMember(name, pre)
   }
 
   /** Non-proxy types */
@@ -481,7 +509,7 @@ object Types {
     * ```
     */
   abstract class CustomTransientGroundType extends GroundType:
-    private[tastyquery] final def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
+    private[tastyquery] final def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       throw AssertionError(s"Trying to findMember($name, $pre) on $this")
   end CustomTransientGroundType
 
@@ -507,8 +535,6 @@ object Types {
   // ----- Type Proxies -------------------------------------------------
 
   sealed abstract class NamedType extends PathType {
-    self =>
-
     type ThisName <: Name
     type ThisSymbolType <: TermOrTypeSymbol { type ThisNameType = ThisName }
     type ThisNamedType >: this.type <: NamedType
@@ -518,14 +544,11 @@ object Types {
 
     protected def designator: ThisDesignatorType
 
-    protected def storeComputedSymbol(sym: ThisSymbolType): Unit
-
     // For tests
     private[tastyquery] final def designatorInternal: TermOrTypeSymbol | Name | LookupIn | Scala2ExternalSymRef =
       designator
 
     private var myName: ThisName | Null = null
-    private var mySymbol: ThisSymbolType | Null = null
 
     private[tastyquery] final def isLocalRef(sym: Symbol): Boolean =
       prefix == NoPrefix && designator == sym
@@ -556,89 +579,7 @@ object Types {
       case designator: Scala2ExternalSymRef => designator.name
     }).asInstanceOf[ThisName]
 
-    final def selectIn(name: SignedName, in: TypeRef): TermRef =
-      TermRef(this, LookupIn(in, name))
-
-    final def symbol(using Context): ThisSymbolType =
-      val local = mySymbol
-      if local != null then local.asInstanceOf[ThisSymbolType] // Cast needed for expression evaluator
-      else
-        val computed = asThisSymbolType(computeSymbol())
-        mySymbol = computed
-        storeComputedSymbol(computed)
-        computed
-
-    protected def asThisSymbolType(sym: Symbol): ThisSymbolType
-
-    private def computeSymbol()(using Context): Symbol = designator match
-      case sym: TermOrTypeSymbol =>
-        sym
-      case LookupIn(pre, name) =>
-        pre.member(name)
-      case Scala2ExternalSymRef(owner, path) =>
-        path.foldLeft(owner) { (owner, name) =>
-          /* In Scala 2 external references, (term) *modules* can appear in paths.
-           * When we find one, in our system, we must follow through to their module class
-           * instead. The `declaredType` will in that case always be a `TypeRef` to the
-           * module class.
-           * Terms cannot otherwise appear in paths.
-           */
-          val cls = if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].symbol else owner
-          cls.asDeclaringSymbol.getDecl(name).getOrElse {
-            throw new MemberNotFoundException(owner, name)
-          }
-        }
-      case name: Name =>
-        prefix match
-          case prefix: Type =>
-            prefix.member(name)
-          case NoPrefix =>
-            throw new AssertionError(s"found reference by name $name without a prefix")
-    end computeSymbol
-
-    /** The argument corresponding to class type parameter `tparam` as seen from
-      * prefix `pre`. Can produce a TypeBounds type if `widenAbstract` is true,
-      * or prefix is an & or | type and parameter is non-variant.
-      * Otherwise, a typebounds argument is dropped and the original type parameter
-      * reference is returned.
-      */
-    private[tastyquery] final def argForParam(pre: Type, widenAbstract: Boolean = false)(using Context): Option[Type] =
-      val tparam = symbol.asInstanceOf[ClassTypeParamSymbol]
-      val cls = tparam.owner
-      val base = pre.baseType(cls)
-      base match {
-        case Some(base: AppliedType) =>
-          var tparams = cls.typeParams
-          var args = base.args
-          var idx = 0
-          while (tparams.nonEmpty && args.nonEmpty) {
-            if (tparams.head.eq(tparam))
-              return Some(args.head match {
-                case _: WildcardTypeBounds if !widenAbstract => TypeRef(pre, tparam)
-                case arg                                     => arg
-              })
-            tparams = tparams.tail
-            args = args.tail
-            idx += 1
-          }
-          None
-        /*case base: AndOrType =>
-          var tp1 = argForParam(base.tp1)
-          var tp2 = argForParam(base.tp2)
-          val variance = tparam.paramVarianceSign
-          if (isBounds(tp1) || isBounds(tp2) || variance == 0) {
-            // compute argument as a type bounds instead of a point type
-            tp1 = tp1.bounds
-            tp2 = tp2.bounds
-          }
-          if (base.isAnd == variance >= 0) tp1 & tp2 else tp1 | tp2*/
-        case _ =>
-          /*if (pre.termSymbol.isPackage) argForParam(pre.select(nme.PACKAGE))
-          else*/
-          if (pre.isExactlyNothing) Some(pre)
-          else None
-      }
-    end argForParam
+    def optSymbol(using Context): Option[ThisSymbolType]
 
     /** A selection of the same kind, but with potentially a different prefix.
       * The following normalization is performed for type selections T#A:
@@ -648,37 +589,15 @@ object Types {
     private[tastyquery] final def normalizedDerivedSelect(prefix: Type)(using Context): Type =
       if (prefix eq this.prefix) this
       else if (prefix.isExactlyNothing) prefix
-      else {
-        if (isType) {
-          val res =
-            if (!symbol.isClass && symbol.isAllOf(ClassTypeParam)) argForParam(prefix)
-            else prefix.lookupRefined(name)
-          if (res.isDefined)
-            return res.get
-        }
+      else normalizedDerivedSelectImpl(prefix)
 
-        designator match
-          case sym: TermSymbol =>
-            val refinedSym = prefix.member(sym.signedName).asTerm
-            TermRef(prefix, refinedSym)
-          case sym: TypeMemberSymbol =>
-            val refinedSym = prefix.member(sym.name).asType
-            TypeRef(prefix, refinedSym)
-          case sym: TypeSymbol =>
-            TypeRef(prefix, sym)
-          case desig =>
-            withPrefix(prefix, cachedSymbol = null)
-      }
-    end normalizedDerivedSelect
+    protected def normalizedDerivedSelectImpl(prefix: Type)(using Context): Type
 
     private[tastyquery] final def derivedSelect(prefix: Prefix): ThisNamedType =
       if prefix eq this.prefix then this
       else withPrefix(prefix)
 
-    private final def withPrefix(prefix: Prefix): ThisNamedType =
-      withPrefix(prefix, cachedSymbol = mySymbol)
-
-    protected def withPrefix(prefix: Prefix, cachedSymbol: ThisSymbolType | Null): ThisNamedType
+    protected def withPrefix(prefix: Prefix): ThisNamedType
   }
 
   object NamedType {
@@ -709,6 +628,21 @@ object Types {
       external.name match
         case _: TypeName => TypeRef(prefix, external)
         case _: TermName => TermRef(prefix, external)
+
+    private[tastyquery] def resolveScala2ExternalRef(externalRef: Scala2ExternalSymRef)(using Context): Symbol =
+      externalRef.path.foldLeft(externalRef.owner) { (owner, name) =>
+        /* In Scala 2 external references, (term) *modules* can appear in paths.
+         * When we find one, in our system, we must follow through to their module class
+         * instead. The `declaredType` will in that case always be a `TypeRef` to the
+         * module class.
+         * Terms cannot otherwise appear in paths.
+         */
+        val cls = if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].asClass else owner
+        cls.asDeclaringSymbol.getDecl(name).getOrElse {
+          throw new MemberNotFoundException(owner, name)
+        }
+      }
+    end resolveScala2ExternalRef
   }
 
   /** The singleton type for path prefix#myDesignator. */
@@ -724,34 +658,52 @@ object Types {
     protected type ThisDesignatorType = TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
 
     // Cache fields
+    private var mySymbol: TermSymbol | Null = null
+    private var myUnderlying: Type | Null = null
     private var mySignature: Signature | Null = null
 
     protected def designator: ThisDesignatorType = myDesignator
 
-    protected def storeComputedSymbol(sym: ThisSymbolType): Unit =
-      myDesignator = sym
-
     override def toString(): String =
       s"TermRef($prefix, $myDesignator)"
 
-    protected def asThisSymbolType(sym: Symbol): ThisSymbolType =
-      sym.asInstanceOf[TermSymbol]
+    final def symbol(using Context): TermSymbol =
+      if mySymbol == null then resolve()
+      mySymbol.asInstanceOf[TermSymbol]
 
-    private var myUnderlying: Type | Null = null
+    private def resolve()(using Context): Unit =
+      def storeResolved(sym: TermSymbol, tpe: Type): Unit =
+        mySymbol = sym
+        myDesignator = sym
+        myUnderlying = tpe
 
-    override def underlying(using ctx: Context): Type = {
-      val myUnderlying = this.myUnderlying
-      if myUnderlying != null then myUnderlying
-      else
-        val computedUnderlying = computeUnderlying
-        this.myUnderlying = computedUnderlying
-        computedUnderlying
-    }
+      designator match
+        case sym: TermSymbol =>
+          storeResolved(sym, sym.declaredTypeAsSeenFrom(prefix))
+        case lookupIn: LookupIn =>
+          val sym = TermRef.resolveLookupIn(lookupIn)
+          storeResolved(sym, sym.declaredTypeAsSeenFrom(prefix))
+        case externalRef: Scala2ExternalSymRef =>
+          val sym = NamedType.resolveScala2ExternalRef(externalRef).asTerm
+          storeResolved(sym, sym.declaredTypeAsSeenFrom(prefix))
+        case name: TermName =>
+          prefix match
+            case prefix: Type =>
+              prefix.resolveMember(name, prefix) match
+                case ResolveMemberResult.TermMember(symbols, tpe) =>
+                  storeResolved(symbols.head, tpe)
+                case _ =>
+                  throw MemberNotFoundException(prefix, name)
+            case NoPrefix =>
+              throw new AssertionError(s"found reference by name $name without a prefix")
+    end resolve
 
-    private def computeUnderlying(using ctx: Context): Type = {
-      val termSymbol = symbol
-      termSymbol.declaredType.asSeenFrom(prefix, termSymbol.owner)
-    }
+    final def optSymbol(using Context): Option[TermSymbol] =
+      Some(symbol)
+
+    override def underlying(using ctx: Context): Type =
+      if myUnderlying == null then resolve()
+      myUnderlying.asInstanceOf[Type]
 
     private[tastyquery] final def signature(using Context): Signature =
       val local = mySignature
@@ -762,21 +714,23 @@ object Types {
         computed
     end signature
 
-    final def isOverloaded(using Context): Boolean =
-      myDesignator match
-        case LookupIn(pre, ref) =>
-          pre.symbol.memberIsOverloaded(ref)
-        case _ => false
-
-    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
+    private[tastyquery] override def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       underlying match
         case mt: MethodType if mt.paramInfos.isEmpty /*&& symbol.is(StableRealizable)*/ =>
-          mt.resultType.findMember(name, pre)
+          mt.resultType.resolveMember(name, pre)
         case tp =>
-          tp.findMember(name, pre)
+          tp.resolveMember(name, pre)
 
-    protected def withPrefix(prefix: Prefix, cachedSymbol: ThisSymbolType | Null): TermRef =
-      new TermRef(prefix, if cachedSymbol != null then cachedSymbol else designator)
+    protected final def normalizedDerivedSelectImpl(prefix: Type)(using Context): TermRef =
+      designator match
+        case sym: TermSymbol if !sym.is(Private) =>
+          TermRef(prefix, sym.signedName)
+        case desig =>
+          withPrefix(prefix)
+    end normalizedDerivedSelectImpl
+
+    protected final def withPrefix(prefix: Prefix): TermRef =
+      new TermRef(prefix, designator)
   }
 
   object TermRef:
@@ -787,6 +741,18 @@ object Types {
 
     private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): TermRef =
       new TermRef(prefix, external)
+
+    private[tastyquery] def resolveLookupIn(designator: LookupIn)(using Context): TermSymbol =
+      val cls = designator.pre.classSymbol.getOrElse {
+        throw InvalidProgramStructureException(s"Owner of SelectIn($designator) does not refer a class")
+      }
+      cls
+        .findMember(cls.thisType, designator.sel)
+        .getOrElse {
+          throw MemberNotFoundException(cls, designator.sel)
+        }
+        .asTerm
+    end resolveLookupIn
   end TermRef
 
   final class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends Type {
@@ -805,8 +771,8 @@ object Types {
       } else local
     }
 
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
-      symbol.getDecl(name).orElse {
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      val sym = symbol.getDecl(name).orElse {
         /* #179 For some very unfortunate reason, Scala 3 emits TypeRefs
          * whose prefix is a PackageRef but the name references something in a
          * *package object*. That goes contrary to TASTy's purpose of being a
@@ -816,6 +782,19 @@ object Types {
          */
         symbol.allPackageObjectDecls().iterator.flatMap(_.getDecl(name)).nextOption()
       }
+
+      sym match
+        case Some(sym: TermSymbol) =>
+          ResolveMemberResult.TermMember(sym :: Nil, sym.declaredTypeAsSeenFrom(pre))
+        case Some(sym: ClassSymbol) =>
+          ResolveMemberResult.ClassMember(sym)
+        case Some(sym: TypeSymbolWithBounds) =>
+          ResolveMemberResult.TypeMember(sym :: Nil, sym.boundsAsSeenFrom(pre))
+        case Some(sym: PackageSymbol) =>
+          ResolveMemberResult.NotFound // maybe we should eagerly throw here?
+        case None =>
+          ResolveMemberResult.NotFound
+    end resolveMember
 
     override def toString(): String = s"PackageRef($fullyQualifiedName)"
   }
@@ -830,25 +809,88 @@ object Types {
     type ThisNamedType = TypeRef
     type ThisDesignatorType = TypeName | TypeSymbol | Scala2ExternalSymRef
 
-    protected def designator: ThisDesignatorType = myDesignator
+    // Cache fields
+    private var myOptSymbol: Option[TypeSymbol] | Null = null
+    private var myBounds: TypeBounds | Null = null
 
-    protected def storeComputedSymbol(sym: ThisSymbolType): Unit =
-      myDesignator = sym
+    protected def designator: ThisDesignatorType = myDesignator
 
     override def toString(): String =
       s"TypeRef($prefix, $myDesignator)"
 
-    protected def asThisSymbolType(sym: Symbol): ThisSymbolType =
-      sym.asInstanceOf[TypeSymbol]
+    private def ensureResolved()(using Context): Unit =
+      if myOptSymbol == null then resolve()
 
-    override def underlying(using Context): Type = symbol match
-      case cls: ClassSymbol =>
+    private def resolve()(using Context): Unit =
+      def storeClass(cls: ClassSymbol): Unit =
+        myOptSymbol = Some(cls)
+        myDesignator = cls
+
+      def storeTypeMember(sym: Option[TypeSymbolWithBounds], bounds: TypeBounds): Unit =
+        myOptSymbol = sym
+        if sym.isDefined then myDesignator = sym.get
+        myBounds = bounds
+
+      def storeSymbol(sym: TypeSymbol): Unit = sym match
+        case cls: ClassSymbol          => storeClass(cls)
+        case sym: TypeSymbolWithBounds => storeTypeMember(Some(sym), sym.boundsAsSeenFrom(prefix))
+
+      designator match
+        case sym: TypeSymbol =>
+          storeSymbol(sym)
+        case externalRef: Scala2ExternalSymRef =>
+          val sym = NamedType.resolveScala2ExternalRef(externalRef).asType
+          storeSymbol(sym)
+        case name: TypeName =>
+          prefix match
+            case prefix: Type =>
+              prefix.resolveMember(name, prefix) match
+                case ResolveMemberResult.ClassMember(cls) =>
+                  storeClass(cls)
+                case ResolveMemberResult.TypeMember(symbols, bounds) =>
+                  storeTypeMember(symbols.headOption, bounds)
+                case _ =>
+                  throw MemberNotFoundException(prefix, name)
+            case NoPrefix =>
+              throw new AssertionError(s"found reference by name $name without a prefix")
+    end resolve
+
+    final def optSymbol(using Context): Option[TypeSymbol] =
+      ensureResolved()
+      myOptSymbol.nn
+
+    final def isClass(using Context): Boolean =
+      optSymbol.exists(_.isClass)
+
+    private[tastyquery] final def asClass(using Context): ClassSymbol =
+      optSymbol.get.asClass
+
+    private[tastyquery] final def isSpecificClass(cls: ClassSymbol)(using Context): Boolean =
+      optSymbol.contains(cls)
+
+    override def underlying(using Context): Type =
+      bounds.high
+
+    final def bounds(using Context): TypeBounds =
+      ensureResolved()
+      val local = myBounds
+      if local == null then
         throw AssertionError(s"TypeRef $this has no `underlying` because it refers to a `ClassSymbol`")
-      case sym: TypeSymbolWithBounds =>
-        sym.upperBound
+      else local
 
-    override def translucentSuperType(using Context): Type = symbol match
-      case sym: TypeMemberSymbol =>
+    def typeDef(using Context): TypeMemberDefinition = optSymbol match
+      case Some(sym: TypeMemberSymbol) => sym.typeDef
+      case _ =>
+        throw AssertionError(s"No typeDef for $this")
+
+    def optAliasedType(using Context): Option[Type] =
+      ensureResolved()
+      myBounds match
+        case TypeAlias(alias) => Some(alias)
+        case _                => None
+
+    override def translucentSuperType(using Context): Type = optSymbol match
+      case Some(sym: TypeMemberSymbol) =>
         sym.typeDef match
           case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => alias
           case _                                              => underlying
@@ -856,15 +898,31 @@ object Types {
         underlying
     end translucentSuperType
 
-    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
-      symbol match
-        case sym: ClassSymbol =>
-          sym.findMember(pre, name)
-        case sym: TypeSymbolWithBounds =>
-          sym.upperBound.findMember(name, pre)
+    private[tastyquery] override def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      optSymbol match
+        case Some(sym: ClassSymbol) =>
+          sym.resolveMember(name, pre)
+        case _ =>
+          underlying.resolveMember(name, pre)
 
-    protected def withPrefix(prefix: Prefix, cachedSymbol: ThisSymbolType | Null): TypeRef =
-      new TypeRef(prefix, if cachedSymbol != null then cachedSymbol else designator)
+    protected final def normalizedDerivedSelectImpl(prefix: Type)(using Context): Type =
+      val result1 = optSymbol match
+        case Some(sym: ClassTypeParamSymbol) => sym.argForParam(prefix)
+        case _                               => prefix.lookupRefined(name)
+
+      result1 match
+        case Some(res) =>
+          res
+        case None =>
+          designator match
+            case sym: TypeMemberSymbol if !sym.is(Private) =>
+              TypeRef(prefix, sym.name)
+            case desig =>
+              withPrefix(prefix)
+    end normalizedDerivedSelectImpl
+
+    protected final def withPrefix(prefix: Prefix): TypeRef =
+      new TypeRef(prefix, designator)
   }
 
   object TypeRef:
@@ -876,9 +934,9 @@ object Types {
 
     private[tastyquery] object OfClass:
       def unapply(typeRef: TypeRef)(using Context): Option[ClassSymbol] =
-        val symbol = typeRef.symbol
-        if symbol.isClass then Some(symbol.asClass)
-        else None
+        typeRef.optSymbol match
+          case Some(cls: ClassSymbol) => Some(cls)
+          case _                      => None
     end OfClass
   end TypeRef
 
@@ -897,7 +955,7 @@ object Types {
         computed
     end underlying
 
-    final def cls(using Context): ClassSymbol = tref.symbol.asClass
+    final def cls(using Context): ClassSymbol = tref.asClass
 
     override def toString(): String = s"ThisType($tref)"
   }
@@ -922,7 +980,7 @@ object Types {
 
     override def superType(using Context): Type =
       val superCls = supertpe match
-        case supertpe: TypeRef => supertpe.symbol.asClass
+        case supertpe: TypeRef => supertpe.asClass
         case _                 => throw AssertionError(s"Cannot compute super class for $this")
       thistpe.baseType(superCls).getOrElse {
         throw AssertionError(s"Cannot find baseType for $this")
@@ -949,12 +1007,12 @@ object Types {
     override def superType(using Context): Type =
       tycon match
         //case tycon: HKTypeLambda => defn.AnyType
-        case tycon: TypeRef if tycon.symbol.isClass => tycon
-        case tycon: TypeProxy                       => tycon.superType.applyIfParameterized(args)
-        case _                                      => defn.AnyType
+        case TypeRef.OfClass(_) => tycon
+        case tycon: TypeProxy   => tycon.superType.applyIfParameterized(args)
+        case _                  => defn.AnyType
 
     override def translucentSuperType(using Context): Type = tycon match
-      case tycon: TypeRef if tycon.symbol.isOpaqueTypeAlias =>
+      case tycon: TypeRef if tycon.optSymbol.exists(_.isOpaqueTypeAlias) =>
         tycon.translucentSuperType.applyIfParameterized(args)
       case _ =>
         // tryNormalize.orElse(superType) // TODO for match types
@@ -976,11 +1034,10 @@ object Types {
       // TODO tycon.isLambdaSub && hasWildcardArg && !isMatchAlias
       false
 
-    private[tastyquery] override def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
+    private[tastyquery] override def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       tycon match
-        case tycon: TypeRef =>
-          if tycon.symbol.isClass then tycon.findMember(name, pre)
-          else ???
+        case tycon @ TypeRef.OfClass(_) =>
+          tycon.resolveMember(name, pre)
         case _ =>
           ???
 
@@ -1124,7 +1181,7 @@ object Types {
 
     def companion: LambdaTypeCompanion[TermName, Type, MethodType] = MethodType
 
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
@@ -1187,7 +1244,7 @@ object Types {
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, PolyType] =
       PolyType
 
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
@@ -1331,6 +1388,17 @@ object Types {
     val refinedName: Name
 
     override final def underlying(using Context): Type = parent
+
+    private[tastyquery] override def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      val parentMember = parent.resolveMember(name, pre)
+
+      if name != refinedName then parentMember
+      else
+        val myResult = makeResolveMemberResult(pre)
+        ResolveMemberResult.merge(parentMember, myResult)
+    end resolveMember
+
+    protected def makeResolveMemberResult(pre: Type)(using Context): ResolveMemberResult
   end RefinedType
 
   /** A type refinement `parent { type refinedName <:> refinedBounds }`.
@@ -1340,6 +1408,9 @@ object Types {
     */
   final class TypeRefinement(val parent: Type, val refinedName: TypeName, val refinedBounds: TypeBounds)
       extends RefinedType:
+    protected def makeResolveMemberResult(pre: Type)(using Context): ResolveMemberResult =
+      ResolveMemberResult.TypeMember(Nil, refinedBounds)
+
     private[tastyquery] final def derivedTypeRefinement(
       parent: Type,
       refinedName: TypeName,
@@ -1358,6 +1429,9 @@ object Types {
     * @param refinedType The refined type for the given term member
     */
   final class TermRefinement(val parent: Type, val refinedName: TermName, val refinedType: Type) extends RefinedType:
+    protected def makeResolveMemberResult(pre: Type)(using Context): ResolveMemberResult =
+      ResolveMemberResult.TermMember(Nil, refinedType)
+
     private[tastyquery] final def derivedTermRefinement(parent: Type, refinedName: TermName, refinedType: Type): Type =
       if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedType eq this.refinedType)) this
       else TermRefinement(parent, refinedName, refinedType)
@@ -1393,7 +1467,7 @@ object Types {
 
   /** case `pattern` => `result` */
   final class MatchTypeCase(val pattern: Type, val result: Type) extends GroundType:
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       throw AssertionError(s"MatchTypeCase.findMember($name, $pre)")
 
     override def toString(): String = s"MatchTypeCase($pattern, $result)"
@@ -1421,6 +1495,14 @@ object Types {
       case _ =>
         low.isSubtype(tp) && tp.isSubtype(high)
     end contains
+
+    final def contains(that: TypeBounds)(using Context): Boolean =
+      this.low.isSubtype(that.low) && that.high.isSubtype(this.high)
+
+    final def intersect(that: TypeBounds)(using Context): TypeBounds =
+      if this.contains(that) then that
+      else if that.contains(this) then this
+      else RealTypeBounds(this.low | that.low, this.high & that.high)
 
     private[tastyquery] def mapBounds(f: Type => Type): TypeBounds = this match
       case RealTypeBounds(low, high) => derivedTypeBounds(f(low), f(high))
@@ -1465,8 +1547,8 @@ object Types {
         computedJoin
     }
 
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
-      join.findMember(name, pre)
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      join.resolveMember(name, pre)
 
     private[tastyquery] def derivedOrType(first: Type, second: Type): Type =
       if (first eq this.first) && (second eq this.second) then this
@@ -1482,14 +1564,8 @@ object Types {
   }
 
   final class AndType(val first: Type, val second: Type) extends GroundType with ValueType {
-    private[tastyquery] def findMember(name: Name, pre: Type)(using Context): Option[Symbol] =
-      (first.findMember(name, pre), second.findMember(name, pre)) match
-        case (Some(left: TermOrTypeSymbol), Some(right: TermOrTypeSymbol)) =>
-          // TODO We should `meet` the two selections, but for now, pick one
-          if right.overrides(left) then Some(right)
-          else Some(left)
-        case (left, right) => left.orElse(right)
-    end findMember
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      ResolveMemberResult.merge(first.resolveMember(name, pre), second.resolveMember(name, pre))
 
     private[tastyquery] def derivedAndType(first: Type, second: Type): Type =
       if ((first eq this.first) && (second eq this.second)) this

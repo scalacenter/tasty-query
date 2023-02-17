@@ -226,6 +226,22 @@ object Trees {
 
   type ParamsClause = Either[List[ValDef], List[TypeParam]]
 
+  private[tastyquery] object ParamsClause:
+    def makeDefDefType(paramLists: List[ParamsClause], resultTpt: TypeTree)(using Context): Type =
+      def rec(paramLists: List[ParamsClause]): Type =
+        paramLists match
+          case Left(params) :: rest =>
+            val paramSymbols = params.map(_.symbol)
+            MethodType.fromSymbols(paramSymbols, rec(rest))
+          case Right(tparams) :: rest =>
+            PolyType.fromParams(tparams, rec(rest))
+          case Nil =>
+            resultTpt.toType
+
+      rec(paramLists)
+    end makeDefDefType
+  end ParamsClause
+
   /** mods def name[tparams](vparams_1)...(vparams_n): tpt = rhs */
   final case class DefDef(
     name: TermName,
@@ -303,7 +319,7 @@ object Trees {
   final case class Apply(fun: TermTree, args: List[TermTree])(span: Span) extends TermTree(span):
 
     private def resolveMethodType(funTpe: Type, args: List[Type])(using Context): Type =
-      funTpe.widenOverloads match
+      funTpe.widen match
         case funTpe: MethodType =>
           funTpe.instantiate(args)
         case tpe =>
@@ -369,7 +385,7 @@ object Trees {
   final case class TypeApply(fun: TermTree, args: List[TypeTree])(span: Span) extends TermTree(span) {
 
     private def resolvePolyType(funTpe: Type, args: List[Type])(using Context): Type =
-      funTpe.widenOverloads match
+      funTpe.widen match
         case funTpe: PolyType =>
           funTpe.instantiate(args)
         case tpe =>
@@ -638,7 +654,27 @@ object Trees {
       extends TypeTree(span) {
 
     override protected def calculateType(using Context): Type =
-      underlying.toType // TODO Actually take the refinements into account
+      val base = underlying.toType
+      refinements.foldLeft(base) { (parent, refinement) =>
+        refinement match
+          case TypeMember(name, rhs, _) =>
+            val refinedBounds = rhs match
+              case TypeAliasDefinitionTree(tpt) =>
+                TypeAlias(tpt.toType)
+              case rhs: TypeBoundsTree =>
+                rhs.toTypeBounds
+              case _ =>
+                throw InvalidProgramStructureException(s"Unexpected rhs for type refinement '$name': $rhs")
+            end refinedBounds
+            TypeRefinement(parent, name, refinedBounds)
+
+          case ValDef(name, tpt, _, _) =>
+            TermRefinement(parent, name, tpt.toType)
+
+          case DefDef(name, paramClauses, resultType, _, _) =>
+            TermRefinement(parent, name, ParamsClause.makeDefDefType(paramClauses, resultType))
+      }
+    end calculateType
 
     override final def withSpan(span: Span): RefinedTypeTree =
       RefinedTypeTree(underlying, refinements, refinedCls)(span)

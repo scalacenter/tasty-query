@@ -229,19 +229,19 @@ private[tastyquery] object TypeMaps {
       * The possible cases are listed inline in the code.
       */
     def tryWiden(tp: NamedType, pre: Type): Option[Type] =
-      pre.member(tp.name) match
-        case memberSym: TypeMemberSymbol =>
-          memberSym.typeDef match
-            case TypeMemberDefinition.TypeAlias(alias) =>
+      pre.resolveMember(tp.name, pre) match
+        case ResolveMemberResult.TypeMember(_, bounds) =>
+          bounds match
+            case TypeAlias(alias) =>
               // if H#T = U, then for any x in L..H, x.T =:= U,
               // hence we can replace with U under all variances
               Some(reapply(alias))
             case _ =>
               // If H#T = ? >: S <: U, then for any x in L..H, S <: x.T <: U,
               // hence we can replace with S..U under all variances
-              Some(expandBounds(memberSym.bounds))
-        case memberSym: TermSymbol =>
-          memberSym.declaredType.dealias match
+              Some(expandBounds(bounds))
+        case ResolveMemberResult.TermMember(symbols, tpe) =>
+          tpe.dealias match
             case tpe: SingletonType =>
               // if H#x: y.type, then for any x in L..H, x.type =:= y.type,
               // hence we can replace with y.type under all variances
@@ -256,11 +256,16 @@ private[tastyquery] object TypeMaps {
       * If the expansion is a wildcard parameter reference, convert its
       * underlying bounds to a range, otherwise return the expansion.
       */
-    def expandParam(tp: NamedType, pre: Type): Option[Type] =
-      tp.argForParam(pre)
+    def expandParam(sym: ClassTypeParamSymbol, pre: Type): Option[Type] =
+      sym
+        .argForParam(pre)
         .map(_ match {
-          case arg: TypeRef if arg.prefix.isArgPrefixOf(arg.symbol) =>
-            expandBounds(arg.symbol.asInstanceOf[ClassTypeParamSymbol].bounds)
+          case arg: TypeRef =>
+            arg.optSymbol match
+              case Some(argSym: ClassTypeParamSymbol) if arg.prefix.isArgPrefixOf(argSym) =>
+                expandBounds(argSym.bounds)
+              case _ =>
+                reapply(arg)
           case arg: WildcardTypeBounds => expandBounds(arg.bounds)
           case arg                     => reapply(arg)
         })
@@ -273,9 +278,9 @@ private[tastyquery] object TypeMaps {
       else
         pre match {
           case Range(preLo, preHi) =>
-            val forwarded =
-              if (tp.symbol.isAllOf(ClassTypeParam)) expandParam(tp, preHi)
-              else tryWiden(tp, preHi)
+            val forwarded = tp.optSymbol match
+              case Some(sym: ClassTypeParamSymbol) => expandParam(sym, preHi)
+              case _                               => tryWiden(tp, preHi)
             forwarded.getOrElse {
               range(super.derivedSelect(tp, preLo).lowerBound, super.derivedSelect(tp, preHi).upperBound)
             }

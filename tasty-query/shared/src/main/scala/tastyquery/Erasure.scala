@@ -43,15 +43,17 @@ private[tastyquery] object Erasure:
             else ClassRef(cls).arrayOf()
           case _ =>
             arrayOf(tpe.translucentSuperType)
+      case TypeRef.OfClass(cls) =>
+        ClassRef(cls).arrayOf()
       case tpe: TypeRef =>
-        tpe.symbol match
-          case cls: ClassSymbol     => ClassRef(cls).arrayOf()
-          case sym: TypeParamSymbol => arrayOfBounds(sym.bounds)
-          case sym: TypeMemberSymbol =>
+        tpe.optSymbol match
+          case Some(sym: TypeMemberSymbol) =>
             sym.typeDef match
               case TypeMemberDefinition.TypeAlias(alias)          => arrayOf(alias)
               case TypeMemberDefinition.AbstractType(bounds)      => arrayOfBounds(bounds)
               case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => arrayOf(alias)
+          case _ =>
+            arrayOfBounds(tpe.bounds)
       case tpe: TypeParamRef       => arrayOfBounds(tpe.bounds)
       case tpe: WildcardTypeBounds => arrayOfBounds(tpe.bounds)
       case _ =>
@@ -68,17 +70,18 @@ private[tastyquery] object Erasure:
             else ClassRef(cls)
           case _ =>
             preErase(tpe.translucentSuperType)
+      case TypeRef.OfClass(cls) =>
+        ClassRef(cls)
       case tpe: TypeRef =>
-        tpe.symbol match
-          case cls: ClassSymbol =>
-            ClassRef(cls)
-          case sym: TypeParamSymbol =>
-            preErase(sym.upperBound)
-          case sym: TypeMemberSymbol =>
+        tpe.optSymbol match
+          case Some(sym: TypeMemberSymbol) =>
             sym.typeDef match
-              case TypeMemberDefinition.TypeAlias(alias)          => preErase(alias)
-              case TypeMemberDefinition.AbstractType(bounds)      => preErase(bounds.high)
-              case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => preErase(alias)
+              case TypeMemberDefinition.OpaqueTypeAlias(_, alias) =>
+                preErase(alias)
+              case _ =>
+                preErase(tpe.underlying)
+          case _ =>
+            preErase(tpe.underlying)
       case tpe: TypeParamRef =>
         preErase(tpe.bounds.high)
       case tpe: WildcardTypeBounds =>

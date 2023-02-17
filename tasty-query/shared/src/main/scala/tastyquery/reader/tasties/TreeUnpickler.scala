@@ -293,9 +293,9 @@ private[tasties] class TreeUnpickler(
 
   private def readWithin(using LocalContext): Symbol =
     readType match
-      case typeRef: TypeRef   => typeRef.symbol
-      case pkgRef: PackageRef => pkgRef.symbol
-      case tpe                => throw TastyFormatException(s"unexpected type for readWithin: $tpe")
+      case TypeRef.OfClass(cls) => cls
+      case pkgRef: PackageRef   => pkgRef.symbol
+      case tpe                  => throw TastyFormatException(s"unexpected type for readWithin: $tpe")
   end readWithin
 
   private def readAnnotationsInModifiers(sym: Symbol, end: Addr)(using LocalContext): Unit =
@@ -667,7 +667,7 @@ private[tasties] class TreeUnpickler(
         val normalizedParams =
           if name == nme.Constructor then normalizeCtorParamClauses(params)
           else params
-        symbol.withDeclaredType(makeDefDefType(normalizedParams, tpt))
+        symbol.withDeclaredType(ParamsClause.makeDefDefType(normalizedParams, tpt))
         definingTree(symbol, DefDef(name, normalizedParams, tpt, rhs, symbol)(spn))
     }
   }
@@ -696,20 +696,6 @@ private[tasties] class TreeUnpickler(
         if anyNonUsingTermClause then paramLists
         else paramLists :+ Left(Nil) // add `()` at the end
   end normalizeCtorParamClauses
-
-  private def makeDefDefType(paramLists: List[ParamsClause], resultTpt: TypeTree): Type =
-    def rec(paramLists: List[ParamsClause]): Type =
-      paramLists match
-        case Left(params) :: rest =>
-          val paramSymbols = params.map(_.symbol)
-          MethodType.fromSymbols(paramSymbols, rec(rest))
-        case Right(tparams) :: rest =>
-          PolyType.fromParams(tparams, rec(rest))
-        case Nil =>
-          resultTpt.toType
-
-    rec(paramLists)
-  end makeDefDefType
 
   private def readTerms(end: Addr)(using LocalContext): List[TermTree] =
     reader.until(end)(readTerm)

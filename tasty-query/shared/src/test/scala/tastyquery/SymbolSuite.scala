@@ -154,7 +154,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
     assert(simpleTreesNestedPkg.fullName.toString == "simple_trees.nested")
 
-    assert(simpleTreesPkg.packageRef.member(name"nested") == simpleTreesNestedPkg)
+    assert(simpleTreesPkg.getDecl(name"nested") == Some(simpleTreesNestedPkg))
   }
 
   testWithContext("basic-inheritance-same-root", "inheritance.SameTasty$", fundamentalClasses*) {
@@ -162,14 +162,14 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val ChildClass = ctx.findStaticClass("inheritance.SameTasty.Child")
     val SubClass = ctx.findStaticClass("inheritance.SameTasty.Sub")
 
-    val fooMethod = SubClass.typeRef.member(name"foo")
+    val fooMethod = SubClass.findMember(name"foo")
     assert(clue(fooMethod.owner) == ChildClass)
 
     val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.fullName))
-    val getFooMethod = SubClass.typeRef.member(getFooName)
+    val getFooMethod = SubClass.findMember(getFooName)
     assert(clue(getFooMethod.owner) == ParentClass)
 
-    val FooTypeSym = SubClass.typeRef.member(tname"FooType")
+    val FooTypeSym = SubClass.findMember(tname"FooType")
     assert(FooTypeSym.isInstanceOf[TypeMemberSymbol])
     assert(clue(FooTypeSym.owner) == ChildClass)
   }
@@ -189,14 +189,14 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val MixinClass = ctx.findStaticClass("inheritance.SameTasty.Mixin")
     val SubMixinClass = ctx.findStaticClass("inheritance.SameTasty.SubMixin")
 
-    val barMethod = SubWithMixinClass.typeRef.member(name"bar")
+    val barMethod = SubWithMixinClass.findMember(name"bar")
     assert(clue(barMethod.owner) == SubMixinClass)
 
     val getBarName = SignedName(termName("getBar"), Signature(Nil, defn.ObjectClass.fullName))
-    val getBarMethod = SubWithMixinClass.typeRef.member(getBarName)
+    val getBarMethod = SubWithMixinClass.findMember(getBarName)
     assert(clue(getBarMethod.owner) == MixinClass)
 
-    val BarTypeSym = SubWithMixinClass.typeRef.member(tname"BarType")
+    val BarTypeSym = SubWithMixinClass.findMember(tname"BarType")
     assert(BarTypeSym.isInstanceOf[TypeMemberSymbol])
     assert(clue(BarTypeSym.owner) == SubMixinClass)
   }
@@ -210,14 +210,14 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val ChildClass = ctx.findStaticClass("inheritance.crosstasty.Child")
     val SubClass = ctx.findStaticClass("inheritance.crosstasty.Sub")
 
-    val fooMethod = SubClass.typeRef.member(name"foo")
+    val fooMethod = SubClass.findMember(name"foo")
     assert(clue(fooMethod.owner) == ChildClass)
 
     val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.fullName))
-    val getFooMethod = SubClass.typeRef.member(getFooName)
+    val getFooMethod = SubClass.findMember(getFooName)
     assert(clue(getFooMethod.owner) == ParentClass)
 
-    val FooTypeSym = SubClass.typeRef.member(tname"FooType")
+    val FooTypeSym = SubClass.findMember(tname"FooType")
     assert(FooTypeSym.isInstanceOf[TypeMemberSymbol])
     assert(clue(FooTypeSym.owner) == ChildClass)
   }

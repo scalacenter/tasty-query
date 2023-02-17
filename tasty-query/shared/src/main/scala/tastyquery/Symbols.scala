@@ -207,10 +207,6 @@ object Symbols {
     final def asClass: ClassSymbol = this.asInstanceOf[ClassSymbol]
     final def asPackage: PackageSymbol = this.asInstanceOf[PackageSymbol]
 
-    private[tastyquery] final def memberIsOverloaded(name: SignedName): Boolean = this match
-      case scope: ClassSymbol => scope.hasOverloads(name)
-      case _                  => false
-
     final def hasAnnotation(annotClass: ClassSymbol)(using Context): Boolean =
       annotations.exists(_.symbol == annotClass)
 
@@ -484,6 +480,9 @@ object Symbols {
 
     def bounds(using Context): TypeBounds
 
+    private[tastyquery] def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
+      bounds.mapBounds(_.asSeenFrom(prefix, owner))
+
     def lowerBound(using Context): Type
 
     def upperBound(using Context): Type
@@ -524,6 +523,50 @@ object Symbols {
       Variance.fromFlags(flags)
 
     final def typeRef(using Context): TypeRef = TypeRef(ThisType(owner.typeRef), this)
+
+    /** The argument corresponding to this class type parameter as seen from prefix `pre`.
+      *
+      * Can produce a TypeBounds type if `widenAbstract` is true,
+      * or prefix is an & or | type and parameter is non-variant.
+      * Otherwise, a typebounds argument is dropped and the original type parameter
+      * reference is returned.
+      */
+    private[tastyquery] final def argForParam(pre: Type, widenAbstract: Boolean = false)(using Context): Option[Type] =
+      val cls = this.owner
+      val base = pre.baseType(cls)
+      base match {
+        case Some(base: AppliedType) =>
+          var tparams = cls.typeParams
+          var args = base.args
+          var idx = 0
+          while (tparams.nonEmpty && args.nonEmpty) {
+            if (tparams.head.eq(this))
+              return Some(args.head match {
+                case _: WildcardTypeBounds if !widenAbstract => TypeRef(pre, this)
+                case arg                                     => arg
+              })
+            tparams = tparams.tail
+            args = args.tail
+            idx += 1
+          }
+          None
+        /*case base: AndOrType =>
+          var tp1 = argForParam(base.tp1)
+          var tp2 = argForParam(base.tp2)
+          val variance = this.paramVarianceSign
+          if (isBounds(tp1) || isBounds(tp2) || variance == 0) {
+            // compute argument as a type bounds instead of a point type
+            tp1 = tp1.bounds
+            tp2 = tp2.bounds
+          }
+          if (base.isAnd == variance >= 0) tp1 & tp2 else tp1 | tp2*/
+        case _ =>
+          /*if (pre.termSymbol.isPackage) argForParam(pre.select(nme.PACKAGE))
+          else*/
+          if (pre.isExactlyNothing) Some(pre)
+          else None
+      }
+    end argForParam
   end ClassTypeParamSymbol
 
   object ClassTypeParamSymbol:
@@ -770,11 +813,6 @@ object Symbols {
       if decl.isType then assert(set.isEmpty, s"trying to add a second entry $decl for type name ${decl.name} in $this")
       set += decl
 
-    private[Symbols] final def hasOverloads(name: SignedName): Boolean =
-      myDeclarations.get(name.underlying) match
-        case Some(decls) => decls.sizeIs > 1
-        case _           => false
-
     @deprecated("use getAllOverloadedDecls", "0.4.0")
     final def getDecls(name: Name)(using Context): List[TermOrTypeSymbol] =
       name match
@@ -897,6 +935,32 @@ object Symbols {
     final def declarations(using Context): List[TermOrTypeSymbol] =
       myDeclarations.values.toList.flatten
 
+    // Member lookup, including inherited members
+
+    final def getMember(name: Name)(using Context): Option[TermOrTypeSymbol] =
+      findMember(appliedRef, name)
+
+    final def getMember(name: TermName)(using Context): Option[TermSymbol] =
+      getMember(name: Name).map(_.asTerm)
+
+    final def getMember(name: TypeName)(using Context): Option[TypeSymbol] =
+      getMember(name: Name).map(_.asType)
+
+    final def findMember(name: Name)(using Context): TermOrTypeSymbol =
+      getMember(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
+    final def findMember(name: TermName)(using Context): TermSymbol =
+      getMember(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
+    final def findMember(name: TypeName)(using Context): TypeSymbol =
+      getMember(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
     // Type-related things
 
     private[tastyquery] final def initParents: Boolean =
@@ -910,32 +974,27 @@ object Symbols {
         else Some(bt1.get & bt2.get)
 
       def recur(tp: Type): Option[Type] = tp match
-        case tp: TypeRef =>
+        case tp @ TypeRef.OfClass(tpSym) =>
           def foldGlb(bt: Option[Type], ps: List[Type]): Option[Type] =
             ps.foldLeft(bt)((bt, p) => combineGlb(bt, recur(p)))
 
-          tp.symbol match
-            case tpSym: ClassSymbol =>
-              def isOwnThis = tp.prefix match
-                case prefix: ThisType   => prefix.cls == tpSym.owner
-                case prefix: PackageRef => prefix.symbol == tpSym.owner
-                case NoPrefix           => true
-                case _                  => false
+          def isOwnThis = tp.prefix match
+            case prefix: ThisType   => prefix.cls == tpSym.owner
+            case prefix: PackageRef => prefix.symbol == tpSym.owner
+            case NoPrefix           => true
+            case _                  => false
 
-              if tpSym == this then Some(tp)
-              else if isOwnThis then
-                if tpSym.isSubclass(this) then
-                  if this.isStatic && this.typeParams.isEmpty then Some(this.typeRef)
-                  else foldGlb(None, tpSym.parents)
-                else None
-              else recur(tpSym.typeRef).map(_.asSeenFrom(tp.prefix, tpSym.owner.asDeclaringSymbol))
-            case _: TypeSymbolWithBounds =>
-              recur(tp.superType)
-          end match
+          if tpSym == this then Some(tp)
+          else if isOwnThis then
+            if tpSym.isSubclass(this) then
+              if this.isStatic && this.typeParams.isEmpty then Some(this.typeRef)
+              else foldGlb(None, tpSym.parents)
+            else None
+          else recur(tpSym.typeRef).map(_.asSeenFrom(tp.prefix, tpSym.owner.asDeclaringSymbol))
 
         case tp: AppliedType =>
           tp.tycon match
-            case tycon: TypeRef if tycon.symbol == this =>
+            case TypeRef.OfClass(cls) if cls == this =>
               Some(tp)
             case tycon =>
               val typeParams = tycon.typeParams
@@ -968,8 +1027,8 @@ object Symbols {
       recur(tp)
     end baseTypeOf
 
-    private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[Symbol] =
-      def lookup(lin: List[ClassSymbol]): Option[Symbol] = lin match
+    private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[TermOrTypeSymbol] =
+      def lookup(lin: List[ClassSymbol]): Option[TermOrTypeSymbol] = lin match
         case parentCls :: linRest =>
           parentCls.getDecl(name) match
             case Some(sym) if !sym.is(Private) =>
@@ -991,6 +1050,18 @@ object Symbols {
           if name == nme.Constructor then None
           else lookup(linearization.tail)
     end findMember
+
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      findMember(pre, name) match
+        case Some(sym: TermSymbol) =>
+          ResolveMemberResult.TermMember(sym :: Nil, sym.declaredTypeAsSeenFrom(pre))
+        case Some(sym: ClassSymbol) =>
+          ResolveMemberResult.ClassMember(sym)
+        case Some(sym: TypeSymbolWithBounds) =>
+          ResolveMemberResult.TypeMember(sym :: Nil, sym.boundsAsSeenFrom(pre))
+        case None =>
+          ResolveMemberResult.NotFound
+    end resolveMember
 
     private var myTypeRef: TypeRef | Null = null
 
@@ -1055,8 +1126,8 @@ object Symbols {
       annot.tree.tpe match
         case tpe: AppliedType =>
           tpe.args match
-            case (childRef: TypeRef) :: Nil if childRef.symbol.isClass =>
-              childRef.symbol.asClass
+            case TypeRef.OfClass(childCls) :: Nil =>
+              childCls
             case (childRef: TermRef) :: Nil if childRef.symbol.isAnyOf(Module | Enum) =>
               childRef.symbol
             case _ =>

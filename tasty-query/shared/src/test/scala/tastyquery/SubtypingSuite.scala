@@ -559,7 +559,99 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       .withRef[refyAlias.AliasOfAbstractType, JString]
   }
 
-  testWithContext("simple-paths-in-subclasses") {
+  testWithContext("paths-and-refinements") {
+    import subtyping.paths.{A, B, C, SimplePaths, ConcreteSimplePathsChild}
+
+    val paths = "subtyping.paths"
+    val AClass = ctx.findTopLevelClass(s"$paths.A")
+    val BClass = ctx.findTopLevelClass(s"$paths.B")
+    val CClass = ctx.findTopLevelClass(s"$paths.C")
+    val SimplePathsClass = ctx.findTopLevelClass(s"$paths.SimplePaths")
+    val ConcreteSimplePathsChildClass = ctx.findTopLevelClass(s"$paths.ConcreteSimplePathsChild")
+
+    val setupMethod = ctx.findTopLevelModuleClass(s"$paths.Setup").findNonOverloadedDecl(name"refinements")
+    val setupMethodDef = setupMethod.tree.get.asInstanceOf[DefDef]
+    val Left(valDefs) = setupMethodDef.paramLists.head: @unchecked
+    val List(x, y) = valDefs.map(valDef => TermRef(NoPrefix, valDef.symbol))
+    val yAsStringRefine = TermRef(NoPrefix, findLocalValDef(setupMethodDef.rhs.get, name"yAsStringRefine"))
+    val zAsIntRefine = TermRef(NoPrefix, findLocalValDef(setupMethodDef.rhs.get, name"zAsIntRefine"))
+
+    type StringRefine = SimplePaths {
+      type AbstractType = String
+      type AbstractTypeWithBounds <: B
+      type ConcreteOnlyMember = Boolean
+    }
+    type IntRefine = SimplePaths { type AbstractType = Int }
+
+    val refx: SimplePaths = new SimplePaths
+    val refy: ConcreteSimplePathsChild = new ConcreteSimplePathsChild
+    val refyAsStringRefine: StringRefine = refy
+    val refzAsIntRefine: IntRefine = new SimplePaths {
+      type AbstractType = Int
+    }
+
+    assertStrictSubtype(x, SimplePathsClass.typeRef)
+    assertStrictSubtype(y, ConcreteSimplePathsChildClass.typeRef)
+    assertStrictSubtype(yAsStringRefine, SimplePathsClass.typeRef)
+    assertStrictSubtype(zAsIntRefine, SimplePathsClass.typeRef)
+
+    assertNeitherSubtype(yAsStringRefine, ConcreteSimplePathsChildClass.typeRef)
+    assertNeitherSubtype(zAsIntRefine, ConcreteSimplePathsChildClass.typeRef)
+
+    assertNeitherSubtype(x.select(tname"AbstractType"), defn.StringType).withRef[refx.AbstractType, JString]
+    assertEquiv(y.select(tname"AbstractType"), defn.StringType).withRef[refy.AbstractType, JString]
+
+    assertEquiv(yAsStringRefine.select(tname"AbstractType"), defn.StringType)
+      .withRef[refyAsStringRefine.AbstractType, JString]
+    assertEquiv(yAsStringRefine.select(tname"AbstractType"), y.select(tname"AbstractType"))
+      .withRef[refyAsStringRefine.AbstractType, refy.AbstractType]
+    assertNeitherSubtype(yAsStringRefine.select(tname"AbstractType"), x.select(tname"AbstractType"))
+      .withRef[refyAsStringRefine.AbstractType, refx.AbstractType]
+
+    assertEquiv(yAsStringRefine.select(tname"ConcreteOnlyMember"), defn.BooleanType)
+      .withRef[refyAsStringRefine.ConcreteOnlyMember, Boolean]
+    assertEquiv(yAsStringRefine.select(tname"ConcreteOnlyMember"), y.select(tname"ConcreteOnlyMember"))
+      .withRef[refyAsStringRefine.ConcreteOnlyMember, refy.ConcreteOnlyMember]
+    assertNeitherSubtype(yAsStringRefine.select(tname"ConcreteOnlyMember"), x.select(tname"AbstractType"))
+      .withRef[refyAsStringRefine.ConcreteOnlyMember, refx.AbstractType]
+
+    assertEquiv(yAsStringRefine.select(tname"AliasOfAbstractType"), y.select(tname"AbstractType"))
+      .withRef[refyAsStringRefine.AliasOfAbstractType, refy.AbstractType]
+    assertEquiv(yAsStringRefine.select(tname"AliasOfAbstractType"), defn.StringType)
+      .withRef[refyAsStringRefine.AliasOfAbstractType, JString]
+    assertNeitherSubtype(
+      yAsStringRefine.select(tname"AliasOfAbstractType"),
+      zAsIntRefine.select(tname"AliasOfAbstractType")
+    )
+      .withRef[refyAsStringRefine.AliasOfAbstractType, refzAsIntRefine.AliasOfAbstractType]
+
+    assertStrictSubtype(yAsStringRefine.select(tname"AbstractTypeWithBounds"), BClass.typeRef)
+      .withRef[refyAsStringRefine.AbstractTypeWithBounds, B]
+    assertStrictSubtype(yAsStringRefine.select(tname"AbstractTypeWithBounds"), AClass.typeRef)
+      .withRef[refyAsStringRefine.AbstractTypeWithBounds, A]
+    assertStrictSubtype(CClass.typeRef, yAsStringRefine.select(tname"AbstractTypeWithBounds"))
+      .withRef[C, refyAsStringRefine.AbstractTypeWithBounds]
+
+    assertStrictSubtype(yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"), BClass.typeRef)
+      .withRef[refyAsStringRefine.AliasOfAbstractTypeWithBounds, B]
+    assertStrictSubtype(
+      yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"),
+      y.select(tname"AliasOfAbstractTypeWithBounds")
+    )
+      .withRef[refyAsStringRefine.AliasOfAbstractTypeWithBounds, refy.AliasOfAbstractTypeWithBounds]
+    assertStrictSubtype(yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"), AClass.typeRef)
+      .withRef[refyAsStringRefine.AliasOfAbstractTypeWithBounds, A]
+    assertStrictSubtype(CClass.typeRef, yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"))
+      .withRef[C, refyAsStringRefine.AliasOfAbstractTypeWithBounds]
+
+    assertNeitherSubtype(
+      yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"),
+      zAsIntRefine.select(tname"AliasOfAbstractTypeWithBounds")
+    )
+      .withRef[refyAsStringRefine.AliasOfAbstractTypeWithBounds, refzAsIntRefine.AliasOfAbstractTypeWithBounds]
+  }
+
+  testWithContext("simple-paths-in-nested-classes") {
     import subtyping.paths.NestedClasses
 
     val paths = "subtyping.paths"
