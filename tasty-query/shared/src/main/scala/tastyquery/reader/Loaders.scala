@@ -188,27 +188,34 @@ private[tastyquery] object Loaders {
     end loadRoot
 
     private def foreachEntry(data: PackageData)(f: (SimpleName, Entry) => Unit): Unit =
+      def binaryNameToRootName(binaryName: String): SimpleName =
+        termName(NameTransformer.decode(binaryName))
+
       if data.classes.isEmpty then
-        for tData <- data.tastys do f(termName(NameTransformer.decode(tData.binaryName)), Entry.TastyOnly(tData))
+        for tData <- data.tastys do f(binaryNameToRootName(tData.binaryName), Entry.TastyOnly(tData))
       else
         val tastyMap = data.tastys.map(t => t.binaryName -> t).toMap
         val nestedPrefixes = data.classes.map(_.binaryName + "$")
 
         for cData <- data.classes do
           val binaryName = cData.binaryName
-          val isTopLevel = !nestedPrefixes.exists(binaryName.startsWith(_))
-          if isTopLevel then
-            val rootName = termName(NameTransformer.decode(binaryName))
-            val entry = tastyMap.get(binaryName) match
-              case Some(tastyData) =>
-                Entry.ClassAndTasty(cData, tastyData)
-              case None =>
-                // ClassOnly could be Scala 2 or Java, but we don't know yet, so we have to include nested classes.
+
+          tastyMap.get(binaryName) match
+            case Some(tastyData) =>
+              // #263 If there is a `.tasty` file, it is necessarily top-level
+              f(binaryNameToRootName(binaryName), Entry.ClassAndTasty(cData, tastyData))
+
+            case None =>
+              /* Otherwise, it can be Scala 2 or Java. In that case, we must
+               * only process top-level classes. We must include nested class
+               * data regardless, because we cannot tell whether it is Java
+               * or Scala 2 here.
+               */
+              val isTopLevel = !nestedPrefixes.exists(binaryName.startsWith(_))
+              if isTopLevel then
                 val nestedPrefix = binaryName + "$"
                 val nestedData = data.classes.filter(_.binaryName.startsWith(nestedPrefix))
-                Entry.ClassOnly(cData, nestedData)
-            end entry
-            f(rootName, entry)
+                f(binaryNameToRootName(binaryName), Entry.ClassOnly(cData, nestedData))
     end foreachEntry
 
     def scanPackage(pkg: PackageSymbol)(using Context): Unit = {

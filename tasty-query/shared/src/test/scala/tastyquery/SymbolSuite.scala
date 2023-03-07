@@ -232,4 +232,17 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     intercept[MemberNotFoundException](ChildClass.parents)
     intercept[MemberNotFoundException](ChildClass.parents) // it's the same exception the second time
   }
+
+  testWithContext(
+    "class-and-package-object-with-same-name-issue-263",
+    "simple_trees.ClassAndPackageObjectSameName",
+    "simple_trees.ClassAndPackageObjectSameName$",
+    "simple_trees.ClassAndPackageObjectSameName$package",
+    "simple_trees.ClassAndPackageObjectSameName$package$"
+  ) {
+    ctx.findTopLevelClass("simple_trees.ClassAndPackageObjectSameName")
+    ctx.findTopLevelModuleClass("simple_trees.ClassAndPackageObjectSameName$package")
+
+    intercept[MemberNotFoundException](ctx.findTopLevelModuleClass("simple_trees.ClassAndPackageObjectSameName"))
+  }
 }
