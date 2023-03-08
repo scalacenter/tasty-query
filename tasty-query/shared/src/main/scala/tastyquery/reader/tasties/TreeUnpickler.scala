@@ -1164,17 +1164,8 @@ private[tasties] class TreeUnpickler(
       val end = reader.readEnd()
       val upperBound = readType
       val scrutinee = readType
-      val cases: List[MatchTypeCase | TypeLambda] = reader.until(end)(readType match
-        case tpe: (MatchTypeCase | TypeLambda) => tpe
-        case tpe => throw TastyFormatException(s"Unexpected type in MATCHtype: $tpe $posErrorMsg")
-      )
+      val cases: List[MatchTypeCase] = reader.until(end)(readMatchTypeCase)
       MatchType(upperBound, scrutinee, cases)
-    case MATCHCASEtype =>
-      reader.readByte() // tag
-      reader.readEnd() // end
-      val pattern = readType
-      val body = readType
-      MatchTypeCase(pattern, body)
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
     case tag =>
@@ -1224,6 +1215,67 @@ private[tasties] class TreeUnpickler(
       tl => resultUnpickler.readType(using localCtx.withEnclosingBinders(lambdaAddr, tl))
     )
   end readLambdaType
+
+  private def readMatchTypeCase(using LocalContext): MatchTypeCase = reader.nextByte match {
+    case MATCHCASEtype =>
+      reader.readByte() // tag
+      reader.readEnd() // end
+      val pattern = readType
+      val body = readType
+      MatchTypeCase(pattern, body)
+
+    case TYPELAMBDAtype =>
+      // This is unfortunately a lot of copy-past wrt. readLambdaType above
+
+      val lambdaAddr = reader.currentAddr
+      reader.readByte()
+      val end = reader.readEnd()
+
+      val matchTypeCaseUnpickler = fork // remember where the underlying MATCHCASEtype is
+      skipTree() // skip the MATCHCASEtype
+      val paramInfosUnpickler = fork // remember where the params are
+
+      // Read names -- skip infos, and stop if we find a modifier
+      val paramNames = reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
+        skipTree()
+        readName.toTypeName
+      }
+
+      if reader.currentAddr != end then
+        throw TastyFormatException(s"unexpected modifiers for match-type-case TYPELAMBDAtype at $posErrorMsg")
+
+      // Read infos -- skip names
+      def readParamInfos()(using LocalContext): List[TypeBounds] =
+        val reader = paramInfosUnpickler.reader
+        reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
+          val bounds = paramInfosUnpickler.readTypeBounds
+          reader.readNat() // skip name
+          bounds
+        }
+      end readParamInfos
+
+      // Flatten out the underlying MatchTypeCase -- this is not pretty
+      var resultType: Type | Null = null
+      MatchTypeCase(paramNames)(
+        mtc => readParamInfos()(using localCtx.withEnclosingBinders(lambdaAddr, mtc)),
+        { mtc =>
+          val inner = matchTypeCaseUnpickler.readMatchTypeCase(using localCtx.withEnclosingBinders(lambdaAddr, mtc))
+          if inner.paramNames.nonEmpty then
+            throw TastyFormatException(s"unexpected nested $inner for match-type-case at $posErrorMsg")
+          resultType = inner.result
+          inner.pattern
+        },
+        mtc => resultType.nn
+      )
+
+    case SHAREDtype =>
+      reader.readByte()
+      val addr = reader.readAddr()
+      forkAt(addr).readMatchTypeCase
+
+    case tag =>
+      throw TastyFormatException(s"Unexpected type in MATCHtype case: $tag $posErrorMsg")
+  }
 
   private def readTypeTree(using LocalContext): TypeTree = reader.nextByte match {
     case IDENTtpt =>

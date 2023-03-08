@@ -2,6 +2,8 @@ package tastyquery
 
 import scala.annotation.tailrec
 
+import scala.collection.mutable
+
 import tastyquery.Annotations.*
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
@@ -726,13 +728,33 @@ object Trees {
   final case class MatchTypeTree(bound: Option[TypeTree], selector: TypeTree, cases: List[TypeCaseDef])(span: Span)
       extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
-      defn.NothingType // TODO
+      MatchType(bound.fold(defn.AnyType)(_.toType), selector.toType, cases.map(_.toMatchTypeCase))
 
     override final def withSpan(span: Span): MatchTypeTree = MatchTypeTree(bound, selector, cases)(span)
   }
 
   final case class TypeCaseDef(pattern: TypeTree, body: TypeTree)(span: Span) extends Tree(span):
     def withSpan(span: Span): TypeCaseDef = TypeCaseDef(pattern, body)(span)
+
+    private[Trees] def toMatchTypeCase(using Context): MatchTypeCase =
+      val bindsBuffer = mutable.ListBuffer.empty[LocalTypeParamSymbol]
+      collectBinds(pattern, bindsBuffer)
+      val binds = bindsBuffer.toList
+
+      val patternType = pattern.toType
+      val resultType = body.toType
+
+      MatchTypeCase.fromParams(binds, patternType, resultType)
+    end toMatchTypeCase
+
+    private def collectBinds(tpt: TypeTree, buffer: mutable.ListBuffer[LocalTypeParamSymbol]): Unit = tpt match
+      case TypeTreeBind(_, _, sym) =>
+        buffer += sym
+      case AppliedTypeTree(tycon, targs) =>
+        for targ <- targs do collectBinds(targ, buffer)
+      case _ =>
+        ()
+    end collectBinds
   end TypeCaseDef
 
   final case class TypeTreeBind(name: TypeName, body: TypeDefinitionTree, symbol: LocalTypeParamSymbol)(span: Span)

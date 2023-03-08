@@ -61,6 +61,8 @@ private[tastyquery] object TypeMaps {
       tp.derivedOrType(tp1, tp2)
     protected def derivedAnnotatedType(tp: AnnotatedType, underlying: Type, annot: Annotation): Type =
       tp.derivedAnnotatedType(underlying, annot)
+    protected def derivedMatchType(tp: MatchType, bound: Type, scrutinee: Type, cases: List[MatchTypeCase]): Type =
+      tp.derivedMatchType(bound, scrutinee, cases)
     protected def derivedByNameType(tp: ByNameType, restpe: Type): Type =
       tp.derivedByNameType(restpe)
     protected def derivedLambdaType(tp: LambdaType, formals: List[tp.PInfo], restpe: Type): Type =
@@ -78,6 +80,14 @@ private[tastyquery] object TypeMaps {
       val ptypes1 = tp.paramInfos.mapConserve(pi => apply(pi)).asInstanceOf[List[tp.PInfo]]
       variance = saved
       derivedLambdaType(tp, ptypes1, this(restpe))
+
+    protected def mapOverMatchTypeCase(caze: MatchTypeCase): MatchTypeCase =
+      caze.derivedMatchTypeCase(
+        caze.paramTypeBounds.mapConserve(bounds => apply(bounds)),
+        this(caze.pattern),
+        this(caze.result)
+      )
+    end mapOverMatchTypeCase
 
     def isRange(tp: Type): Boolean = tp.isInstanceOf[Range]
 
@@ -127,6 +137,15 @@ private[tastyquery] object TypeMaps {
 
         case tp: OrType =>
           derivedOrType(tp, this(tp.first), this(tp.second))
+
+        case tp: MatchType =>
+          // The spec says that all type positions in a match type are considered invariant
+          atVariance(0) {
+            val newBound = this(tp.bound)
+            val newScrutinee = this(tp.scrutinee)
+            val newCases = tp.cases.mapConserve(mapOverMatchTypeCase(_))
+            derivedMatchType(tp, newBound, newScrutinee, newCases)
+          }
 
         case _ =>
           tp
