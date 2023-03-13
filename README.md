@@ -28,7 +28,7 @@ libraryDependencies += "ch.epfl.scala" %% "tasty-query" % "<latest-version>"
 You can find the latest release in the Releases list on GitHub.
 
 Head over to the [latest API docs](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery.html) to see what's available.
-To get started, create a [`Classpath`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Classpaths$$Classpath.html) using [`ClasspathLoaders.read`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/jdk/ClasspathLoaders$.html).
+To get started, create a [`Classpath`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Classpaths$$Classpath.html) using [`ClasspathLoaders.read`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/jdk/ClasspathLoaders$.html). Please note that TASTy Query requires all classes, such as the JRE, must be explicitly added to the classpath. 
 Then, create a [`Context`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Contexts$$Context.html) object using [`Contexts.init(classpath)`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Contexts$.html#init-fffffe7c).
 From there, follow the available methods to access [`Symbols`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Symbols$.html), [`Types`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Types$.html) and [`Trees`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Trees$.html).
 
