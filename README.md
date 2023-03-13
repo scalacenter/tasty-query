@@ -29,6 +29,9 @@ You can find the latest release in the Releases list on GitHub.
 
 Head over to the [latest API docs](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery.html) to see what's available.
 To get started, create a [`Classpath`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Classpaths$$Classpath.html) using [`ClasspathLoaders.read`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/jdk/ClasspathLoaders$.html).
+Please note that TASTy Query requires that all classes, such as the JRE, must be explicitly added to the classpath.
+On the JDK versions >= 9, the JRE classpath can be obtained on the JVM platform with `FileSystems.getFileSystem(java.net.URI.create("jrt:/")).getPath("modules", "java.base")`.
+On the JavaScript plaform the contents of this path need to be saved as a JAR file in the real file system.
 Then, create a [`Context`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Contexts$$Context.html) object using [`Contexts.init(classpath)`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Contexts$.html#init-fffffe7c).
 From there, follow the available methods to access [`Symbols`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Symbols$.html), [`Types`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Types$.html) and [`Trees`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Trees$.html).
 
