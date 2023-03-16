@@ -464,6 +464,9 @@ object Types {
       case st                           => st
     }
 
+    private[tastyquery] final def superTypeNormalized(using Context): Type =
+      superType // .normalized
+
     /** Same as superType, except for two differences:
       *
       *  - opaque types are treated as transparent aliases
@@ -551,7 +554,10 @@ object Types {
     private var myName: ThisName | Null = null
 
     private[tastyquery] final def isLocalRef(sym: Symbol): Boolean =
-      prefix == NoPrefix && designator == sym
+      prefix == NoPrefix && (designator eq sym)
+
+    private[tastyquery] final def isTypeParamRef(tparam: TypeParamInfo): Boolean =
+      designator eq tparam
 
     final def isType: Boolean = isInstanceOf[TypeRef]
 
@@ -1552,7 +1558,22 @@ object Types {
   final class MatchType(val bound: Type, val scrutinee: Type, val cases: List[MatchTypeCase])
       extends TypeProxy
       with ValueType:
+    private var myReduced: Option[Type] | Null = null
+
     def underlying(using Context): Type = bound
+
+    def reduced(using Context): Option[Type] =
+      val local = myReduced
+      if local != null then local
+      else
+        val computed = computeReduced()
+        myReduced = computed
+        computed
+    end reduced
+
+    private def computeReduced()(using Context): Option[Type] =
+      TypeMatching.matchCases(scrutinee, cases)
+
     override def toString(): String = s"MatchType($bound, $scrutinee, $cases)"
 
     private[tastyquery] def derivedMatchType(bound: Type, scrutinee: Type, cases: List[MatchTypeCase]): MatchType =
@@ -1610,6 +1631,11 @@ object Types {
 
     override def toString(): String = s"WildcardTypeBounds($bounds)"
   }
+
+  object WildcardTypeBounds:
+    def NothingAny(using Context): WildcardTypeBounds =
+      WildcardTypeBounds(defn.NothingAnyBounds)
+  end WildcardTypeBounds
 
   // ----- Ground Types -------------------------------------------------
 

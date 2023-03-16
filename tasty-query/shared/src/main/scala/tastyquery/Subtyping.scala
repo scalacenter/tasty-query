@@ -138,6 +138,11 @@ private[tastyquery] object Subtyping:
     case tp1: AnnotatedType =>
       isSubtype(tp1.typ, tp2)
 
+    case tp1: MatchType =>
+      tp1.reduced match
+        case Some(reduced) => isSubtype(reduced, tp2)
+        case None          => level3(tp1, tp2)
+
     case _ =>
       level3(tp1, tp2)
   end level2
@@ -184,6 +189,11 @@ private[tastyquery] object Subtyping:
         case tp1: ByNameType => isSubtype(tp1.resultType, tp2.resultType)
         case _               => level4(tp1, tp2)
 
+    case tp2: MatchType =>
+      tp2.reduced match
+        case Some(reduced) => isSubtype(tp1, reduced)
+        case None          => level4(tp1, tp2)
+
     case _ =>
       level4(tp1, tp2)
   end level3
@@ -199,6 +209,8 @@ private[tastyquery] object Subtyping:
     else tp1.baseType(cls2)
 
   private def compareAppliedType2(tp1: Type, tp2: AppliedType)(using Context): Boolean =
+    // !!! There is similar code in TypeMatching.tryMatchPattern
+
     val tycon2 = tp2.tycon
     val tparams = tycon2.typeParams
     if tparams.isEmpty then
@@ -344,6 +356,15 @@ private[tastyquery] object Subtyping:
       // TODO Try and simplify first
       isSubtype(tp1.first, tp2) || isSubtype(tp1.second, tp2)
 
+    case tp1: MatchType =>
+      def isSubMatchType: Boolean = tp2 match
+        case tp2: MatchType =>
+          isSameType(tp1.scrutinee, tp2.scrutinee) && tp1.cases.corresponds(tp2.cases)(isSubMatchTypeCase)
+        case _ =>
+          false
+
+      isSubtype(tp1.underlying, tp2) || isSubMatchType
+
     case _ =>
       false
   end level4
@@ -358,6 +379,12 @@ private[tastyquery] object Subtyping:
       case _ =>
         false
   end compareAppliedType1
+
+  private def isSubMatchTypeCase(caze1: MatchTypeCase, caze2: MatchTypeCase)(using Context): Boolean =
+    caze1.paramNames.lengthCompare(caze2.paramNames) == 0
+      && isSameType(caze1.pattern, Substituters.substBinders(caze2.pattern, caze2, caze1))
+      && isSubtype(caze1.result, Substituters.substBinders(caze2.result, caze2, caze1))
+  end isSubMatchTypeCase
 
   private def isNullable(tp: Type)(using Context): Boolean = tp match
     case TypeRef.OfClass(cls) =>
@@ -380,7 +407,7 @@ private[tastyquery] object Subtyping:
       false
   end isNullable
 
-  private def isSubprefix(pre1: Prefix, pre2: Prefix)(using Context): Boolean =
+  private[tastyquery] def isSubprefix(pre1: Prefix, pre2: Prefix)(using Context): Boolean =
     pre1 match
       case NoPrefix =>
         pre2 eq NoPrefix

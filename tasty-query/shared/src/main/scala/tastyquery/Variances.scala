@@ -11,6 +11,8 @@ private[tastyquery] object Variances:
       flags & VarianceFlags
 
     val Invariant: Variance = fromFlags(EmptyFlagSet)
+    val Covariant: Variance = fromFlags(tastyquery.Flags.Covariant)
+    val Contravariant: Variance = fromFlags(tastyquery.Flags.Contravariant)
   end Variance
 
   extension (variance: Variance)
@@ -33,5 +35,11 @@ private[tastyquery] object Variances:
       if variance.is(Covariant) then 1
       else if variance.is(Contravariant) then -1
       else 0
+
+    def *(that: Variance): Variance =
+      variance.sign * that.sign match
+        case 0  => Variance.Invariant
+        case 1  => Covariant
+        case -1 => Contravariant
   end extension
 end Variances
