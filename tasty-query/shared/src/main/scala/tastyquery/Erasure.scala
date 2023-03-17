@@ -86,6 +86,10 @@ private[tastyquery] object Erasure:
         preErase(tpe.bounds.high)
       case tpe: WildcardTypeBounds =>
         preErase(tpe.bounds.high)
+      case tpe: MatchType =>
+        tpe.reduced match
+          case Some(reduced) => preErase(reduced)
+          case None          => preErase(tpe.bound)
       case tpe: OrType =>
         erasedLub(preErase(tpe.first), preErase(tpe.second))
       case tpe =>

@@ -1793,9 +1793,17 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               List(TypeParam(TypeName(SimpleName("X")), NothingAnyTypeBoundsTree(), _)),
               TypeAliasDefinitionTree(
                 MatchTypeTree(
-                  Some(TypeIdent(TypeName(SimpleName("Nothing")))),
+                  Some(TypeIdent(TypeName(SimpleName("Product")))),
                   TypeIdent(TypeName(SimpleName("X"))),
-                  List(TypeCaseDef(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("Nothing")))))
+                  List(
+                    TypeCaseDef(
+                      TypeIdent(TypeName(SimpleName("Int"))),
+                      AppliedTypeTree(
+                        TypeIdent(TypeName(SimpleName("Some"))),
+                        List(TypeIdent(TypeName(SimpleName("Int"))))
+                      )
+                    )
+                  )
                 )
               )
             ),
