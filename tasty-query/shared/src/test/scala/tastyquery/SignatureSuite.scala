@@ -52,6 +52,11 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(length, "():scala.Int")
   }
 
+  testWithContext("Specials") {
+    val equals = defn.Any_equals
+    assertSigned(equals, "(java.lang.Object):scala.Boolean")
+  }
+
   testWithContext("GenericClass") {
     val GenericClass = ctx.findTopLevelClass("simple_trees.GenericClass")
 
@@ -133,6 +138,15 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
     val withArrayOfSubtypeList = TypeRefIn.findNonOverloadedDecl(name"withArrayOfSubtypeList")
     assertSigned(withArrayOfSubtypeList, "(1,scala.collection.immutable.List[]):scala.Unit")
+
+    val withArrayExactAny = TypeRefIn.findNonOverloadedDecl(name"withArrayExactAny")
+    assertSigned(withArrayExactAny, "(java.lang.Object[]):scala.Unit")
+
+    val withArrayExactAnyRef = TypeRefIn.findNonOverloadedDecl(name"withArrayExactAnyRef")
+    assertSigned(withArrayExactAnyRef, "(java.lang.Object[]):scala.Unit")
+
+    val withArrayExactAnyVal = TypeRefIn.findNonOverloadedDecl(name"withArrayExactAnyVal")
+    assertSigned(withArrayExactAnyVal, "(java.lang.Object[]):scala.Unit")
   }
 
   testWithContext("type-member") {

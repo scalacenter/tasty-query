@@ -662,7 +662,7 @@ object Symbols {
     private var myGivenSelfType: Option[Type] | Null = null
 
     // Optional reference fields
-    private var mySpecialErasure: Option[() => ErasedTypeRef] = None
+    private var mySpecialErasure: Option[() => ErasedTypeRef.ClassRef] = None
 
     // DeclaringSymbol-related fields
     private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[TermOrTypeSymbol]] =
@@ -798,12 +798,12 @@ object Symbols {
     final def isSubclass(that: ClassSymbol)(using Context): Boolean =
       linearization.contains(that)
 
-    private[tastyquery] final def withSpecialErasure(specialErasure: () => ErasedTypeRef): this.type =
+    private[tastyquery] final def withSpecialErasure(specialErasure: () => ErasedTypeRef.ClassRef): this.type =
       if mySpecialErasure.isDefined then throw IllegalStateException(s"reassignment of the special erasure of $this")
       mySpecialErasure = Some(specialErasure)
       this
 
-    private[tastyquery] final def specialErasure(using Context): Option[() => ErasedTypeRef] =
+    private[tastyquery] final def specialErasure(using Context): Option[() => ErasedTypeRef.ClassRef] =
       mySpecialErasure
 
     // DeclaringSymbol implementation

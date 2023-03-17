@@ -104,8 +104,9 @@ private[tastyquery] object Erasure:
         if cls == defn.AnyValClass then ClassRef(defn.ObjectClass)
         else if cls.isDerivedValueClass then valueClass(cls)
         else cls.specialErasure.fold(typeRef)(f => f())
-      case ArrayTypeRef(_, _) =>
-        typeRef
+      case ArrayTypeRef(ClassRef(cls), dimensions) =>
+        if cls == defn.AnyValClass then ArrayTypeRef(ClassRef(defn.ObjectClass), dimensions)
+        else cls.specialErasure.fold(typeRef)(f => ArrayTypeRef(f(), dimensions))
   end finishErase
 
   /** The erased least upper bound of two erased types is computed as follows.
