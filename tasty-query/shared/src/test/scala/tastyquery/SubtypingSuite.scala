@@ -662,6 +662,98 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(inner.declaredType, ParentClass.typeRef).withRef[NestedClasses.inner.type, NestedClasses.Parent]
   }
 
+  testWithContext("refinement-types-subtyping") {
+    import subtyping.paths.{SimplePaths, ConcreteSimplePathsChild}
+
+    val SimplePathsClass = ctx.findTopLevelClass("subtyping.paths.SimplePaths")
+    val ConcreteSimplePathsChildClass = ctx.findTopLevelClass("subtyping.paths.ConcreteSimplePathsChild")
+    val CharSequenceClass = ctx.findTopLevelClass("java.lang.CharSequence")
+
+    val CharSequenceType = CharSequenceClass.appliedRef
+
+    def refineTypeAlias(name: String, alias: Type): Type =
+      TypeRefinement(SimplePathsClass.appliedRef, typeName(name), TypeAlias(alias))
+
+    def refineTypeBound(name: String, high: Type): Type =
+      TypeRefinement(SimplePathsClass.appliedRef, typeName(name), RealTypeBounds(defn.NothingType, high))
+
+    def refineTerm(name: String, tpe: Type): Type =
+      TermRefinement(SimplePathsClass.appliedRef, termName(name), tpe)
+
+    // type refinement - exists in class
+
+    assertEquiv(refineTypeAlias("AbstractType", defn.StringType), refineTypeAlias("AbstractType", defn.StringType))
+      .withRef[SimplePaths { type AbstractType = String }, SimplePaths { type AbstractType = String }]
+    assertNeitherSubtype(
+      refineTypeAlias("AbstractType", defn.StringType),
+      refineTypeAlias("AbstractType", defn.IntType)
+    )
+      .withRef[SimplePaths { type AbstractType = String }, SimplePaths { type AbstractType = CharSequence }]
+    assertNeitherSubtype(
+      refineTypeAlias("AbstractType", defn.StringType),
+      refineTypeAlias("AbstractType", CharSequenceType)
+    )
+      .withRef[SimplePaths { type AbstractType = String }, SimplePaths { type AbstractType = Int }]
+    assertStrictSubtype(
+      refineTypeAlias("AbstractType", defn.StringType),
+      refineTypeBound("AbstractType", CharSequenceType)
+    )
+      .withRef[SimplePaths { type AbstractType = String }, SimplePaths { type AbstractType <: CharSequence }]
+
+    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeAlias("AbstractType", defn.StringType))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { type AbstractType = String }]
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeAlias("AbstractType", defn.IntType))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { type AbstractType = Int }]
+
+    // type refinement - does not exist in class
+
+    assertEquiv(refineTypeAlias("OtherType", defn.StringType), refineTypeAlias("OtherType", defn.StringType))
+      .withRef[SimplePaths { type OtherType = String }, SimplePaths { type OtherType = String }]
+    assertNeitherSubtype(refineTypeAlias("OtherType", defn.StringType), refineTypeAlias("OtherType", defn.IntType))
+      .withRef[SimplePaths { type OtherType = String }, SimplePaths { type OtherType = Int }]
+    assertNeitherSubtype(refineTypeAlias("OtherType", defn.StringType), refineTypeAlias("OtherType", CharSequenceType))
+      .withRef[SimplePaths { type OtherType = String }, SimplePaths { type OtherType = CharSequence }]
+    assertStrictSubtype(refineTypeAlias("OtherType", defn.StringType), refineTypeBound("OtherType", CharSequenceType))
+      .withRef[SimplePaths { type OtherType = String }, SimplePaths { type OtherType <: CharSequence }]
+
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeAlias("OtherType", defn.StringType))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { type OtherType = String }]
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeAlias("OtherType", defn.IntType))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { type OtherType = Int }]
+
+    // term refinement - exists in class
+
+    assertEquiv(refineTerm("abstractTerm", defn.StringType), refineTerm("abstractTerm", defn.StringType))
+      .withRef[SimplePaths { def abstractTerm: String }, SimplePaths { def abstractTerm: String }]
+    assertNeitherSubtype(refineTerm("abstractTerm", defn.StringType), refineTerm("abstractTerm", defn.IntType))
+      .withRef[SimplePaths { def abstractTerm: String }, SimplePaths { def abstractTerm: Int }]
+    assertStrictSubtype(refineTerm("abstractTerm", defn.StringType), refineTerm("abstractTerm", CharSequenceType))
+      .withRef[SimplePaths { def abstractTerm: String }, SimplePaths { def abstractTerm: CharSequence }]
+
+    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("abstractTerm", listOf(defn.IntType)))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { def abstractTerm: List[Int] }]
+    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("abstractTerm", listOf(defn.AnyType)))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { def abstractTerm: List[Any] }]
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("abstractTerm", listOf(defn.BooleanType)))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { def abstractTerm: List[Boolean] }]
+
+    // term refinement - does not exist in class
+
+    assertEquiv(refineTerm("otherTerm", defn.StringType), refineTerm("otherTerm", defn.StringType))
+      .withRef[SimplePaths { def otherTerm: String }, SimplePaths { def otherTerm: String }]
+    assertNeitherSubtype(refineTerm("otherTerm", defn.StringType), refineTerm("otherTerm", defn.IntType))
+      .withRef[SimplePaths { def otherTerm: String }, SimplePaths { def otherTerm: Int }]
+    assertStrictSubtype(refineTerm("otherTerm", defn.StringType), refineTerm("otherTerm", CharSequenceType))
+      .withRef[SimplePaths { def otherTerm: String }, SimplePaths { def otherTerm: CharSequence }]
+
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("otherTerm", listOf(defn.IntType)))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { def otherTerm: List[Int] }]
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("otherTerm", listOf(defn.AnyType)))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { def otherTerm: List[Any] }]
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("otherTerm", listOf(defn.BooleanType)))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { def otherTerm: List[Boolean] }]
+  }
+
   testWithContext("intersection-types") {
     assertStrictSubtype(Types.AndType.make(defn.IntType, defn.StringType), defn.IntType).withRef[Int & String, Int]
 
