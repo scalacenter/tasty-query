@@ -275,4 +275,14 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(arrayOfUnion, "(java.lang.Object[]):java.lang.Object[]")
   }
 
+  testWithContext("refined types") {
+    val RefinedTypeTree = ctx.findTopLevelClass("simple_trees.RefinedTypeTree")
+
+    val sigRefined = RefinedTypeTree.findNonOverloadedDecl(name"sigRefined")
+    assertSigned(sigRefined, "():simple_trees.TypeMember")
+
+    val foo = RefinedTypeTree.findNonOverloadedDecl(name"foo")
+    assertSigned(foo, "(simple_trees.RefinedTypeTree.A):scala.Int")
+  }
+
 end SignatureSuite

@@ -3,6 +3,8 @@ package simple_trees
 class RefinedTypeTree {
   type Refined = TypeMember { type AbstractType = Int }
 
+  def sigRefined(): Refined = ???
+
   // Refining an existing term member
 
   abstract class A {
