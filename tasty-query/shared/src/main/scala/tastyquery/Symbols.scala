@@ -522,6 +522,10 @@ object Symbols {
     private[tastyquery] def paramVariance(using Context): Variance =
       Variance.fromFlags(flags)
 
+    private[tastyquery] def paramName: TypeName = name
+
+    private[tastyquery] def paramTypeBounds(using Context): TypeBounds = bounds
+
     final def typeRef(using Context): TypeRef = TypeRef(ThisType(owner.typeRef), this)
 
     /** The argument corresponding to this class type parameter as seen from prefix `pre`.

@@ -173,8 +173,10 @@ private[tastyquery] object Subtyping:
           tp1.paramRefs.lengthCompare(tp2.paramRefs) == 0
             && isSubtype(tp1.resultType, tp2.appliedTo(tp1.paramRefs))
         case _ =>
-          // TODO? Eta-expand polymorphic type constructors?
-          level4(tp1, tp2)
+          // Try eta-expansion
+          val tparams1 = tp1.typeParams
+          val etaExpandSuccess = tparams1.nonEmpty && isSubtype(etaExpand(tp1, tparams1), tp2)
+          etaExpandSuccess || level4(tp1, tp2)
 
     case tp2: RefinedType =>
       (isSubtype(tp1, tp2.parent) && hasMatchingRefinedMember(tp1, tp2))
@@ -290,6 +292,9 @@ private[tastyquery] object Subtyping:
       isSubArg(arg1, arg2, tparam2)
     }
   end isSubArgs
+
+  private def etaExpand(tp: Type, tparams: List[TypeParamInfo])(using Context): TypeLambda =
+    TypeLambda.fromParamInfos(tparams)(tl => tp.appliedTo(tl.paramRefs))
 
   private def hasMatchingRefinedMember(tp1: Type, tp2: RefinedType)(using Context): Boolean =
     tp1.resolveMember(tp2.refinedName, tp1) match

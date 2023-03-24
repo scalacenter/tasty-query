@@ -53,4 +53,7 @@ class ConcreteSimplePathsChild extends SimplePaths:
   type ConcreteOnlyMember = Boolean
 
   override def abstractTerm: List[Int] = ???
+
+  class InnerClassMono extends A
+  class InnerClassPoly[T] extends C
 end ConcreteSimplePathsChild
