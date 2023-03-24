@@ -171,6 +171,10 @@ private[tastyquery] object Subtyping:
           // TODO? Eta-expand polymorphic type constructors?
           level4(tp1, tp2)
 
+    case tp2: RefinedType =>
+      (isSubtype(tp1, tp2.parent) && hasMatchingRefinedMember(tp1, tp2))
+        || level4(tp1, tp2)
+
     case tp2: OrType =>
       isSubtype(tp1, tp2.first) || isSubtype(tp1, tp2.second)
         || level4(tp1, tp2)
@@ -275,6 +279,27 @@ private[tastyquery] object Subtyping:
     }
   end isSubArgs
 
+  private def hasMatchingRefinedMember(tp1: Type, tp2: RefinedType)(using Context): Boolean =
+    tp1.resolveMember(tp2.refinedName, tp1) match
+      case ResolveMemberResult.NotFound =>
+        false
+
+      case ResolveMemberResult.TermMember(symbols, tpe) =>
+        tp2 match
+          case tp2: TermRefinement => isSubtype(tpe, tp2.refinedType)
+          case _: TypeRefinement   => throw AssertionError(s"found term member for $tp2 in $tp1")
+
+      case ResolveMemberResult.ClassMember(cls) =>
+        tp2 match
+          case tp2: TypeRefinement => tp2.refinedBounds.contains(tp1.select(cls))
+          case _: TermRefinement   => throw AssertionError(s"found type member for $tp2 in $tp1")
+
+      case ResolveMemberResult.TypeMember(symbols, bounds) =>
+        tp2 match
+          case tp2: TypeRefinement => tp2.refinedBounds.contains(bounds)
+          case _: TermRefinement   => throw AssertionError(s"found type member for $tp2 in $tp1")
+  end hasMatchingRefinedMember
+
   private def level4(tp1: Type, tp2: Type)(using Context): Boolean = tp1 match
     case TypeRef.OfClass(cls1) =>
       if cls1 == defn.NothingClass then true
@@ -311,6 +336,9 @@ private[tastyquery] object Subtyping:
         case _ =>
           tp2.typeParams.lengthCompare(tp1.paramRefs) == 0
             && isSubtype(tp1.resultType, tp2.appliedTo(tp1.paramRefs))
+
+    case tp1: RefinedType =>
+      isSubtype(tp1.parent, tp2)
 
     case tp1: AndType =>
       // TODO Try and simplify first
