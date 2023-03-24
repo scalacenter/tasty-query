@@ -119,10 +119,10 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       def unapply(tpe: Types.WildcardTypeBounds): Some[TypeBounds] = Some(tpe.bounds)
 
     object MatchType:
-      def unapply(tpe: Types.MatchType): (Type, Type, List[Type]) = (tpe.bound, tpe.scrutinee, tpe.cases)
+      def unapply(tpe: Types.MatchType): (Type, Type, List[MatchTypeCase]) = (tpe.bound, tpe.scrutinee, tpe.cases)
 
     object MatchTypeCase:
-      def unapply(tpe: Types.MatchTypeCase): (Type, Type) = (tpe.pattern, tpe.result)
+      def unapply(tpe: Types.MatchTypeCase): (List[Type], Type, Type) = (tpe.paramRefs, tpe.pattern, tpe.result)
 
     object PolyType:
       def unapply(tpe: Types.PolyType): (List[(TypeName, TypeBounds)], Type) =
@@ -1793,9 +1793,17 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               List(TypeParam(TypeName(SimpleName("X")), NothingAnyTypeBoundsTree(), _)),
               TypeAliasDefinitionTree(
                 MatchTypeTree(
-                  Some(TypeIdent(TypeName(SimpleName("Nothing")))),
+                  Some(TypeIdent(TypeName(SimpleName("Product")))),
                   TypeIdent(TypeName(SimpleName("X"))),
-                  List(TypeCaseDef(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("Nothing")))))
+                  List(
+                    TypeCaseDef(
+                      TypeIdent(TypeName(SimpleName("Int"))),
+                      AppliedTypeTree(
+                        TypeIdent(TypeName(SimpleName("Some"))),
+                        List(TypeIdent(TypeName(SimpleName("Int"))))
+                      )
+                    )
+                  )
                 )
               )
             ),
@@ -1868,6 +1876,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                     TypeRefInternal(_, xRef),
                     List(
                       ty.MatchTypeCase(
+                        Nil,
                         TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Int"))),
                         TypeRefInternal(
                           TermRefInternal(ScalaPackageRef(), SimpleName("Predef")),
@@ -1897,15 +1906,13 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                     TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Any"))),
                     TypeRefInternal(_, xRef),
                     List(
-                      ty.TypeLambda(
+                      ty.MatchTypeCase(
                         List(tRef),
-                        ty.MatchTypeCase(
-                          ty.AppliedType(
-                            TypeRefInternal(ScalaCollImmutablePackageRef(), TypeName(SimpleName("List"))),
-                            tRef2 :: Nil
-                          ),
-                          tRef3
-                        )
+                        ty.AppliedType(
+                          TypeRefInternal(ScalaCollImmutablePackageRef(), TypeName(SimpleName("List"))),
+                          tRef2 :: Nil
+                        ),
+                        tRef3
                       )
                     )
                   )

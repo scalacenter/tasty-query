@@ -52,6 +52,11 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(length, "():scala.Int")
   }
 
+  testWithContext("Specials") {
+    val equals = defn.Any_equals
+    assertSigned(equals, "(java.lang.Object):scala.Boolean")
+  }
+
   testWithContext("GenericClass") {
     val GenericClass = ctx.findTopLevelClass("simple_trees.GenericClass")
 
@@ -133,6 +138,15 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
     val withArrayOfSubtypeList = TypeRefIn.findNonOverloadedDecl(name"withArrayOfSubtypeList")
     assertSigned(withArrayOfSubtypeList, "(1,scala.collection.immutable.List[]):scala.Unit")
+
+    val withArrayExactAny = TypeRefIn.findNonOverloadedDecl(name"withArrayExactAny")
+    assertSigned(withArrayExactAny, "(java.lang.Object[]):scala.Unit")
+
+    val withArrayExactAnyRef = TypeRefIn.findNonOverloadedDecl(name"withArrayExactAnyRef")
+    assertSigned(withArrayExactAnyRef, "(java.lang.Object[]):scala.Unit")
+
+    val withArrayExactAnyVal = TypeRefIn.findNonOverloadedDecl(name"withArrayExactAnyVal")
+    assertSigned(withArrayExactAnyVal, "(java.lang.Object[]):scala.Unit")
   }
 
   testWithContext("type-member") {
@@ -283,6 +297,35 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
     val foo = RefinedTypeTree.findNonOverloadedDecl(name"foo")
     assertSigned(foo, "(simple_trees.RefinedTypeTree.A):scala.Int")
+  }
+
+  testWithContext("match types") {
+    val MatchType = ctx.findTopLevelClass("simple_trees.MatchType")
+
+    val unboundUnreducibleSig = MatchType.findNonOverloadedDecl(termName("unboundUnreducibleSig"))
+    assertSigned(unboundUnreducibleSig, "(1,java.lang.Object):java.lang.Object")
+
+    val unboundReducibleSig = MatchType.findNonOverloadedDecl(termName("unboundReducibleSig"))
+    assertSigned(unboundReducibleSig, "(1,scala.Int):java.lang.String")
+
+    val boundUnreducibleSig = MatchType.findNonOverloadedDecl(termName("boundUnreducibleSig"))
+    assertSigned(boundUnreducibleSig, "(1,java.lang.Object):scala.Product")
+
+    val boundReducibleSig = MatchType.findNonOverloadedDecl(termName("boundReducibleSig"))
+    assertSigned(boundReducibleSig, "(1,scala.Int):scala.Some")
+
+    // this one is suspicious, but it is what dotc does (I expected `Object` instead of `Object[]`)
+    val arrayOfUnboundUnreducibleSig = MatchType.findNonOverloadedDecl(termName("arrayOfUnboundUnreducibleSig"))
+    assertSigned(arrayOfUnboundUnreducibleSig, "(1,java.lang.Object):java.lang.Object[]")
+
+    val arrayOfUnboundReducibleSig = MatchType.findNonOverloadedDecl(termName("arrayOfUnboundReducibleSig"))
+    assertSigned(arrayOfUnboundReducibleSig, "(1,scala.Int):java.lang.String[]")
+
+    val arrayOfBoundUnreducibleSig = MatchType.findNonOverloadedDecl(termName("arrayOfBoundUnreducibleSig"))
+    assertSigned(arrayOfBoundUnreducibleSig, "(1,java.lang.Object):scala.Product[]")
+
+    val arrayOfBoundReducibleSig = MatchType.findNonOverloadedDecl(termName("arrayOfBoundReducibleSig"))
+    assertSigned(arrayOfBoundReducibleSig, "(1,scala.Int):scala.Some[]")
   }
 
 end SignatureSuite

@@ -11,6 +11,7 @@ import scala.util.NotGiven
 import scala.Predef.String as PString
 
 import tastyquery.Annotations.*
+import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
@@ -111,6 +112,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
 
   def findTypesFromTASTyNamed(name: TypeName)(using Context): Type =
     ctx.findTopLevelClass("subtyping.TypesFromTASTy").findDecl(name).asInstanceOf[TypeMemberSymbol].aliasedType
+
+  def thisTypeRefFromTASTy(name: TypeName)(using Context): TypeRef =
+    ctx.findTopLevelClass("subtyping.TypesFromTASTy").thisType.select(name)
 
   testWithContext("same-monomorphic-class") {
     assertEquiv(defn.IntType, defn.IntClass.typeRef).withRef[Int, scala.Int]
@@ -920,6 +924,230 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       .withRef[Int @uV, AnyVal @uV]
     assertStrictSubtype(defn.IntType, AnnotatedType(defn.AnyValType, annot)).withRef[Int, AnyVal @uV]
     assertStrictSubtype(AnnotatedType(defn.IntType, annot), defn.AnyValType).withRef[Int @uV, AnyVal]
+  }
+
+  testWithContext("match-types-mono-reduced") {
+    val typesFromTasty = new subtyping.TypesFromTASTy
+    import typesFromTasty.*
+
+    val matchTypeMono2 = findTypesFromTASTyNamed(typeName("MatchTypeMono2"))
+
+    val matchTypeMono2Int = matchTypeMono2.appliedTo(defn.IntType).asInstanceOf[MatchType]
+    assert(clue(matchTypeMono2Int.reduced).isDefined)
+    assertEquiv(matchTypeMono2Int.reduced.get, defn.StringType)
+      .withRef[MatchTypeMono2[Int], String]
+    assertEquiv(matchTypeMono2Int, defn.StringType)
+      .withRef[MatchTypeMono2[Int], String]
+    assertNeitherSubtype(matchTypeMono2Int, defn.DoubleType)
+      .withRef[MatchTypeMono2[Int], Double]
+    assertNeitherSubtype(matchTypeMono2Int, defn.BooleanType)
+      .withRef[MatchTypeMono2[Int], Boolean]
+
+    val matchTypeMono2Boolean = matchTypeMono2.appliedTo(defn.BooleanType).asInstanceOf[MatchType]
+    assert(clue(matchTypeMono2Boolean.reduced).isDefined)
+    assertEquiv(matchTypeMono2Boolean.reduced.get, defn.DoubleType)
+      .withRef[MatchTypeMono2[Boolean], Double]
+    assertEquiv(matchTypeMono2Boolean, defn.DoubleType)
+      .withRef[MatchTypeMono2[Boolean], Double]
+    assertNeitherSubtype(matchTypeMono2Boolean, defn.StringType)
+      .withRef[MatchTypeMono2[Boolean], String]
+    assertNeitherSubtype(matchTypeMono2Boolean, defn.BooleanType)
+      .withRef[MatchTypeMono2[Boolean], Boolean]
+
+    val matchTypeMono2True = matchTypeMono2.appliedTo(ConstantType(Constant(true))).asInstanceOf[MatchType]
+    assert(clue(matchTypeMono2True.reduced).isDefined)
+    assertEquiv(matchTypeMono2True.reduced.get, defn.DoubleType)
+      .withRef[MatchTypeMono2[Boolean], Double]
+    assertEquiv(matchTypeMono2True, defn.DoubleType)
+      .withRef[MatchTypeMono2[Boolean], Double]
+    assertNeitherSubtype(matchTypeMono2True, defn.StringType)
+      .withRef[MatchTypeMono2[Boolean], String]
+    assertNeitherSubtype(matchTypeMono2True, defn.BooleanType)
+      .withRef[MatchTypeMono2[Boolean], Boolean]
+
+    val matchTypeMono2String = matchTypeMono2.appliedTo(defn.StringType).asInstanceOf[MatchType]
+    assert(clue(matchTypeMono2String.reduced).isEmpty)
+
+    val matchTypeMono2WithDefault = findTypesFromTASTyNamed(typeName("MatchTypeMono2WithDefault"))
+
+    val matchTypeMono2WithDefaultString = matchTypeMono2WithDefault.appliedTo(defn.StringType).asInstanceOf[MatchType]
+    assert(clue(matchTypeMono2WithDefaultString.reduced).isDefined)
+    assertEquiv(matchTypeMono2WithDefaultString.reduced.get, ProductClass.typeRef)
+      .withRef[MatchTypeMono2WithDefault[String], Product]
+    assertEquiv(matchTypeMono2WithDefaultString, ProductClass.typeRef)
+      .withRef[MatchTypeMono2WithDefault[String], Product]
+  }
+
+  testWithContext("match-types-poly-reduced") {
+    import subtyping.TypesFromTASTy.{Consumer, Inv}
+
+    val typesFromTasty = new subtyping.TypesFromTASTy
+    import typesFromTasty.*
+
+    val invRef = ctx.findStaticType("subtyping.TypesFromTASTy.Inv").staticRef
+    val consumerRef = ctx.findStaticType("subtyping.TypesFromTASTy.Consumer").staticRef
+
+    val matchTypePoly2 = findTypesFromTASTyNamed(typeName("MatchTypePoly2"))
+
+    val matchTypePoly2ListInt = matchTypePoly2.appliedTo(listOf(defn.IntType)).asInstanceOf[MatchType]
+    assert(clue(matchTypePoly2ListInt.reduced).isDefined)
+    assertEquiv(matchTypePoly2ListInt.reduced.get, defn.IntType).withRef[MatchTypePoly2[List[Int]], Int]
+    assertEquiv(matchTypePoly2ListInt, defn.IntType).withRef[MatchTypePoly2[List[Int]], Int]
+
+    val matchTypePoly2ListWildcard =
+      matchTypePoly2.appliedTo(listOf(WildcardTypeBounds.NothingAny)).asInstanceOf[MatchType]
+    assert(clue(matchTypePoly2ListWildcard.reduced).isDefined)
+    assertEquiv(matchTypePoly2ListWildcard.reduced.get, defn.AnyType).withRef[MatchTypePoly2[List[?]], Any]
+    assertEquiv(matchTypePoly2ListWildcard, defn.AnyType).withRef[MatchTypePoly2[List[?]], Any]
+
+    val nilType = ctx.findStaticTerm("scala.collection.immutable.Nil").staticRef
+    val matchTypePoly2Nil = matchTypePoly2.appliedTo(nilType).asInstanceOf[MatchType]
+    assert(clue(matchTypePoly2Nil.reduced).isDefined)
+    assertEquiv(matchTypePoly2Nil.reduced.get, defn.NothingType).withRef[MatchTypePoly2[Nil.type], Nothing]
+    assertEquiv(matchTypePoly2Nil, defn.NothingType).withRef[MatchTypePoly2[Nil.type], Nothing]
+
+    val matchTypePoly2InvInt = matchTypePoly2.appliedTo(invRef.appliedTo(defn.IntType)).asInstanceOf[MatchType]
+    assert(clue(matchTypePoly2InvInt.reduced).isDefined)
+    assertEquiv(matchTypePoly2InvInt.reduced.get, defn.IntType).withRef[MatchTypePoly2[Inv[Int]], Int]
+    assertEquiv(matchTypePoly2InvInt, defn.IntType).withRef[MatchTypePoly2[Inv[Int]], Int]
+
+    val matchTypePoly2InvWildcard =
+      matchTypePoly2.appliedTo(invRef.appliedTo(WildcardTypeBounds.NothingAny)).asInstanceOf[MatchType]
+    assert(clue(matchTypePoly2InvWildcard.reduced).isEmpty)
+
+    val matchTypePoly2ConsumerInt =
+      matchTypePoly2.appliedTo(consumerRef.appliedTo(defn.IntType)).asInstanceOf[MatchType]
+    assert(clue(matchTypePoly2ConsumerInt.reduced).isDefined)
+    assertEquiv(matchTypePoly2ConsumerInt.reduced.get, defn.IntType).withRef[MatchTypePoly2[Consumer[Int]], Int]
+    assertEquiv(matchTypePoly2ConsumerInt, defn.IntType).withRef[MatchTypePoly2[Consumer[Int]], Int]
+
+    val matchTypePoly2ConsumerWildcard =
+      matchTypePoly2.appliedTo(consumerRef.appliedTo(WildcardTypeBounds.NothingAny)).asInstanceOf[MatchType]
+    assert(clue(matchTypePoly2ConsumerWildcard.reduced).isDefined)
+    assertEquiv(matchTypePoly2ConsumerWildcard.reduced.get, defn.NothingType)
+      .withRef[MatchTypePoly2[Consumer[?]], Nothing]
+    assertEquiv(matchTypePoly2ConsumerWildcard, defn.NothingType).withRef[MatchTypePoly2[Consumer[?]], Nothing]
+  }
+
+  testWithContext("match-types-bound") {
+    val typesFromTasty = new subtyping.TypesFromTASTy
+    import typesFromTasty.*
+
+    val thisTypeMemberRef = thisTypeRefFromTASTy(typeName("TypeMember"))
+
+    val matchTypeMono2 = findTypesFromTASTyNamed(typeName("MatchTypeMono2"))
+    val matchTypeMono2TypeMember = matchTypeMono2.appliedTo(thisTypeMemberRef).asInstanceOf[MatchType]
+    assert(clue(matchTypeMono2TypeMember.reduced).isEmpty)
+
+    assertStrictSubtype(matchTypeMono2TypeMember, defn.AnyType).withRef[MatchTypeMono2[TypeMember], Any]
+    assertNeitherSubtype(matchTypeMono2TypeMember, defn.AnyValType).withRef[MatchTypeMono2[TypeMember], AnyVal]
+
+    val matchTypeMono2Bounded = findTypesFromTASTyNamed(typeName("MatchTypeMono2Bounded"))
+    val matchTypeMono2BoundedTypeMember = matchTypeMono2Bounded.appliedTo(thisTypeMemberRef).asInstanceOf[MatchType]
+    assert(clue(matchTypeMono2BoundedTypeMember.reduced).isEmpty)
+
+    assertStrictSubtype(matchTypeMono2BoundedTypeMember, defn.AnyType).withRef[MatchTypeMono2Bounded[TypeMember], Any]
+    assertStrictSubtype(matchTypeMono2BoundedTypeMember, defn.AnyValType)
+      .withRef[MatchTypeMono2Bounded[TypeMember], AnyVal]
+    assertNeitherSubtype(matchTypeMono2BoundedTypeMember, defn.AnyRefType)
+      .withRef[MatchTypeMono2Bounded[TypeMember], AnyRef]
+  }
+
+  testWithContext("match-types-against-match-types") {
+    val typesFromTasty = new subtyping.TypesFromTASTy
+    import typesFromTasty.*
+
+    val thisTypeMemberRef = thisTypeRefFromTASTy(typeName("TypeMember"))
+
+    val matchTypeMono2 = findTypesFromTASTyNamed(typeName("MatchTypeMono2"))
+    val matchTypeMono2TypeMember = matchTypeMono2.appliedTo(thisTypeMemberRef).asInstanceOf[MatchType]
+    assert(clue(matchTypeMono2TypeMember.reduced).isEmpty)
+
+    val matchTypeMono2TypeMemberBis = matchTypeMono2.appliedTo(thisTypeMemberRef).asInstanceOf[MatchType]
+
+    assertEquiv(matchTypeMono2TypeMember, matchTypeMono2TypeMemberBis)
+      .withRef[MatchTypeMono2[TypeMember], MatchTypeMono2[TypeMember]]
+
+    val matchTypeMono2Subtype = findTypesFromTASTyNamed(typeName("MatchTypeMono2Subtype"))
+    val matchTypeMono2SubtypeTypeMember = matchTypeMono2Subtype.appliedTo(thisTypeMemberRef).asInstanceOf[MatchType]
+    assert(clue(matchTypeMono2SubtypeTypeMember.reduced).isEmpty)
+
+    assertStrictSubtype(matchTypeMono2SubtypeTypeMember, matchTypeMono2TypeMember)
+      .withRef[MatchTypeMono2Subtype[TypeMember], MatchTypeMono2[TypeMember]]
+
+    val matchTypePoly2 = findTypesFromTASTyNamed(typeName("MatchTypePoly2"))
+    val matchTypePoly2TypeMember = matchTypePoly2.appliedTo(thisTypeMemberRef).asInstanceOf[MatchType]
+    assert(clue(matchTypePoly2TypeMember.reduced).isEmpty)
+
+    val matchTypePoly2TypeMemberBis = matchTypePoly2.appliedTo(thisTypeMemberRef).asInstanceOf[MatchType]
+
+    assertEquiv(matchTypePoly2TypeMember, matchTypePoly2TypeMemberBis)
+      .withRef[MatchTypePoly2[TypeMember], MatchTypePoly2[TypeMember]]
+    assertNeitherSubtype(matchTypePoly2TypeMember, matchTypeMono2TypeMember)
+      .withRef[MatchTypePoly2[TypeMember], MatchTypeMono2[TypeMember]]
+  }
+
+  testWithContext("match-types-with-literal-types") {
+    val typesFromTasty = new subtyping.TypesFromTASTy
+    import typesFromTasty.*
+
+    val matchTypeLiterals = findTypesFromTASTyNamed(typeName("MatchTypeLiterals"))
+
+    def const(x: Int): ConstantType = ConstantType(Constant(x))
+
+    assertEquiv(matchTypeLiterals.appliedTo(const(1)), defn.IntType).withRef[MatchTypeLiterals[1], Int]
+    assertEquiv(matchTypeLiterals.appliedTo(const(3)), defn.StringType).withRef[MatchTypeLiterals[3], String]
+    assertEquiv(matchTypeLiterals.appliedTo(const(5)), defn.BooleanType).withRef[MatchTypeLiterals[5], Boolean]
+
+    assert(clue(matchTypeLiterals.appliedTo(const(2)).asInstanceOf[MatchType].reduced).isEmpty)
+  }
+
+  testWithContext("match-types-with-enums") {
+    import subtyping.TypesFromTASTy.MyEnum
+
+    val typesFromTasty = new subtyping.TypesFromTASTy
+    import typesFromTasty.*
+
+    val matchTypeEnums = findTypesFromTASTyNamed(typeName("MatchTypeEnums"))
+    val MyEnumPrefix = "subtyping.TypesFromTASTy.MyEnum"
+
+    val ParametricTycon = ctx.findStaticType(s"$MyEnumPrefix.Parametric").staticRef
+
+    assertEquiv(matchTypeEnums.appliedTo(ctx.findStaticTerm(s"$MyEnumPrefix.Singleton1").staticRef), defn.IntType)
+      .withRef[MatchTypeEnums[MyEnum.Singleton1.type], Int]
+
+    assertEquiv(matchTypeEnums.appliedTo(ParametricTycon.appliedTo(defn.IntType)), defn.DoubleType)
+      .withRef[MatchTypeEnums[MyEnum.Parametric[Int]], Double]
+
+    assertEquiv(matchTypeEnums.appliedTo(ctx.findStaticTerm(s"$MyEnumPrefix.Singleton2").staticRef), defn.StringType)
+      .withRef[MatchTypeEnums[MyEnum.Singleton2.type], String]
+
+    assertEquiv(matchTypeEnums.appliedTo(ParametricTycon.appliedTo(defn.StringType)), defn.StringType)
+      .withRef[MatchTypeEnums[MyEnum.Parametric[String]], String]
+  }
+
+  testWithContext("match-types-with-old-style-enums") {
+    import subtyping.TypesFromTASTy.OldStyleEnum
+
+    val typesFromTasty = new subtyping.TypesFromTASTy
+    import typesFromTasty.*
+
+    val matchTypeEnums = findTypesFromTASTyNamed(typeName("MatchTypeOldStyleEnums"))
+    val MyEnumPrefix = "subtyping.TypesFromTASTy.OldStyleEnum"
+
+    val ParametricTycon = ctx.findStaticType(s"$MyEnumPrefix.Parametric").staticRef
+
+    assertEquiv(matchTypeEnums.appliedTo(ctx.findStaticTerm(s"$MyEnumPrefix.Singleton1").staticRef), defn.IntType)
+      .withRef[MatchTypeOldStyleEnums[OldStyleEnum.Singleton1.type], Int]
+
+    assertEquiv(matchTypeEnums.appliedTo(ParametricTycon.appliedTo(defn.IntType)), defn.DoubleType)
+      .withRef[MatchTypeOldStyleEnums[OldStyleEnum.Parametric[Int]], Double]
+
+    assertEquiv(matchTypeEnums.appliedTo(ctx.findStaticTerm(s"$MyEnumPrefix.Singleton2").staticRef), defn.StringType)
+      .withRef[MatchTypeOldStyleEnums[OldStyleEnum.Singleton2.type], String]
+
+    assertEquiv(matchTypeEnums.appliedTo(ParametricTycon.appliedTo(defn.StringType)), defn.StringType)
+      .withRef[MatchTypeOldStyleEnums[OldStyleEnum.Parametric[String]], String]
   }
 
 end SubtypingSuite

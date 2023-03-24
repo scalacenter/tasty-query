@@ -464,6 +464,9 @@ object Types {
       case st                           => st
     }
 
+    private[tastyquery] final def superTypeNormalized(using Context): Type =
+      superType // .normalized
+
     /** Same as superType, except for two differences:
       *
       *  - opaque types are treated as transparent aliases
@@ -551,7 +554,10 @@ object Types {
     private var myName: ThisName | Null = null
 
     private[tastyquery] final def isLocalRef(sym: Symbol): Boolean =
-      prefix == NoPrefix && designator == sym
+      prefix == NoPrefix && (designator eq sym)
+
+    private[tastyquery] final def isTypeParamRef(tparam: TypeParamInfo): Boolean =
+      designator eq tparam
 
     final def isType: Boolean = isInstanceOf[TypeRef]
 
@@ -1278,6 +1284,9 @@ object Types {
   sealed trait TypeBinders extends ParamRefBinders:
     def paramRefs: List[TypeParamRef]
     def lookupRef(name: TypeName): Option[Type]
+    def paramNames: List[TypeName]
+    def paramTypeBounds: List[TypeBounds]
+  end TypeBinders
 
   sealed trait BoundType extends Type:
     type BindersType <: Binders
@@ -1339,11 +1348,8 @@ object Types {
       apply(params.map(_.name))(_ => params.map(_.symbol.bounds), resultTypeExp)
   end TypeLambda
 
-  final class TypeParamRef(val binders: TypeLambdaType, val paramNum: Int)
-      extends TypeProxy
-      with ValueType
-      with ParamRef {
-    type BindersType = TypeLambdaType
+  final class TypeParamRef(val binders: TypeBinders, val paramNum: Int) extends TypeProxy with ValueType with ParamRef {
+    type BindersType = TypeBinders
 
     private[tastyquery] def copyBoundType(newBinders: BindersType): Type =
       newBinders.paramRefs(paramNum)
@@ -1352,7 +1358,7 @@ object Types {
 
     def paramName: TypeName = binders.paramNames(paramNum)
 
-    def bounds(using Context): TypeBounds = binders.paramInfos(paramNum)
+    def bounds(using Context): TypeBounds = binders.paramTypeBounds(paramNum)
 
     override def toString: String = paramName.toString
   }
@@ -1466,19 +1472,113 @@ object Types {
   end RecThis
 
   /** case `pattern` => `result` */
-  final class MatchTypeCase(val pattern: Type, val result: Type) extends GroundType:
-    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
-      throw AssertionError(s"MatchTypeCase.findMember($name, $pre)")
+  final class MatchTypeCase(val paramNames: List[TypeName])(
+    @constructorOnly paramTypeBoundsExp: MatchTypeCase => List[TypeBounds],
+    @constructorOnly patternExp: MatchTypeCase => Type,
+    @constructorOnly resultTypeExp: MatchTypeCase => Type
+  ) extends TypeBinders:
+    val paramRefs: List[TypeParamRef] =
+      List.tabulate(paramNames.size)(i => TypeParamRef(this: @unchecked, i))
 
-    override def toString(): String = s"MatchTypeCase($pattern, $result)"
+    private var initialized: Boolean = false
+    private val myParamTypeBounds: List[TypeBounds] = paramTypeBoundsExp(this: @unchecked)
+    private val myPattern: Type = patternExp(this: @unchecked)
+    private val myResult: Type = resultTypeExp(this: @unchecked)
+    initialized = true
+
+    def paramTypeBounds: List[TypeBounds] =
+      if !initialized then throw CyclicReferenceException(s"match [$paramNames]=>???")
+      myParamTypeBounds.nn
+
+    def pattern: Type =
+      if !initialized then throw CyclicReferenceException(s"match [$paramNames]=>???")
+      myPattern.nn
+
+    def result: Type =
+      if !initialized then throw CyclicReferenceException(s"match [$paramNames]=>???")
+      myResult.nn
+
+    final def lookupRef(name: TypeName): Option[TypeParamRef] =
+      paramNames.indexOf(name) match
+        case -1    => None
+        case index => Some(paramRefs(index))
+
+    /** The type `[params := this.paramRefs] tp`. */
+    private def integrate(params: List[Symbol], tp: Type): Type =
+      Substituters.substLocalParams(tp, params, paramRefs)
+
+    /** The type-bounds `[tparams := this.paramRefs] bounds`. */
+    private def integrate(tparams: List[TypeParamSymbol], bounds: TypeBounds): TypeBounds =
+      Substituters.substLocalParams(bounds, tparams, paramRefs)
+
+    private[tastyquery] def derivedMatchTypeCase(
+      paramTypeBounds: List[TypeBounds],
+      pattern: Type,
+      result: Type
+    ): MatchTypeCase =
+      if (paramTypeBounds eq this.paramTypeBounds) && (pattern eq this.pattern) && (result eq this.result) then this
+      else
+        MatchTypeCase(paramNames)(
+          x => paramTypeBounds.mapConserve(Substituters.substBinders(_, this, x)),
+          x => Substituters.substBinders(pattern, this, x),
+          x => Substituters.substBinders(result, this, x)
+        )
+    end derivedMatchTypeCase
+
+    override def toString(): String =
+      if !initialized then s"MatchTypeCase($paramNames)(<evaluating>)"
+      else s"MatchTypeCase($paramNames)($paramTypeBounds, $pattern, $result)"
+  end MatchTypeCase
+
+  object MatchTypeCase:
+    def apply(paramNames: List[TypeName])(
+      paramTypeBoundsExp: MatchTypeCase => List[TypeBounds],
+      patternExp: MatchTypeCase => Type,
+      resultTypeExp: MatchTypeCase => Type
+    ): MatchTypeCase =
+      new MatchTypeCase(paramNames)(paramTypeBoundsExp, patternExp, resultTypeExp)
+    end apply
+
+    def apply(pattern: Type, result: Type): MatchTypeCase =
+      new MatchTypeCase(Nil)(_ => Nil, _ => pattern, _ => result)
+
+    private[tastyquery] final def fromParams(params: List[LocalTypeParamSymbol], pattern: Type, result: Type)(
+      using Context
+    ): MatchTypeCase =
+      val paramNames = params.map(_.name)
+      val paramTypeBounds = params.map(_.bounds)
+      apply(paramNames)(
+        mtc => paramTypeBounds.map(mtc.integrate(params, _)),
+        mtc => mtc.integrate(params, pattern),
+        mtc => mtc.integrate(params, result)
+      )
   end MatchTypeCase
 
   /** selector match { cases } */
-  final class MatchType(val bound: Type, val scrutinee: Type, val cases: List[MatchTypeCase | TypeLambda])
+  final class MatchType(val bound: Type, val scrutinee: Type, val cases: List[MatchTypeCase])
       extends TypeProxy
       with ValueType:
+    private var myReduced: Option[Type] | Null = null
+
     def underlying(using Context): Type = bound
+
+    def reduced(using Context): Option[Type] =
+      val local = myReduced
+      if local != null then local
+      else
+        val computed = computeReduced()
+        myReduced = computed
+        computed
+    end reduced
+
+    private def computeReduced()(using Context): Option[Type] =
+      TypeMatching.matchCases(scrutinee, cases)
+
     override def toString(): String = s"MatchType($bound, $scrutinee, $cases)"
+
+    private[tastyquery] def derivedMatchType(bound: Type, scrutinee: Type, cases: List[MatchTypeCase]): MatchType =
+      if (bound eq this.bound) && (scrutinee eq this.scrutinee) && (cases eq this.cases) then this
+      else MatchType(bound, scrutinee, cases)
   end MatchType
 
   sealed abstract class TypeBounds(val low: Type, val high: Type) extends TypeMappable {
@@ -1531,6 +1631,11 @@ object Types {
 
     override def toString(): String = s"WildcardTypeBounds($bounds)"
   }
+
+  object WildcardTypeBounds:
+    def NothingAny(using Context): WildcardTypeBounds =
+      WildcardTypeBounds(defn.NothingAnyBounds)
+  end WildcardTypeBounds
 
   // ----- Ground Types -------------------------------------------------
 
