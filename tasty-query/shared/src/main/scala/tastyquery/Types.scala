@@ -175,6 +175,13 @@ object Types {
     override def toString(): String = "NoPrefix"
   end NoPrefix
 
+  /** A type in the Scala type system.
+    *
+    * Partitioned into [[GroundType]] and [[TypeProxy]].
+    *
+    * Also partitioned into [[TermType]], [[WildcardTypeBounds]] and
+    * [[CustomTransientGroundType]].
+    */
   sealed abstract class Type extends Prefix {
     type ThisTypeMappableType = Type
 
@@ -600,14 +607,26 @@ object Types {
 
   // ----- Marker traits ------------------------------------------------
 
-  /** A marker trait for types that apply only to term symbols or that
-    * represent higher-kinded types.
+  /** A marker trait for types that can be the type of a [[Trees.TermTree]].
+    *
+    * The only standard [[Type]] that is not a [[TermType]] is [[WildcardTypeBounds]].
+    *
+    * Partitioned into [[ValueType]], [[MethodicType]], [[ByNameType]] and
+    * [[PackageRef]].
     */
   sealed trait TermType extends Type
 
-  sealed trait MethodicType extends TermType
+  /** The type of a `def` that has at least one (term or type) parameter list.
+    *
+    * Partitioned into [[MethodType]] and [[PolyType]].
+    */
+  sealed trait MethodicType extends GroundType with TermType
 
-  /** A marker trait for types that can be types of values or that are higher-kinded */
+  /** A marker trait for the type of values.
+    *
+    * Most [[TermType]]s are [[ValueType]]. The only exceptions are
+    * [[MethodicType]], [[ByNameType]] and [[PackageRef]].
+    */
   sealed trait ValueType extends TermType
 
   /** A marker trait for types that are guaranteed to contain only a
@@ -619,11 +638,9 @@ object Types {
       case _           => true
   end SingletonType
 
-  sealed trait PathType extends TypeProxy with ValueType
-
   // ----- Type Proxies -------------------------------------------------
 
-  sealed abstract class NamedType extends PathType {
+  sealed abstract class NamedType extends TypeProxy with ValueType {
     protected type AnyDesignatorType = TermOrTypeSymbol | Name | LookupIn | LookupTypeIn | Scala2ExternalSymRef
 
     type ThisName <: Name
@@ -876,7 +893,7 @@ object Types {
     end resolveLookupIn
   end TermRef
 
-  final class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends Type {
+  final class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends GroundType with TermType {
     private var packageSymbol: PackageSymbol | Null = null
 
     def this(packageSym: PackageSymbol) =
@@ -1118,7 +1135,7 @@ object Types {
     end resolveLookupTypeIn
   end TypeRef
 
-  final class ThisType(val tref: TypeRef) extends PathType with SingletonType {
+  final class ThisType(val tref: TypeRef) extends SingletonType {
     private var myUnderlying: Type | Null = null
 
     override def underlying(using Context): Type =
@@ -1547,7 +1564,7 @@ object Types {
     @constructorOnly paramTypeBoundsExp: TypeLambda => List[TypeBounds],
     @constructorOnly resultTypeExp: TypeLambda => Type
   ) extends TypeProxy
-      with TermType
+      with ValueType
       with TypeLambdaType {
     type This = TypeLambda
 
@@ -1632,9 +1649,9 @@ object Types {
     override def toString(): String = s"AnnotatedType($typ, $annotation)"
   }
 
-  sealed abstract class RefinedOrRecType extends TypeProxy
+  sealed abstract class RefinedOrRecType extends TypeProxy with ValueType
 
-  sealed abstract class RefinedType extends RefinedOrRecType with ValueType:
+  sealed abstract class RefinedType extends RefinedOrRecType:
     val parent: Type
     val refinedName: Name
 

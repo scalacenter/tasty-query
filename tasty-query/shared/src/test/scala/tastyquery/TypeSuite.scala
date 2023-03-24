@@ -49,6 +49,30 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def isArrayOf(arg: Type => Boolean)(using Context): Boolean =
       isApplied(_.isRef(defn.ArrayClass), Seq(arg))
 
+  testWithContext("hierarchy-partitions") {
+    /* These no-op matches test that the set of all possible `Type`s is
+     * partitioned into certain sets of sub-classes and sub-traits.
+     */
+
+    def groundAndProxy(tp: Type): Int = tp match
+      case _: GroundType => 1
+      case _: TypeProxy  => 2
+
+    def termAndNonTerm(tp: Type): Int = tp match
+      case _: TermType                  => 1
+      case _: WildcardTypeBounds        => 2
+      case _: CustomTransientGroundType => 3
+
+    def valueAndMethodic(tp: TermType): Int = tp match
+      case _: ValueType    => 1
+      case _: MethodicType => 2
+      case _: ByNameType   => 3
+      case _: PackageRef   => 4
+
+    // Nothing to do
+    ()
+  }
+
   testWithContext("apply-dependent") {
     val DependentMethodClass = ctx.findTopLevelClass("simple_trees.DependentMethod")
     val testVal = DependentMethodClass.findNonOverloadedDecl(name"test")
