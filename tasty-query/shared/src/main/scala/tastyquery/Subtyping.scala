@@ -125,7 +125,7 @@ private[tastyquery] object Subtyping:
     case tp1: ThisType =>
       val cls1 = tp1.cls
       tp2 match {
-        case tp2: TermRef if cls1.is(Module) && tp2.symbol.declaredType.isRef(cls1) =>
+        case tp2: TermRef if cls1.is(Module) && isTypeRefOf(tp2.symbol.declaredType, cls1) =>
           (cls1.isStatic || isSubprefix(cls1.typeRef.prefix, tp2.prefix))
             || level3(tp1, tp2)
         case _ =>
@@ -523,5 +523,9 @@ private[tastyquery] object Subtyping:
   end isSubprefix
 
   private def isBottom(tp: Type)(using Context): Boolean =
-    tp.widen.isRef(defn.NothingClass)
+    isTypeRefOf(tp.widen, defn.NothingClass)
+
+  private def isTypeRefOf(tp: Type, cls: ClassSymbol)(using Context): Boolean = tp match
+    case tp: TypeRef => tp.isSpecificClass(cls)
+    case _           => false
 end Subtyping

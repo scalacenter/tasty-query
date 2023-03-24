@@ -408,31 +408,12 @@ object Types {
     final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): Type =
       TypeOps.asSeenFrom(this, pre, cls)
 
-    final def isRef(sym: Symbol)(using Context): Boolean =
-      this match {
-        case tpe: NamedType    => tpe.optSymbol.contains(sym)
-        case tpe: AppliedType  => tpe.underlying.isRef(sym)
-        case tpe: TermParamRef => tpe.underlying.isRef(sym)
-        case tpe: TypeParamRef => tpe.bounds.high.isRef(sym)
-        case _                 => false // todo: add ProxyType (need to fill in implementations of underlying)
-      }
-
     /** Is this type exactly Nothing (no vars, aliases, refinements etc allowed)? */
-    final def isExactlyNothing(using Context): Boolean = this match
+    private[tastyquery] final def isExactlyNothing(using Context): Boolean = this match
       case tp: TypeRef =>
         tp.name == tpnme.Nothing && tp.isSpecificClass(defn.NothingClass)
       case _ =>
         false
-
-    final def isOfClass(sym: Symbol)(using Context): Boolean =
-      this match {
-        case tpe: TermRef =>
-          tpe.underlying.isOfClass(sym)
-        case tpe: ConstantType =>
-          tpe.underlying.isOfClass(sym)
-        case _ =>
-          this.isRef(sym)
-      }
 
     /** Is this type considered as "FromJavaObject" for the purposes of subtyping?
       *
