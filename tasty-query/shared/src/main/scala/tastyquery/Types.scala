@@ -198,6 +198,24 @@ object Types {
     final def select(name: TypeName)(using Context): TypeRef =
       TypeRef(this, name)
 
+    final def lookupMember(name: Name)(using Context): Option[NamedType] =
+      resolveMember(name, this) match
+        case ResolveMemberResult.NotFound =>
+          None
+        case resolved: ResolveMemberResult.TermMember =>
+          Some(TermRef.fromResolved(this, resolved))
+        case resolved: ResolveMemberResult.ClassMember =>
+          Some(TypeRef.fromResolved(this, resolved))
+        case resolved: ResolveMemberResult.TypeMember =>
+          Some(TypeRef.fromResolved(this, name.asInstanceOf[TypeName], resolved))
+    end lookupMember
+
+    final def lookupMember(name: TermName)(using Context): Option[TermRef] =
+      lookupMember(name: Name).map(_.asTerm)
+
+    final def lookupMember(name: TypeName)(using Context): Option[TypeRef] =
+      lookupMember(name: Name).map(_.asType)
+
     /** The type parameters of this type are:
       * For a ClassInfo type, the type parameters of its class.
       * For a typeref referring to a class, the type parameters of the class.
@@ -674,6 +692,12 @@ object Types {
     private var myUnderlying: Type | Null = null
     private var mySignature: Signature | Null = null
 
+    private def this(prefix: Type, resolved: ResolveMemberResult.TermMember) =
+      this(prefix, resolved.symbols.head)
+      mySymbol = resolved.symbols.head
+      myUnderlying = resolved.tpe
+    end this
+
     protected def designator: ThisDesignatorType = myDesignator
 
     override def toString(): String =
@@ -754,6 +778,9 @@ object Types {
     private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): TermRef =
       new TermRef(prefix, external)
 
+    private[Types] def fromResolved(prefix: Type, resolved: ResolveMemberResult.TermMember): TermRef =
+      new TermRef(prefix, resolved)
+
     private[tastyquery] def resolveLookupIn(designator: LookupIn)(using Context): TermSymbol =
       val cls = designator.pre.classSymbol.getOrElse {
         throw InvalidProgramStructureException(s"Owner of SelectIn($designator) does not refer a class")
@@ -824,6 +851,19 @@ object Types {
     // Cache fields
     private var myOptSymbol: Option[TypeSymbol] | Null = null
     private var myBounds: TypeBounds | Null = null
+
+    private def this(prefix: Type, resolved: ResolveMemberResult.ClassMember) =
+      this(prefix, resolved.cls)
+      myOptSymbol = Some(resolved.cls)
+    end this
+
+    private def this(prefix: Type, name: TypeName, resolved: ResolveMemberResult.TypeMember) =
+      this(prefix, name)
+      val optSymbol = resolved.symbols.headOption
+      myOptSymbol = optSymbol
+      if optSymbol.isDefined then myDesignator = optSymbol.get
+      myBounds = resolved.bounds
+    end this
 
     protected def designator: ThisDesignatorType = myDesignator
 
@@ -943,6 +983,12 @@ object Types {
 
     private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): TypeRef =
       new TypeRef(prefix, external)
+
+    private[Types] def fromResolved(prefix: Type, resolved: ResolveMemberResult.ClassMember): TypeRef =
+      new TypeRef(prefix, resolved)
+
+    private[Types] def fromResolved(prefix: Type, name: TypeName, resolved: ResolveMemberResult.TypeMember): TypeRef =
+      new TypeRef(prefix, name, resolved)
 
     private[tastyquery] object OfClass:
       def unapply(typeRef: TypeRef)(using Context): Option[ClassSymbol] =

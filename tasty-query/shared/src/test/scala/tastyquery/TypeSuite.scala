@@ -2202,4 +2202,23 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val SubEvilTraitClass = ctx.findStaticClass("simple_trees.EvilClassNames.SubEvilTrait")
     assert(clue(SubEvilTraitClass.parentClasses(1)).name == typeName("evil_$_trait"))
   }
+
+  testWithContext("lookupMember") {
+    val TypeMemberClass = ctx.findTopLevelClass("simple_trees.TypeMember")
+    val prefix = TypeMemberClass.appliedRef
+
+    val TypeMemberRef = prefix.lookupMember(typeName("TypeMember")).get
+    assert(TypeMemberRef.optSymbol == Some(TypeMemberClass.findDecl(typeName("TypeMember"))))
+
+    assert(clue(prefix.lookupMember(typeName("NonExistentType"))).isEmpty)
+
+    val termMemberName = termName("mTypeAlias")
+    val termMemberSym = TypeMemberClass.findNonOverloadedDecl(termMemberName)
+    val termMemberSignedName = termMemberSym.signedName
+
+    val termMemberRef = prefix.lookupMember(termMemberSignedName).get
+    assert(termMemberRef.symbol == termMemberSym)
+
+    assert(clue(prefix.lookupMember(termName("nonExistentTerm"))).isEmpty)
+  }
 }
