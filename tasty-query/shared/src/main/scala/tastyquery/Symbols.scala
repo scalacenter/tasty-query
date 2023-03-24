@@ -970,7 +970,7 @@ object Symbols {
       * returns `Nil`.
       *
       * @throws java.lang.IllegalArgumentException
-      *   if the provided `name` is a [[SignedName]]
+      *   if the provided `name` is a [[Names.SignedName]]
       */
     final def getAllOverloadedDecls(name: TermName)(using Context): List[TermSymbol] =
       name match
@@ -983,7 +983,7 @@ object Symbols {
       * @throws tastyquery.Exceptions.MemberNotFoundException
       *   if there is no declaration with the given unsigned name
       * @throws java.lang.IllegalArgumentException
-      *   if the provided `name` is a [[SignedName]]
+      *   if the provided `name` is a [[Names.SignedName]]
       */
     final def findAllOverloadedDecls(name: TermName)(using Context): List[TermSymbol] =
       getAllOverloadedDecls(name) match
@@ -997,7 +997,7 @@ object Symbols {
       * method returns `None`.
       *
       * @throws java.lang.IllegalArgumentException
-      *   if the provided `name` is a [[SignedName]]
+      *   if the provided `name` is a [[Names.SignedName]]
       */
     final def getNonOverloadedDecl(name: TermName)(using Context): Option[TermSymbol] =
       myDeclarations.get(name) match
@@ -1015,7 +1015,7 @@ object Symbols {
       * @throws tastyquery.Exceptions.MemberNotFoundException
       *   if there are multiple or no overload with the given unsigned name
       * @throws java.lang.IllegalArgumentException
-      *   if the provided `name` is a [[SignedName]]
+      *   if the provided `name` is a [[Names.SignedName]]
       */
     final def findNonOverloadedDecl(name: TermName)(using Context): TermSymbol =
       getNonOverloadedDecl(name).getOrElse {
