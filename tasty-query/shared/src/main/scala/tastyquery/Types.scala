@@ -121,6 +121,12 @@ object Types {
   private[tastyquery] trait TypeParamInfo:
     /** The variance of the type parameter */
     private[tastyquery] def paramVariance(using Context): Variance
+
+    /** The name of the type parameter */
+    private[tastyquery] def paramName: TypeName
+
+    /** The bounds of the type parameter */
+    private[tastyquery] def paramTypeBounds(using Context): TypeBounds
   end TypeParamInfo
 
   sealed trait TypeMappable:
@@ -1299,6 +1305,12 @@ object Types {
   private[tastyquery] final class TypeLambdaParam(val typeLambda: TypeLambda, num: Int) extends TypeParamInfo:
     override def paramVariance(using Context): Variance =
       Variance.Invariant // TODO? Should we set structure variances?
+
+    private[tastyquery] def paramName: TypeName =
+      typeLambda.paramNames(num)
+
+    private[tastyquery] def paramTypeBounds(using Context): TypeBounds =
+      typeLambda.paramTypeBounds(num)
   end TypeLambdaParam
 
   final class TypeLambda(val paramNames: List[TypeName])(
@@ -1346,6 +1358,11 @@ object Types {
       using Context
     ): TypeLambda =
       apply(params.map(_.name))(_ => params.map(_.symbol.bounds), resultTypeExp)
+
+    private[tastyquery] def fromParamInfos(params: List[TypeParamInfo])(resultTypeExp: TypeLambda => Type)(
+      using Context
+    ): TypeLambda =
+      apply(params.map(_.paramName))(_ => params.map(_.paramTypeBounds), resultTypeExp)
   end TypeLambda
 
   final class TypeParamRef(val binders: TypeBinders, val paramNum: Int) extends TypeProxy with ValueType with ParamRef {

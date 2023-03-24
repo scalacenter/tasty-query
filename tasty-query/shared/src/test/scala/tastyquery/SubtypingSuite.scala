@@ -667,8 +667,11 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   }
 
   testWithContext("refinement-types-subtyping") {
-    import subtyping.paths.{SimplePaths, ConcreteSimplePathsChild}
+    import subtyping.paths.{A, B, D, SimplePaths, ConcreteSimplePathsChild}
 
+    val AClass = ctx.findTopLevelClass("subtyping.paths.A")
+    val BClass = ctx.findTopLevelClass("subtyping.paths.B")
+    val DClass = ctx.findTopLevelClass("subtyping.paths.D")
     val SimplePathsClass = ctx.findTopLevelClass("subtyping.paths.SimplePaths")
     val ConcreteSimplePathsChildClass = ctx.findTopLevelClass("subtyping.paths.ConcreteSimplePathsChild")
     val CharSequenceClass = ctx.findTopLevelClass("java.lang.CharSequence")
@@ -680,6 +683,11 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
 
     def refineTypeBound(name: String, high: Type): Type =
       TypeRefinement(SimplePathsClass.appliedRef, typeName(name), RealTypeBounds(defn.NothingType, high))
+
+    def refinePolyTypeBound(name: String, high: Type): Type =
+      val polyLow = TypeLambda(List(typeName("X")), List(defn.NothingAnyBounds), defn.NothingType)
+      val polyHigh = TypeLambda(List(typeName("X")), List(defn.NothingAnyBounds), high)
+      TypeRefinement(SimplePathsClass.appliedRef, typeName(name), RealTypeBounds(polyLow, polyHigh))
 
     def refineTerm(name: String, tpe: Type): Type =
       TermRefinement(SimplePathsClass.appliedRef, termName(name), tpe)
@@ -724,6 +732,24 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       .withRef[ConcreteSimplePathsChild, SimplePaths { type OtherType = String }]
     assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeAlias("OtherType", defn.IntType))
       .withRef[ConcreteSimplePathsChild, SimplePaths { type OtherType = Int }]
+
+    // type refinement - implemented by a class member
+
+    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeBound("InnerClassMono", AClass.appliedRef))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { type InnerClassMono <: A }]
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeBound("InnerClassMono", BClass.appliedRef))
+      .withRef[ConcreteSimplePathsChild, SimplePaths { type InnerClassMono <: B }]
+
+    assertStrictSubtype(
+      ConcreteSimplePathsChildClass.appliedRef,
+      refinePolyTypeBound("InnerClassPoly", AClass.appliedRef)
+    )
+      .withRef[ConcreteSimplePathsChild, SimplePaths { type InnerClassPoly[X] <: A }]
+    assertNeitherSubtype(
+      ConcreteSimplePathsChildClass.appliedRef,
+      refinePolyTypeBound("InnerClassPoly", DClass.appliedRef)
+    )
+      .withRef[ConcreteSimplePathsChild, SimplePaths { type InnerClassPoly[X] <: D }]
 
     // term refinement - exists in class
 
