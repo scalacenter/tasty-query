@@ -139,11 +139,11 @@ object Types {
   end TypeConstructorParam
 
   sealed trait TypeMappable:
-    type ThisTypeMappableType >: this.type <: TypeMappable
+    private[tastyquery] type ThisTypeMappableType >: this.type <: TypeMappable
   end TypeMappable
 
   sealed abstract class Prefix extends TypeMappable:
-    type ThisTypeMappableType >: this.type <: Prefix
+    private[tastyquery] type ThisTypeMappableType >: this.type <: Prefix
 
     /** True iff `sym` is a symbol of a class type parameter and the reference
       * `<pre> . <sym>` is an actual argument reference, i.e., `pre` is not the
@@ -158,7 +158,7 @@ object Types {
   end Prefix
 
   object NoPrefix extends Prefix:
-    type ThisTypeMappableType = this.type
+    private[tastyquery] type ThisTypeMappableType = this.type
 
     override def toString(): String = "NoPrefix"
   end NoPrefix
@@ -171,7 +171,7 @@ object Types {
     * [[CustomTransientGroundType]].
     */
   sealed abstract class Type extends Prefix {
-    type ThisTypeMappableType = Type
+    private[tastyquery] type ThisTypeMappableType = Type
 
     final def isSubtype(that: Type)(using Context): Boolean =
       Subtyping.isSubtype(this, that)
@@ -1888,7 +1888,7 @@ object Types {
   end MatchType
 
   sealed abstract class TypeBounds(val low: Type, val high: Type) extends TypeMappable {
-    type ThisTypeMappableType = TypeBounds
+    private[tastyquery] type ThisTypeMappableType = TypeBounds
 
     /** The non-alias type bounds type with given bounds */
     private[tastyquery] def derivedTypeBounds(low: Type, high: Type): TypeBounds =
