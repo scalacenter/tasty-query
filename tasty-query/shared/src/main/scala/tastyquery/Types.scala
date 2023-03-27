@@ -145,15 +145,6 @@ object Types {
   sealed abstract class Prefix extends TypeMappable:
     type ThisTypeMappableType >: this.type <: Prefix
 
-    final def memberType(member: TermSymbol)(using Context): Type =
-      member.declaredType.asSeenFrom(this, member.owner)
-
-    final def memberTypeBoundsLow(member: TypeSymbolWithBounds)(using Context): Type =
-      member.lowerBound.asSeenFrom(this, member.owner)
-
-    final def memberTypeBoundsHigh(member: TypeSymbolWithBounds)(using Context): Type =
-      member.upperBound.asSeenFrom(this, member.owner)
-
     final def select(sym: TermOrTypeSymbol)(using Context): NamedType =
       NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
 
