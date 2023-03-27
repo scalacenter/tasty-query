@@ -145,9 +145,6 @@ object Types {
   sealed abstract class Prefix extends TypeMappable:
     type ThisTypeMappableType >: this.type <: Prefix
 
-    final def select(sym: TermOrTypeSymbol)(using Context): NamedType =
-      NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
-
     /** True iff `sym` is a symbol of a class type parameter and the reference
       * `<pre> . <sym>` is an actual argument reference, i.e., `pre` is not the
       * ThisType of `sym`'s owner, or a reference to `sym`'s owner.'
@@ -204,6 +201,15 @@ object Types {
 
     final def select(name: TypeName)(using Context): TypeRef =
       TypeRef(this, name)
+
+    final def select(sym: TermOrTypeSymbol)(using Context): NamedType =
+      NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
+
+    final def select(sym: TermSymbol)(using Context): TermRef =
+      TermRef(this, sym) // same comment about reduceProjection
+
+    final def select(sym: TypeSymbol)(using Context): TypeRef =
+      TypeRef(this, sym) // same comment about reduceProjection
 
     final def lookupMember(name: Name)(using Context): Option[NamedType] =
       resolveMember(name, this) match

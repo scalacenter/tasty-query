@@ -396,7 +396,7 @@ private[pickles] class PickleReader {
       // structural members need to be selected by name, their symbols are only
       // valid in the synthetic refinement class that defines them.
       /*TODO if !pre.isInstanceOf[ThisType] && isRefinementClass(sym.owner) then pre.select(sym.name)
-      else*/ pre.select(sym)
+      else*/ NamedType(pre, sym)
 
     val tag = pkl.readByte()
     val end = pkl.readEnd()
