@@ -85,6 +85,8 @@ object Names {
     val m_synchronized: SimpleName = termName("synchronized")
 
     val m_+ : SimpleName = termName("+")
+
+    val m_apply: SimpleName = termName("apply")
   }
 
   object tpnme {

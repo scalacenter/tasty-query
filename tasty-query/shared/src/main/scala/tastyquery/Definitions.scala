@@ -322,6 +322,9 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   lazy val SeqClass = scalaCollectionImmutablePackage.requiredClass("Seq")
   lazy val Function0Class = scalaPackage.requiredClass("Function0")
 
+  def FunctionNClass(n: Int): ClassSymbol =
+    scalaPackage.requiredClass(s"Function$n")
+
   lazy val IntClass = scalaPackage.requiredClass("Int")
   lazy val LongClass = scalaPackage.requiredClass("Long")
   lazy val FloatClass = scalaPackage.requiredClass("Float")
