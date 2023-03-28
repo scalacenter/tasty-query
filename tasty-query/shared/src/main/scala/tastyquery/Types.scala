@@ -18,6 +18,75 @@ import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Variances.*
 
+/** Types in the Scala type system.
+  *
+  * Every type from the Scala type system is represented in tasty-query as an
+  * instance of [[Type]]. That abstract class has a number of subtypes for all
+  * the possible "shapes" of types.
+  *
+  * For example, a reference to the class `scala.Int` is represented as
+  *
+  * ```
+  * TypeRef(PackageRef("scala"), TypeName("Int"))
+  * ```
+  *
+  * Type applications of the form `C[T1, ..., Tn]` are represented as
+  *
+  * ```
+  * AppliedType(typeForC, List(typeForT1, ..., typeForTn))
+  * ```
+  *
+  * etc.
+  *
+  * The full hierarchy is organized as follows:
+  *
+  * ```none
+  * Type
+  *  |
+  *  +- WildcardTypeBounds         `? >: L <: H`
+  *  |
+  *  +- TermType                   a type that can be the type of a term tree
+  *     |
+  *     +- PackageRef              a reference to a package (typically used as `prefix` of `NamedType`s)
+  *     |
+  *     +- MethodicType            types of methods
+  *     |  +- MethodType           `(termParams): resultType`
+  *     |  +- PolyType             `[TypeParams]: resultType`
+  *     |
+  *     +- ByNameType              type of a by-name parameter `=> T`
+  *     |
+  *     +- ValueType               a type that can be the type of a run-time value
+  *        +- NamedType
+  *        |  +- TypeRef           type selection of the form `prefix.T`
+  *        |  +- TermRef           term selection of the form `prefix.t`
+  *        +- AppliedType          `C[T1, ..., Tn]`
+  *        +- ThisType             `C.this`
+  *        +- OrType               `A | B`
+  *        +- AndType              `A & B`
+  *        +- TypeLambda           `[T1, ..., Tn] => R`
+  *        +- TypeParamRef         reference to a type parameter of an enclosing `TypeLambda` or `PolyType`
+  *        +- TermParamRef         reference to a term parameter of an enclosing `MethodType`
+  *        +- AnnotatedType        `T @annotation`
+  *        +- ConstantType         literal singleton type, such as `42` or `"foo"`
+  *        +- MatchType            `T match { case ... }`
+  *        +- RefinedType
+  *        |  +- TypeRefinement    `P { type T >: L <: H }`
+  *        |  +- TermRefinement    `P { val/def t: T }`
+  *        +- RecType              recursive type that introduces a recursive `this` binding
+  *        +- RecThis              recursive reference to the `this` of a `RecType`
+  *        +- SuperType            `super[mix]` (typically used as `prefix` of `NamedType`s)
+  * ```
+  *
+  * Common shapes of types can be constructed with properties of [[Symbols.Symbol]]
+  * and with combinator methods on [[Type]]:
+  *
+  * - [[Symbols.TypeSymbol.staticRef typeSymbol.staticRef]] constructs a `TypeRef` to the given static `typeSymbol`
+  * - [[Symbols.TermSymbol.staticRef termSymbol.staticRef]] constructs a `TermRef` to the given static `termSymbol`
+  * - [[Type.appliedTo tpe1.appliedTo(tpe2)]] constructs the application `tpe1[tpe2]`
+  *   (there is an overload that accepts a list of type arguments)
+  * - [[Type.| tpe1 | tpe2]] constructs a union type
+  * - [[Type.& tpe1 & tpe2]] constructs an intersection type
+  */
 object Types {
   private[tastyquery] final case class LookupIn(ownerRef: TypeRef, name: TermName)
   private[tastyquery] final case class LookupTypeIn(ownerRef: TypeRef, name: TypeName)
