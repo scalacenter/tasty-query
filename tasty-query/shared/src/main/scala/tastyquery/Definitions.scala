@@ -121,6 +121,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
         )
       )
     )
+    andTypeAlias.setAnnotations(Nil)
+    andTypeAlias.checkCompleted()
 
     val orTypeAlias = TypeMemberSymbol.create(typeName("|"), scalaPackage)
     orTypeAlias.withFlags(EmptyFlagSet, None)
@@ -132,15 +134,21 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
         )
       )
     )
+    orTypeAlias.setAnnotations(Nil)
+    orTypeAlias.checkCompleted()
 
     val AnyRefAlias = TypeMemberSymbol.create(typeName("AnyRef"), scalaPackage)
     AnyRefAlias.withFlags(EmptyFlagSet, None)
     AnyRefAlias.withDefinition(TypeMemberDefinition.TypeAlias(ObjectType))
+    AnyRefAlias.setAnnotations(Nil)
+    AnyRefAlias.checkCompleted()
 
     // See `case NOtpe` in `PickleReader.scala`
     val scala2NoTypeAlias = TypeMemberSymbol.create(typeName("<notype>"), scalaPackage)
     scala2NoTypeAlias.withFlags(Synthetic, None)
     scala2NoTypeAlias.withDefinition(TypeMemberDefinition.TypeAlias(NothingType))
+    scala2NoTypeAlias.setAnnotations(Nil)
+    scala2NoTypeAlias.checkCompleted()
   }
 
   private def equalityMethodType: MethodType =
@@ -221,6 +229,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val tparam = ClassTypeParamSymbol.create(typeName("T"), cls)
     tparam.withFlags(ClassTypeParam, None)
     tparam.setBounds(NothingAnyBounds)
+    tparam.setAnnotations(Nil)
+    tparam.checkCompleted()
 
     cls.withTypeParams(tparam :: Nil)
     cls.withFlags(EmptyFlagSet | Artifact, None)
@@ -254,6 +264,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
     cls.withFlags(Trait | NoInitsInterface, None)
     cls.withParentsDirect(ObjectType :: Nil)
+    cls.setAnnotations(Nil)
+    cls.withGivenSelfType(None)
 
     cls.withSpecialErasure { () =>
       ErasedTypeRef.ClassRef(scalaPackage.requiredClass("Function" + n))
@@ -264,14 +276,17 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
         .create(typeName("T" + i), cls)
         .withFlags(ClassTypeParam | Contravariant, None)
         .setBounds(NothingAnyBounds)
+        .setAnnotations(Nil)
     }
     val resultTypeParam =
       ClassTypeParamSymbol
         .create(typeName("R"), cls)
         .withFlags(ClassTypeParam | Covariant, None)
         .setBounds(NothingAnyBounds)
+        .setAnnotations(Nil)
 
     val allTypeParams = inputTypeParams :+ resultTypeParam
+    allTypeParams.foreach(_.checkCompleted())
     cls.withTypeParams(allTypeParams)
 
     val applyMethod = TermSymbol.create(termName("apply"), cls)
@@ -282,7 +297,10 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
         mt => resultTypeParam.typeRef
       )
     )
+    applyMethod.setAnnotations(Nil)
+    applyMethod.checkCompleted()
 
+    cls.checkCompleted()
     cls
   end createContextFunctionNClass
 
