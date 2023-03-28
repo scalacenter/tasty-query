@@ -1239,6 +1239,26 @@ object Types {
 
     def companion: LambdaTypeCompanion[TermName, Type, MethodType] = MethodType
 
+    private[tastyquery] def isResultDependent(using Context): Boolean =
+      // TODO This should be made more efficient; we only need to traverse the type, not transform it
+      object traverser extends TypeMaps.TypeMap:
+        var isDependent: Boolean = false
+
+        def apply(tp: Type): Type = tp match
+          case _ if isDependent =>
+            tp
+          case tp: TermParamRef if tp.binders eq MethodType.this =>
+            isDependent = true
+            tp
+          case _ =>
+            mapOver(tp)
+        end apply
+      end traverser
+
+      traverser(resultType)
+      traverser.isDependent
+    end isResultDependent
+
     private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       throw new AssertionError(s"Cannot find member in $this")
 

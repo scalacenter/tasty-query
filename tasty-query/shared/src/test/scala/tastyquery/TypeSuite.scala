@@ -1064,6 +1064,66 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(polyMethod.declaredType.asInstanceOf[PolyType].resultType.isInstanceOf[MethodType])
   }
 
+  testWithContext("lambdas") {
+    val FunctionClass = ctx.findTopLevelClass("simple_trees.Function")
+    val ListClass = ctx.findTopLevelClass("scala.collection.immutable.List")
+
+    def getRhsOf(name: String): TermTree =
+      FunctionClass.findNonOverloadedDecl(termName(name)).tree.get.asInstanceOf[ValDef].rhs.get
+
+    // val functionLambda = (x: Int) => x + 1
+    val functionLambda = getRhsOf("functionLambda")
+    assert(
+      clue(functionLambda.tpe)
+        .isApplied(_.isRef(defn.FunctionNClass(1)), List(_.isRef(defn.IntClass), _.isRef(defn.IntClass)))
+    )
+
+    // val samLambda: Runnable = () => ()
+    val samLambda = getRhsOf("samLambda")
+    assert(clue(samLambda.tpe).isRef(ctx.findTopLevelClass("java.lang.Runnable")))
+
+    // val polyID: [T] => T => T = [T] => (x: T) => x
+    val polyID = getRhsOf("polyID")
+    polyID.tpe match
+      case polyIDTpe: TermRefinement =>
+        assert(clue(polyIDTpe.parent).isRef(ctx.findTopLevelClass("scala.PolyFunction")))
+        assert(clue(polyIDTpe.refinedName) == nme.m_apply)
+        polyIDTpe.refinedType match
+          case pt: PolyType =>
+            assert(clue(pt.paramNames.size) == 1)
+            val tpRef = pt.paramRefs(0)
+            pt.resultType match
+              case mt: MethodType =>
+                assert(clue(mt.paramNames.size) == 1)
+                assert(clue(mt.paramTypes(0)) == clue(tpRef))
+                assert(clue(mt.resultType) == clue(tpRef))
+              case _ =>
+                fail(s"unexpected polyID refined type: $pt")
+          case pt =>
+            fail(s"unexpected polyID refined type: $pt")
+      case polyIDTpe =>
+        fail(s"unexpected polyID type: $polyIDTpe")
+    end match
+
+    // val dependentID: (x: Any) => x.type = x => x
+    val dependentID = getRhsOf("dependentID")
+    dependentID.tpe match
+      case dependentIDTpe: TermRefinement =>
+        assert(clue(dependentIDTpe.parent).isApplied(_.isRef(defn.FunctionNClass(1)), List(_ => true, _ => true)))
+        assert(clue(dependentIDTpe.refinedName) == nme.m_apply)
+        dependentIDTpe.refinedType match
+          case mt: MethodType =>
+            assert(clue(mt.paramNames.size) == 1)
+            val tpRef = mt.paramRefs(0)
+            assert(clue(mt.paramTypes(0)).isAny)
+            assert(clue(mt.resultType) == clue(tpRef))
+          case mt =>
+            fail(s"unexpected dependentID refined type: $mt")
+      case dependentIDTpe =>
+        fail(s"unexpected dependentID type: $dependentIDTpe")
+    end match
+  }
+
   testWithContext("scala.collection.:+") {
     // type parameter C <: SeqOps[A, CC, C]
     ctx.findStaticModuleClass("scala.collection.package.:+")

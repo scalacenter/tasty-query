@@ -461,8 +461,22 @@ object Trees {
     protected final def calculateType(using Context): Type = tpt match
       case Some(tpt) =>
         tpt.toType
+
       case None =>
-        ??? // TODO Resolve the method's type to construct the appropriate scala.FunctionN type
+        val methodType = meth.tpe.widen match
+          case mt: MethodType if !mt.resultType.isInstanceOf[MethodicType] =>
+            mt
+          case mt =>
+            throw InvalidProgramStructureException(s"Unexpected type for the `meth` part of a Lambda: $mt")
+
+        val paramCount = methodType.paramNames.size
+        val functionNTypeRef = defn.FunctionNClass(paramCount).staticRef
+
+        if methodType.isResultDependent then
+          val parent = functionNTypeRef.appliedTo(List.fill(paramCount + 1)(defn.AnyType))
+          TermRefinement(parent, nme.m_apply, methodType)
+        else functionNTypeRef.appliedTo(methodType.paramTypes :+ methodType.resultType)
+    end calculateType
 
     override final def withSpan(span: Span): Lambda = Lambda(meth, tpt)(span)
   }
