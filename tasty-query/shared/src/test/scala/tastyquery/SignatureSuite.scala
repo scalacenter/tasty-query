@@ -105,6 +105,14 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertNotSigned(productIterator, "():scala.collection.Iterator")
   }
 
+  testWithContext("empty package") {
+    val ClassInEmptyPackage = ctx.findTopLevelClass("ClassInEmptyPackage")
+    assert(ClassInEmptyPackage.owner == defn.EmptyPackage)
+
+    val meth = ClassInEmptyPackage.findNonOverloadedDecl(termName("meth"))
+    assertSigned(meth, "(ClassInEmptyPackage):scala.Int")
+  }
+
   testWithContext("with type") {
     val RefinedTypeTree = ctx.findTopLevelClass("simple_trees.RefinedTypeTree")
 

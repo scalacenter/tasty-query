@@ -184,7 +184,7 @@ object Symbols {
     end staticOwnerPrefix
 
     private def nameWithPrefix(addPrefix: Symbol => Boolean): FullyQualifiedName =
-      if isRoot then FullyQualifiedName.rootPackageName
+      if isPackage && (owner == null || name == nme.EmptyPackageName) then FullyQualifiedName.rootPackageName
       else
         val pre = owner
         if pre != null && addPrefix(pre) then pre.nameWithPrefix(addPrefix).mapLastOption(_.toTermName).select(name)
