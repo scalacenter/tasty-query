@@ -580,6 +580,12 @@ object Types {
     private[tastyquery] final def isLocalRef(sym: Symbol): Boolean =
       prefix == NoPrefix && (designator eq sym)
 
+    private[tastyquery] final def isSomeClassTypeParamRef: Boolean =
+      designator.isInstanceOf[ClassTypeParamSymbol]
+
+    private[tastyquery] final def isClassTypeParamRef(sym: ClassTypeParamSymbol): Boolean =
+      designator eq sym
+
     private[tastyquery] final def isTypeParamRef(tparam: TypeParamInfo): Boolean =
       designator eq tparam
 

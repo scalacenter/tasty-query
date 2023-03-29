@@ -1207,6 +1207,40 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
   }
 
+  testWithContext("scala2-class-type-param-ref") {
+    val RepeatedClass = ctx.findTopLevelClass("simple_trees.Repeated")
+    val BitSetClass = ctx.findTopLevelClass("scala.collection.immutable.BitSet")
+    val SpecificIterableFactoryClass = ctx.findTopLevelClass("scala.collection.SpecificIterableFactory")
+
+    val fSym = RepeatedClass.findNonOverloadedDecl(termName("f"))
+    val body = fSym.tree.get.asInstanceOf[DefDef].rhs.get
+
+    val Apply(fun, args) = body: @unchecked
+
+    val termRef = fun.tpe.asInstanceOf[TermRef]
+    val sym = termRef.symbol
+    assert(clue(sym).name == nme.m_apply)
+    assert(clue(sym.owner) == SpecificIterableFactoryClass)
+
+    sym.declaredType match
+      case tpe: MethodType =>
+        tpe.resultType match
+          case resType: TypeRef =>
+            assert(clue(resType.optSymbol).exists(_.isInstanceOf[ClassTypeParamSymbol]))
+            resType.prefix match
+              case thisType: ThisType =>
+                assert(thisType.cls == SpecificIterableFactoryClass)
+              case _ =>
+                fail(s"prefix is not a ThisType for $sym", clues(resType))
+          case resType =>
+            fail(s"result type is not a TypeRef for $sym", clues(resType))
+      case tpe =>
+        fail(s"not a MethodType for $sym", clues(tpe))
+    end match
+
+    assert(clue(body.tpe.widen).isRef(BitSetClass))
+  }
+
   testWithContext("scala.collection.:+") {
     // type parameter C <: SeqOps[A, CC, C]
     ctx.findStaticModuleClass("scala.collection.package.:+")

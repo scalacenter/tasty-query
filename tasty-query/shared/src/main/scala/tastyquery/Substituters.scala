@@ -64,16 +64,18 @@ private[tastyquery] object Substituters:
       tp match
         case tp: NamedType =>
           tp.prefix match
-            case NoPrefix =>
+            case _: ThisType if tp.isSomeClassTypeParamRef =>
               var fs = from
               var ts = to
               while fs.nonEmpty && ts.nonEmpty do
-                if tp.isLocalRef(fs.head) then return ts.head
+                if tp.isClassTypeParamRef(fs.head) then return ts.head
                 fs = fs.tail
                 ts = ts.tail
               tp
             case prefix: Type =>
               tp.normalizedDerivedSelect(apply(prefix))
+            case NoPrefix =>
+              tp
         case _: ThisType | _: BoundType =>
           tp
         case _ =>
