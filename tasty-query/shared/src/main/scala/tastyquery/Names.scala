@@ -202,6 +202,9 @@ object Names {
     override def tag: Int = NameTags.SIGNED
 
     override def toString: String = s"$underlying[with sig $sig @$target]"
+
+    override def toDebugString: String =
+      s"${underlying.toDebugString}[with sig ${sig.toDebugString} @${target.toDebugString}]"
   }
 
   object SignedName:
@@ -227,17 +230,21 @@ object Names {
       case NameTags.SUPERACCESSOR  => s"super$underlying"
       case NameTags.INLINEACCESSOR => s"inline$underlying"
     }
+
+    override def toDebugString: String = tag match
+      case NameTags.SUPERACCESSOR  => s"<super:${underlying.toDebugString}>"
+      case NameTags.INLINEACCESSOR => s"<inline:${underlying.toDebugString}>"
   }
 
   final case class SuffixedName(override val tag: Int, override val underlying: TermName)
       extends DerivedName(underlying) {
     override def toString: String = tag match {
-      case NameTags.BODYRETAINER => ???
+      case NameTags.BODYRETAINER => s"<bodyretainer$underlying>" // probably wrong but print something without crashing
       case NameTags.OBJECTCLASS  => underlying.toString
     }
 
     override def toDebugString: String = tag match {
-      case NameTags.BODYRETAINER => ???
+      case NameTags.BODYRETAINER => s"<bodyretainer:$underlying>"
       case NameTags.OBJECTCLASS  => s"${underlying.toDebugString}[$$]"
     }
   }
@@ -250,6 +257,8 @@ object Names {
     override def tag: Int = NameTags.UNIQUE
 
     override def toString: String = s"$underlying$separator$num"
+
+    override def toDebugString: String = s"${underlying.toDebugString}[unique $separator $num]"
   }
 
   // can't instantiate directly, might have to nest the other way
@@ -258,6 +267,8 @@ object Names {
     override def tag: Int = NameTags.DEFAULTGETTER
 
     override def toString: String = s"$underlying$$default$num"
+
+    override def toDebugString: String = s"${underlying.toDebugString}[default $num]"
   }
 
   final case class TypeName(override val toTermName: TermName) extends Name {
