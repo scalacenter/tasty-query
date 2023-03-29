@@ -1124,6 +1124,89 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     end match
   }
 
+  testWithContext("varargs") {
+    val VarargFunctionClass = ctx.findTopLevelClass("simple_trees.VarargFunction")
+    val scalaSeq = ctx.findStaticType("scala.package.Seq")
+
+    def getDefOf(name: String): DefDef =
+      VarargFunctionClass.findNonOverloadedDecl(termName(name)).tree.get.asInstanceOf[DefDef]
+
+    def extractParamAndResultType(mt: Type): (Type, Type) = mt match
+      case mt: MethodType if mt.paramNames.sizeIs == 1 =>
+        (mt.paramTypes.head, mt.resultType)
+      case _ =>
+        fail(s"unexpected method type", clues(mt))
+    end extractParamAndResultType
+
+    def extractFormalTypedActualParamTypes(apply: TermTree): (Type, Type, Type) = apply match
+      case Apply(fun, List(typed @ Typed(arg, _))) =>
+        val (formal, _) = extractParamAndResultType(fun.tpe.widen)
+        (formal, typed.tpe, arg.tpe)
+      case _ =>
+        fail("unexpected body", clues(apply))
+    end extractFormalTypedActualParamTypes
+
+    def assertSeqOfInt(tpe: Type): Unit =
+      assert(clue(tpe).isApplied(t => t.isRef(defn.SeqClass) || t.isRef(scalaSeq), List(_.isRef(defn.IntClass))))
+
+    def assertAnnotatedSeqOfInt(tpe: Type): Unit = tpe match
+      case tpe: AnnotatedType =>
+        assertSeqOfInt(tpe.typ)
+        assert(clue(tpe.annotation.symbol) == defn.internalRepeatedAnnotClass.get)
+      case _ =>
+        fail("unexpected parameter type", clues(tpe))
+    end assertAnnotatedSeqOfInt
+
+    def assertRepeatedOfInt(tpe: Type): Unit =
+      assert(clue(tpe).isApplied(_.isRef(defn.RepeatedParamClass), List(_.isRef(defn.IntClass))))
+
+    def assertArrayOfInt(tpe: Type): Unit =
+      assert(clue(tpe).isArrayOf(_.isRef(defn.IntClass)))
+
+    locally {
+      val dd = getDefOf("takesVarargs")
+      val (paramType, resultType) = extractParamAndResultType(dd.symbol.declaredType)
+
+      assertAnnotatedSeqOfInt(paramType)
+    }
+
+    locally {
+      val dd = getDefOf("givesVarargs")
+      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
+
+      assertAnnotatedSeqOfInt(formal)
+      assertRepeatedOfInt(typed)
+      assertSeqOfInt(actual.widen)
+    }
+
+    locally {
+      val dd = getDefOf("givesSeqLiteral")
+      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
+
+      assertAnnotatedSeqOfInt(formal)
+      assertRepeatedOfInt(typed)
+      assertSeqOfInt(actual.widen)
+    }
+
+    locally {
+      val dd = getDefOf("givesSeqToJava")
+      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
+
+      assertArrayOfInt(formal)
+      assertRepeatedOfInt(typed)
+      assertSeqOfInt(actual.widen)
+    }
+
+    locally {
+      val dd = getDefOf("givesSeqLiteralToJava")
+      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
+
+      assertArrayOfInt(formal)
+      assertRepeatedOfInt(typed)
+      assertSeqOfInt(actual.widen)
+    }
+  }
+
   testWithContext("scala.collection.:+") {
     // type parameter C <: SeqOps[A, CC, C]
     ctx.findStaticModuleClass("scala.collection.package.:+")

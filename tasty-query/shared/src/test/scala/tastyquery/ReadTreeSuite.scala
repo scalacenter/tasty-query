@@ -25,6 +25,24 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   def containsSubtree(p: StructureCheck)(t: Tree): Boolean =
     t.walkTree(p.isDefinedAt)(_ || _, false)
 
+  private object SimpleIdent:
+    def unapply(ident: Ident): Option[String] = ident match
+      case Ident(SimpleName(nameStr)) => Some(nameStr)
+      case _                          => None
+  end SimpleIdent
+
+  private object SimpleTypeName:
+    def unapply(name: TypeName): Option[String] = name match
+      case TypeName(SimpleName(nameStr)) => Some(nameStr)
+      case _                             => None
+  end SimpleTypeName
+
+  private object SimpleTypeIdent:
+    def unapply(ident: TypeIdent): Option[String] = ident match
+      case TypeIdent(SimpleTypeName(nameStr)) => Some(nameStr)
+      case _                                  => None
+  end SimpleTypeIdent
+
   private object SymbolWithName:
     def unapply(sym: Symbol): Some[sym.ThisNameType] = Some(sym.name)
 
@@ -1649,7 +1667,32 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickle("varags-annotated-type", "simple_trees.VarargFunction") { tree =>
-    val varargMatch: StructureCheck = {
+    def findDefDef(name: String): DefDef =
+      findTree(tree) { case dd @ DefDef(SimpleName(`name`), _, _, _, _) =>
+        dd
+      }
+
+    object RepeatedAnnot:
+      def unapply(tree: Apply): Boolean = tree match
+        case Apply(
+              Select(
+                New(TypeWrapper(TypeRefInternal(_: PackageRef, TypeName(SimpleName("Repeated"))))),
+                SignedName(SimpleName("<init>"), _, _)
+              ),
+              Nil
+            ) =>
+          true
+        case _ =>
+          false
+    end RepeatedAnnot
+
+    object RepeatedTypeRef:
+      def unapply(tree: TypeRef): Boolean = tree match
+        case TypeRefInternal(ScalaPackageRef(), tpnme.RepeatedParamClassMagic) => true
+        case _                                                                 => false
+    end RepeatedTypeRef
+
+    val takesVarargs: StructureCheck = {
       case DefDef(
             SimpleName("takesVarargs"),
             List(
@@ -1660,16 +1703,10 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                     AnnotatedTypeTree(
                       // Int* ==> Seq[Int]
                       AppliedTypeTree(
-                        TypeWrapper(TypeRefInternal(_: PackageRef, TypeName(SimpleName("Seq")))),
-                        TypeIdent(TypeName(SimpleName("Int"))) :: Nil
+                        TypeWrapper(TypeRefInternal(_: PackageRef, SimpleTypeName("Seq"))),
+                        SimpleTypeIdent("Int") :: Nil
                       ),
-                      Apply(
-                        Select(
-                          New(TypeWrapper(TypeRefInternal(_: PackageRef, TypeName(SimpleName("Repeated"))))),
-                          SignedName(SimpleName("<init>"), _, _)
-                        ),
-                        Nil
-                      )
+                      RepeatedAnnot()
                     ),
                     None,
                     _
@@ -1677,12 +1714,114 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 )
               )
             ),
-            _,
-            _,
+            AppliedTypeTree(SimpleTypeIdent("Seq"), List(SimpleTypeIdent("Int"))),
+            Some(SimpleIdent("xs")),
             _
           ) =>
     }
-    assert(containsSubtree(varargMatch)(clue(tree)))
+    assert(containsSubtree(takesVarargs)(clue(findDefDef("takesVarargs"))))
+
+    val givesVarargs: StructureCheck = {
+      case DefDef(
+            SimpleName("givesVarargs"),
+            List(
+              Left(
+                List(
+                  ValDef(
+                    SimpleName("xs"),
+                    AppliedTypeTree(SimpleTypeIdent("Seq"), List(SimpleTypeIdent("Int"))),
+                    None,
+                    _
+                  )
+                )
+              )
+            ),
+            AppliedTypeTree(SimpleTypeIdent("Seq"), List(SimpleTypeIdent("Int"))),
+            Some(
+              Apply(
+                Select(_, SignedName(SimpleName("takesVarargs"), _, _)),
+                List(Typed(SimpleIdent("xs"), TypeWrapper(ty.AppliedType(RepeatedTypeRef(), List(_)))))
+              )
+            ),
+            _
+          ) =>
+    }
+    assert(containsSubtree(givesVarargs)(clue(findDefDef("givesVarargs"))))
+
+    val givesSeqLiteral: StructureCheck = {
+      case DefDef(
+            SimpleName("givesSeqLiteral"),
+            List(Left(List(ValDef(SimpleName("x"), SimpleTypeIdent("Int"), None, _)))),
+            AppliedTypeTree(SimpleTypeIdent("Seq"), List(SimpleTypeIdent("Int"))),
+            Some(
+              Apply(
+                Select(_, SignedName(SimpleName("takesVarargs"), _, _)),
+                List(
+                  Typed(
+                    SeqLiteral(
+                      List(SimpleIdent("x"), Literal(Constant(1))),
+                      TypeWrapper(TypeRefInternal(_, SimpleTypeName("Int")))
+                    ),
+                    TypeWrapper(ty.AppliedType(RepeatedTypeRef(), List(_)))
+                  )
+                )
+              )
+            ),
+            _
+          ) =>
+    }
+    assert(containsSubtree(givesSeqLiteral)(clue(findDefDef("givesSeqLiteral"))))
+
+    val givesSeqToJava: StructureCheck = {
+      case DefDef(
+            SimpleName("givesSeqToJava"),
+            List(
+              Left(
+                List(
+                  ValDef(
+                    SimpleName("xs"),
+                    AppliedTypeTree(SimpleTypeIdent("Seq"), List(SimpleTypeIdent("Int"))),
+                    None,
+                    _
+                  )
+                )
+              )
+            ),
+            AppliedTypeTree(SelectTypeTree(_, SimpleTypeName("List")), List(SimpleTypeIdent("Int"))),
+            Some(
+              Apply(
+                TypeApply(Select(_, SignedName(SimpleName("asList"), _, _)), _),
+                List(Typed(SimpleIdent("xs"), TypeWrapper(ty.AppliedType(RepeatedTypeRef(), List(_)))))
+              )
+            ),
+            _
+          ) =>
+    }
+    assert(containsSubtree(givesSeqToJava)(clue(findDefDef("givesSeqToJava"))))
+
+    val givesSeqLiteralToJava: StructureCheck = {
+      case DefDef(
+            SimpleName("givesSeqLiteralToJava"),
+            List(Left(List(ValDef(SimpleName("x"), SimpleTypeIdent("Int"), None, _)))),
+            AppliedTypeTree(SelectTypeTree(_, SimpleTypeName("List")), List(SimpleTypeIdent("Int"))),
+            Some(
+              Apply(
+                TypeApply(Select(_, SignedName(SimpleName("asList"), _, _)), _),
+                List(
+                  Typed(
+                    SeqLiteral(
+                      List(SimpleIdent("x"), Literal(Constant(1))),
+                      TypeWrapper(TypeRefInternal(_, SimpleTypeName("Int")))
+                    ),
+                    TypeWrapper(ty.AppliedType(RepeatedTypeRef(), List(_)))
+                  )
+                )
+              )
+            ),
+            _
+          ) =>
+    }
+    assert(containsSubtree(givesSeqLiteralToJava)(clue(findDefDef("givesSeqLiteralToJava"))))
   }
 
   testUnpickle("refined-type-tree", "simple_trees.RefinedTypeTree") { tree =>

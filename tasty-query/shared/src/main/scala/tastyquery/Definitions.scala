@@ -341,6 +341,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   private[tastyquery] lazy val internalChildAnnotClass = scalaAnnotationInternalPackage.optionalClass("Child")
 
+  private[tastyquery] lazy val internalRepeatedAnnotClass = scalaAnnotationInternalPackage.optionalClass("Repeated")
+
   def isPrimitiveValueClass(sym: ClassSymbol): Boolean =
     sym == IntClass || sym == LongClass || sym == FloatClass || sym == DoubleClass ||
       sym == BooleanClass || sym == ByteClass || sym == ShortClass || sym == CharClass ||
