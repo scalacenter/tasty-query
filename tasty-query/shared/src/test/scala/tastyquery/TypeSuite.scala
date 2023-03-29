@@ -1866,6 +1866,21 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     end for
   }
 
+  testWithContext("scala-enum-anon-class-signature-name") {
+    val ScalaEnumClass = ctx.findTopLevelClass("simple_trees.ScalaEnum")
+    val ScalaEnumModuleClass = ctx.findTopLevelModuleClass("simple_trees.ScalaEnum")
+
+    val newMethod = ScalaEnumModuleClass.findNonOverloadedDecl(termName("$new"))
+    val body = newMethod.tree.get.asInstanceOf[DefDef].rhs.get
+    val Block(List(anonClassDef: ClassDef), expr) = body: @unchecked
+    val Typed(app @ Apply(Select(New(_), ctorSignedName: SignedName), Nil), _) = expr: @unchecked
+
+    val anonClassSym = anonClassDef.symbol
+    assert(clue(anonClassSym.signatureName) == clue(ctorSignedName.sig.resSig))
+
+    assert(clue(app.tpe).isRef(anonClassSym))
+  }
+
   testWithContext("annotations") {
     val AnnotationsClass = ctx.findTopLevelClass("simple_trees.Annotations")
     val inlineClass = ctx.findTopLevelClass("scala.inline")

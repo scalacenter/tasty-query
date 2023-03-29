@@ -181,8 +181,11 @@ object Names {
 
     override def toString: String = name
 
+    def prepend(s: String): SimpleName =
+      termName(s + name)
+
     def append(s: String): SimpleName =
-      termName(s"$name$s")
+      termName(name + s)
 
     private[tastyquery] def isPackageObjectName: Boolean =
       name == "package" || name.endsWith(str.topLevelSuffix)
@@ -293,6 +296,9 @@ object Names {
     def sourceObjectName: SimpleName = toTermName match
       case SuffixedName(NameTags.OBJECTCLASS, objName) => objName.asSimpleName
       case name                                        => name.asSimpleName
+
+    private[tastyquery] def isPackageObjectClassName: Boolean =
+      wrapsObjectName && toTermName.stripObjectSuffix.asSimpleName.isPackageObjectName
   }
 
   final case class FullyQualifiedName(path: List[Name]):
