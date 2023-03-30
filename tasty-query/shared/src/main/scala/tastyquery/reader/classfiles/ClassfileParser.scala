@@ -2,6 +2,7 @@ package tastyquery.reader.classfiles
 
 import scala.collection.mutable
 
+import tastyquery.Annotations.Annotation as TQAnnotation
 import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
@@ -184,16 +185,16 @@ private[reader] object ClassfileParser {
       allRegisteredSymbols += sym
       sym
 
-    def loadMembers(): IArray[(TermSymbol, SigOrDesc)] =
-      val buf = IArray.newBuilder[(TermSymbol, SigOrDesc)]
+    def loadMembers(): IArray[(TermSymbol, AccessFlags, SigOrDesc)] =
+      val buf = IArray.newBuilder[(TermSymbol, AccessFlags, SigOrDesc)]
       structure.fields.use {
         reader.readFields { (name, sigOrDesc, access) =>
-          buf += createMember(name, EmptyFlagSet, access) -> sigOrDesc
+          buf += ((createMember(name, EmptyFlagSet, access), access, sigOrDesc))
         }
       }
       structure.methods.use {
         reader.readMethods { (name, sigOrDesc, access) =>
-          buf += createMember(name, Method, access) -> sigOrDesc
+          buf += ((createMember(name, Method, access), access, sigOrDesc))
         }
       }
       buf.result()
@@ -227,15 +228,35 @@ private[reader] object ClassfileParser {
       if cls.name == tpnme.Object then defn.createObjectMagicMethods(cls)
       else if cls.name == tpnme.String then defn.createStringMagicMethods(cls)
 
-    for (sym, sigOrDesc) <- loadMembers() do
-      sigOrDesc match
-        case SigOrDesc.Desc(desc) => sym.withDeclaredType(Descriptors.parseDescriptor(sym, desc))
-        case SigOrDesc.Sig(sig)   => sym.withDeclaredType(JavaSignatures.parseSignature(sym, sig, allRegisteredSymbols))
+    for (sym, javaFlags, sigOrDesc) <- loadMembers() do
+      val parsedType = sigOrDesc match
+        case SigOrDesc.Desc(desc) => Descriptors.parseDescriptor(sym, desc)
+        case SigOrDesc.Sig(sig)   => JavaSignatures.parseSignature(sym, sig, allRegisteredSymbols)
+      val adaptedType =
+        if sym.is(Method) && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
+        else parsedType
+      sym.withDeclaredType(adaptedType)
 
     for sym <- allRegisteredSymbols do sym.checkCompleted()
 
     innerClasses.declarations
   }
+
+  private def patchForVarargs(sym: TermSymbol, tpe: Type)(using Context): Type =
+    tpe match
+      case tpe: MethodType if tpe.paramNames.sizeIs >= 1 =>
+        defn.internalRepeatedAnnotClass match
+          case Some(annotClass) =>
+            val patchedLast = AnnotatedType(tpe.paramTypes.last, TQAnnotation(annotClass))
+            tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypes.init :+ patchedLast, tpe.resultType)
+          case None =>
+            // Warn here? How?
+            tpe
+      case tpe: PolyType =>
+        tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypeBounds, patchForVarargs(sym, tpe.resultType))
+      case _ =>
+        throw ClassfileFormatException(s"Found ACC_VARARGS on $sym but its type was not a MethodType: $tpe")
+  end patchForVarargs
 
   private def parse(classRoot: ClassData, structure: Structure)(using Context): ClassKind = {
     import structure.{reader, given}
