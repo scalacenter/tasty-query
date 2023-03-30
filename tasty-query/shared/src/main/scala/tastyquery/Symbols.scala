@@ -191,7 +191,6 @@ object Symbols {
         else FullyQualifiedName(name :: Nil)
 
     final def fullName: FullyQualifiedName = nameWithPrefix(_.isStatic)
-    private[tastyquery] final def erasedName: FullyQualifiedName = nameWithPrefix(_ => true)
 
     final def isType: Boolean = this.isInstanceOf[TypeSymbol]
     final def isTerm: Boolean = this.isInstanceOf[TermSymbol]
@@ -673,6 +672,7 @@ object Symbols {
       mutable.HashMap[Name, mutable.HashSet[TermOrTypeSymbol]]()
 
     // Cache fields
+    private var mySignatureName: FullyQualifiedName | Null = null
     private var myAppliedRef: Type | Null = null
     private var mySelfType: Type | Null = null
     private var myLinearization: List[ClassSymbol] | Null = null
@@ -709,6 +709,40 @@ object Symbols {
           sym
         }
       case _ => None // not possible yet for local symbols
+
+    /** The name of this class as used in `Signature`s.
+      *
+      * This needs to match the behavior of `classSymbol.fullName` in dotc.
+      * Eventually that goes to `fullNameSeparate(Qualified, Qualified, name)`,
+      * which contains this comment:
+      *
+      * > Drops package objects. Represents each term in the owner chain by a simple `_$`.
+      *
+      * The code actually represents each *non-class* in the owner chain by a simple `_$`.
+      */
+    private[tastyquery] final def signatureName: FullyQualifiedName =
+      def computeErasedName(owner: Symbol, name: TypeName): FullyQualifiedName = owner match
+        case owner: PackageSymbol =>
+          owner.fullName.select(name)
+
+        case owner: ClassSymbol =>
+          // Drop package objects
+          if owner.name.isPackageObjectClassName && owner.owner.isPackage then owner.owner.fullName.select(name)
+          else owner.signatureName.mapLast(_.toTermName).select(name)
+
+        case owner: TermOrTypeSymbol =>
+          // Replace non-class non-package owners by simple `_$`
+          val filledName = name.toTermName.asSimpleName.prepend("_$").toTypeName
+          computeErasedName(owner.owner, filledName)
+      end computeErasedName
+
+      val local = mySignatureName
+      if local != null then local
+      else
+        val computed = computeErasedName(owner, name)
+        mySignatureName = computed
+        computed
+    end signatureName
 
     private[tastyquery] final def withTypeParams(tparams: List[ClassTypeParamSymbol]): this.type =
       if myTypeParams != null then throw new IllegalStateException(s"reassignment of type parameters to $this")
@@ -1246,13 +1280,10 @@ object Symbols {
     end allPackageObjectDecls
 
     private def computeAllPackageObjectDecls()(using Context): List[ClassSymbol] =
-      def isPackageObjectClassName(name: TypeName): Boolean =
-        name.wrapsObjectName && name.toTermName.stripObjectSuffix.asSimpleName.isPackageObjectName
-
       ensureRootsInitialized()
       ctx.classloader.loadAllPackageObjectRoots(this)
       myDeclarations.valuesIterator.collect {
-        case cls: ClassSymbol if isPackageObjectClassName(cls.name) => cls
+        case cls: ClassSymbol if cls.name.isPackageObjectClassName => cls
       }.toList
         .sortBy(_.name.toTermName.stripObjectSuffix.asSimpleName) // sort for determinism
     end computeAllPackageObjectDecls

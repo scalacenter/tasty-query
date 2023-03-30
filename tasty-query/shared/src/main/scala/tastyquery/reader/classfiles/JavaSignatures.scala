@@ -39,7 +39,7 @@ private[classfiles] object JavaSignatures:
           if scope.isPackage then cookFailure(tname, "no enclosing scope declares it")
           else if scope.isClass then
             scope.asClass.typeParams.find(_.name == tname) match
-              case Some(ref) => Some(TypeRef(NoPrefix, ref))
+              case Some(ref) => Some(TypeRef(ref.owner.thisType, ref))
               case _         => lookupTParam(scope.asClass.owner)
           else cookFailure(tname, "unexpected non-class scope")
         if env == null then lookupTParam(member.owner)
@@ -47,7 +47,7 @@ private[classfiles] object JavaSignatures:
           env match
             case map: Map[t, s] =>
               map.asInstanceOf[Map[TypeName, ClassTypeParamSymbol]].get(tname) match
-                case Some(sym) => Some(TypeRef(NoPrefix, sym))
+                case Some(sym) => Some(TypeRef(sym.owner.thisType, sym))
                 case None      => lookupTParam(member.owner)
             case pt: TypeBinders =>
               pt.lookupRef(tname) match
@@ -277,7 +277,7 @@ private[classfiles] object JavaSignatures:
       referenceType(null)
 
     def cookFailure(tname: TypeName, reason: String): Nothing =
-      val path = if !isClass then s"${member.owner.erasedName}#${member.name}" else member.erasedName
+      val path = if !isClass then s"${member.owner.fullName}#${member.name}" else member.fullName
       throw ClassfileFormatException(
         s"could not resolve type parameter `$tname` in signature `$signature` of $path because $reason"
       )

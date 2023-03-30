@@ -1124,6 +1124,123 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     end match
   }
 
+  testWithContext("varargs") {
+    val VarargFunctionClass = ctx.findTopLevelClass("simple_trees.VarargFunction")
+    val scalaSeq = ctx.findStaticType("scala.package.Seq")
+
+    def getDefOf(name: String): DefDef =
+      VarargFunctionClass.findNonOverloadedDecl(termName(name)).tree.get.asInstanceOf[DefDef]
+
+    def extractParamAndResultType(mt: Type): (Type, Type) = mt match
+      case mt: MethodType if mt.paramNames.sizeIs == 1 =>
+        (mt.paramTypes.head, mt.resultType)
+      case _ =>
+        fail(s"unexpected method type", clues(mt))
+    end extractParamAndResultType
+
+    def extractFormalTypedActualParamTypes(apply: TermTree): (Type, Type, Type) = apply match
+      case Apply(fun, List(typed @ Typed(arg, _))) =>
+        val (formal, _) = extractParamAndResultType(fun.tpe.widen)
+        (formal, typed.tpe, arg.tpe)
+      case _ =>
+        fail("unexpected body", clues(apply))
+    end extractFormalTypedActualParamTypes
+
+    def assertSeqOfInt(tpe: Type): Unit =
+      assert(clue(tpe).isApplied(t => t.isRef(defn.SeqClass) || t.isRef(scalaSeq), List(_.isRef(defn.IntClass))))
+
+    def assertAnnotatedSeqOfInt(tpe: Type): Unit = tpe match
+      case tpe: AnnotatedType =>
+        assertSeqOfInt(tpe.typ)
+        assert(clue(tpe.annotation.symbol) == defn.internalRepeatedAnnotClass.get)
+      case _ =>
+        fail("unexpected parameter type", clues(tpe))
+    end assertAnnotatedSeqOfInt
+
+    def assertRepeatedOfInt(tpe: Type): Unit =
+      assert(clue(tpe).isApplied(_.isRef(defn.RepeatedParamClass), List(_.isRef(defn.IntClass))))
+
+    def assertArrayOfInt(tpe: Type): Unit =
+      assert(clue(tpe).isArrayOf(_.isRef(defn.IntClass)))
+
+    locally {
+      val dd = getDefOf("takesVarargs")
+      val (paramType, resultType) = extractParamAndResultType(dd.symbol.declaredType)
+
+      assertAnnotatedSeqOfInt(paramType)
+    }
+
+    locally {
+      val dd = getDefOf("givesVarargs")
+      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
+
+      assertAnnotatedSeqOfInt(formal)
+      assertRepeatedOfInt(typed)
+      assertSeqOfInt(actual.widen)
+    }
+
+    locally {
+      val dd = getDefOf("givesSeqLiteral")
+      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
+
+      assertAnnotatedSeqOfInt(formal)
+      assertRepeatedOfInt(typed)
+      assertSeqOfInt(actual.widen)
+    }
+
+    locally {
+      val dd = getDefOf("givesSeqToJava")
+      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
+
+      assertArrayOfInt(formal)
+      assertRepeatedOfInt(typed)
+      assertSeqOfInt(actual.widen)
+    }
+
+    locally {
+      val dd = getDefOf("givesSeqLiteralToJava")
+      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
+
+      assertArrayOfInt(formal)
+      assertRepeatedOfInt(typed)
+      assertSeqOfInt(actual.widen)
+    }
+  }
+
+  testWithContext("scala2-class-type-param-ref") {
+    val RepeatedClass = ctx.findTopLevelClass("simple_trees.Repeated")
+    val BitSetClass = ctx.findTopLevelClass("scala.collection.immutable.BitSet")
+    val SpecificIterableFactoryClass = ctx.findTopLevelClass("scala.collection.SpecificIterableFactory")
+
+    val fSym = RepeatedClass.findNonOverloadedDecl(termName("f"))
+    val body = fSym.tree.get.asInstanceOf[DefDef].rhs.get
+
+    val Apply(fun, args) = body: @unchecked
+
+    val termRef = fun.tpe.asInstanceOf[TermRef]
+    val sym = termRef.symbol
+    assert(clue(sym).name == nme.m_apply)
+    assert(clue(sym.owner) == SpecificIterableFactoryClass)
+
+    sym.declaredType match
+      case tpe: MethodType =>
+        tpe.resultType match
+          case resType: TypeRef =>
+            assert(clue(resType.optSymbol).exists(_.isInstanceOf[ClassTypeParamSymbol]))
+            resType.prefix match
+              case thisType: ThisType =>
+                assert(thisType.cls == SpecificIterableFactoryClass)
+              case _ =>
+                fail(s"prefix is not a ThisType for $sym", clues(resType))
+          case resType =>
+            fail(s"result type is not a TypeRef for $sym", clues(resType))
+      case tpe =>
+        fail(s"not a MethodType for $sym", clues(tpe))
+    end match
+
+    assert(clue(body.tpe.widen).isRef(BitSetClass))
+  }
+
   testWithContext("scala.collection.:+") {
     // type parameter C <: SeqOps[A, CC, C]
     ctx.findStaticModuleClass("scala.collection.package.:+")
@@ -1864,6 +1981,21 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         assert(clue(selectedSymbol) == clue(expectedSym), fStr)
       end if
     end for
+  }
+
+  testWithContext("scala-enum-anon-class-signature-name") {
+    val ScalaEnumClass = ctx.findTopLevelClass("simple_trees.ScalaEnum")
+    val ScalaEnumModuleClass = ctx.findTopLevelModuleClass("simple_trees.ScalaEnum")
+
+    val newMethod = ScalaEnumModuleClass.findNonOverloadedDecl(termName("$new"))
+    val body = newMethod.tree.get.asInstanceOf[DefDef].rhs.get
+    val Block(List(anonClassDef: ClassDef), expr) = body: @unchecked
+    val Typed(app @ Apply(Select(New(_), ctorSignedName: SignedName), Nil), _) = expr: @unchecked
+
+    val anonClassSym = anonClassDef.symbol
+    assert(clue(anonClassSym.signatureName) == clue(ctorSignedName.sig.resSig))
+
+    assert(clue(app.tpe).isRef(anonClassSym))
   }
 
   testWithContext("annotations") {

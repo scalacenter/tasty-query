@@ -30,11 +30,11 @@ object Types {
     case ArrayTypeRef(base: ClassRef, dimensions: Int)
 
     def toDebugString: String = this match
-      case ClassRef(cls)                  => s"ClassRef(${cls.erasedName.toDebugString})"
+      case ClassRef(cls)                  => s"ClassRef(${cls.signatureName.toDebugString})"
       case ArrayTypeRef(base, dimensions) => s"ArrayTypeRef(${base.toDebugString}, $dimensions)"
 
     override def toString(): String = this match
-      case ClassRef(cls)                  => cls.erasedName.toString()
+      case ClassRef(cls)                  => cls.signatureName.toString()
       case ArrayTypeRef(base, dimensions) => base.toString() + "[]" * dimensions
 
     def arrayOf(): ArrayTypeRef = this match
@@ -44,11 +44,11 @@ object Types {
     /** The `FullyQualifiedName` for this `ErasedTypeRef` as found in the `TermSig`s of `Signature`s. */
     def toSigFullName: FullyQualifiedName = this match
       case ClassRef(cls) =>
-        cls.erasedName
+        cls.signatureName
 
       case ArrayTypeRef(base, dimensions) =>
         val suffix = "[]" * dimensions
-        val baseName = base.cls.erasedName
+        val baseName = base.cls.signatureName
         val suffixedLast = baseName.path.last match
           case TypeName(SuffixedName(NameTags.OBJECTCLASS, baseModuleName)) =>
             baseModuleName.asSimpleName.append(suffix).withObjectSuffix.toTypeName
@@ -579,6 +579,12 @@ object Types {
 
     private[tastyquery] final def isLocalRef(sym: Symbol): Boolean =
       prefix == NoPrefix && (designator eq sym)
+
+    private[tastyquery] final def isSomeClassTypeParamRef: Boolean =
+      designator.isInstanceOf[ClassTypeParamSymbol]
+
+    private[tastyquery] final def isClassTypeParamRef(sym: ClassTypeParamSymbol): Boolean =
+      designator eq sym
 
     private[tastyquery] final def isTypeParamRef(tparam: TypeParamInfo): Boolean =
       designator eq tparam

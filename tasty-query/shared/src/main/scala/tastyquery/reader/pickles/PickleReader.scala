@@ -446,10 +446,10 @@ private[pickles] class PickleReader {
           case c: Constant => ConstantType(c)
           case tp: TermRef => tp
       case TYPEREFtpe =>
-        var pre = readPrefixRef()
+        val originalPrefix = readPrefixRef()
         val designator = readMaybeExternalSymbolRef()
-        /*pre match {
-          case thispre: ThisType =>
+        val prefix = originalPrefix match
+          /*case thispre: ThisType =>
             // The problem is that class references super.C get pickled as
             // this.C. Dereferencing the member might then get an overriding class
             // instance. The problem arises for instance for LinkedHashMap#MapValues
@@ -462,16 +462,21 @@ private[pickles] class PickleReader {
                 assert(base.exists)
                 pre = SuperType(thispre, base)
               }
-            }
-          case NoPrefix if sym.is(TypeParam) =>
-            pre = sym.owner.thisType
+            }*/
+          case NoPrefix if designator.isInstanceOf[ClassTypeParamSymbol] =>
+            /* Scala 2 pickles references to class type parameters of enclosing
+             * classes with NoPrefix, but the Scala 3 type system and tasty-query
+             * demand that it be `ThisType` of the enclosing class instead.
+             */
+            designator.asInstanceOf[ClassTypeParamSymbol].owner.thisType
           case _ =>
-        }*/
+            originalPrefix
+        end prefix
         //val tycon = select(pre, sym)
         val tycon = designator match
           case sym: PackageSymbol          => sym.packageRef
-          case sym: TermOrTypeSymbol       => select(pre, sym)
-          case external: ExternalSymbolRef => external.toNamedType(pre)
+          case sym: TermOrTypeSymbol       => select(prefix, sym)
+          case external: ExternalSymbolRef => external.toNamedType(prefix)
           case _: NoExternalSymbolRef      => throw Scala2PickleFormatException("TYPEREFtpe references NoSymbol")
         val args = pkl.until(end, () => readTypeRef())
         /*if (sym == defn.ByNameParamClass2x) ByNameType(args.head)
