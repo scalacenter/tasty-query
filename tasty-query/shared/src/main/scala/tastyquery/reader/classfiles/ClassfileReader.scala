@@ -429,6 +429,13 @@ private[classfiles] object ClassfileReader {
 
         def isPackagePrivate: Boolean = !isSet(Tags.Protected) && !isSet(Tags.Private) && !isSet(Tags.Public)
 
+        /** Is the corresponding member a Varargs method, *asumming* it is a method in the first place?
+          *
+          * The `ACC_VARARGS` flag shares its numerical value with `ACC_TRANSIENT` for fields,
+          * so this method will return non-sensical results if called for a field member.
+          */
+        def isVarargsIfMethod: Boolean = isSet(Tags.Varargs)
+
         def toFlags: FlagSet =
           var flags = EmptyFlagSet
           if isSet(Tags.Private) then flags |= Private
@@ -447,6 +454,7 @@ private[classfiles] object ClassfileReader {
         inline val Protected = 0x0004
         inline val Static = 0x0008
         inline val Final = 0x0010
+        inline val Varargs = 0x0080
         inline val Interface = 0x0200
         inline val Abstract = 0x0400
         inline val Synthetic = 0x1000

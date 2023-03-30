@@ -1149,13 +1149,13 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def assertSeqOfInt(tpe: Type): Unit =
       assert(clue(tpe).isApplied(t => t.isRef(defn.SeqClass) || t.isRef(scalaSeq), List(_.isRef(defn.IntClass))))
 
-    def assertAnnotatedSeqOfInt(tpe: Type): Unit = tpe match
+    def assertAnnotated(tpe: Type)(assertInner: Type => Unit): Unit = tpe match
       case tpe: AnnotatedType =>
-        assertSeqOfInt(tpe.typ)
+        assertInner(tpe.typ)
         assert(clue(tpe.annotation.symbol) == defn.internalRepeatedAnnotClass.get)
       case _ =>
         fail("unexpected parameter type", clues(tpe))
-    end assertAnnotatedSeqOfInt
+    end assertAnnotated
 
     def assertRepeatedOfInt(tpe: Type): Unit =
       assert(clue(tpe).isApplied(_.isRef(defn.RepeatedParamClass), List(_.isRef(defn.IntClass))))
@@ -1167,14 +1167,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val dd = getDefOf("takesVarargs")
       val (paramType, resultType) = extractParamAndResultType(dd.symbol.declaredType)
 
-      assertAnnotatedSeqOfInt(paramType)
+      assertAnnotated(paramType)(assertSeqOfInt(_))
     }
 
     locally {
       val dd = getDefOf("givesVarargs")
       val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
 
-      assertAnnotatedSeqOfInt(formal)
+      assertAnnotated(formal)(assertSeqOfInt(_))
       assertRepeatedOfInt(typed)
       assertSeqOfInt(actual.widen)
     }
@@ -1183,7 +1183,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val dd = getDefOf("givesSeqLiteral")
       val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
 
-      assertAnnotatedSeqOfInt(formal)
+      assertAnnotated(formal)(assertSeqOfInt(_))
       assertRepeatedOfInt(typed)
       assertSeqOfInt(actual.widen)
     }
@@ -1192,7 +1192,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val dd = getDefOf("givesSeqToJava")
       val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
 
-      assertArrayOfInt(formal)
+      assertAnnotated(formal)(assertArrayOfInt(_))
       assertRepeatedOfInt(typed)
       assertSeqOfInt(actual.widen)
     }
@@ -1201,7 +1201,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val dd = getDefOf("givesSeqLiteralToJava")
       val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
 
-      assertArrayOfInt(formal)
+      assertAnnotated(formal)(assertArrayOfInt(_))
       assertRepeatedOfInt(typed)
       assertSeqOfInt(actual.widen)
     }
