@@ -1241,6 +1241,50 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(body.tpe.widen).isRef(BitSetClass))
   }
 
+  testWithContext("baseType with higher-kinded type params instantiated to own subclass") {
+    /* First, the fundamental reproduction: computing
+     *
+     *   baseType(List[Int], trait scala.collection.IterableOps)
+     *
+     * This used to crash with a StackOverflowError. It was caused because of
+     * the self-higher-kinded application of CC in superclasses. The hierarchy
+     * looks like the following:
+     *
+     * trait IterableOps[+A, +CC[_], +C]
+     * class List[+A] extends StrictOptimizedSeqOps[A, List, List[A]]
+     * trait StrictOptimizedSeqOps[+A, +CC[_], +C] extends ... (eventually) ... IterableOps[A, CC, C]
+     */
+
+    val ListClass = ctx.findTopLevelClass("scala.collection.immutable.List")
+    val IterableOpsClass = ctx.findTopLevelClass("scala.collection.IterableOps")
+
+    val origType = ListClass.staticRef.appliedTo(defn.IntType)
+    val optBaseType = origType.baseType(IterableOpsClass) // this used to cause an infinite recursion
+    assert(optBaseType.isDefined)
+
+    val baseTypeParts = optBaseType.get match
+      case baseType: AndType => baseType.parts
+      case baseType          => baseType :: Nil
+
+    assert(clue(baseTypeParts).exists { tp =>
+      tp.isApplied(
+        _.isRef(IterableOpsClass),
+        List(_.isRef(defn.IntClass), _.isRef(ListClass), _.isApplied(_.isRef(ListClass), List(_.isRef(defn.IntClass))))
+      )
+    })
+
+    // Here is the original trigger: computing the type of the body of ForExpressions.test1
+    locally {
+      val ForExpressionsClass = ctx.findTopLevelClass("simple_trees.ForExpressions")
+
+      val test1Sym = ForExpressionsClass.findNonOverloadedDecl(termName("test1"))
+      val body = test1Sym.tree.get.asInstanceOf[DefDef].rhs.get
+
+      val tpe = body.tpe // this used to cause an infinite recursion
+      assert(clue(tpe).isRef(defn.UnitClass))
+    }
+  }
+
   testWithContext("scala.collection.:+") {
     // type parameter C <: SeqOps[A, CC, C]
     ctx.findStaticModuleClass("scala.collection.package.:+")

@@ -112,6 +112,9 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
+          // private[tastyquery], so this is fine
+          ProblemFilters.exclude[FinalClassProblem]("tastyquery.TypeOps$AsSeenFromMap"),
+          ProblemFilters.exclude[IncompatibleMethTypeProblem]("tastyquery.TypeOps#AsSeenFromMap.this"),
         )
       },
     )
