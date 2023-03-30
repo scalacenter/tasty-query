@@ -1025,55 +1025,63 @@ object Symbols {
       )
     end baseTypeForClass
 
+    /** Computes the (unapplied) baseType of a class type constructor.
+      *
+      * Precondition: `tp.optSymbol == Some(tpCls)`.
+      */
+    private def baseTypeOfClassTypeRef(tp: TypeRef, tpCls: ClassSymbol)(using Context): Option[Type] =
+      def isOwnThis = tp.prefix match
+        case prefix: ThisType   => prefix.cls == tpCls.owner
+        case prefix: PackageRef => prefix.symbol == tpCls.owner
+        case NoPrefix           => true
+        case _                  => false
+
+      val baseTypeOnOwnThis = baseTypeForClass(tpCls)
+      if isOwnThis then baseTypeOnOwnThis
+      else baseTypeOnOwnThis.map(_.asSeenFrom(tp.prefix, tpCls.owner.asDeclaringSymbol))
+    end baseTypeOfClassTypeRef
+
     /** Compute tp.baseType(this) */
-    private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Option[Type] =
-      def recur(tp: Type): Option[Type] = tp match
-        case tp @ TypeRef.OfClass(tpSym) =>
-          def isOwnThis = tp.prefix match
-            case prefix: ThisType   => prefix.cls == tpSym.owner
-            case prefix: PackageRef => prefix.symbol == tpSym.owner
-            case NoPrefix           => true
-            case _                  => false
+    private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Option[Type] = tp match
+      case tp @ TypeRef.OfClass(tpCls) =>
+        if tpCls == this then Some(tp)
+        else baseTypeOfClassTypeRef(tp, tpCls)
 
-          if tpSym == this then Some(tp)
-          else if isOwnThis then baseTypeForClass(tpSym)
-          else
-            val recurredOnOwnThis = recur(tpSym.typeRef)
-            recurredOnOwnThis.map(_.asSeenFrom(tp.prefix, tpSym.owner.asDeclaringSymbol))
+      case tp: AppliedType =>
+        tp.tycon match
+          case tycon @ TypeRef.OfClass(tyconCls) =>
+            if tyconCls == this then Some(tp)
+            else
+              val baseTycon = baseTypeOfClassTypeRef(tycon, tyconCls)
+              baseTycon.map(_.substClassTypeParams(tyconCls.typeParams, tp.args))
+          case tycon =>
+            baseTypeOf(tp.superType)
 
-        case tp: AppliedType =>
-          tp.tycon match
-            case TypeRef.OfClass(cls) if cls == this =>
-              Some(tp)
-            case tycon =>
-              val typeParams = tycon.typeParams
-              typeParams match
-                case (_: TypeLambdaParam) :: _ =>
-                  recur(tp.superType)
-                case _ =>
-                  recur(tycon).map(_.substClassTypeParams(typeParams.asInstanceOf[List[ClassTypeParamSymbol]], tp.args))
+      case tp: TypeProxy =>
+        baseTypeOf(tp.superType)
 
-        case tp: TypeProxy =>
-          recur(tp.superType)
+      case tp: AndType =>
+        val tp1 = tp.first
+        val tp2 = tp.second
+        // TODO? Opt when this.isStatic && tp.derivesFrom(this) && this.typeParams.isEmpty then this.typeRef
+        val combined = AndType.combineGlb(baseTypeOf(tp1), baseTypeOf(tp2))
+        combined match
+          case Some(combined: AndType) if (combined.first eq tp1) && (combined.second eq tp2) =>
+            // Return `tp` itself to allow `Subtyping.level3WithBaseType` to cut off infinite recursions
+            Some(tp)
+          case _ =>
+            combined
 
-        case tp: AndType =>
-          val tp1 = tp.first
-          val tp2 = tp.second
-          // TODO? Opt when this.isStatic && tp.derivesFrom(this) && this.typeParams.isEmpty then this.typeRef
-          val combined = AndType.combineGlb(recur(tp1), recur(tp2))
-          combined match
-            case Some(combined: AndType) if (combined.first eq tp1) && (combined.second eq tp2) =>
-              // Return `tp` itself to allow `Subtyping.level3WithBaseType` to cut off infinite recursions
-              Some(tp)
-            case _ =>
-              combined
+      case _: OrType =>
+        // TODO Handle OrType
+        None
 
-        case _ =>
-          // TODO Handle OrType and JavaArrayType
-          None
-      end recur
+      case _: PackageRef =>
+        None
 
-      recur(tp)
+      case _: MethodicType | _: CustomTransientGroundType =>
+        // Kind of nonsensical; keep an explicit list for exhaustivity checking
+        None
     end baseTypeOf
 
     private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[TermOrTypeSymbol] =
