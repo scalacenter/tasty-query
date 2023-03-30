@@ -1779,5 +1779,10 @@ object Types {
       // TODO Avoid &'ing with Any
       if first eq second then first
       else AndType(first, second)
+
+    private[tastyquery] def combineGlb(bt1: Option[Type], bt2: Option[Type])(using Context): Option[Type] =
+      if bt1.isEmpty then bt2
+      else if bt2.isEmpty then bt1
+      else Some(bt1.get & bt2.get)
   }
 }
