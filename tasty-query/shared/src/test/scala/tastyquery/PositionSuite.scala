@@ -339,8 +339,8 @@ class PositionSuite extends RestrictedUnpicklingSuite {
     assertEquals(collectCode[TypeTreeBind](tree, code), List("t", "t"))
   }
 
-  testUnpickleWithCode("named-type-bounds".ignore, "simple_trees.MatchType") { (tree, code) =>
-    assertEquals(collectCode[NamedTypeBoundsTree](tree, code), List(""))
+  testUnpickleWithCode("named-type-bounds", "simple_trees.MatchType") { (tree, code) =>
+    assertEquals(collectCode[NamedTypeBoundsTree](tree, code), List("t", "t"))
   }
 
   testUnpickleWithCode("type-definition-tree-1", "simple_trees.TypeMember") { (tree, code) =>
