@@ -1004,65 +1004,84 @@ object Symbols {
     private[tastyquery] final def initParents: Boolean =
       myTypeParams != null
 
+    private val baseTypeForClassCache = mutable.AnyRefMap.empty[ClassSymbol, Option[Type]]
+
+    /** Cached core lookup of `this.baseTypeOf(clsOwner.this.cls)`.
+      *
+      * We can safely cache it because it only depends on `this` and `cls`,
+      * which are both `ClassSymbol`s, so there is a finite number of them,
+      * and they have meaningful equality semantics.
+      */
+    private def baseTypeForClass(cls: ClassSymbol)(using Context): Option[Type] =
+      def foldGlb(bt: Option[Type], ps: List[Type]): Option[Type] =
+        ps.foldLeft(bt)((bt, p) => AndType.combineGlb(bt, baseTypeOf(p)))
+
+      baseTypeForClassCache.getOrElseUpdate(
+        cls,
+        if cls.isSubclass(this) then
+          if this.isStatic && this.typeParams.isEmpty then Some(this.typeRef)
+          else foldGlb(None, cls.parents)
+        else None
+      )
+    end baseTypeForClass
+
+    /** Computes the (unapplied) baseType of a class type constructor.
+      *
+      * Precondition: `tp.optSymbol == Some(tpCls)`.
+      */
+    private def baseTypeOfClassTypeRef(tp: TypeRef, tpCls: ClassSymbol)(using Context): Option[Type] =
+      def isOwnThis = tp.prefix match
+        case prefix: ThisType   => prefix.cls == tpCls.owner
+        case prefix: PackageRef => prefix.symbol == tpCls.owner
+        case NoPrefix           => true
+        case _                  => false
+
+      val baseTypeOnOwnThis = baseTypeForClass(tpCls)
+      if isOwnThis then baseTypeOnOwnThis
+      else baseTypeOnOwnThis.map(_.asSeenFrom(tp.prefix, tpCls.owner.asDeclaringSymbol))
+    end baseTypeOfClassTypeRef
+
     /** Compute tp.baseType(this) */
-    private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Option[Type] =
-      def combineGlb(bt1: Option[Type], bt2: Option[Type]): Option[Type] =
-        if bt1.isEmpty then bt2
-        else if bt2.isEmpty then bt1
-        else Some(bt1.get & bt2.get)
+    private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Option[Type] = tp match
+      case tp @ TypeRef.OfClass(tpCls) =>
+        if tpCls == this then Some(tp)
+        else baseTypeOfClassTypeRef(tp, tpCls)
 
-      def recur(tp: Type): Option[Type] = tp match
-        case tp @ TypeRef.OfClass(tpSym) =>
-          def foldGlb(bt: Option[Type], ps: List[Type]): Option[Type] =
-            ps.foldLeft(bt)((bt, p) => combineGlb(bt, recur(p)))
+      case tp: AppliedType =>
+        tp.tycon match
+          case tycon @ TypeRef.OfClass(tyconCls) =>
+            if tyconCls == this then Some(tp)
+            else
+              val baseTycon = baseTypeOfClassTypeRef(tycon, tyconCls)
+              baseTycon.map(_.substClassTypeParams(tyconCls.typeParams, tp.args))
+          case tycon =>
+            baseTypeOf(tp.superType)
 
-          def isOwnThis = tp.prefix match
-            case prefix: ThisType   => prefix.cls == tpSym.owner
-            case prefix: PackageRef => prefix.symbol == tpSym.owner
-            case NoPrefix           => true
-            case _                  => false
+      case tp: TypeProxy =>
+        baseTypeOf(tp.superType)
 
-          if tpSym == this then Some(tp)
-          else if isOwnThis then
-            if tpSym.isSubclass(this) then
-              if this.isStatic && this.typeParams.isEmpty then Some(this.typeRef)
-              else foldGlb(None, tpSym.parents)
-            else None
-          else recur(tpSym.typeRef).map(_.asSeenFrom(tp.prefix, tpSym.owner.asDeclaringSymbol))
+      case tp: AndType =>
+        val tp1 = tp.first
+        val tp2 = tp.second
+        // TODO? Opt when this.isStatic && tp.derivesFrom(this) && this.typeParams.isEmpty then this.typeRef
+        val combined = AndType.combineGlb(baseTypeOf(tp1), baseTypeOf(tp2))
+        combined match
+          case Some(combined: AndType) if (combined.first eq tp1) && (combined.second eq tp2) =>
+            // Return `tp` itself to allow `Subtyping.level3WithBaseType` to cut off infinite recursions
+            Some(tp)
+          case _ =>
+            combined
 
-        case tp: AppliedType =>
-          tp.tycon match
-            case TypeRef.OfClass(cls) if cls == this =>
-              Some(tp)
-            case tycon =>
-              val typeParams = tycon.typeParams
-              typeParams match
-                case (_: TypeLambdaParam) :: _ =>
-                  recur(tp.superType)
-                case _ =>
-                  recur(tycon).map(_.substClassTypeParams(typeParams.asInstanceOf[List[ClassTypeParamSymbol]], tp.args))
+      case _: OrType =>
+        // TODO Handle OrType
+        None
 
-        case tp: TypeProxy =>
-          recur(tp.superType)
+      case _: PackageRef =>
+        None
 
-        case tp: AndType =>
-          val tp1 = tp.first
-          val tp2 = tp.second
-          // TODO? Opt when this.isStatic && tp.derivesFrom(this) && this.typeParams.isEmpty then this.typeRef
-          val combined = combineGlb(recur(tp1), recur(tp2))
-          combined match
-            case Some(combined: AndType) if (combined.first eq tp1) && (combined.second eq tp2) =>
-              // Return `tp` itself to allow `Subtyping.level3WithBaseType` to cut off infinite recursions
-              Some(tp)
-            case _ =>
-              combined
-
-        case _ =>
-          // TODO Handle OrType and JavaArrayType
-          None
-      end recur
-
-      recur(tp)
+      case _: MethodicType | _: CustomTransientGroundType =>
+        // Kind of nonsensical; keep an explicit list for exhaustivity checking
+        None
     end baseTypeOf
 
     private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[TermOrTypeSymbol] =

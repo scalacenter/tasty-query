@@ -7,10 +7,14 @@ import tastyquery.TypeMaps.*
 
 private[tastyquery] object TypeOps:
   def asSeenFrom(tp: Type, pre: Prefix, cls: Symbol)(using Context): Type =
-    new AsSeenFromMap(pre, cls).apply(tp)
+    pre match
+      case NoPrefix                        => tp
+      case pre: ThisType if pre.cls == cls => tp // This is necessary to cut down infinite recursions
+      case pre: Type                       => new AsSeenFromMap(pre, cls).apply(tp)
+  end asSeenFrom
 
   /** The TypeMap handling the asSeenFrom */
-  class AsSeenFromMap(pre: Prefix, cls: Symbol)(using Context) extends ApproximatingTypeMap {
+  private final class AsSeenFromMap(pre: Type, cls: Symbol)(using Context) extends ApproximatingTypeMap {
 
     /** Set to true when the result of `apply` was approximated to avoid an unstable prefix. */
     var approximated: Boolean = false
