@@ -14,4 +14,10 @@ class VarargFunction {
 
   def givesSeqLiteralToJava(x: Int): java.util.List[Int] =
     java.util.Arrays.asList(x, 1)
+
+  def givesSeqToScala2(xs: Seq[Int]): Vector[Int] =
+    Vector(xs*)
+
+  def givesSeqLiteralToScala2(x: Int): Vector[Int] =
+    Vector(x, 1)
 }

@@ -1205,6 +1205,24 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assertRepeatedOfInt(typed)
       assertSeqOfInt(actual.widen)
     }
+
+    locally {
+      val dd = getDefOf("givesSeqToScala2")
+      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
+
+      assertRepeatedOfInt(formal)
+      assertRepeatedOfInt(typed)
+      assertSeqOfInt(actual.widen)
+    }
+
+    locally {
+      val dd = getDefOf("givesSeqLiteralToScala2")
+      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
+
+      assertRepeatedOfInt(formal)
+      assertRepeatedOfInt(typed)
+      assertSeqOfInt(actual.widen)
+    }
   }
 
   testWithContext("scala2-class-type-param-ref") {
