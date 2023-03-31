@@ -1160,9 +1160,6 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def assertRepeatedOfInt(tpe: Type): Unit =
       assert(clue(tpe).isApplied(_.isRef(defn.RepeatedParamClass), List(_.isRef(defn.IntClass))))
 
-    def assertArrayOfInt(tpe: Type): Unit =
-      assert(clue(tpe).isArrayOf(_.isRef(defn.IntClass)))
-
     locally {
       val dd = getDefOf("takesVarargs")
       val (paramType, resultType) = extractParamAndResultType(dd.symbol.declaredType)
@@ -1192,7 +1189,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val dd = getDefOf("givesSeqToJava")
       val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
 
-      assertAnnotated(formal)(assertArrayOfInt(_))
+      assertRepeatedOfInt(formal)
       assertRepeatedOfInt(typed)
       assertSeqOfInt(actual.widen)
     }
@@ -1201,7 +1198,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val dd = getDefOf("givesSeqLiteralToJava")
       val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
 
-      assertAnnotated(formal)(assertArrayOfInt(_))
+      assertRepeatedOfInt(formal)
       assertRepeatedOfInt(typed)
       assertSeqOfInt(actual.widen)
     }

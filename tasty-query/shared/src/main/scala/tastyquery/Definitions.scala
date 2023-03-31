@@ -48,6 +48,9 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val SeqTypeUnapplied: TypeRef = TypeRef(scalaCollectionImmutablePackage.packageRef, typeName("Seq"))
   def SeqTypeOf(tpe: Type): AppliedType = AppliedType(SeqTypeUnapplied, List(tpe))
 
+  val RepeatedTypeUnapplied: TypeRef = TypeRef(scalaPackage.packageRef, tpnme.RepeatedParamClassMagic)
+  def RepeatedTypeOf(tpe: Type): AppliedType = AppliedType(RepeatedTypeUnapplied, List(tpe))
+
   val IntType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Int"))
   val LongType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Long"))
   val FloatType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Float"))

@@ -397,7 +397,7 @@ object Symbols {
       val local = mySignature
       if local != null then local
       else
-        val sig = Signature.fromType(declaredType, Option.when(isConstructor)(owner.asClass))
+        val sig = Signature.fromType(declaredType, sourceLanguage, Option.when(isConstructor)(owner.asClass))
         mySignature = sig
         sig
     end signature

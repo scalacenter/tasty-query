@@ -24,17 +24,19 @@ object Signatures:
   end Signature
 
   object Signature {
-    private[tastyquery] def fromType(info: Type, optCtorReturn: Option[ClassSymbol])(using Context): Signature =
+    private[tastyquery] def fromType(info: Type, language: SourceLanguage, optCtorReturn: Option[ClassSymbol])(
+      using Context
+    ): Signature =
       def rec(info: Type, acc: List[ParamSig]): Signature =
         info match {
           case info: MethodType =>
-            val erased = info.paramTypes.map(tpe => ParamSig.Term(ErasedTypeRef.erase(tpe).toSigFullName))
+            val erased = info.paramTypes.map(tpe => ParamSig.Term(ErasedTypeRef.erase(tpe, language).toSigFullName))
             rec(info.resultType, acc ::: erased)
           case info: PolyType =>
             rec(info.resultType, acc ::: ParamSig.TypeLen(info.paramTypeBounds.length) :: Nil)
           case tpe =>
             val retType = optCtorReturn.map(_.typeRef).getOrElse(tpe)
-            Signature(acc, ErasedTypeRef.erase(retType).toSigFullName)
+            Signature(acc, ErasedTypeRef.erase(retType, language).toSigFullName)
         }
 
       rec(info, Nil)

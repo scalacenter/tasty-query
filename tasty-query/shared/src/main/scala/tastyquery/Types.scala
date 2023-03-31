@@ -61,8 +61,12 @@ object Types {
   end ErasedTypeRef
 
   object ErasedTypeRef:
+    @deprecated("use the overload that takes an explicit SourceLanguage", since = "0.7.1")
     def erase(tpe: Type)(using Context): ErasedTypeRef =
-      Erasure.erase(tpe)
+      erase(tpe, SourceLanguage.Scala3)
+
+    def erase(tpe: Type, language: SourceLanguage)(using Context): ErasedTypeRef =
+      Erasure.erase(tpe, language)
   end ErasedTypeRef
 
   private[tastyquery] enum ResolveMemberResult:
