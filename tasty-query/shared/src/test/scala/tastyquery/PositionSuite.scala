@@ -318,24 +318,37 @@ class PositionSuite extends RestrictedUnpicklingSuite {
     assertEquals(collectCode[AnnotatedTypeTree](tree, code), List("Int*"))
   }
 
-  testUnpickleWithCode("match-type".ignore, "simple_trees.MatchType") { (tree, code) =>
-    assertEquals(collectCode[MatchTypeTree](tree, code), List(""))
+  testUnpickleWithCode("match-type", "simple_trees.MatchType") { (tree, code) =>
+    assertEquals(
+      collectCode[MatchTypeTree](tree, code),
+      List(
+        """X match {
+          |    case Int => String
+          |  }""".stripMargin,
+        """X match {
+          |    case _ => Int
+          |  }""".stripMargin,
+        """X match {
+          |    case List[t] => t
+          |  }""".stripMargin
+      )
+    )
   }
 
-  testUnpickleWithCode("type-tree-bind".ignore, "simple_trees.MatchType") { (tree, code) =>
-    assertEquals(collectCode[TypeTreeBind](tree, code), List(""))
+  testUnpickleWithCode("type-tree-bind", "simple_trees.MatchType") { (tree, code) =>
+    assertEquals(collectCode[TypeTreeBind](tree, code), List("t", "t"))
   }
 
-  testUnpickleWithCode("bounded-type".ignore, "simple_trees.TypeMember") { (tree, code) =>
-    assertEquals(collectCode[TypeDefinitionTree](tree, code), List(""))
+  testUnpickleWithCode("named-type-bounds", "simple_trees.MatchType") { (tree, code) =>
+    assertEquals(collectCode[NamedTypeBoundsTree](tree, code), List("t", "t"))
   }
 
-  testUnpickleWithCode("named-type-bounds".ignore, "simple_trees.MatchType") { (tree, code) =>
-    assertEquals(collectCode[NamedTypeBoundsTree](tree, code), List(""))
+  testUnpickleWithCode("type-definition-tree-1", "simple_trees.TypeMember") { (tree, code) =>
+    assertEquals(collectCode[TypeDefinitionTree](tree, code), List("Int", ">: Null <: Product", "Int"))
   }
 
-  testUnpickleWithCode("type-lambda", "simple_trees.TypeLambda") { (tree, code) =>
-    assertEquals(collectCode[PolyTypeDefinitionTree](tree, code), List("[X] =>> List[X]"))
+  testUnpickleWithCode("type-definition-tree-2", "simple_trees.TypeLambda") { (tree, code) =>
+    assertEquals(collectCode[TypeDefinitionTree](tree, code), List("[X] =>> List[X]", "List[X]"))
   }
 
   /** Inlined */

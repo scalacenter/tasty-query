@@ -1354,11 +1354,11 @@ private[tasties] class TreeUnpickler(
        * Such a bind has IDENT(_) as its body, which is not a type tree and therefore not expected.
        * Treat it as if it were an IDENTtpt. */
       val body: TypeDefinitionTree = if (reader.nextByte == IDENT) {
-        val bodySpn = span
+        val identSpn = spn // for some reason, the span of the IDENT itself is empty, so we reuse the span of the BIND
         reader.readByte()
         val typeName = readName.toTypeName
         val typ = readTypeBounds
-        NamedTypeBoundsTree(typeName, typ)(bodySpn)
+        NamedTypeBoundsTree(typeName, typ)(identSpn)
       } else readTypeDefinition(forOpaque = false)
       val sym = localCtx.getSymbol[LocalTypeParamSymbol](start)
       readAnnotationsInModifiers(sym, end)
