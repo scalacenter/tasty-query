@@ -152,7 +152,7 @@ private[reader] object ClassfileParser {
     def privateWithin(access: AccessFlags): Option[Symbol] =
       if access.isPackagePrivate then Some(pkg) else None
 
-    val clsFlags = structure.access.toFlags
+    val clsFlags = structure.access.toFlags | JavaDefined
     val clsPrivateWithin = privateWithin(structure.access)
 
     val moduleClass = ClassSymbol
@@ -178,7 +178,7 @@ private[reader] object ClassfileParser {
     given InnerClasses = innerClassesStrict
 
     def createMember(name: SimpleName, baseFlags: FlagSet, access: AccessFlags): TermSymbol =
-      val flags = baseFlags | access.toFlags
+      val flags = baseFlags | access.toFlags | JavaDefined
       val owner = if flags.is(Flags.Static) then moduleClass else cls
       val sym = TermSymbol.create(name, owner).withFlags(flags, privateWithin(access))
       sym.setAnnotations(Nil) // TODO Read Java annotations on fields and methods
@@ -237,7 +237,9 @@ private[reader] object ClassfileParser {
         else parsedType
       sym.withDeclaredType(adaptedType)
 
-    for sym <- allRegisteredSymbols do sym.checkCompleted()
+    for sym <- allRegisteredSymbols do
+      sym.checkCompleted()
+      assert(sym.flags.is(JavaDefined), s"$sym of ${sym.getClass()}")
 
     innerClasses.declarations
   }

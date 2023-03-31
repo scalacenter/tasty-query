@@ -236,7 +236,7 @@ private[pickles] class PickleReader {
       case CLASSsym =>
         val tname = name.toTypeName
         val cls =
-          if tname == tpnme.RefinedClassMagic then ClassSymbol.createRefinedClassSymbol(owner)
+          if tname == tpnme.RefinedClassMagic then ClassSymbol.createRefinedClassSymbol(owner, Scala2Defined)
           else ClassSymbol.create(name.toTypeName, owner)
         storeResultInEntries(cls)
         val tpe = readSymType()
@@ -285,7 +285,7 @@ private[pickles] class PickleReader {
     PickleFlagSet(pkl.readLongNat(), isType)
 
   private def pickleFlagsToFlags(pickleFlags: PickleFlagSet): FlagSet = {
-    var flags: FlagSet = EmptyFlagSet
+    var flags: FlagSet = Scala2Defined
 
     if pickleFlags.isProtected then flags |= Protected
     if pickleFlags.isOverride then flags |= Override
