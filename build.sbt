@@ -67,6 +67,7 @@ lazy val testSources = crossProject(JSPlatform, JVMPlatform)
   .settings(commonSettings)
   .settings(
     publish / skip := true,
+    scalacOptions += "-Xfatal-warnings",
   )
 
 lazy val tastyQuery =
