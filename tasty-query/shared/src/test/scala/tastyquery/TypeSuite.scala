@@ -1149,77 +1149,42 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def assertSeqOfInt(tpe: Type): Unit =
       assert(clue(tpe).isApplied(t => t.isRef(defn.SeqClass) || t.isRef(scalaSeq), List(_.isRef(defn.IntClass))))
 
-    def assertAnnotated(tpe: Type)(assertInner: Type => Unit): Unit = tpe match
+    def assertAnnotatedSeqOfInt(tpe: Type): Unit = tpe match
       case tpe: AnnotatedType =>
-        assertInner(tpe.typ)
+        assertSeqOfInt(tpe.typ)
         assert(clue(tpe.annotation.symbol) == defn.internalRepeatedAnnotClass.get)
       case _ =>
         fail("unexpected parameter type", clues(tpe))
-    end assertAnnotated
+    end assertAnnotatedSeqOfInt
 
     def assertRepeatedOfInt(tpe: Type): Unit =
       assert(clue(tpe).isApplied(_.isRef(defn.RepeatedParamClass), List(_.isRef(defn.IntClass))))
 
     locally {
       val dd = getDefOf("takesVarargs")
+      val List(Left(List(paramValDef))) = dd.paramLists: @unchecked
       val (paramType, resultType) = extractParamAndResultType(dd.symbol.declaredType)
 
-      assertAnnotated(paramType)(assertSeqOfInt(_))
+      assertAnnotatedSeqOfInt(paramValDef.symbol.declaredType)
+      assertRepeatedOfInt(paramType)
     }
 
-    locally {
-      val dd = getDefOf("givesVarargs")
-      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
-
-      assertAnnotated(formal)(assertSeqOfInt(_))
-      assertRepeatedOfInt(typed)
-      assertSeqOfInt(actual.widen)
-    }
-
-    locally {
-      val dd = getDefOf("givesSeqLiteral")
-      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
-
-      assertAnnotated(formal)(assertSeqOfInt(_))
-      assertRepeatedOfInt(typed)
-      assertSeqOfInt(actual.widen)
-    }
-
-    locally {
-      val dd = getDefOf("givesSeqToJava")
+    val testMethodNames = List(
+      "givesVarargs",
+      "givesSeqLiteral",
+      "givesSeqToJava",
+      "givesSeqLiteralToJava",
+      "givesSeqToScala2",
+      "givesSeqLiteralToScala2"
+    )
+    for testMethodName <- testMethodNames do
+      val dd = getDefOf(testMethodName)
       val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
 
       assertRepeatedOfInt(formal)
       assertRepeatedOfInt(typed)
       assertSeqOfInt(actual.widen)
-    }
-
-    locally {
-      val dd = getDefOf("givesSeqLiteralToJava")
-      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
-
-      assertRepeatedOfInt(formal)
-      assertRepeatedOfInt(typed)
-      assertSeqOfInt(actual.widen)
-    }
-
-    locally {
-      val dd = getDefOf("givesSeqToScala2")
-      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
-
-      assertRepeatedOfInt(formal)
-      assertRepeatedOfInt(typed)
-      assertSeqOfInt(actual.widen)
-    }
-
-    locally {
-      val dd = getDefOf("givesSeqLiteralToScala2")
-      val (formal, typed, actual) = extractFormalTypedActualParamTypes(dd.rhs.get)
-
-      assertRepeatedOfInt(formal)
-      assertRepeatedOfInt(typed)
-      assertSeqOfInt(actual.widen)
-    }
+    end for
   }
 
   testWithContext("scala2-class-type-param-ref") {

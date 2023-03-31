@@ -20,7 +20,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   private val scalaAnnotationPackage =
     scalaPackage.getPackageDeclOrCreate(termName("annotation"))
-  private val scalaAnnotationInternalPackage =
+  private[tastyquery] val scalaAnnotationInternalPackage =
     scalaAnnotationPackage.getPackageDeclOrCreate(termName("internal"))
   private val scalaCollectionPackage =
     scalaPackage.getPackageDeclOrCreate(termName("collection"))

@@ -1289,12 +1289,24 @@ object Types {
       *   - add @inlineParam to inline parameters
       */
     private[tastyquery] def fromSymbols(params: List[TermSymbol], resultType: Type)(using Context): MethodType = {
+      def annotatedToRepeated(tpe: Type): Type = tpe match
+        case tpe: AnnotatedType if tpe.annotation.safeIsInternalRepeatedAnnot =>
+          tpe.typ match
+            case applied: AppliedType if applied.args.sizeIs == 1 =>
+              // We're going to assume that `tycon` is indeed `Seq`, here, because we cannot afford to resolve it
+              defn.RepeatedTypeOf(applied.args.head)
+            case _ =>
+              throw TastyFormatException(s"in $params, $tpe is declared repeated but is not a Seq type")
+        case _ =>
+          tpe
+      end annotatedToRepeated
+
       // def translateInline(tp: Type): Type =
       //   AnnotatedType(tp, Annotation(defn.InlineParamAnnot))
       // def translateErased(tp: Type): Type =
       //   AnnotatedType(tp, Annotation(defn.ErasedParamAnnot))
-      def paramInfo(param: TermSymbol) = {
-        var paramType = param.declaredType //.annotatedToRepeated
+      def paramInfo(param: TermSymbol): Type = {
+        var paramType = annotatedToRepeated(param.declaredType)
         // if (param.is(Inline)) paramType = translateInline(paramType)
         // if (param.is(Erased)) paramType = translateErased(paramType)
         paramType
