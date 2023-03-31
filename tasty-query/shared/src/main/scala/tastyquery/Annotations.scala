@@ -53,6 +53,25 @@ object Annotations:
         case Literal(constant) => Some(constant)
         case _                 => None
 
+    /** Tests whether this annotation points to `defn.internalRepeatedAnnotClass` without resolving anything. */
+    private[tastyquery] def safeIsInternalRepeatedAnnot(using Context): Boolean =
+      defn.internalRepeatedAnnotClass match
+        case None =>
+          false
+        case Some(repeatedAnnotClass) =>
+          val tpt = findNewAnnotTypeTree(tree)
+          tpt match
+            // It is compiler-synthetic by definition, so it can only be a TypeWrapper
+            case TypeWrapper(tpe: TypeRef) =>
+              if tpe.name != tpnme.internalRepeatedAnnot then false
+              else
+                tpe.prefix match
+                  case pkg: PackageRef => pkg.symbol == defn.scalaAnnotationInternalPackage
+                  case _               => false
+            case _ =>
+              false
+    end safeIsInternalRepeatedAnnot
+
     override def toString(): String = s"Annotation($tree)"
   end Annotation
 
@@ -88,20 +107,27 @@ object Annotations:
   end Annotation
 
   private def computeAnnotSymbol(tree: TermTree)(using Context): ClassSymbol =
+    val tpt = findNewAnnotTypeTree(tree)
+    tpt.toType.classSymbol.getOrElse {
+      throw InvalidProgramStructureException(s"Illegal annotation class type $tpt in $tree")
+    }
+  end computeAnnotSymbol
+
+  private def findNewAnnotTypeTree(tree: TermTree): TypeTree =
     def invalid(): Nothing =
       throw InvalidProgramStructureException(s"Cannot find annotation class in $tree")
 
     @tailrec
-    def loop(tree: TermTree): ClassSymbol = tree match
+    def loop(tree: TermTree): TypeTree = tree match
       case Apply(fun, _)     => loop(fun)
-      case New(tpt)          => tpt.toType.classSymbol.getOrElse(invalid())
+      case New(tpt)          => tpt
       case Select(qual, _)   => loop(qual)
       case TypeApply(fun, _) => loop(fun)
       case Block(_, expr)    => loop(expr)
       case _                 => invalid()
 
     loop(tree)
-  end computeAnnotSymbol
+  end findNewAnnotTypeTree
 
   private def computeAnnotConstructor(tree: TermTree)(using Context): TermSymbol =
     def invalid(): Nothing =

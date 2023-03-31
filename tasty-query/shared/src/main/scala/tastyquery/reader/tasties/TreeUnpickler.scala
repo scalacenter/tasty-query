@@ -1290,7 +1290,7 @@ private[tasties] class TreeUnpickler(
       SingletonTypeTree(readTerm)(spn)
     case REFINEDtpt =>
       val spn = span
-      val cls = ClassSymbol.createRefinedClassSymbol(localCtx.owner, spn)
+      val cls = ClassSymbol.createRefinedClassSymbol(localCtx.owner, EmptyFlagSet, spn)
       recursiveTypeAtAddr(reader.currentAddr) = cls.typeRef
       reader.readByte()
       val end = reader.readEnd()

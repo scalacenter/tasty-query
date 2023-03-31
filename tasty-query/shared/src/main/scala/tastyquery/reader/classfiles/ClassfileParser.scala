@@ -152,7 +152,7 @@ private[reader] object ClassfileParser {
     def privateWithin(access: AccessFlags): Option[Symbol] =
       if access.isPackagePrivate then Some(pkg) else None
 
-    val clsFlags = structure.access.toFlags
+    val clsFlags = structure.access.toFlags | JavaDefined
     val clsPrivateWithin = privateWithin(structure.access)
 
     val moduleClass = ClassSymbol
@@ -178,7 +178,7 @@ private[reader] object ClassfileParser {
     given InnerClasses = innerClassesStrict
 
     def createMember(name: SimpleName, baseFlags: FlagSet, access: AccessFlags): TermSymbol =
-      val flags = baseFlags | access.toFlags
+      val flags = baseFlags | access.toFlags | JavaDefined
       val owner = if flags.is(Flags.Static) then moduleClass else cls
       val sym = TermSymbol.create(name, owner).withFlags(flags, privateWithin(access))
       sym.setAnnotations(Nil) // TODO Read Java annotations on fields and methods
@@ -237,7 +237,9 @@ private[reader] object ClassfileParser {
         else parsedType
       sym.withDeclaredType(adaptedType)
 
-    for sym <- allRegisteredSymbols do sym.checkCompleted()
+    for sym <- allRegisteredSymbols do
+      sym.checkCompleted()
+      assert(sym.flags.is(JavaDefined), s"$sym of ${sym.getClass()}")
 
     innerClasses.declarations
   }
@@ -245,18 +247,35 @@ private[reader] object ClassfileParser {
   private def patchForVarargs(sym: TermSymbol, tpe: Type)(using Context): Type =
     tpe match
       case tpe: MethodType if tpe.paramNames.sizeIs >= 1 =>
-        defn.internalRepeatedAnnotClass match
-          case Some(annotClass) =>
-            val patchedLast = AnnotatedType(tpe.paramTypes.last, TQAnnotation(annotClass))
-            tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypes.init :+ patchedLast, tpe.resultType)
-          case None =>
-            // Warn here? How?
-            tpe
+        val patchedLast = tpe.paramTypes.last match
+          case ArrayTypeExtractor(lastElemType) =>
+            defn.RepeatedTypeOf(lastElemType)
+          case _ =>
+            throw ClassfileFormatException(s"Found ACC_VARARGS on $sym but its last param type was not an array: $tpe")
+        tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypes.init :+ patchedLast, tpe.resultType)
       case tpe: PolyType =>
         tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypeBounds, patchForVarargs(sym, tpe.resultType))
       case _ =>
         throw ClassfileFormatException(s"Found ACC_VARARGS on $sym but its type was not a MethodType: $tpe")
   end patchForVarargs
+
+  /** Extracts `elemType` from `AppliedType(scala.Array, List(elemType))`.
+    *
+    * This works for array types created by `defn.ArrayTypeOf(elemType)`, but
+    * is not otherwise guaranteed to work in all situations.
+    */
+  private object ArrayTypeExtractor:
+    def unapply(tpe: AppliedType)(using Context): Option[Type] =
+      tpe.tycon match
+        case tycon: TypeRef if tycon.name == tpnme.Array && tpe.args.sizeIs == 1 =>
+          tycon.prefix match
+            case prefix: PackageRef if prefix.symbol == defn.scalaPackage =>
+              Some(tpe.args.head)
+            case _ =>
+              None
+        case _ =>
+          None
+  end ArrayTypeExtractor
 
   private def parse(classRoot: ClassData, structure: Structure)(using Context): ClassKind = {
     import structure.{reader, given}

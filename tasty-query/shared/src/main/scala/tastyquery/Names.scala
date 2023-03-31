@@ -117,6 +117,8 @@ object Names {
     val RepeatedParamClassMagic: TypeName = typeName("<repeated>")
 
     val scala2PackageObjectClass: TypeName = termName("package").withObjectSuffix.toTypeName
+
+    private[tastyquery] val internalRepeatedAnnot: TypeName = typeName("Repeated")
   }
 
   /** Create a type name from a string */

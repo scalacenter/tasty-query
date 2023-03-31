@@ -230,6 +230,16 @@ object Symbols {
   }
 
   sealed abstract class TermOrTypeSymbol(override val owner: Symbol) extends Symbol(owner):
+    /** The source language in which this symbol was defined.
+      *
+      * The source language of a symbol may have an influence on how it is
+      * erased, and therefore on how its signature is computed.
+      */
+    final def sourceLanguage: SourceLanguage =
+      if flags.is(JavaDefined) then SourceLanguage.Java
+      else if flags.is(Scala2Defined) then SourceLanguage.Scala2
+      else SourceLanguage.Scala3
+
     // Overriding relationships
 
     /** The non-private symbol whose name and type matches the type of this symbol in the given class.
@@ -387,7 +397,7 @@ object Symbols {
       val local = mySignature
       if local != null then local
       else
-        val sig = Signature.fromType(declaredType, Option.when(isConstructor)(owner.asClass))
+        val sig = Signature.fromType(declaredType, sourceLanguage, Option.when(isConstructor)(owner.asClass))
         mySignature = sig
         sig
     end signature
@@ -1198,17 +1208,19 @@ object Symbols {
     private[tastyquery] def create(name: TypeName, owner: Symbol): ClassSymbol =
       owner.addDeclIfDeclaringSym(ClassSymbol(name, owner))
 
-    private[tastyquery] def createRefinedClassSymbol(owner: Symbol, span: Span)(using Context): ClassSymbol =
+    private[tastyquery] def createRefinedClassSymbol(owner: Symbol, flags: FlagSet, span: Span)(
+      using Context
+    ): ClassSymbol =
       // TODO Store the `span`
-      createRefinedClassSymbol(owner)
+      createRefinedClassSymbol(owner, flags)
 
-    private[tastyquery] def createRefinedClassSymbol(owner: Symbol)(using Context): ClassSymbol =
+    private[tastyquery] def createRefinedClassSymbol(owner: Symbol, flags: FlagSet)(using Context): ClassSymbol =
       val cls = ClassSymbol(tpnme.RefinedClassMagic, owner) // by-pass `owner.addDeclIfDeclaringSym`
       cls
         .withTypeParams(Nil)
         .withParentsDirect(defn.ObjectType :: Nil)
         .withGivenSelfType(None)
-        .withFlags(EmptyFlagSet, None)
+        .withFlags(flags, None)
         .setAnnotations(Nil)
       cls.checkCompleted()
       cls

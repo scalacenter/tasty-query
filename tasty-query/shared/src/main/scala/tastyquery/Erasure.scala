@@ -14,7 +14,12 @@ private[tastyquery] object Erasure:
   // - use correct type erasure algorithm from Scala 3, with specialisations
   //   for Java types and Scala 2 types (i.e. varargs, value-classes)
 
+  @deprecated("use the overload that takes an explicit SourceLanguage", since = "0.7.1")
   def erase(tpe: Type)(using Context): ErasedTypeRef =
+    erase(tpe, SourceLanguage.Scala3)
+
+  def erase(tpe: Type, language: SourceLanguage)(using Context): ErasedTypeRef =
+    given SourceLanguage = language
     tpe match
       case _: ByNameType => ClassRef(defn.Function0Class)
       case _             => finishErase(preErase(tpe))
@@ -25,7 +30,10 @@ private[tastyquery] object Erasure:
     * In particular, `Any` is preserved as `Any`, instead of becoming
     * `java.lang.Object`.
     */
-  private def preErase(tpe: Type)(using Context): ErasedTypeRef =
+  private def preErase(tpe: Type)(using Context, SourceLanguage): ErasedTypeRef =
+    def hasArrayErasure(cls: ClassSymbol): Boolean =
+      cls == defn.ArrayClass || (cls == defn.RepeatedParamClass && summon[SourceLanguage] == SourceLanguage.Java)
+
     def arrayOfBounds(bounds: TypeBounds): ErasedTypeRef =
       preErase(bounds.high) match
         case ClassRef(cls) if cls == defn.AnyClass || cls == defn.AnyValClass =>
@@ -37,7 +45,7 @@ private[tastyquery] object Erasure:
       case tpe: AppliedType =>
         tpe.tycon match
           case TypeRef.OfClass(cls) =>
-            if cls == defn.ArrayClass then
+            if hasArrayErasure(cls) then
               val List(targ) = tpe.args: @unchecked
               arrayOf(targ).arrayOf()
             else ClassRef(cls).arrayOf()
@@ -64,7 +72,7 @@ private[tastyquery] object Erasure:
       case tpe: AppliedType =>
         tpe.tycon match
           case TypeRef.OfClass(cls) =>
-            if cls == defn.ArrayClass then
+            if hasArrayErasure(cls) then
               val List(targ) = tpe.args: @unchecked
               arrayOf(targ)
             else ClassRef(cls)
@@ -101,7 +109,7 @@ private[tastyquery] object Erasure:
       val ctor = cls.findNonOverloadedDecl(nme.Constructor)
       val List(Left(List(paramRef))) = ctor.paramRefss.dropWhile(_.isRight): @unchecked
       val paramType = paramRef.underlying
-      erase(paramType)
+      erase(paramType, ctor.sourceLanguage)
 
     typeRef match
       case ClassRef(cls) =>

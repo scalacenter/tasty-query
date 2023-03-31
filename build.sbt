@@ -113,6 +113,8 @@ lazy val tastyQuery =
         import com.typesafe.tools.mima.core.*
         Seq(
           // private[tastyquery], so this is fine
+          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Signatures#Signature.fromType"),
+          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Symbols#ClassSymbol.createRefinedClassSymbol"),
           ProblemFilters.exclude[FinalClassProblem]("tastyquery.TypeOps$AsSeenFromMap"),
           ProblemFilters.exclude[IncompatibleMethTypeProblem]("tastyquery.TypeOps#AsSeenFromMap.this"),
         )

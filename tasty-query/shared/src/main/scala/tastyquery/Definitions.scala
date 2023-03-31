@@ -20,7 +20,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   private val scalaAnnotationPackage =
     scalaPackage.getPackageDeclOrCreate(termName("annotation"))
-  private val scalaAnnotationInternalPackage =
+  private[tastyquery] val scalaAnnotationInternalPackage =
     scalaAnnotationPackage.getPackageDeclOrCreate(termName("internal"))
   private val scalaCollectionPackage =
     scalaPackage.getPackageDeclOrCreate(termName("collection"))
@@ -47,6 +47,9 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   val SeqTypeUnapplied: TypeRef = TypeRef(scalaCollectionImmutablePackage.packageRef, typeName("Seq"))
   def SeqTypeOf(tpe: Type): AppliedType = AppliedType(SeqTypeUnapplied, List(tpe))
+
+  val RepeatedTypeUnapplied: TypeRef = TypeRef(scalaPackage.packageRef, tpnme.RepeatedParamClassMagic)
+  def RepeatedTypeOf(tpe: Type): AppliedType = AppliedType(RepeatedTypeUnapplied, List(tpe))
 
   val IntType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Int"))
   val LongType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Long"))
