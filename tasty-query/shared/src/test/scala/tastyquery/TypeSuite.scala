@@ -2022,6 +2022,19 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(app.tpe).isRef(anonClassSym))
   }
 
+  testWithContext("toplevel-module-class-with-opaque-type-alias-companion-signature-name") {
+    val TopLevelOpaqueTypeAliasModule =
+      ctx.findStaticTerm("crosspackagetasty.TopLevelOpaqueTypeAlias$package.TopLevelOpaqueTypeAlias")
+    val TopLevelOpaqueTypeAliasModuleClass =
+      ctx.findStaticModuleClass("crosspackagetasty.TopLevelOpaqueTypeAlias$package.TopLevelOpaqueTypeAlias")
+
+    val moduleValRhs = TopLevelOpaqueTypeAliasModule.tree.get.asInstanceOf[ValDef].rhs.get
+    val Apply(Select(New(_), ctorSignedName: SignedName), Nil) = moduleValRhs: @unchecked
+
+    assert(clue(TopLevelOpaqueTypeAliasModuleClass.signatureName) == clue(ctorSignedName.sig.resSig))
+    assert(clue(moduleValRhs.tpe).isRef(TopLevelOpaqueTypeAliasModuleClass))
+  }
+
   testWithContext("annotations") {
     val AnnotationsClass = ctx.findTopLevelClass("simple_trees.Annotations")
     val inlineClass = ctx.findTopLevelClass("scala.inline")

@@ -729,6 +729,8 @@ object Symbols {
       * > Drops package objects. Represents each term in the owner chain by a simple `_$`.
       *
       * The code actually represents each *non-class* in the owner chain by a simple `_$`.
+      * Moreover, there does not seem to be any code that actually drops package objects,
+      * and evidence suggests that it does not.
       */
     private[tastyquery] final def signatureName: FullyQualifiedName =
       def computeErasedName(owner: Symbol, name: TypeName): FullyQualifiedName = owner match
@@ -736,9 +738,7 @@ object Symbols {
           owner.fullName.select(name)
 
         case owner: ClassSymbol =>
-          // Drop package objects
-          if owner.name.isPackageObjectClassName && owner.owner.isPackage then owner.owner.fullName.select(name)
-          else owner.signatureName.mapLast(_.toTermName).select(name)
+          owner.signatureName.mapLast(_.toTermName).select(name)
 
         case owner: TermOrTypeSymbol =>
           // Replace non-class non-package owners by simple `_$`
