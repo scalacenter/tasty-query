@@ -303,6 +303,48 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(wildcardPatternCount == 2, clue(wildcardPatternCount))
   }
 
+  testWithContext("match-bind-with-type-capture") {
+    val ListClass = ctx.findTopLevelClass("scala.collection.immutable.List")
+    val MatchTypeClass = ctx.findTopLevelClass("simple_trees.MatchType")
+
+    val castMatchResultWithBindSym = MatchTypeClass.findNonOverloadedDecl(termName("castMatchResultWithBind"))
+    val castMatchResultWithBindDef = castMatchResultWithBindSym.tree.get.asInstanceOf[DefDef]
+
+    /* type param [X]
+     * param x: X
+     *
+     * x match
+     *   case is: List[t] => is.head
+     *
+     * `is` gets typed as `X & List[t]`.
+     * `is.head` must resolve to having type `t`.
+     */
+
+    val List(Right(List(typeXDef)), _) = castMatchResultWithBindDef.paramLists: @unchecked
+    val typeXSym = typeXDef.symbol
+
+    val tTypeCaptureSym = findTree(castMatchResultWithBindDef) { case TypeTreeBind(TypeName(SimpleName("t")), _, sym) =>
+      sym
+    }
+
+    val bind = findTree(castMatchResultWithBindDef) { case bind @ Bind(SimpleName("is"), _, _) =>
+      bind
+    }
+    val isSym = bind.symbol
+
+    assert(
+      clue(isSym.declaredType)
+        .isIntersectionOf(_.isRef(typeXSym), _.isApplied(_.isRef(ListClass), List(_.isRef(tTypeCaptureSym))))
+    )
+
+    val (typed, expr, qualifier) = findTree(castMatchResultWithBindDef) {
+      case typed @ Typed(expr @ Select(qualifier, SimpleName("head")), _) => (typed, expr, qualifier)
+    }
+    assert(clue(qualifier.tpe).isRef(isSym))
+    assert(clue(clue(expr.tpe).widen).isRef(tTypeCaptureSym))
+    assert(typed.tpe.isRef(tTypeCaptureSym))
+  }
+
   testWithContext("return") {
     val ReturnPathClass = ctx.findTopLevelClass("simple_trees.Return")
 

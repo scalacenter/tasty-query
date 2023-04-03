@@ -563,6 +563,25 @@ object Symbols {
             idx += 1
           }
           None
+
+        case Some(base: AndType) =>
+          (argForParam(base.first), argForParam(base.second)) match
+            case (None, tp2) =>
+              tp2
+            case (tp1, None) =>
+              tp1
+            case (Some(tp1), Some(tp2)) =>
+              val variance = this.paramVariance.sign
+              val result: Type =
+                if tp1.isInstanceOf[WildcardTypeBounds] || tp2.isInstanceOf[WildcardTypeBounds] || variance == 0 then
+                  // TODO? Compute based on bounds, instead of returning the original reference
+                  TypeRef(pre, this)
+                else if variance > 0 then tp1 & tp2
+                else tp1 | tp2
+              end result
+              Some(result)
+          end match
+
         /*case base: AndOrType =>
           var tp1 = argForParam(base.tp1)
           var tp2 = argForParam(base.tp2)
@@ -573,6 +592,7 @@ object Symbols {
             tp2 = tp2.bounds
           }
           if (base.isAnd == variance >= 0) tp1 & tp2 else tp1 | tp2*/
+
         case _ =>
           /*if (pre.termSymbol.isPackage) argForParam(pre.select(nme.PACKAGE))
           else*/
