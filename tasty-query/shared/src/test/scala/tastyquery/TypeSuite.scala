@@ -303,6 +303,48 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(wildcardPatternCount == 2, clue(wildcardPatternCount))
   }
 
+  testWithContext("match-bind-with-type-capture") {
+    val ListClass = ctx.findTopLevelClass("scala.collection.immutable.List")
+    val MatchTypeClass = ctx.findTopLevelClass("simple_trees.MatchType")
+
+    val castMatchResultWithBindSym = MatchTypeClass.findNonOverloadedDecl(termName("castMatchResultWithBind"))
+    val castMatchResultWithBindDef = castMatchResultWithBindSym.tree.get.asInstanceOf[DefDef]
+
+    /* type param [X]
+     * param x: X
+     *
+     * x match
+     *   case is: List[t] => is.head
+     *
+     * `is` gets typed as `X & List[t]`.
+     * `is.head` must resolve to having type `t`.
+     */
+
+    val List(Right(List(typeXDef)), _) = castMatchResultWithBindDef.paramLists: @unchecked
+    val typeXSym = typeXDef.symbol
+
+    val tTypeCaptureSym = findTree(castMatchResultWithBindDef) { case TypeTreeBind(TypeName(SimpleName("t")), _, sym) =>
+      sym
+    }
+
+    val bind = findTree(castMatchResultWithBindDef) { case bind @ Bind(SimpleName("is"), _, _) =>
+      bind
+    }
+    val isSym = bind.symbol
+
+    assert(
+      clue(isSym.declaredType)
+        .isIntersectionOf(_.isRef(typeXSym), _.isApplied(_.isRef(ListClass), List(_.isRef(tTypeCaptureSym))))
+    )
+
+    val (typed, expr, qualifier) = findTree(castMatchResultWithBindDef) {
+      case typed @ Typed(expr @ Select(qualifier, SimpleName("head")), _) => (typed, expr, qualifier)
+    }
+    assert(clue(qualifier.tpe).isRef(isSym))
+    assert(clue(clue(expr.tpe).widen).isRef(tTypeCaptureSym))
+    assert(typed.tpe.isRef(tTypeCaptureSym))
+  }
+
   testWithContext("return") {
     val ReturnPathClass = ctx.findTopLevelClass("simple_trees.Return")
 
@@ -2007,6 +2049,26 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     end for
   }
 
+  testWithContext("findMember-refined-method-signature") {
+    val RefinedTypeTreeClass = ctx.findTopLevelClass("simple_trees.RefinedTypeTree")
+
+    val fooSym = RefinedTypeTreeClass.findNonOverloadedDecl(termName("foo"))
+    val fooBody = fooSym.tree.get.asInstanceOf[DefDef].rhs.get
+    val Apply(fun @ Select(qualifier, signedName @ SignedName(SimpleName("m"), _, _)), Nil) = fooBody: @unchecked
+
+    assert(clue(qualifier.tpe).isInstanceOf[TermRef])
+    assert(clue(qualifier.tpe.asInstanceOf[TermRef].underlying).isInstanceOf[TermRefinement])
+
+    val optMember = qualifier.tpe.lookupMember(signedName)
+    assert(optMember.isDefined)
+
+    val AClass = RefinedTypeTreeClass.findMember(typeName("A")).asClass
+    val AmSym = AClass.findNonOverloadedDecl(termName("m"))
+
+    assert(clue(optMember.get.symbol) == AmSym)
+    assert(clue(fooBody.tpe).isRef(defn.IntClass))
+  }
+
   testWithContext("scala-enum-anon-class-signature-name") {
     val ScalaEnumClass = ctx.findTopLevelClass("simple_trees.ScalaEnum")
     val ScalaEnumModuleClass = ctx.findTopLevelModuleClass("simple_trees.ScalaEnum")
@@ -2020,6 +2082,19 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(anonClassSym.signatureName) == clue(ctorSignedName.sig.resSig))
 
     assert(clue(app.tpe).isRef(anonClassSym))
+  }
+
+  testWithContext("toplevel-module-class-with-opaque-type-alias-companion-signature-name") {
+    val TopLevelOpaqueTypeAliasModule =
+      ctx.findStaticTerm("crosspackagetasty.TopLevelOpaqueTypeAlias$package.TopLevelOpaqueTypeAlias")
+    val TopLevelOpaqueTypeAliasModuleClass =
+      ctx.findStaticModuleClass("crosspackagetasty.TopLevelOpaqueTypeAlias$package.TopLevelOpaqueTypeAlias")
+
+    val moduleValRhs = TopLevelOpaqueTypeAliasModule.tree.get.asInstanceOf[ValDef].rhs.get
+    val Apply(Select(New(_), ctorSignedName: SignedName), Nil) = moduleValRhs: @unchecked
+
+    assert(clue(TopLevelOpaqueTypeAliasModuleClass.signatureName) == clue(ctorSignedName.sig.resSig))
+    assert(clue(moduleValRhs.tpe).isRef(TopLevelOpaqueTypeAliasModuleClass))
   }
 
   testWithContext("annotations") {

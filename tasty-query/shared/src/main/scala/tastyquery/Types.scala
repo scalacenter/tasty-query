@@ -207,7 +207,8 @@ object Types {
         case ResolveMemberResult.NotFound =>
           None
         case resolved: ResolveMemberResult.TermMember =>
-          Some(TermRef.fromResolved(this, resolved))
+          if resolved.symbols.isEmpty then None
+          else Some(TermRef.fromResolved(this, resolved))
         case resolved: ResolveMemberResult.ClassMember =>
           Some(TypeRef.fromResolved(this, resolved))
         case resolved: ResolveMemberResult.TypeMember =>
@@ -367,6 +368,17 @@ object Types {
     /** Find the member of this type with the given `name` when prefix `pre`. */
     private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult
 
+    /** Finds the term member with the given signed name, disregarding the result type,
+      * and whose type satisfies the given predicate.
+      *
+      * This method must follow the "paths" followed by `resolveMember`.
+      * It is used when dealing with methodic refinements in
+      * `Subtyping.hasMatchingRefinedMember`and `TermRefinement.resolveMember`.
+      */
+    private[tastyquery] def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult
+
     private[Types] def lookupRefined(name: Name)(using Context): Option[Type] =
       None // TODO
 
@@ -509,6 +521,11 @@ object Types {
 
     private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       underlying.resolveMember(name, pre)
+
+    private[tastyquery] def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      underlying.resolveMatchingMember(name, pre, typePredicate)
   }
 
   /** Non-proxy types */
@@ -542,6 +559,11 @@ object Types {
   abstract class CustomTransientGroundType extends GroundType:
     private[tastyquery] final def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       throw AssertionError(s"Trying to findMember($name, $pre) on $this")
+
+    private[tastyquery] def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      throw AssertionError(s"Trying to call resolveMatchingMember($name, $pre) on $this")
   end CustomTransientGroundType
 
   // ----- Marker traits ------------------------------------------------
@@ -736,7 +758,7 @@ object Types {
           prefix match
             case prefix: Type =>
               prefix.resolveMember(name, prefix) match
-                case ResolveMemberResult.TermMember(symbols, tpe) =>
+                case ResolveMemberResult.TermMember(symbols, tpe) if symbols.nonEmpty =>
                   storeResolved(symbols.head, tpe)
                 case _ =>
                   throw MemberNotFoundException(prefix, name)
@@ -766,6 +788,17 @@ object Types {
           mt.resultType.resolveMember(name, pre)
         case tp =>
           tp.resolveMember(name, pre)
+    end resolveMember
+
+    private[tastyquery] override def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      underlying match
+        case mt: MethodType if mt.paramInfos.isEmpty /*&& symbol.is(StableRealizable)*/ =>
+          mt.resultType.resolveMatchingMember(name, pre, typePredicate)
+        case tp =>
+          tp.resolveMatchingMember(name, pre, typePredicate)
+    end resolveMatchingMember
 
     protected final def normalizedDerivedSelectImpl(prefix: Type)(using Context): TermRef =
       designator match
@@ -844,6 +877,16 @@ object Types {
         case None =>
           ResolveMemberResult.NotFound
     end resolveMember
+
+    private[tastyquery] def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      /* Until proven otherwise, we assume that PackageRef's cannot participate
+       * as valid subtypes of `TermRefinement`s, and that therefore we can
+       * always return `NotFound` here.
+       */
+      ResolveMemberResult.NotFound
+    end resolveMatchingMember
 
     override def toString(): String = s"PackageRef($fullyQualifiedName)"
   }
@@ -966,6 +1009,16 @@ object Types {
           sym.resolveMember(name, pre)
         case _ =>
           underlying.resolveMember(name, pre)
+
+    private[tastyquery] override def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      optSymbol match
+        case Some(sym: ClassSymbol) =>
+          sym.resolveMatchingMember(name, pre, typePredicate)
+        case _ =>
+          underlying.resolveMatchingMember(name, pre, typePredicate)
+    end resolveMatchingMember
 
     protected final def normalizedDerivedSelectImpl(prefix: Type)(using Context): Type =
       val result1 = optSymbol match
@@ -1107,7 +1160,18 @@ object Types {
         case tycon @ TypeRef.OfClass(_) =>
           tycon.resolveMember(name, pre)
         case _ =>
-          ???
+          superType.resolveMember(name, pre)
+    end resolveMember
+
+    private[tastyquery] override def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      tycon match
+        case tycon @ TypeRef.OfClass(_) =>
+          tycon.resolveMatchingMember(name, pre, typePredicate)
+        case _ =>
+          superType.resolveMatchingMember(name, pre, typePredicate)
+    end resolveMatchingMember
 
     private[tastyquery] final def derivedAppliedType(tycon: Type, args: List[Type]): AppliedType =
       if ((tycon eq this.tycon) && (args eq this.args)) this
@@ -1272,6 +1336,11 @@ object Types {
     private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       throw new AssertionError(s"Cannot find member in $this")
 
+    private[tastyquery] def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      throw new AssertionError(s"Cannot find member in $this")
+
     override def toString: String =
       if !initialized then s"MethodType($paramNames)(<evaluating>...)"
       else s"MethodType($paramNames)($paramTypes, $resultType)"
@@ -1345,6 +1414,11 @@ object Types {
       PolyType
 
     private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      throw new AssertionError(s"Cannot find member in $this")
+
+    private[tastyquery] def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
@@ -1499,17 +1573,6 @@ object Types {
     val refinedName: Name
 
     override final def underlying(using Context): Type = parent
-
-    private[tastyquery] override def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
-      val parentMember = parent.resolveMember(name, pre)
-
-      if name != refinedName then parentMember
-      else
-        val myResult = makeResolveMemberResult(pre)
-        ResolveMemberResult.merge(parentMember, myResult)
-    end resolveMember
-
-    protected def makeResolveMemberResult(pre: Type)(using Context): ResolveMemberResult
   end RefinedType
 
   /** A type refinement `parent { type refinedName <:> refinedBounds }`.
@@ -1519,8 +1582,14 @@ object Types {
     */
   final class TypeRefinement(val parent: Type, val refinedName: TypeName, val refinedBounds: TypeBounds)
       extends RefinedType:
-    protected def makeResolveMemberResult(pre: Type)(using Context): ResolveMemberResult =
-      ResolveMemberResult.TypeMember(Nil, refinedBounds)
+    private[tastyquery] override def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      val parentMember = parent.resolveMember(name, pre)
+
+      if name != refinedName then parentMember
+      else
+        val myResult = ResolveMemberResult.TypeMember(Nil, refinedBounds)
+        ResolveMemberResult.merge(parentMember, myResult)
+    end resolveMember
 
     private[tastyquery] final def derivedTypeRefinement(
       parent: Type,
@@ -1540,8 +1609,59 @@ object Types {
     * @param refinedType The refined type for the given term member
     */
   final class TermRefinement(val parent: Type, val refinedName: TermName, val refinedType: Type) extends RefinedType:
-    protected def makeResolveMemberResult(pre: Type)(using Context): ResolveMemberResult =
-      ResolveMemberResult.TermMember(Nil, refinedType)
+    // Cache fields
+    private[tastyquery] val isMethodic = refinedType.isInstanceOf[MethodicType]
+    private var mySignedName: SignedName | Null = null
+
+    private[tastyquery] def signedName(using Context): SignedName =
+      val local = mySignedName
+      if local != null then local
+      else
+        val sig = Signature.fromType(refinedType, SourceLanguage.Scala3, optCtorReturn = None)
+        val computed = SignedName(refinedName, sig)
+        mySignedName = computed
+        computed
+    end signedName
+
+    private[tastyquery] override def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      if !isMethodic then
+        val parentMember = parent.resolveMember(name, pre)
+        if name != refinedName then parentMember
+        else
+          parentMember match
+            case ResolveMemberResult.TermMember(symbols, tpe) =>
+              ResolveMemberResult.TermMember(symbols, tpe & refinedType)
+            case _ =>
+              ResolveMemberResult.TermMember(Nil, refinedType)
+      else
+        name match
+          case SignedName(simpleName, sig, _) if simpleName == refinedName && sig.paramsCorrespond(signedName.sig) =>
+            val parentMember = parent.resolveMatchingMember(signedName, pre, refinedType.isSubtype(_))
+            parentMember match
+              case ResolveMemberResult.TermMember(symbols, _) =>
+                // We can disregard the type coming from parent because we selected for `refinedType.isSubtype(_)`
+                ResolveMemberResult.TermMember(symbols, refinedType)
+              case _ =>
+                ResolveMemberResult.TermMember(Nil, refinedType)
+          case _ =>
+            parent.resolveMember(name, pre)
+    end resolveMember
+
+    private[tastyquery] override def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      if isMethodic && name.underlying == refinedName && name.sig.paramsCorrespond(signedName.sig) then
+        if !typePredicate(refinedType) then ResolveMemberResult.NotFound
+        else
+          val parentMember = parent.resolveMatchingMember(signedName, pre, refinedType.isSubtype(_))
+          parentMember match
+            case ResolveMemberResult.TermMember(symbols, _) =>
+              // We can disregard the type coming from parent because we selected for `refinedType.isSubtype(_)`
+              ResolveMemberResult.TermMember(symbols, refinedType)
+            case _ =>
+              ResolveMemberResult.TermMember(Nil, refinedType)
+      else parent.resolveMatchingMember(name, pre, typePredicate)
+    end resolveMatchingMember
 
     private[tastyquery] final def derivedTermRefinement(parent: Type, refinedName: TermName, refinedType: Type): Type =
       if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedType eq this.refinedType)) this
@@ -1760,6 +1880,11 @@ object Types {
     private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       join.resolveMember(name, pre)
 
+    private[tastyquery] def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      join.resolveMatchingMember(name, pre, typePredicate)
+
     private[tastyquery] def derivedOrType(first: Type, second: Type): Type =
       if (first eq this.first) && (second eq this.second) then this
       else OrType.make(first, second)
@@ -1776,6 +1901,15 @@ object Types {
   final class AndType(val first: Type, val second: Type) extends GroundType with ValueType {
     private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       ResolveMemberResult.merge(first.resolveMember(name, pre), second.resolveMember(name, pre))
+
+    private[tastyquery] def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      ResolveMemberResult.merge(
+        first.resolveMatchingMember(name, pre, typePredicate),
+        second.resolveMatchingMember(name, pre, typePredicate)
+      )
+    end resolveMatchingMember
 
     private[tastyquery] def derivedAndType(first: Type, second: Type): Type =
       if ((first eq this.first) && (second eq this.second)) this

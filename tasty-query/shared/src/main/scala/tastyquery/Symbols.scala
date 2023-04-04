@@ -563,6 +563,25 @@ object Symbols {
             idx += 1
           }
           None
+
+        case Some(base: AndType) =>
+          (argForParam(base.first), argForParam(base.second)) match
+            case (None, tp2) =>
+              tp2
+            case (tp1, None) =>
+              tp1
+            case (Some(tp1), Some(tp2)) =>
+              val variance = this.paramVariance.sign
+              val result: Type =
+                if tp1.isInstanceOf[WildcardTypeBounds] || tp2.isInstanceOf[WildcardTypeBounds] || variance == 0 then
+                  // TODO? Compute based on bounds, instead of returning the original reference
+                  TypeRef(pre, this)
+                else if variance > 0 then tp1 & tp2
+                else tp1 | tp2
+              end result
+              Some(result)
+          end match
+
         /*case base: AndOrType =>
           var tp1 = argForParam(base.tp1)
           var tp2 = argForParam(base.tp2)
@@ -573,6 +592,7 @@ object Symbols {
             tp2 = tp2.bounds
           }
           if (base.isAnd == variance >= 0) tp1 & tp2 else tp1 | tp2*/
+
         case _ =>
           /*if (pre.termSymbol.isPackage) argForParam(pre.select(nme.PACKAGE))
           else*/
@@ -729,6 +749,8 @@ object Symbols {
       * > Drops package objects. Represents each term in the owner chain by a simple `_$`.
       *
       * The code actually represents each *non-class* in the owner chain by a simple `_$`.
+      * Moreover, there does not seem to be any code that actually drops package objects,
+      * and evidence suggests that it does not.
       */
     private[tastyquery] final def signatureName: FullyQualifiedName =
       def computeErasedName(owner: Symbol, name: TypeName): FullyQualifiedName = owner match
@@ -736,9 +758,7 @@ object Symbols {
           owner.fullName.select(name)
 
         case owner: ClassSymbol =>
-          // Drop package objects
-          if owner.name.isPackageObjectClassName && owner.owner.isPackage then owner.owner.fullName.select(name)
-          else owner.signatureName.mapLast(_.toTermName).select(name)
+          owner.signatureName.mapLast(_.toTermName).select(name)
 
         case owner: TermOrTypeSymbol =>
           // Replace non-class non-package owners by simple `_$`
@@ -1129,6 +1149,33 @@ object Symbols {
         case None =>
           ResolveMemberResult.NotFound
     end resolveMember
+
+    private[tastyquery] def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      def lookup(lin: List[ClassSymbol]): ResolveMemberResult = lin match
+        case parentCls :: linRest =>
+          var overloadsRest = parentCls.getAllOverloadedDecls(name.underlying)
+          while overloadsRest.nonEmpty do
+            val decl = overloadsRest.head
+            val matches =
+              !decl.isAnyOf(Private | Protected | Local)
+                && decl.needsSignature
+                && name.sig.paramsCorrespond(decl.signature)
+            if matches then
+              val tpe = decl.declaredTypeAsSeenFrom(pre)
+              if typePredicate(tpe) then return ResolveMemberResult.TermMember(decl :: Nil, tpe)
+            end if
+            overloadsRest = overloadsRest.tail
+          end while
+          lookup(linRest)
+
+        case Nil =>
+          ResolveMemberResult.NotFound
+      end lookup
+
+      lookup(linearization)
+    end resolveMatchingMember
 
     private var myTypeRef: TypeRef | Null = null
 

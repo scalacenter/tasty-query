@@ -767,6 +767,43 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("abstractTerm", listOf(defn.BooleanType)))
       .withRef[ConcreteSimplePathsChild, SimplePaths { def abstractTerm: List[Boolean] }]
 
+    val refinedSomeMethodType =
+      refineTerm("someMethod", MethodType(List(termName("x")), List(defn.IntType), defn.IntType))
+    assertEquiv(
+      refineTerm("someMethod", MethodType(List(termName("x")), List(defn.IntType), defn.IntType)),
+      refinedSomeMethodType
+    )
+      .withRef[SimplePaths { def someMethod(x: Int): Int }, SimplePaths { def someMethod(x: Int): Int }]
+    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refinedSomeMethodType)
+      .withRef[ConcreteSimplePathsChild, SimplePaths { def someMethod(x: Int): Int }]
+    assertNeitherSubtype(
+      ConcreteSimplePathsChildClass.appliedRef,
+      refineTerm("someMethod", MethodType(List(termName("x")), List(defn.IntType), defn.BooleanType))
+    )
+      .withRef[ConcreteSimplePathsChild, SimplePaths { def someMethod(x: Int): Boolean }]
+
+    val refinedSomePolyMethodType =
+      refineTerm(
+        "somePolyMethod",
+        PolyType(List(typeName("X")))(
+          tl => List(defn.NothingAnyBounds),
+          tl => MethodType(List(termName("x")), List(tl.paramRefs(0)), tl.paramRefs(0))
+        )
+      )
+    assertEquiv(
+      refineTerm(
+        "somePolyMethod",
+        PolyType(List(typeName("Y")))(
+          tl => List(defn.NothingAnyBounds),
+          tl => MethodType(List(termName("x")), List(tl.paramRefs(0)), tl.paramRefs(0))
+        )
+      ),
+      refinedSomePolyMethodType
+    )
+      .withRef[SimplePaths { def somePolyMethod[X](x: X): X }, SimplePaths { def somePolyMethod[Y](x: Y): Y }]
+    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refinedSomePolyMethodType)
+      .withRef[ConcreteSimplePathsChild, SimplePaths { def somePolyMethod[Y](x: Y): Y }]
+
     // term refinement - does not exist in class
 
     assertEquiv(refineTerm("otherTerm", defn.StringType), refineTerm("otherTerm", defn.StringType))
@@ -782,6 +819,46 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       .withRef[ConcreteSimplePathsChild, SimplePaths { def otherTerm: List[Any] }]
     assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("otherTerm", listOf(defn.BooleanType)))
       .withRef[ConcreteSimplePathsChild, SimplePaths { def otherTerm: List[Boolean] }]
+
+    val refinedSomeOtherMethodType =
+      refineTerm("someOtherMethod", MethodType(List(termName("x")), List(defn.IntType), defn.IntType))
+    assertEquiv(
+      refineTerm("someOtherMethod", MethodType(List(termName("x")), List(defn.IntType), defn.IntType)),
+      refinedSomeOtherMethodType
+    )
+      .withRef[SimplePaths { def someOtherMethod(x: Int): Int }, SimplePaths { def someOtherMethod(x: Int): Int }]
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refinedSomeOtherMethodType)
+      .withRef[ConcreteSimplePathsChild, SimplePaths { def someOtherMethod(x: Int): Int }]
+    assertNeitherSubtype(
+      ConcreteSimplePathsChildClass.appliedRef,
+      refineTerm("someOtherMethod", MethodType(List(termName("x")), List(defn.IntType), defn.BooleanType))
+    )
+      .withRef[ConcreteSimplePathsChild, SimplePaths { def someOtherMethod(x: Int): Boolean }]
+
+    /* No `withRef` tests for a `someOtherPolyMethod` because dotc says:
+     *
+     * > Polymorphic refinement method someOtherPolyMethod without matching
+     * > type in parent class SimplePaths is no longer allowed
+     */
+    val refinedSomeOtherPolyMethodType =
+      refineTerm(
+        "someOtherPolyMethod",
+        PolyType(List(typeName("X")))(
+          tl => List(defn.NothingAnyBounds),
+          tl => MethodType(List(termName("x")), List(tl.paramRefs(0)), tl.paramRefs(0))
+        )
+      )
+    assertEquiv(
+      refineTerm(
+        "someOtherPolyMethod",
+        PolyType(List(typeName("Y")))(
+          tl => List(defn.NothingAnyBounds),
+          tl => MethodType(List(termName("x")), List(tl.paramRefs(0)), tl.paramRefs(0))
+        )
+      ),
+      refinedSomeOtherPolyMethodType
+    )
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refinedSomeOtherPolyMethodType)
   }
 
   testWithContext("intersection-types") {
