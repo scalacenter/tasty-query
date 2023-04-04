@@ -21,6 +21,9 @@ object Signatures:
       case ParamSig.Term(typ)    => typ.toString
       case ParamSig.TypeLen(len) => len.toString
     }.mkString("(", ",", ")") + ":" + resSig.toString
+
+    private[tastyquery] def paramsCorrespond(that: Signature): Boolean =
+      this.paramsSig == that.paramsSig
   end Signature
 
   object Signature {

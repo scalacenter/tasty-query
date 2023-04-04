@@ -38,6 +38,9 @@ open class SimplePaths:
   type AliasOfAbstractTypeWithBounds = AbstractTypeWithBounds
 
   def abstractTerm: AnyRef = ???
+
+  def someMethod(x: Int): Any = ???
+  def somePolyMethod[X](x: X): Any = ???
 end SimplePaths
 
 // With members of the same shape as SimplePaths
@@ -53,6 +56,9 @@ class ConcreteSimplePathsChild extends SimplePaths:
   type ConcreteOnlyMember = Boolean
 
   override def abstractTerm: List[Int] = ???
+
+  override def someMethod(x: Int): Int = ???
+  override def somePolyMethod[X](x: X): X = ???
 
   class InnerClassMono extends A
   class InnerClassPoly[T] extends C

@@ -100,7 +100,7 @@ private[tastyquery] object TypeOps:
     case tp1: PolyType =>
       tp2.widen match
         case tp2: PolyType =>
-          tp1.paramNames.lengthCompare(tp2.paramNames) == 0
+          matchingPolyParams(tp1, tp2)
             && matchesType(tp1.resultType, Substituters.substBinders(tp2.resultType, tp2, tp1))
         case _ =>
           false
@@ -117,9 +117,18 @@ private[tastyquery] object TypeOps:
 
   /** Do the parameter types of `tp1` and `tp2` match in a way that allows `tp1` to override `tp2`?
     *
+    * This is the case if they're pairwise `>:>`.
+    */
+  def matchingPolyParams(tp1: PolyType, tp2: PolyType)(using Context): Boolean =
+    // TODO Actually test `>:>`.
+    tp1.paramNames.lengthCompare(tp2.paramNames) == 0
+  end matchingPolyParams
+
+  /** Do the parameter types of `tp1` and `tp2` match in a way that allows `tp1` to override `tp2`?
+    *
     * This is the case if they're pairwise `=:=`.
     */
-  private def matchingMethodParams(tp1: MethodType, tp2: MethodType)(using Context): Boolean =
+  def matchingMethodParams(tp1: MethodType, tp2: MethodType)(using Context): Boolean =
     def loop(formals1: List[Type], formals2: List[Type]): Boolean = formals1 match
       case formal1 :: rest1 =>
         formals2 match

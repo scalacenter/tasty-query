@@ -178,6 +178,22 @@ private[tastyquery] object Subtyping:
           val etaExpandSuccess = tparams1.nonEmpty && isSubtype(etaExpand(tp1, tparams1), tp2)
           etaExpandSuccess || level4(tp1, tp2)
 
+    case tp2: MethodType =>
+      tp1 match
+        case tp1: MethodType =>
+          TypeOps.matchingMethodParams(tp1, tp2)
+            && isSubtype(tp1.resultType, Substituters.substBinders(tp2.resultType, tp2, tp1))
+        case _ =>
+          false
+
+    case tp2: PolyType =>
+      tp1 match
+        case tp1: PolyType =>
+          TypeOps.matchingPolyParams(tp1, tp2)
+            && isSubtype(tp1.resultType, Substituters.substBinders(tp2.resultType, tp2, tp1))
+        case _ =>
+          false
+
     case tp2: RefinedType =>
       (isSubtype(tp1, tp2.parent) && hasMatchingRefinedMember(tp1, tp2))
         || level4(tp1, tp2)
@@ -297,24 +313,35 @@ private[tastyquery] object Subtyping:
     TypeLambda.fromParamInfos(tparams)(tl => tp.appliedTo(tl.paramRefs))
 
   private def hasMatchingRefinedMember(tp1: Type, tp2: RefinedType)(using Context): Boolean =
-    tp1.resolveMember(tp2.refinedName, tp1) match
-      case ResolveMemberResult.NotFound =>
-        false
+    tp2 match
+      case tp2: TypeRefinement =>
+        tp1.resolveMember(tp2.refinedName, tp1) match
+          case ResolveMemberResult.NotFound =>
+            false
+          case ResolveMemberResult.ClassMember(cls) =>
+            tp2.refinedBounds.contains(tp1.select(cls))
+          case ResolveMemberResult.TypeMember(symbols, bounds) =>
+            tp2.refinedBounds.contains(bounds)
+          case ResolveMemberResult.TermMember(symbols, tpe) =>
+            throw AssertionError(s"found term member for $tp2 in $tp1")
 
-      case ResolveMemberResult.TermMember(symbols, tpe) =>
-        tp2 match
-          case tp2: TermRefinement => isSubtype(tpe, tp2.refinedType)
-          case _: TypeRefinement   => throw AssertionError(s"found term member for $tp2 in $tp1")
-
-      case ResolveMemberResult.ClassMember(cls) =>
-        tp2 match
-          case tp2: TypeRefinement => tp2.refinedBounds.contains(tp1.select(cls))
-          case _: TermRefinement   => throw AssertionError(s"found type member for $tp2 in $tp1")
-
-      case ResolveMemberResult.TypeMember(symbols, bounds) =>
-        tp2 match
-          case tp2: TypeRefinement => tp2.refinedBounds.contains(bounds)
-          case _: TermRefinement   => throw AssertionError(s"found type member for $tp2 in $tp1")
+      case tp2: TermRefinement =>
+        if !tp2.isMethodic then
+          tp1.resolveMember(tp2.refinedName, tp1) match
+            case ResolveMemberResult.NotFound =>
+              false
+            case ResolveMemberResult.TermMember(_, tpe) =>
+              tpe.isSubtype(tp2.refinedType)
+            case _: ResolveMemberResult.ClassMember | _: ResolveMemberResult.TypeMember =>
+              throw AssertionError(s"found type member for $tp2 in $tp1")
+        else
+          tp1.resolveMatchingMember(tp2.signedName, tp1, _.isSubtype(tp2.refinedType)) match
+            case ResolveMemberResult.NotFound =>
+              false
+            case _: ResolveMemberResult.TermMember =>
+              true
+            case _: ResolveMemberResult.ClassMember | _: ResolveMemberResult.TypeMember =>
+              throw AssertionError(s"found type member for $tp2 in $tp1")
   end hasMatchingRefinedMember
 
   private def level4(tp1: Type, tp2: Type)(using Context): Boolean = tp1 match

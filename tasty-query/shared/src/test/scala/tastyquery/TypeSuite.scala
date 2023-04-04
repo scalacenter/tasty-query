@@ -2049,6 +2049,26 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     end for
   }
 
+  testWithContext("findMember-refined-method-signature") {
+    val RefinedTypeTreeClass = ctx.findTopLevelClass("simple_trees.RefinedTypeTree")
+
+    val fooSym = RefinedTypeTreeClass.findNonOverloadedDecl(termName("foo"))
+    val fooBody = fooSym.tree.get.asInstanceOf[DefDef].rhs.get
+    val Apply(fun @ Select(qualifier, signedName @ SignedName(SimpleName("m"), _, _)), Nil) = fooBody: @unchecked
+
+    assert(clue(qualifier.tpe).isInstanceOf[TermRef])
+    assert(clue(qualifier.tpe.asInstanceOf[TermRef].underlying).isInstanceOf[TermRefinement])
+
+    val optMember = qualifier.tpe.lookupMember(signedName)
+    assert(optMember.isDefined)
+
+    val AClass = RefinedTypeTreeClass.findMember(typeName("A")).asClass
+    val AmSym = AClass.findNonOverloadedDecl(termName("m"))
+
+    assert(clue(optMember.get.symbol) == AmSym)
+    assert(clue(fooBody.tpe).isRef(defn.IntClass))
+  }
+
   testWithContext("scala-enum-anon-class-signature-name") {
     val ScalaEnumClass = ctx.findTopLevelClass("simple_trees.ScalaEnum")
     val ScalaEnumModuleClass = ctx.findTopLevelModuleClass("simple_trees.ScalaEnum")

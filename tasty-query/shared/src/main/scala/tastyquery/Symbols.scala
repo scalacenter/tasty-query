@@ -1150,6 +1150,33 @@ object Symbols {
           ResolveMemberResult.NotFound
     end resolveMember
 
+    private[tastyquery] def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      def lookup(lin: List[ClassSymbol]): ResolveMemberResult = lin match
+        case parentCls :: linRest =>
+          var overloadsRest = parentCls.getAllOverloadedDecls(name.underlying)
+          while overloadsRest.nonEmpty do
+            val decl = overloadsRest.head
+            val matches =
+              !decl.isAnyOf(Private | Protected | Local)
+                && decl.needsSignature
+                && name.sig.paramsCorrespond(decl.signature)
+            if matches then
+              val tpe = decl.declaredTypeAsSeenFrom(pre)
+              if typePredicate(tpe) then return ResolveMemberResult.TermMember(decl :: Nil, tpe)
+            end if
+            overloadsRest = overloadsRest.tail
+          end while
+          lookup(linRest)
+
+        case Nil =>
+          ResolveMemberResult.NotFound
+      end lookup
+
+      lookup(linearization)
+    end resolveMatchingMember
+
     private var myTypeRef: TypeRef | Null = null
 
     private[tastyquery] final def typeRef(using Context): TypeRef =
