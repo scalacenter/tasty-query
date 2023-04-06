@@ -19,7 +19,8 @@ import tastyquery.Trees.*
 import tastyquery.Variances.*
 
 object Types {
-  private[tastyquery] final case class LookupIn(pre: TypeRef, sel: SignedName)
+  private[tastyquery] final case class LookupIn(ownerRef: TypeRef, sel: SignedName)
+  private[tastyquery] final case class LookupTypeIn(ownerRef: TypeRef, name: TypeName)
 
   private[tastyquery] final case class Scala2ExternalSymRef(owner: Symbol, path: List[Name]) {
     val name = path.last
@@ -588,17 +589,19 @@ object Types {
   // ----- Type Proxies -------------------------------------------------
 
   sealed abstract class NamedType extends PathType {
+    protected type AnyDesignatorType = TermOrTypeSymbol | Name | LookupIn | LookupTypeIn | Scala2ExternalSymRef
+
     type ThisName <: Name
     type ThisSymbolType <: TermOrTypeSymbol { type ThisNameType = ThisName }
     type ThisNamedType >: this.type <: NamedType
-    protected type ThisDesignatorType >: ThisSymbolType <: TermOrTypeSymbol | Name | LookupIn | Scala2ExternalSymRef
+    protected type ThisDesignatorType >: ThisSymbolType <: AnyDesignatorType
 
     val prefix: Prefix
 
     protected def designator: ThisDesignatorType
 
     // For tests
-    private[tastyquery] final def designatorInternal: TermOrTypeSymbol | Name | LookupIn | Scala2ExternalSymRef =
+    private[tastyquery] final def designatorInternal: AnyDesignatorType =
       designator
 
     private var myName: ThisName | Null = null
@@ -638,6 +641,7 @@ object Types {
       case name: Name                       => name
       case sym: TermOrTypeSymbol            => sym.name
       case LookupIn(_, sel)                 => sel
+      case LookupTypeIn(_, name)            => name
       case designator: Scala2ExternalSymRef => designator.name
     }).asInstanceOf[ThisName]
 
@@ -825,7 +829,7 @@ object Types {
       new TermRef(prefix, resolved)
 
     private[tastyquery] def resolveLookupIn(designator: LookupIn)(using Context): TermSymbol =
-      val cls = designator.pre.classSymbol.getOrElse {
+      val cls = designator.ownerRef.classSymbol.getOrElse {
         throw InvalidProgramStructureException(s"Owner of SelectIn($designator) does not refer a class")
       }
       cls
@@ -893,13 +897,13 @@ object Types {
 
   final class TypeRef private (
     val prefix: Prefix,
-    private var myDesignator: TypeName | TypeSymbol | Scala2ExternalSymRef
+    private var myDesignator: TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
   ) extends NamedType {
 
     type ThisName = TypeName
     type ThisSymbolType = TypeSymbol
     type ThisNamedType = TypeRef
-    type ThisDesignatorType = TypeName | TypeSymbol | Scala2ExternalSymRef
+    type ThisDesignatorType = TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
 
     // Cache fields
     private var myOptSymbol: Option[TypeSymbol] | Null = null
@@ -942,6 +946,9 @@ object Types {
 
       designator match
         case sym: TypeSymbol =>
+          storeSymbol(sym)
+        case lookupTypeIn: LookupTypeIn =>
+          val sym = TypeRef.resolveLookupTypeIn(lookupTypeIn)
           storeSymbol(sym)
         case externalRef: Scala2ExternalSymRef =>
           val sym = NamedType.resolveScala2ExternalRef(externalRef).asType
@@ -1044,6 +1051,9 @@ object Types {
     def apply(prefix: Type, name: TypeName): TypeRef = new TypeRef(prefix, name)
     def apply(prefix: Prefix, symbol: TypeSymbol): TypeRef = new TypeRef(prefix, symbol)
 
+    private[tastyquery] def apply(prefix: Type, lookupTypeIn: LookupTypeIn): TypeRef =
+      new TypeRef(prefix, lookupTypeIn)
+
     private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): TypeRef =
       new TypeRef(prefix, external)
 
@@ -1059,6 +1069,18 @@ object Types {
           case Some(cls: ClassSymbol) => Some(cls)
           case _                      => None
     end OfClass
+
+    private[tastyquery] def resolveLookupTypeIn(designator: LookupTypeIn)(using Context): TypeSymbol =
+      val cls = designator.ownerRef.classSymbol.getOrElse {
+        throw InvalidProgramStructureException(s"Owner of LookupTypeIn($designator) does not refer a class")
+      }
+      cls.typeParams
+        .find(_.name == designator.name) // typical case, resulting from persisted capture conversion
+        .orElse(cls.getDecl(designator.name)) // reference to private class member, or shadowed class member
+        .getOrElse {
+          throw MemberNotFoundException(cls, designator.name)
+        }
+    end resolveLookupTypeIn
   end TypeRef
 
   final class ThisType(val tref: TypeRef) extends PathType with SingletonType {

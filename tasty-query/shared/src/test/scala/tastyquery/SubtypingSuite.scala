@@ -1253,4 +1253,39 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       .withRef[MatchTypeOldStyleEnums[OldStyleEnum.Parametric[String]], String]
   }
 
+  testWithContext("capture-conversion") {
+    val TypeRefInClass = ctx.findTopLevelClass("simple_trees.TypeRefIn")
+
+    def finalResultType(tpe: Type): Type = tpe match
+      case tpe: MethodType => finalResultType(tpe.resultType)
+      case tpe: PolyType   => finalResultType(tpe.resultType)
+      case _               => tpe
+
+    var applyBodyCount = 0
+
+    for
+      case (decl: TermSymbol) <- TypeRefInClass.declarations
+      if decl.is(Method) && decl.name != nme.Constructor
+    do
+      val tree = decl.tree.get.asInstanceOf[DefDef].rhs.get
+      assert(tree.tpe.isSubtype(finalResultType(decl.declaredType)))
+
+      tree match
+        case Apply(fun, List(arg)) =>
+          val methodType = fun.tpe.widen.asInstanceOf[MethodType]
+          assert(clue(arg.tpe).isSubtype(clue(methodType.paramTypes.head)))
+          applyBodyCount += 1
+
+        case Literal(_) =>
+          // Nothing to check here
+          ()
+
+        case _ =>
+          fail(s"Unexpected method body $tree")
+      end match
+    end for
+
+    assert(clue(applyBodyCount) == 4)
+  }
+
 end SubtypingSuite
