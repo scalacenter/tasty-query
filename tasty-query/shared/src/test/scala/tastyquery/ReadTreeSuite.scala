@@ -59,7 +59,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   private object SimpleTreesPackageRef:
     def unapply(tree: PackageRef): Boolean = tree.fullyQualifiedName.path == List(termName("simple_trees"))
 
-  private type AnyDesignator = Symbol | Name | LookupIn | Scala2ExternalSymRef
+  private type AnyDesignator = Symbol | Name | LookupIn | LookupTypeIn | Scala2ExternalSymRef
 
   private object TypeRefInternal:
     def unapply(tpe: TypeRef): Some[(Prefix, AnyDesignator)] = Some((tpe.prefix, tpe.designatorInternal))
@@ -2153,9 +2153,11 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val typerefCheck: StructureCheck = {
       case TypeApply(
             Select(qualifier, SignedName(SimpleName("withArray"), _, _)),
-            // TODO: check the namespace ("in") once its taken into account
             TypeWrapper(
-              TypeRefInternal(TermRefInternal(NoPrefix, SymbolWithName(SimpleName("arr"))), TypeName(SimpleName("T")))
+              TypeRefInternal(
+                TermRefInternal(NoPrefix, SymbolWithName(SimpleName("arr"))),
+                LookupTypeIn(TypeRefInternal(ScalaPackageRef(), SimpleTypeName("Array")), SimpleTypeName("T"))
+              )
             ) :: Nil
           ) =>
     }
