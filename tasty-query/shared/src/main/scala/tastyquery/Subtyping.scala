@@ -235,21 +235,21 @@ private[tastyquery] object Subtyping:
       throw InvalidProgramStructureException(s"found type constructor $tycon2 without type params in AppliedType")
 
     def isMatchingApply(tp1: Type): Boolean = tp1.widen match
-      case tp1: AppliedType =>
-        tp1.tycon match
+      case tp1Applied: AppliedType =>
+        tp1Applied.tycon match
           case tycon1: TypeRef =>
             tp2.tycon match
               case tycon2: TypeRef =>
                 val tycon1Sym = tycon1.optSymbol
                 val tycon2Sym = tycon2.optSymbol
                 if tycon1Sym.isDefined && tycon1Sym == tycon2Sym && isSubprefix(tycon1.prefix, tycon2.prefix) then
-                  isSubArgs(tp1.args, tp2.args, tparams)
+                  isSubArgs(tp1, tp1Applied.args, tp2.args, tparams)
                 else false
               case _ =>
                 false
 
           case tycon1: TypeParamRef =>
-            tycon1 == tycon2 && isSubArgs(tp1.args, tp2.args, tparams)
+            tycon1 == tycon2 && isSubArgs(tp1, tp1Applied.args, tp2.args, tparams)
 
           case _ =>
             false
@@ -282,9 +282,11 @@ private[tastyquery] object Subtyping:
         false
   end compareAppliedType2
 
-  private def isSubArgs(args1: List[Type], args2: List[Type], tparams2: List[TypeParamInfo])(using Context): Boolean =
-    def isSubArg(arg1: Type, arg2: Type, tparam2: TypeParamInfo): Boolean =
-      val variance = tparam2.paramVariance
+  private def isSubArgs(tp1: Type, args1: List[Type], args2: List[Type], tparams: List[TypeParamInfo])(
+    using Context
+  ): Boolean =
+    def isSubArg(arg1: Type, arg2: Type, tparam: TypeParamInfo): Boolean =
+      val variance = tparam.paramVariance
 
       arg2 match
         case arg2: WildcardTypeBounds =>
@@ -292,8 +294,18 @@ private[tastyquery] object Subtyping:
         case _ =>
           arg1 match
             case arg1: WildcardTypeBounds =>
-              // TODO? Capture conversion
-              false
+              // Attempt capture conversion
+              tp1 match
+                case tp1: SingletonType =>
+                  tparam match
+                    case tparam: ClassTypeParamSymbol =>
+                      val wildcardConverted = TypeRef(tp1, tparam)
+                      isSubArg(wildcardConverted, arg2, tparam)
+                    case _ =>
+                      false
+                case _ =>
+                  // TODO Approximate if co- or contravariant
+                  false
             case _ =>
               variance.sign match
                 case 1  => isSubtype(arg1, arg2)
@@ -301,11 +313,11 @@ private[tastyquery] object Subtyping:
                 case 0  => isSameType(arg1, arg2)
     end isSubArg
 
-    if args1.sizeCompare(args2) != 0 || args2.sizeCompare(tparams2) != 0 then
-      throw InvalidProgramStructureException(s"argument count mismatch: isSubArgs($args1, $args2, $tparams2)")
+    if args1.sizeCompare(args2) != 0 || args2.sizeCompare(tparams) != 0 then
+      throw InvalidProgramStructureException(s"argument count mismatch: isSubArgs($args1, $args2, $tparams)")
 
-    args1.lazyZip(args2).lazyZip(tparams2).forall { (arg1, arg2, tparam2) =>
-      isSubArg(arg1, arg2, tparam2)
+    args1.lazyZip(args2).lazyZip(tparams).forall { (arg1, arg2, tparam) =>
+      isSubArg(arg1, arg2, tparam)
     }
   end isSubArgs
 
