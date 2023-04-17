@@ -2290,4 +2290,26 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     }
     assert(containsSubtree(abstractVarCheck)(clue(tree)))
   }
+
+  testUnpickle("quotes-and-splices", "simple_trees.QuotesAndSplices$") { tree =>
+    val typeQuoteMatchingDef = findTree(tree) { case dd @ DefDef(SimpleName("typeQuoteMatching"), _, _, _, _) =>
+      dd
+    }
+    val typeQuoteMatchingCaseDef = findTree(typeQuoteMatchingDef) { case cd: CaseDef =>
+      cd
+    }
+    val typeQuoteMatchingCheck: StructureCheck = {
+      case TypeBindingsTree(
+            List(
+              TypeMember(SimpleTypeName("t"), InferredTypeBoundsTree(_), tSym),
+              TypeMember(SimpleTypeName("u"), InferredTypeBoundsTree(_), uSym)
+            ),
+            AppliedTypeTree(
+              TypeIdent(SimpleTypeName("Map")),
+              List(TypeWrapper(TypeRefInternal(NoPrefix, tSymRef)), TypeWrapper(TypeRefInternal(NoPrefix, uSymRef)))
+            )
+          ) if tSymRef == tSym && uSymRef == uSym && tSym != uSym =>
+    }
+    assert(containsSubtree(typeQuoteMatchingCheck)(clue(typeQuoteMatchingCaseDef)))
+  }
 }

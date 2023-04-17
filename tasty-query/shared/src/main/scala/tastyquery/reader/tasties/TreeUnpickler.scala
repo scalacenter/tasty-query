@@ -1367,6 +1367,14 @@ private[tasties] class TreeUnpickler(
       val spn = span
       reader.readByte()
       ByNameTypeTree(readTypeTree)(spn)
+    case BLOCK =>
+      // #284 See QuotesAndSplices.typeQuoteMatching
+      val spn = span
+      reader.readByte()
+      val end = reader.readEnd()
+      val body = readTypeTree
+      val bindings = readStats(end).map(_.asInstanceOf[TypeMember])
+      TypeBindingsTree(bindings, body)(spn)
     case SHAREDterm =>
       val spn = span
       reader.readByte()

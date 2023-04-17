@@ -68,6 +68,7 @@ object Trees {
       case TypeTreeBind(name, body, symbol)               => body :: Nil
       case WildcardTypeBoundsTree(bounds)                 => bounds :: Nil
       case TypeLambdaTree(tparams, body)                  => tparams ::: body :: Nil
+      case TypeBindingsTree(bindings, body)               => bindings ::: body :: Nil
 
       case InferredTypeBoundsTree(bounds)               => Nil
       case ExplicitTypeBoundsTree(low, high)            => low :: high :: Nil
@@ -794,6 +795,12 @@ object Trees {
 
     override final def withSpan(span: Span): TypeLambdaTree = TypeLambdaTree(tparams, body)(span)
   }
+
+  final case class TypeBindingsTree(bindings: List[TypeMember], body: TypeTree)(span: Span) extends TypeTree(span):
+    override protected def calculateType(using Context): Type = body.toType
+
+    override def withSpan(span: Span): TypeBindingsTree = TypeBindingsTree(bindings, body)(span)
+  end TypeBindingsTree
 
   // --- TypeDefinitionTrees and TypeBoundsTrees ------------------------------
 
