@@ -1630,10 +1630,17 @@ object Types {
     * @param refinedName The name of the refined term member
     * @param refinedType The refined type for the given term member
     */
-  final class TermRefinement(val parent: Type, val refinedName: TermName, val refinedType: Type) extends RefinedType:
+  final class TermRefinement(val parent: Type, val isStable: Boolean, val refinedName: TermName, val refinedType: Type)
+      extends RefinedType:
+    @deprecated("use the overload with an explicit isStable argument", since = "0.7.4")
+    def this(parent: Type, refinedName: TermName, refinedType: Type) =
+      this(parent, isStable = false, refinedName, refinedType)
+
     // Cache fields
     private[tastyquery] val isMethodic = refinedType.isInstanceOf[MethodicType]
     private var mySignedName: SignedName | Null = null
+
+    require(!(isStable && isMethodic), s"Ill-formed $this")
 
     private[tastyquery] def signedName(using Context): SignedName =
       val local = mySignedName
@@ -1687,7 +1694,7 @@ object Types {
 
     private[tastyquery] final def derivedTermRefinement(parent: Type, refinedName: TermName, refinedType: Type): Type =
       if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedType eq this.refinedType)) this
-      else TermRefinement(parent, refinedName, refinedType)
+      else TermRefinement(parent, isStable, refinedName, refinedType)
 
     override def toString(): String = s"TermRefinement($parent, $refinedName, $refinedType)"
   end TermRefinement

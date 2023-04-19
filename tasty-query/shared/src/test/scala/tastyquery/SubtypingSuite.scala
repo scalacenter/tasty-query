@@ -690,7 +690,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       TypeRefinement(SimplePathsClass.appliedRef, typeName(name), RealTypeBounds(polyLow, polyHigh))
 
     def refineTerm(name: String, tpe: Type): Type =
-      TermRefinement(SimplePathsClass.appliedRef, termName(name), tpe)
+      TermRefinement(SimplePathsClass.appliedRef, isStable = false, termName(name), tpe)
 
     // type refinement - exists in class
 

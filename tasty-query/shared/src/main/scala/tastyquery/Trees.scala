@@ -475,7 +475,7 @@ object Trees {
 
         if methodType.isResultDependent then
           val parent = functionNTypeRef.appliedTo(List.fill(paramCount + 1)(defn.AnyType))
-          TermRefinement(parent, nme.m_apply, methodType)
+          TermRefinement(parent, isStable = false, nme.m_apply, methodType)
         else functionNTypeRef.appliedTo(methodType.paramTypes :+ methodType.resultType)
     end calculateType
 
@@ -686,10 +686,10 @@ object Trees {
             TypeRefinement(parent, name, refinedBounds)
 
           case ValDef(name, tpt, _, _) =>
-            TermRefinement(parent, name, tpt.toType)
+            TermRefinement(parent, isStable = true, name, tpt.toType)
 
           case DefDef(name, paramClauses, resultType, _, _) =>
-            TermRefinement(parent, name, ParamsClause.makeDefDefType(paramClauses, resultType))
+            TermRefinement(parent, isStable = false, name, ParamsClause.makeDefDefType(paramClauses, resultType))
       }
     end calculateType
 
