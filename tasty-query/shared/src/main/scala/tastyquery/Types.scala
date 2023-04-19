@@ -1693,12 +1693,22 @@ object Types {
   end TermRefinement
 
   final class RecType private (parentExp: RecType => Type) extends RefinedOrRecType with Binders:
-    val parent: Type = parentExp(this: @unchecked)
+    private var initialized = false
 
     /** Reference to this recursive type from within itself. */
     val recThis: RecThis = RecThis(this)
+    private val myParent: Type = parentExp(this: @unchecked)
+    initialized = true
+
+    def parent: Type =
+      if !initialized then throw CyclicReferenceException("RecType(???)")
+      myParent
 
     def underlying(using Context): Type = parent
+
+    override def toString(): String = s"RecType@$debugID($parent)"
+
+    def debugID: Int = System.identityHashCode(this)
   end RecType
 
   object RecType:
@@ -1715,7 +1725,7 @@ object Types {
 
     final def underlying(using Context): Type = binder
 
-    override def toString(): String = s"RecThis(<recursive>)"
+    override def toString(): String = s"RecThis(RecType@${binder.debugID})"
   end RecThis
 
   /** case `pattern` => `result` */
