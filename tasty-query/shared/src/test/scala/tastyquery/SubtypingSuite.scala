@@ -1288,4 +1288,18 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assert(clue(applyBodyCount) == 4)
   }
 
+  testWithContext("recursive-types") {
+    val RefinedTypeTreeClass = ctx.findTopLevelClass("simple_trees.RefinedTypeTree")
+
+    val innerRefValSym = RefinedTypeTreeClass.findDecl(termName("innerRefVal"))
+    val valDef = innerRefValSym.tree.get.asInstanceOf[ValDef]
+    val Block(List(anonClassDef: ClassDef), Typed(anonInstance, tpt)) = valDef.rhs.get: @unchecked
+
+    val anonInstanceType = anonInstance.tpe
+
+    val expectedType1 = tpt.toType
+    assert(clue(expectedType1).isInstanceOf[RecType])
+    assertStrictSubtype(anonInstanceType, expectedType1)
+  }
+
 end SubtypingSuite

@@ -13,6 +13,9 @@ private[tastyquery] object Substituters:
   def substParams(tp: TypeMappable, from: Binders, to: List[Type])(using Context): tp.ThisTypeMappableType =
     new SubstParamsMap(from, to).apply(tp)
 
+  def substRecThis(tp: TypeMappable, from: RecType, to: Type)(using Context): tp.ThisTypeMappableType =
+    new SubstRecThisMap(from, to).apply(tp)
+
   def substClassTypeParams(tp: TypeMappable, from: List[ClassTypeParamSymbol], to: List[Type])(
     using Context
   ): tp.ThisTypeMappableType =
@@ -57,6 +60,24 @@ private[tastyquery] object Substituters:
           mapOver(tp)
     end apply
   end SubstParamsMap
+
+  private final class SubstRecThisMap(from: RecType, to: Type)(using Context) extends NormalizingTypeMap:
+    def apply(tp: Type): Type =
+      tp match
+        case tp: RecThis =>
+          if tp.binders eq from then to else tp
+        case tp: NamedType =>
+          tp.prefix match
+            case NoPrefix     => tp
+            case prefix: Type => tp.derivedSelect(apply(prefix))
+        case _: ThisType =>
+          tp
+        case tp: AppliedType =>
+          tp.map(apply(_))
+        case _ =>
+          mapOver(tp)
+    end apply
+  end SubstRecThisMap
 
   private final class SubstClassTypeParamsMap(from: List[ClassTypeParamSymbol], to: List[Type])(using Context)
       extends NormalizingTypeMap:
