@@ -1300,6 +1300,10 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val expectedType1 = tpt.toType
     assert(clue(expectedType1).isInstanceOf[RecType])
     assertStrictSubtype(anonInstanceType, expectedType1)
+
+    val expectedType2 = valDef.tpt.toType
+    assert(clue(expectedType2).isInstanceOf[RecType])
+    assertEquiv(expectedType1, expectedType2)
   }
 
 end SubtypingSuite

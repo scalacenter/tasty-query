@@ -672,7 +672,7 @@ object Trees {
 
     override protected def calculateType(using Context): Type =
       val base = underlying.toType
-      refinements.foldLeft(base) { (parent, refinement) =>
+      val refined = refinements.foldLeft(base) { (parent, refinement) =>
         refinement match
           case TypeMember(name, rhs, _) =>
             val refinedBounds = rhs match
@@ -691,6 +691,12 @@ object Trees {
           case DefDef(name, paramClauses, resultType, _, _) =>
             TermRefinement(parent, isStable = false, name, ParamsClause.makeDefDefType(paramClauses, resultType))
       }
+
+      if refined eq base then base
+      else
+        val recType = RecType(rt => Substituters.substRefinementThis(refined, refinedCls, rt.recThis))
+        if recType.parent eq refined then refined
+        else recType
     end calculateType
 
     override final def withSpan(span: Span): RefinedTypeTree =

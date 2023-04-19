@@ -25,6 +25,9 @@ private[tastyquery] object Substituters:
     if from.isEmpty then tp
     else new SubstLocalParamsMap(from, to).apply(tp)
 
+  def substRefinementThis(tp: TypeMappable, from: ClassSymbol, to: RecThis)(using Context): tp.ThisTypeMappableType =
+    new SubstRefinementThisMap(from, to).apply(tp)
+
   final class SubstBindingMap(from: Binders, to: Binders) extends TypeMap:
     def apply(tp: Type): Type =
       tp match
@@ -124,5 +127,16 @@ private[tastyquery] object Substituters:
         case _ =>
           mapOver(tp)
   end SubstLocalParamsMap
+
+  private final class SubstRefinementThisMap(from: ClassSymbol, to: RecThis) extends TypeMap:
+    def apply(tp: Type): Type =
+      tp match
+        case tp: ThisType =>
+          if tp.tref.isLocalRef(from) then to else tp
+        case _: BoundType =>
+          tp
+        case _ =>
+          mapOver(tp)
+  end SubstRefinementThisMap
 
 end Substituters
