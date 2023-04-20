@@ -475,7 +475,7 @@ object Trees {
 
         if methodType.isResultDependent then
           val parent = functionNTypeRef.appliedTo(List.fill(paramCount + 1)(defn.AnyType))
-          TermRefinement(parent, nme.m_apply, methodType)
+          TermRefinement(parent, isStable = false, nme.m_apply, methodType)
         else functionNTypeRef.appliedTo(methodType.paramTypes :+ methodType.resultType)
     end calculateType
 
@@ -672,7 +672,7 @@ object Trees {
 
     override protected def calculateType(using Context): Type =
       val base = underlying.toType
-      refinements.foldLeft(base) { (parent, refinement) =>
+      val refined = refinements.foldLeft(base) { (parent, refinement) =>
         refinement match
           case TypeMember(name, rhs, _) =>
             val refinedBounds = rhs match
@@ -686,11 +686,17 @@ object Trees {
             TypeRefinement(parent, name, refinedBounds)
 
           case ValDef(name, tpt, _, _) =>
-            TermRefinement(parent, name, tpt.toType)
+            TermRefinement(parent, isStable = true, name, tpt.toType)
 
           case DefDef(name, paramClauses, resultType, _, _) =>
-            TermRefinement(parent, name, ParamsClause.makeDefDefType(paramClauses, resultType))
+            TermRefinement(parent, isStable = false, name, ParamsClause.makeDefDefType(paramClauses, resultType))
       }
+
+      if refined eq base then base
+      else
+        val recType = RecType(rt => Substituters.substRefinementThis(refined, refinedCls, rt.recThis))
+        if recType.parent eq refined then refined
+        else recType
     end calculateType
 
     override final def withSpan(span: Span): RefinedTypeTree =

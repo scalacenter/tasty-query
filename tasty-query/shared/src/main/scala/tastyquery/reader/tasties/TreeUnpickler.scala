@@ -1140,7 +1140,12 @@ private[tasties] class TreeUnpickler(
       else
         // Type refinement with a term member of the form `Underlying { val/def refinementName: Type }`
         val refinedMemberType = readType
-        TermRefinement(underlying, refinementName, refinedMemberType)
+        refinedMemberType match
+          case refinedMemberType: ByNameType =>
+            TermRefinement(underlying, isStable = false, refinementName, refinedMemberType.resultType)
+          case _ =>
+            val isStable = !refinedMemberType.isInstanceOf[MethodicType]
+            TermRefinement(underlying, isStable, refinementName, refinedMemberType)
     case RECtype =>
       val start = reader.currentAddr
       reader.readByte()

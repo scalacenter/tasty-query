@@ -13,6 +13,9 @@ private[tastyquery] object Substituters:
   def substParams(tp: TypeMappable, from: Binders, to: List[Type])(using Context): tp.ThisTypeMappableType =
     new SubstParamsMap(from, to).apply(tp)
 
+  def substRecThis(tp: TypeMappable, from: RecType, to: Type)(using Context): tp.ThisTypeMappableType =
+    new SubstRecThisMap(from, to).apply(tp)
+
   def substClassTypeParams(tp: TypeMappable, from: List[ClassTypeParamSymbol], to: List[Type])(
     using Context
   ): tp.ThisTypeMappableType =
@@ -21,6 +24,9 @@ private[tastyquery] object Substituters:
   def substLocalParams(tp: TypeMappable, from: List[Symbol], to: List[Type]): tp.ThisTypeMappableType =
     if from.isEmpty then tp
     else new SubstLocalParamsMap(from, to).apply(tp)
+
+  def substRefinementThis(tp: TypeMappable, from: ClassSymbol, to: RecThis)(using Context): tp.ThisTypeMappableType =
+    new SubstRefinementThisMap(from, to).apply(tp)
 
   final class SubstBindingMap(from: Binders, to: Binders) extends TypeMap:
     def apply(tp: Type): Type =
@@ -57,6 +63,24 @@ private[tastyquery] object Substituters:
           mapOver(tp)
     end apply
   end SubstParamsMap
+
+  private final class SubstRecThisMap(from: RecType, to: Type)(using Context) extends NormalizingTypeMap:
+    def apply(tp: Type): Type =
+      tp match
+        case tp: RecThis =>
+          if tp.binders eq from then to else tp
+        case tp: NamedType =>
+          tp.prefix match
+            case NoPrefix     => tp
+            case prefix: Type => tp.derivedSelect(apply(prefix))
+        case _: ThisType =>
+          tp
+        case tp: AppliedType =>
+          tp.map(apply(_))
+        case _ =>
+          mapOver(tp)
+    end apply
+  end SubstRecThisMap
 
   private final class SubstClassTypeParamsMap(from: List[ClassTypeParamSymbol], to: List[Type])(using Context)
       extends NormalizingTypeMap:
@@ -103,5 +127,16 @@ private[tastyquery] object Substituters:
         case _ =>
           mapOver(tp)
   end SubstLocalParamsMap
+
+  private final class SubstRefinementThisMap(from: ClassSymbol, to: RecThis) extends TypeMap:
+    def apply(tp: Type): Type =
+      tp match
+        case tp: ThisType =>
+          if tp.tref.isLocalRef(from) then to else tp
+        case _: BoundType =>
+          tp
+        case _ =>
+          mapOver(tp)
+  end SubstRefinementThisMap
 
 end Substituters

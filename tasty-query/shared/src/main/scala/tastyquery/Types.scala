@@ -582,7 +582,11 @@ object Types {
   /** A marker trait for types that are guaranteed to contain only a
     * single non-null value (they might contain null in addition).
     */
-  sealed trait SingletonType extends TypeProxy with ValueType
+  sealed trait SingletonType extends TypeProxy with ValueType:
+    private[tastyquery] final def isStable(using Context): Boolean = this match
+      case tp: TermRef => tp.symbol.isStableMember
+      case _           => true
+  end SingletonType
 
   sealed trait PathType extends TypeProxy with ValueType
 
@@ -1630,10 +1634,17 @@ object Types {
     * @param refinedName The name of the refined term member
     * @param refinedType The refined type for the given term member
     */
-  final class TermRefinement(val parent: Type, val refinedName: TermName, val refinedType: Type) extends RefinedType:
+  final class TermRefinement(val parent: Type, val isStable: Boolean, val refinedName: TermName, val refinedType: Type)
+      extends RefinedType:
+    @deprecated("use the overload with an explicit isStable argument", since = "0.7.4")
+    def this(parent: Type, refinedName: TermName, refinedType: Type) =
+      this(parent, isStable = false, refinedName, refinedType)
+
     // Cache fields
     private[tastyquery] val isMethodic = refinedType.isInstanceOf[MethodicType]
     private var mySignedName: SignedName | Null = null
+
+    require(!(isStable && isMethodic), s"Ill-formed $this")
 
     private[tastyquery] def signedName(using Context): SignedName =
       val local = mySignedName
@@ -1687,7 +1698,7 @@ object Types {
 
     private[tastyquery] final def derivedTermRefinement(parent: Type, refinedName: TermName, refinedType: Type): Type =
       if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedType eq this.refinedType)) this
-      else TermRefinement(parent, refinedName, refinedType)
+      else TermRefinement(parent, isStable, refinedName, refinedType)
 
     override def toString(): String = s"TermRefinement($parent, $refinedName, $refinedType)"
   end TermRefinement
@@ -1706,6 +1717,9 @@ object Types {
 
     def underlying(using Context): Type = parent
 
+    final def expand(recThisType: Type)(using Context): Type =
+      Substituters.substRecThis(parent, this, recThisType)
+
     override def toString(): String = s"RecType@$debugID($parent)"
 
     def debugID: Int = System.identityHashCode(this)
@@ -1721,7 +1735,7 @@ object Types {
 
     final def binders: BindersType = binder
 
-    final def copyBoundType(newBinder: RecType): Type = RecThis(newBinder)
+    final def copyBoundType(newBinder: RecType): Type = newBinder.recThis
 
     final def underlying(using Context): Type = binder
 
@@ -1877,6 +1891,30 @@ object Types {
       else TypeAlias(alias)
 
     override def toString(): String = s"TypeAlias($alias)"
+  }
+
+  /** A skolem type reference with underlying type `tpe`.
+    *
+    * For tasty-query, a skolem type is a singleton type of some unknown value
+    * of type `tpe`.
+    *
+    * Skolem types do not appear as the types of trees or symbols, but they
+    * may be used internally, notably for subtyping and member lookup purposes.
+    *
+    * Note that care is needed when creating them, since not all types need to
+    * be inhabited.
+    *
+    * A skolem is equal to itself and no other type.
+    */
+  final class SkolemType(val tpe: Type) extends SingletonType {
+    override def underlying(using Context): Type = tpe
+
+    private[tastyquery] def derivedSkolemType(tpe: Type)(using Context): SkolemType =
+      if (tpe eq this.tpe) this else SkolemType(tpe)
+
+    override def toString: String = s"SkolemType@$debugID($tpe)"
+
+    def debugID: Int = System.identityHashCode(this)
   }
 
   final class WildcardTypeBounds(val bounds: TypeBounds) extends TypeProxy {

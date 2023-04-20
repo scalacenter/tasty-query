@@ -198,6 +198,16 @@ private[tastyquery] object Subtyping:
       (isSubtype(tp1, tp2.parent) && hasMatchingRefinedMember(tp1, tp2))
         || level4(tp1, tp2)
 
+    case tp2: RecType =>
+      tp1.dealias match
+        case tp1: RecType =>
+          isSubtype(tp1.parent, tp2.expand(tp1.recThis))
+        case tp1: ValueType =>
+          val tp1stable = ensureStableSingleton(tp1)
+          isSubtype(fixRecs(tp1stable, tp1stable), tp2.expand(tp1stable))
+        case _ =>
+          false
+
     case tp2: OrType =>
       isSubtype(tp1, tp2.first) || isSubtype(tp1, tp2.second)
         || level4(tp1, tp2)
@@ -356,6 +366,43 @@ private[tastyquery] object Subtyping:
               throw AssertionError(s"found type member for $tp2 in $tp1")
   end hasMatchingRefinedMember
 
+  private def ensureStableSingleton(tp: ValueType)(using Context): SingletonType = tp match
+    case tp: SingletonType if tp.isStable => tp
+    case _                                => SkolemType(tp)
+
+  /** Replace any top-level recursive type `{ z => T }` in `tp` with `[z := anchor]T`. */
+  private def fixRecs(anchor: SingletonType, tp: Type)(using Context): Type =
+    def fix(tp: Type): Type = tp match
+      case tp: TypeProxy =>
+        tp match
+          case tp: RecType =>
+            Substituters.substRecThis(fix(tp.parent), tp, anchor)
+          case tp: TermRefinement =>
+            tp.derivedTermRefinement(fix(tp.parent), tp.refinedName, tp.refinedType)
+          case tp: TypeRefinement =>
+            tp.derivedTypeRefinement(fix(tp.parent), tp.refinedName, tp.refinedBounds)
+          case tp: TypeParamRef =>
+            fixOrElse(tp.bounds.high, tp)
+          case tp: TypeRef if tp.isClass =>
+            tp
+          case _ =>
+            fixOrElse(tp.superType, tp)
+      case tp: AndType =>
+        tp.derivedAndType(fix(tp.first), fix(tp.second))
+      case tp: OrType =>
+        tp.derivedOrType(fix(tp.first), fix(tp.second))
+      case tp =>
+        tp
+    end fix
+
+    def fixOrElse(tp: Type, fallback: Type): Type =
+      val tp1 = fix(tp)
+      if tp1 ne tp then tp1 else fallback
+    end fixOrElse
+
+    fix(tp)
+  end fixRecs
+
   private def level4(tp1: Type, tp2: Type)(using Context): Boolean = tp1 match
     case TypeRef.OfClass(cls1) =>
       if cls1 == defn.NothingClass then true
@@ -394,6 +441,9 @@ private[tastyquery] object Subtyping:
             && isSubtype(tp1.resultType, tp2.appliedTo(tp1.paramRefs))
 
     case tp1: RefinedType =>
+      isSubtype(tp1.parent, tp2)
+
+    case tp1: RecType =>
       isSubtype(tp1.parent, tp2)
 
     case tp1: AndType =>
