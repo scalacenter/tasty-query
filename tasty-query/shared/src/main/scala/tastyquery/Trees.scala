@@ -675,15 +675,7 @@ object Trees {
       val refined = refinements.foldLeft(base) { (parent, refinement) =>
         refinement match
           case TypeMember(name, rhs, _) =>
-            val refinedBounds = rhs match
-              case TypeAliasDefinitionTree(tpt) =>
-                TypeAlias(tpt.toType)
-              case rhs: TypeBoundsTree =>
-                rhs.toTypeBounds
-              case _ =>
-                throw InvalidProgramStructureException(s"Unexpected rhs for type refinement '$name': $rhs")
-            end refinedBounds
-            TypeRefinement(parent, name, refinedBounds)
+            TypeRefinement(parent, name, makeRefinedBounds(name, rhs))
 
           case ValDef(name, tpt, _, _) =>
             TermRefinement(parent, isStable = true, name, tpt.toType)
@@ -698,6 +690,18 @@ object Trees {
         if recType.parent eq refined then refined
         else recType
     end calculateType
+
+    private def makeRefinedBounds(name: TypeName, rhs: TypeDefinitionTree)(using Context): TypeBounds =
+      rhs match
+        case TypeAliasDefinitionTree(tpt) =>
+          TypeAlias(tpt.toType)
+        case rhs: TypeBoundsTree =>
+          rhs.toTypeBounds
+        case rhs @ PolyTypeDefinitionTree(_, body) =>
+          makeRefinedBounds(name, body).mapBounds(rhs.integrateInto(_))
+        case _ =>
+          throw InvalidProgramStructureException(s"Unexpected rhs for type refinement '$name': $rhs")
+    end makeRefinedBounds
 
     override final def withSpan(span: Span): RefinedTypeTree =
       RefinedTypeTree(underlying, refinements, refinedCls)(span)

@@ -37,6 +37,10 @@ class RefinedTypeTree {
 
   val innerRefVal: C { def c1: C1 } = new C { def c1: C1 = new C1}
 
+  // Poly type refinement
+
+  def polyTypeRefinement(c: C { type Poly[X] = List[(X, X)] }) = c
+
   // With an additional 'with'
 
   trait AndTypeA
