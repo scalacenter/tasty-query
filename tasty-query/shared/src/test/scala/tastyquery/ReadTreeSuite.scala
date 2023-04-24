@@ -2164,6 +2164,18 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(typerefCheck)(clue(tree)))
   }
 
+  testUnpickle("termrefin", "simple_trees.EmbeddedConfig") { tree =>
+    val termRefInCheck: StructureCheck = {
+      case TypeWrapper(
+            TermRefInternal(
+              ty.ThisType(TypeRefInternal(_, SimpleTypeName("DefaultConfigs"))),
+              LookupIn(TypeRefInternal(_, SimpleTypeName("DefaultConfigs")), SimpleName("PrivateConfig"))
+            )
+          ) =>
+    }
+    assert(containsSubtree(termRefInCheck)(clue(tree.symbol.annotations.head.tree)))
+  }
+
   testUnpickle("thistype", "simple_trees.ThisType") { tree =>
     val thisTypeCheck: StructureCheck = {
       case DefDef(

@@ -968,6 +968,14 @@ private[tasties] class TreeUnpickler(
       val sym = readSymRef.asTerm
       val pre = readType
       Ident(sym.name)(TermRef(pre, sym))(spn)
+    case TERMREFin =>
+      val spn = span
+      reader.readByte()
+      reader.readEnd()
+      val name = readName
+      val prefix = readType
+      val ownerRef = readTypeRef()
+      Ident(name)(TermRef(prefix, LookupIn(ownerRef, name)))(spn)
     case SHAREDtype =>
       val spn = span
       reader.readByte()
@@ -1068,6 +1076,13 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       val name = readName
       TermRef(readType, name)
+    case TERMREFin =>
+      reader.readByte()
+      reader.readEnd()
+      val name = readName
+      val prefix = readType
+      val ownerRef = readTypeRef()
+      TermRef(prefix, LookupIn(ownerRef, name))
     case APPLIEDtype =>
       reader.readByte()
       val end = reader.readEnd()
