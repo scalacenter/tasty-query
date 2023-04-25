@@ -27,16 +27,16 @@ private[tasties] sealed trait AbstractCaseDefFactory[CaseDefType]
 private[tasties] case object CaseDefFactory extends AbstractCaseDefFactory[CaseDef]
 private[tasties] case object TypeCaseDefFactory extends AbstractCaseDefFactory[TypeCaseDef]
 
-private[tasties] class TreeUnpickler(
+private[tasties] class TreeUnpickler private (
   protected val reader: TastyReader,
   nameAtRef: NameTable,
-  posUnpicklerOpt: Option[PositionUnpickler]
+  posUnpicklerOpt: Option[PositionUnpickler],
+  caches: TreeUnpickler.Caches
 )(using Context) {
   import TreeUnpickler.*
 
-  private val recursiveTypeAtAddr = mutable.Map.empty[Addr, Type]
-
-  private val sharedTypesCache = mutable.Map.empty[Addr, Type]
+  def this(reader: TastyReader, nameAtRef: NameTable, posUnpicklerOpt: Option[PositionUnpickler])(using Context) =
+    this(reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
 
   def unpickle(filename: String): List[Tree] =
     val fileContext = new LocalContext(filename, defn.RootPackage, mutable.HashMap.empty, Map.empty)
@@ -114,6 +114,12 @@ private[tasties] class TreeUnpickler(
         sym.withFlags(Case, None)
         // bind is never an owner
         reader.until(end)(createSymbols())
+      case REFINEDtpt =>
+        val spn = spanAt(start)
+        val sym = ClassSymbol.createRefinedClassSymbol(localCtx.owner, EmptyFlagSet, spn)
+        localCtx.registerSym(start, sym)
+        val end = reader.readEnd()
+        reader.until(end)(createSymbols())
 
       // ---------- tags with potentially nested symbols --------------------------------
       case tag if firstASTTreeTag <= tag && tag < firstNatASTTreeTag => createSymbols()
@@ -121,8 +127,8 @@ private[tasties] class TreeUnpickler(
         reader.readNat()
         createSymbols()
       case TEMPLATE | APPLY | TYPEAPPLY | SUPER | TYPED | ASSIGN | BLOCK | INLINED | LAMBDA | IF | MATCH | TRY | WHILE |
-          REPEATED | ALTERNATIVE | UNAPPLY | REFINEDtpt | APPLIEDtpt | LAMBDAtpt | TYPEBOUNDStpt | ANNOTATEDtpt |
-          MATCHtpt | CASEDEF =>
+          REPEATED | ALTERNATIVE | UNAPPLY | APPLIEDtpt | LAMBDAtpt | TYPEBOUNDStpt | ANNOTATEDtpt | MATCHtpt |
+          CASEDEF =>
         val end = reader.readEnd()
         reader.until(end)(createSymbols())
       case SELECTin =>
@@ -173,7 +179,7 @@ private[tasties] class TreeUnpickler(
   private def spanSeqT(trees: Seq[TypeTree]): Span = trees.foldLeft(NoSpan)((s, t) => s.union(t.span))
 
   def forkAt(start: Addr): TreeUnpickler =
-    new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt)
+    new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt, caches)
 
   def fork: TreeUnpickler =
     forkAt(reader.currentAddr)
@@ -1060,7 +1066,7 @@ private[tasties] class TreeUnpickler(
     case SHAREDtype =>
       reader.readByte()
       val addr = reader.readAddr()
-      recursiveTypeAtAddr.getOrElse(addr, sharedTypesCache.getOrElseUpdate(addr, forkAt(addr).readType))
+      caches.sharedTypesCache.getOrElseUpdate(addr, forkAt(addr).readType)
     case TERMREFdirect =>
       reader.readByte()
       val sym = readSymRef.asTerm
@@ -1164,18 +1170,12 @@ private[tasties] class TreeUnpickler(
     case RECtype =>
       val start = reader.currentAddr
       reader.readByte()
-      recursiveTypeAtAddr.get(start) match
-        case Some(tp) =>
-          skipTree()
-          tp
-        case None =>
-          RecType { rt =>
-            recursiveTypeAtAddr(start) = rt
-            readType
-          }
+      RecType { rt =>
+        readType(using localCtx.withEnclosingBinders(start, rt))
+      }
     case RECthis =>
       reader.readByte()
-      val recType = recursiveTypeAtAddr(reader.readAddr()).asInstanceOf[RecType]
+      val recType = localCtx.getEnclosingBinders(reader.readAddr()).asInstanceOf[RecType]
       recType.recThis
     case MATCHtype =>
       val start = reader.currentAddr
@@ -1185,6 +1185,15 @@ private[tasties] class TreeUnpickler(
       val scrutinee = readType
       val cases: List[MatchTypeCase] = reader.until(end)(readMatchTypeCase)
       MatchType(upperBound, scrutinee, cases)
+    case REFINEDtpt =>
+      /* This is kind of a hack at the TASTy format level. A `Type` with tag
+       * `REFINEDtpt` (but not a `TypeTree` with that tag!) is in fact the
+       * `cls.typeRef` of the refined class `cls` implicitly declared by that
+       * `REFINEDtpt`.
+       */
+      val start = reader.currentAddr
+      skipTree()
+      localCtx.getSymbol[ClassSymbol](start).typeRef
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
     case tag =>
@@ -1308,20 +1317,39 @@ private[tasties] class TreeUnpickler(
       reader.readByte()
       SingletonTypeTree(readTerm)(spn)
     case REFINEDtpt =>
-      val spn = span
-      val cls = ClassSymbol.createRefinedClassSymbol(localCtx.owner, EmptyFlagSet, spn)
-      recursiveTypeAtAddr(reader.currentAddr) = cls.typeRef
-      reader.readByte()
-      val end = reader.readEnd()
-      val parent = readTypeTree
-      val statements = readStats(end)(using localCtx.withOwner(cls))
-      val refinements = statements.map {
-        case memberDef: RefinementMemberDef =>
-          memberDef
-        case otherDef =>
-          throw TastyFormatException(s"Unexpected member $otherDef in refinement type")
-      }
-      RefinedTypeTree(parent, refinements, cls)(spn)
+      /* It is possible to find SHAREDterm's referencing REFINEDtpt's.
+       * This is bad because a REFINEDtpt defines symbols. If we read it again,
+       * we will try to re-fill the information of the symbols, which is not
+       * allowed. To work around this problem, we maintain a special map of the
+       * REFINEDtpt nodes we have already read.
+       *
+       * A better solution would be not to rely on symbols at all; but that is
+       * tricky because there are standard TYPEDEF, VALDEF and DEFDEF in the
+       * REFINEDtpt, and those create trees that define symbols as well. We
+       * would need a different mode of reading those nested definitions, which
+       * would create other kinds of trees without symbols.
+       */
+      val start = reader.currentAddr
+      caches.refinedTypeTreeCache.get(start) match
+        case Some(existing) =>
+          skipTree()
+          existing
+        case None =>
+          val spn = span
+          val cls = localCtx.getSymbol[ClassSymbol](reader.currentAddr)
+          reader.readByte()
+          val end = reader.readEnd()
+          val parent = readTypeTree
+          val statements = readStats(end)(using localCtx.withOwner(cls))
+          val refinements = statements.map {
+            case memberDef: RefinementMemberDef =>
+              memberDef
+            case otherDef =>
+              throw TastyFormatException(s"Unexpected member $otherDef in refinement type")
+          }
+          val result = RefinedTypeTree(parent, refinements, cls)(spn)
+          caches.refinedTypeTreeCache(start) = result
+          result
     case APPLIEDtpt =>
       val spn = span
       reader.readByte()
@@ -1462,6 +1490,12 @@ private[tasties] class TreeUnpickler(
 }
 
 private[tasties] object TreeUnpickler {
+
+  private final class Caches:
+    val sharedTypesCache = mutable.Map.empty[Addr, Type]
+
+    val refinedTypeTreeCache = mutable.Map.empty[Addr, RefinedTypeTree]
+  end Caches
 
   extension (reader: TastyReader)
     def ifBeforeOpt[T](end: Addr)(op: => T): Option[T] =
