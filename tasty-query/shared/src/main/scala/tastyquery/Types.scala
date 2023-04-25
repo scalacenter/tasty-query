@@ -19,7 +19,7 @@ import tastyquery.Trees.*
 import tastyquery.Variances.*
 
 object Types {
-  private[tastyquery] final case class LookupIn(ownerRef: TypeRef, sel: SignedName)
+  private[tastyquery] final case class LookupIn(ownerRef: TypeRef, name: TermName)
   private[tastyquery] final case class LookupTypeIn(ownerRef: TypeRef, name: TypeName)
 
   private[tastyquery] final case class Scala2ExternalSymRef(owner: Symbol, path: List[Name]) {
@@ -644,7 +644,7 @@ object Types {
     private def computeName: ThisName = (designator match {
       case name: Name                       => name
       case sym: TermOrTypeSymbol            => sym.name
-      case LookupIn(_, sel)                 => sel
+      case LookupIn(_, name)                => name
       case LookupTypeIn(_, name)            => name
       case designator: Scala2ExternalSymRef => designator.name
     }).asInstanceOf[ThisName]
@@ -837,9 +837,9 @@ object Types {
         throw InvalidProgramStructureException(s"Owner of SelectIn($designator) does not refer a class")
       }
       cls
-        .findMember(cls.thisType, designator.sel)
+        .findMember(cls.thisType, designator.name)
         .getOrElse {
-          throw MemberNotFoundException(cls, designator.sel)
+          throw MemberNotFoundException(cls, designator.name)
         }
         .asTerm
     end resolveLookupIn
