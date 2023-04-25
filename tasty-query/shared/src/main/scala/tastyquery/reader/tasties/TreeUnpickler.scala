@@ -27,14 +27,16 @@ private[tasties] sealed trait AbstractCaseDefFactory[CaseDefType]
 private[tasties] case object CaseDefFactory extends AbstractCaseDefFactory[CaseDef]
 private[tasties] case object TypeCaseDefFactory extends AbstractCaseDefFactory[TypeCaseDef]
 
-private[tasties] class TreeUnpickler(
+private[tasties] class TreeUnpickler private (
   protected val reader: TastyReader,
   nameAtRef: NameTable,
-  posUnpicklerOpt: Option[PositionUnpickler]
+  posUnpicklerOpt: Option[PositionUnpickler],
+  caches: TreeUnpickler.Caches
 )(using Context) {
   import TreeUnpickler.*
 
-  private val sharedTypesCache = mutable.Map.empty[Addr, Type]
+  def this(reader: TastyReader, nameAtRef: NameTable, posUnpicklerOpt: Option[PositionUnpickler])(using Context) =
+    this(reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
 
   def unpickle(filename: String): List[Tree] =
     val fileContext = new LocalContext(filename, defn.RootPackage, mutable.HashMap.empty, Map.empty)
@@ -177,7 +179,7 @@ private[tasties] class TreeUnpickler(
   private def spanSeqT(trees: Seq[TypeTree]): Span = trees.foldLeft(NoSpan)((s, t) => s.union(t.span))
 
   def forkAt(start: Addr): TreeUnpickler =
-    new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt)
+    new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt, caches)
 
   def fork: TreeUnpickler =
     forkAt(reader.currentAddr)
@@ -1064,7 +1066,7 @@ private[tasties] class TreeUnpickler(
     case SHAREDtype =>
       reader.readByte()
       val addr = reader.readAddr()
-      sharedTypesCache.getOrElseUpdate(addr, forkAt(addr).readType)
+      caches.sharedTypesCache.getOrElseUpdate(addr, forkAt(addr).readType)
     case TERMREFdirect =>
       reader.readByte()
       val sym = readSymRef.asTerm
@@ -1468,6 +1470,10 @@ private[tasties] class TreeUnpickler(
 }
 
 private[tasties] object TreeUnpickler {
+
+  private final class Caches:
+    val sharedTypesCache = mutable.Map.empty[Addr, Type]
+  end Caches
 
   extension (reader: TastyReader)
     def ifBeforeOpt[T](end: Addr)(op: => T): Option[T] =
