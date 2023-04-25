@@ -1317,19 +1317,39 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       SingletonTypeTree(readTerm)(spn)
     case REFINEDtpt =>
-      val spn = span
-      val cls = localCtx.getSymbol[ClassSymbol](reader.currentAddr)
-      reader.readByte()
-      val end = reader.readEnd()
-      val parent = readTypeTree
-      val statements = readStats(end)(using localCtx.withOwner(cls))
-      val refinements = statements.map {
-        case memberDef: RefinementMemberDef =>
-          memberDef
-        case otherDef =>
-          throw TastyFormatException(s"Unexpected member $otherDef in refinement type")
-      }
-      RefinedTypeTree(parent, refinements, cls)(spn)
+      /* It is possible to find SHAREDterm's referencing REFINEDtpt's.
+       * This is bad because a REFINEDtpt defines symbols. If we read it again,
+       * we will try to re-fill the information of the symbols, which is not
+       * allowed. To work around this problem, we maintain a special map of the
+       * REFINEDtpt nodes we have already read.
+       *
+       * A better solution would be not to rely on symbols at all; but that is
+       * tricky because there are standard TYPEDEF, VALDEF and DEFDEF in the
+       * REFINEDtpt, and those create trees that define symbols as well. We
+       * would need a different mode of reading those nested definitions, which
+       * would create other kinds of trees without symbols.
+       */
+      val start = reader.currentAddr
+      caches.refinedTypeTreeCache.get(start) match
+        case Some(existing) =>
+          skipTree()
+          existing
+        case None =>
+          val spn = span
+          val cls = localCtx.getSymbol[ClassSymbol](reader.currentAddr)
+          reader.readByte()
+          val end = reader.readEnd()
+          val parent = readTypeTree
+          val statements = readStats(end)(using localCtx.withOwner(cls))
+          val refinements = statements.map {
+            case memberDef: RefinementMemberDef =>
+              memberDef
+            case otherDef =>
+              throw TastyFormatException(s"Unexpected member $otherDef in refinement type")
+          }
+          val result = RefinedTypeTree(parent, refinements, cls)(spn)
+          caches.refinedTypeTreeCache(start) = result
+          result
     case APPLIEDtpt =>
       val spn = span
       reader.readByte()
@@ -1473,6 +1493,8 @@ private[tasties] object TreeUnpickler {
 
   private final class Caches:
     val sharedTypesCache = mutable.Map.empty[Addr, Type]
+
+    val refinedTypeTreeCache = mutable.Map.empty[Addr, RefinedTypeTree]
   end Caches
 
   extension (reader: TastyReader)
