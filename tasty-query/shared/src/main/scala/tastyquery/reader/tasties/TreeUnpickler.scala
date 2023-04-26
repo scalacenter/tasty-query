@@ -551,8 +551,6 @@ private[tasties] class TreeUnpickler private (
       val spn = span
       val start = reader.currentAddr
       val paramSymbol = localCtx.getSymbol[TypeParamSymbol](start)
-      val expectedFlags = if paramSymbol.owner.isClass then ClassTypeParam else TypeParameter
-      assert(paramSymbol.flags.isAllOf(expectedFlags))
       reader.readByte()
       val end = reader.readEnd()
       val name = readName.toTypeName
