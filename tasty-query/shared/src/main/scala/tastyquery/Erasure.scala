@@ -100,8 +100,12 @@ private[tastyquery] object Erasure:
           case None          => preErase(tpe.bound)
       case tpe: OrType =>
         erasedLub(preErase(tpe.first), preErase(tpe.second))
-      case tpe =>
+      case tpe: AndType =>
         throw UnsupportedOperationException(s"Cannot erase $tpe")
+      case tpe: TypeProxy =>
+        preErase(tpe.underlying)
+      case _: MethodicType | _: PackageRef | _: CustomTransientGroundType =>
+        throw IllegalArgumentException(s"Unexpected type in erasure: $tpe")
   end preErase
 
   private def finishErase(typeRef: ErasedTypeRef)(using Context): ErasedTypeRef =

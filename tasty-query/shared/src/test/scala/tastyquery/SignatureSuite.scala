@@ -305,6 +305,12 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
     val foo = RefinedTypeTree.findNonOverloadedDecl(name"foo")
     assertSigned(foo, "(simple_trees.RefinedTypeTree.A):scala.Int")
+
+    val innerRef = RefinedTypeTree.findNonOverloadedDecl(name"innerRef")
+    assertSigned(innerRef, "(simple_trees.RefinedTypeTree.C):scala.Int")
+
+    val innerRefVal = RefinedTypeTree.findNonOverloadedDecl(name"innerRefVal")
+    assertNotSigned(innerRefVal, "():simple_trees.RefinedTypeTree.C")
   }
 
   testWithContext("match types") {
