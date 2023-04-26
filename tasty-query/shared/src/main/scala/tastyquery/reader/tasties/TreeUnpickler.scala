@@ -1315,39 +1315,21 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       SingletonTypeTree(readTerm)(spn)
     case REFINEDtpt =>
-      /* It is possible to find SHAREDterm's referencing REFINEDtpt's.
-       * This is bad because a REFINEDtpt defines symbols. If we read it again,
-       * we will try to re-fill the information of the symbols, which is not
-       * allowed. To work around this problem, we maintain a special map of the
-       * REFINEDtpt nodes we have already read.
-       *
-       * A better solution would be not to rely on symbols at all; but that is
-       * tricky because there are standard TYPEDEF, VALDEF and DEFDEF in the
-       * REFINEDtpt, and those create trees that define symbols as well. We
-       * would need a different mode of reading those nested definitions, which
-       * would create other kinds of trees without symbols.
-       */
-      val start = reader.currentAddr
-      caches.refinedTypeTreeCache.get(start) match
-        case Some(existing) =>
-          skipTree()
-          existing
-        case None =>
-          val spn = span
-          val cls = localCtx.getSymbol[ClassSymbol](reader.currentAddr)
-          reader.readByte()
-          val end = reader.readEnd()
-          val parent = readTypeTree
-          val statements = readStats(end)(using localCtx.withOwner(cls))
-          val refinements = statements.map {
-            case memberDef: RefinementMemberDef =>
-              memberDef
-            case otherDef =>
-              throw TastyFormatException(s"Unexpected member $otherDef in refinement type")
-          }
-          val result = RefinedTypeTree(parent, refinements, cls)(spn)
-          caches.refinedTypeTreeCache(start) = result
-          result
+      protectReadDefiningTypeTree {
+        val spn = span
+        val cls = localCtx.getSymbol[ClassSymbol](reader.currentAddr)
+        reader.readByte()
+        val end = reader.readEnd()
+        val parent = readTypeTree
+        val statements = readStats(end)(using localCtx.withOwner(cls))
+        val refinements = statements.map {
+          case memberDef: RefinementMemberDef =>
+            memberDef
+          case otherDef =>
+            throw TastyFormatException(s"Unexpected member $otherDef in refinement type")
+        }
+        RefinedTypeTree(parent, refinements, cls)(spn)
+      }
     case APPLIEDtpt =>
       val spn = span
       reader.readByte()
@@ -1355,10 +1337,12 @@ private[tasties] class TreeUnpickler private (
       val tycon = readTypeTree
       AppliedTypeTree(tycon, reader.until(end)(readTypeOrWildcardTree(spn)))(spn)
     case LAMBDAtpt =>
-      val spn = span
-      reader.readByte()
-      reader.readEnd()
-      TypeLambdaTree(readTypeParams, readTypeTree)(spn)
+      protectReadDefiningTypeTree {
+        val spn = span
+        reader.readByte()
+        reader.readEnd()
+        TypeLambdaTree(readTypeParams, readTypeTree)(spn)
+      }
     // select type from a term
     case SELECT =>
       val spn = span
@@ -1388,27 +1372,29 @@ private[tasties] class TreeUnpickler private (
     // TODO: why in TYPEAPPLY?
     // in MATCHtpt, TYPEAPPLY
     case BIND =>
-      val spn = span
-      val start = reader.currentAddr
-      reader.readByte()
-      val end = reader.readEnd()
-      val name = readName.toTypeName
-      val bounds = readTypeBounds
-      /* This is a workaround: consider a BIND inside a MATCHtpt
-       * example: case List[t] => t
-       * Such a bind has IDENT(_) as its body, which is not a type tree and therefore not expected.
-       * Treat it as if it were an IDENTtpt. */
-      val body: TypeDefinitionTree = if (reader.nextByte == IDENT) {
-        val identSpn = spn // for some reason, the span of the IDENT itself is empty, so we reuse the span of the BIND
+      protectReadDefiningTypeTree {
+        val spn = span
+        val start = reader.currentAddr
         reader.readByte()
-        val typeName = readName.toTypeName
-        val typ = readTypeBounds
-        NamedTypeBoundsTree(typeName, typ)(identSpn)
-      } else readTypeDefinition(forOpaque = false)
-      val sym = localCtx.getSymbol[LocalTypeParamSymbol](start)
-      readAnnotationsInModifiers(sym, end)
-      sym.setBounds(bounds)
-      definingTree(sym, TypeTreeBind(name, body, sym)(spn))
+        val end = reader.readEnd()
+        val name = readName.toTypeName
+        val bounds = readTypeBounds
+        /* This is a workaround: consider a BIND inside a MATCHtpt
+         * example: case List[t] => t
+         * Such a bind has IDENT(_) as its body, which is not a type tree and therefore not expected.
+         * Treat it as if it were an IDENTtpt. */
+        val body: TypeDefinitionTree = if (reader.nextByte == IDENT) {
+          val identSpn = spn // for some reason, the span of the IDENT itself is empty, so we reuse the span of the BIND
+          reader.readByte()
+          val typeName = readName.toTypeName
+          val typ = readTypeBounds
+          NamedTypeBoundsTree(typeName, typ)(identSpn)
+        } else readTypeDefinition(forOpaque = false)
+        val sym = localCtx.getSymbol[LocalTypeParamSymbol](start)
+        readAnnotationsInModifiers(sym, end)
+        sym.setBounds(bounds)
+        definingTree(sym, TypeTreeBind(name, body, sym)(spn))
+      }
     case BYNAMEtpt =>
       val spn = span
       reader.readByte()
@@ -1429,6 +1415,31 @@ private[tasties] class TreeUnpickler private (
       throw TastyFormatException(s"Unexpected type tree tag ${astTagToString(tag)} $posErrorMsg")
     case _ => TypeWrapper(readType)(span)
   }
+
+  private def protectReadDefiningTypeTree[A <: TypeTree](body: => A): A =
+    /* It is possible to find SHAREDterm's referencing REFINEDtpt, `LAMBDAtpt`, etc.
+     * This is bad because a these TypeTree's define symbols. If we read them
+     * again, we will try to re-fill the information of the symbols, which is
+     * not allowed. To work around this problem, we maintain a special map of
+     * those "sensitive" nodes we have already read.
+     *
+     * A better solution would be not to rely on symbols at all; but that is
+     * tricky because there are standard TYPEDEF, VALDEF and DEFDEF in the
+     * REFINEDtpt, and those create trees that define symbols as well. We
+     * would need a different mode of reading those nested definitions, which
+     * would create other kinds of trees without symbols. The same problem
+     * appears for other kinds of type trees with definitions.
+     */
+    val start = reader.currentAddr
+    caches.definingTypeTreeCache.get(start) match
+      case Some(existing) =>
+        skipTree()
+        existing.asInstanceOf[A]
+      case None =>
+        val result = body
+        caches.definingTypeTreeCache(start) = result
+        result
+  end protectReadDefiningTypeTree
 
   private def readConstant(using LocalContext): Constant = reader.readByte() match {
     case UNITconst =>
@@ -1492,7 +1503,7 @@ private[tasties] object TreeUnpickler {
   private final class Caches:
     val sharedTypesCache = mutable.Map.empty[Addr, Type]
 
-    val refinedTypeTreeCache = mutable.Map.empty[Addr, RefinedTypeTree]
+    val definingTypeTreeCache = mutable.Map.empty[Addr, TypeTree]
   end Caches
 
   extension (reader: TastyReader)

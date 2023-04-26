@@ -112,16 +112,8 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
-          // private[tastyquery], so this is fine
-          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Signatures#Signature.fromType"),
-          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Symbols#ClassSymbol.createRefinedClassSymbol"),
-          ProblemFilters.exclude[FinalClassProblem]("tastyquery.TypeOps$AsSeenFromMap"),
-          ProblemFilters.exclude[IncompatibleMethTypeProblem]("tastyquery.TypeOps#AsSeenFromMap.this"),
-          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.*.makeResolveMemberResult"),
-
-          // private[tastyquery] and implemented in the entire "open boundary" of Type, so this is fine
-          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#Type.resolveMatchingMember"),
-          ProblemFilters.exclude[ReversedMissingMethodProblem]("tastyquery.Types#Type.resolveMatchingMember"),
+          // private, so this is fine
+          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.reader.tasties.TreeUnpickler#Caches.refinedTypeTreeCache"),
         )
       },
     )
