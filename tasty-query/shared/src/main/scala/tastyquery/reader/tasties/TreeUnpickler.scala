@@ -925,12 +925,17 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       val end = reader.readEnd()
       val expr = readTerm
-      val caller: Option[TypeIdent] =
+      val caller: Option[TypeIdent | SelectTypeTree] =
         reader.ifBefore(end)(
           tagFollowShared match {
             // The caller is not specified, this is a binding (or next val or def)
             case VALDEF | DEFDEF => None
-            case _               => Some(readTypeTree.asInstanceOf[TypeIdent])
+            case _ =>
+              readTypeTree match
+                case caller: TypeIdent      => Some(caller)
+                case caller: SelectTypeTree => Some(caller)
+                case caller =>
+                  throw TastyFormatException(s"Unexpected Inlined caller $caller $posErrorMsg")
           },
           None
         )
