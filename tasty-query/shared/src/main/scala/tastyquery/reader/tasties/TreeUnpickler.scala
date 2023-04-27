@@ -41,14 +41,12 @@ private[tasties] class TreeUnpickler private (
   ) = this(filename, reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
 
   def unpickle(): List[Tree] =
-    val fileContext = new LocalContext()
-
     @tailrec
     def read(acc: ListBuffer[Tree]): List[Tree] =
-      acc += readTopLevelStat(using fileContext)
+      acc += readTopLevelStat
       if !reader.isAtEnd then read(acc) else acc.toList
 
-    fork.enterSymbols()(using fileContext)
+    fork.enterSymbols()
     val result = read(new ListBuffer[Tree])
 
     // Check that all the Symbols we created have been completed
@@ -57,7 +55,7 @@ private[tasties] class TreeUnpickler private (
     result
   end unpickle
 
-  private def enterSymbols()(using LocalContext): Unit =
+  private def enterSymbols(): Unit =
     while !reader.isAtEnd do createSymbols(defn.RootPackage)
 
   /* This method walks a TASTy file and creates all symbols in it.
@@ -68,7 +66,7 @@ private[tasties] class TreeUnpickler private (
    * The alternative is to create a symbol when we encounter a forward reference, but it is hard to
    * keep track of the owner in this case.
    * */
-  private def createSymbols(owner: Symbol)(using LocalContext): Unit = {
+  private def createSymbols(owner: Symbol): Unit = {
     val start = reader.currentAddr
     val tag = reader.readByte()
     tag match {
@@ -147,9 +145,7 @@ private[tasties] class TreeUnpickler private (
     }
   }
 
-  private def normalizeFlags(sym: Symbol, tag: Int, givenFlags: FlagSet, rhsIsEmpty: Boolean)(
-    using LocalContext
-  ): FlagSet =
+  private def normalizeFlags(sym: Symbol, tag: Int, givenFlags: FlagSet, rhsIsEmpty: Boolean): FlagSet =
     var flags = givenFlags
     if tag == DEFDEF then flags |= Method
     if rhsIsEmpty && (tag == VALDEF || tag == DEFDEF) then flags |= Abstract
@@ -163,8 +159,8 @@ private[tasties] class TreeUnpickler private (
     if tag == TYPEPARAM then flags |= TypeParameter
     flags
 
-  private def posErrorMsg(using LocalContext): String = s"at address ${reader.currentAddr} in file $filename"
-  private def posErrorMsg(atAddr: Addr)(using LocalContext): String = s"at address $atAddr in file $filename"
+  private def posErrorMsg: String = s"at address ${reader.currentAddr} in file $filename"
+  private def posErrorMsg(atAddr: Addr): String = s"at address $atAddr in file $filename"
 
   def spanAt(addr: Addr): Span =
     posUnpicklerOpt match {
@@ -219,7 +215,7 @@ private[tasties] class TreeUnpickler private (
     }
   }
 
-  private def readSymbolModifiers(sym: Symbol, tag: Int, end: Addr)(using LocalContext): Unit =
+  private def readSymbolModifiers(sym: Symbol, tag: Int, end: Addr): Unit =
     val modsReader = fork
     modsReader.skipParams()
     modsReader.skipTree() // tpt
@@ -230,7 +226,7 @@ private[tasties] class TreeUnpickler private (
     sym.withFlags(normalizedFlags, privateWithin)
 
   /** Read modifiers into a set of flags and a privateWithin boundary symbol. */
-  private def readModifiers(end: Addr)(using LocalContext): (FlagSet, Option[Symbol]) =
+  private def readModifiers(end: Addr): (FlagSet, Option[Symbol]) =
     var flags: FlagSet = EmptyFlagSet
     var privateWithin: Option[Symbol] = None
     def addFlag(flag: FlagSet): Unit =
@@ -299,14 +295,14 @@ private[tasties] class TreeUnpickler private (
     (flags, privateWithin)
   end readModifiers
 
-  private def readWithin(using LocalContext): Symbol =
+  private def readWithin: Symbol =
     readType match
       case TypeRef.OfClass(cls) => cls
       case pkgRef: PackageRef   => pkgRef.symbol
       case tpe                  => throw TastyFormatException(s"unexpected type for readWithin: $tpe")
   end readWithin
 
-  private def readAnnotationsInModifiers(sym: Symbol, end: Addr)(using LocalContext): Unit =
+  private def readAnnotationsInModifiers(sym: Symbol, end: Addr): Unit =
     var annots: List[Annotation] = Nil
 
     while reader.currentAddr != end && isModifierTag(reader.nextByte) do
@@ -322,7 +318,7 @@ private[tasties] class TreeUnpickler private (
     sym.setAnnotations(annots)
   end readAnnotationsInModifiers
 
-  private def readAnnotation()(using LocalContext): Annotation =
+  private def readAnnotation(): Annotation =
     val end = reader.readEnd()
     skipTree() // skip the typeref to the annotation class; we only use the tree
     val tree = readTerm
@@ -357,7 +353,7 @@ private[tasties] class TreeUnpickler private (
 
   def readSignedName(): SignedName = readName.asInstanceOf[SignedName]
 
-  private def readTopLevelStat(using LocalContext): TopLevelTree = reader.nextByte match {
+  private def readTopLevelStat: TopLevelTree = reader.nextByte match {
     case PACKAGE =>
       val spn = span
       reader.readByte()
@@ -370,10 +366,10 @@ private[tasties] class TreeUnpickler private (
     case _ => readStat
   }
 
-  private def readStats(end: Addr)(using LocalContext): List[StatementTree] =
+  private def readStats(end: Addr): List[StatementTree] =
     reader.until(end)(readStat)
 
-  private def readStat(using LocalContext): StatementTree = reader.nextByte match {
+  private def readStat: StatementTree = reader.nextByte match {
     case IMPORT | EXPORT =>
       def readSelector: ImportSelector = {
         assert(reader.nextByte == IMPORTED, posErrorMsg)
@@ -435,7 +431,7 @@ private[tasties] class TreeUnpickler private (
     * `PolyTypeDefinitionTree`s are distributed over the components of the
     * recursively transformed body.
     */
-  private def makeTypeMemberDefinition(tpt: TypeDefinitionTree)(using LocalContext): TypeMemberDefinition =
+  private def makeTypeMemberDefinition(tpt: TypeDefinitionTree): TypeMemberDefinition =
     import TypeMemberDefinition.*
 
     tpt match
@@ -461,7 +457,7 @@ private[tasties] class TreeUnpickler private (
         throw TastyFormatException(s"Unexpected type member definition $tpt at $posErrorMsg")
   end makeTypeMemberDefinition
 
-  private def readTypeDefinition(forOpaque: Boolean)(using LocalContext): TypeDefinitionTree =
+  private def readTypeDefinition(forOpaque: Boolean): TypeDefinitionTree =
     readPotentiallyShared {
       reader.nextByte match
         case TYPEBOUNDS =>
@@ -497,7 +493,7 @@ private[tasties] class TreeUnpickler private (
     }
   end readTypeDefinition
 
-  private def readTypeOrWildcard()(using LocalContext): Type =
+  private def readTypeOrWildcard(): Type =
     readPotentiallyShared {
       reader.nextByte match
         case TYPEBOUNDS =>
@@ -507,7 +503,7 @@ private[tasties] class TreeUnpickler private (
     }
   end readTypeOrWildcard
 
-  private def readTypeOrWildcardTree(span: Span)(using LocalContext): TypeTree =
+  private def readTypeOrWildcardTree(span: Span): TypeTree =
     readPotentiallyShared {
       reader.nextByte match
         case TYPEBOUNDS | TYPEBOUNDStpt =>
@@ -519,7 +515,7 @@ private[tasties] class TreeUnpickler private (
   end readTypeOrWildcardTree
 
   /** Reads type bounds for a synthetic typedef */
-  private def readTypeBounds(using LocalContext): TypeBounds = {
+  private def readTypeBounds: TypeBounds = {
     assert(tagFollowShared == TYPEBOUNDS, posErrorMsg)
     readPotentiallyShared({
       reader.readByte()
@@ -537,7 +533,7 @@ private[tasties] class TreeUnpickler private (
     })
   }
 
-  private def readTypeParams(using LocalContext): List[TypeParam] = {
+  private def readTypeParams: List[TypeParam] = {
     def toTypeParamBounds(tpt: TypeDefinitionTree): TypeBounds = tpt match
       case tpt: TypeBoundsTree =>
         tpt.toTypeBounds
@@ -569,7 +565,7 @@ private[tasties] class TreeUnpickler private (
   }
 
   // TODO: classinfo of the owner
-  private def readTemplate(cls: ClassSymbol)(using LocalContext): Template = {
+  private def readTemplate(cls: ClassSymbol): Template = {
     val spn = span
     reader.readByte()
     val end = reader.readEnd()
@@ -601,7 +597,7 @@ private[tasties] class TreeUnpickler private (
     Template(cstr, parents, self, tparams ++ params ++ body)(spn)
   }
 
-  private def readAllParams(using LocalContext): List[ParamsClause] =
+  private def readAllParams: List[ParamsClause] =
     reader.nextByte match {
       case PARAM => Left(readParams) :: readAllParams
       case EMPTYCLAUSE =>
@@ -611,7 +607,7 @@ private[tasties] class TreeUnpickler private (
       case _         => Nil
     }
 
-  private def readParamLists(using LocalContext): List[List[ValDef]] = {
+  private def readParamLists: List[List[ValDef]] = {
     var acc = new ListBuffer[List[ValDef]]()
     while (reader.nextByte == PARAM || reader.nextByte == EMPTYCLAUSE) {
       reader.nextByte match {
@@ -624,7 +620,7 @@ private[tasties] class TreeUnpickler private (
     acc.toList
   }
 
-  private def readParams(using LocalContext): List[ValDef] = {
+  private def readParams: List[ValDef] = {
     var acc = new ListBuffer[ValDef]()
     while (reader.nextByte == PARAM) {
       acc += readValOrDefDef.asInstanceOf[ValDef]
@@ -635,7 +631,7 @@ private[tasties] class TreeUnpickler private (
     acc.toList
   }
 
-  private def readSelf(using LocalContext): Option[SelfDef] =
+  private def readSelf: Option[SelfDef] =
     if (reader.nextByte != SELFDEF) {
       None
     } else {
@@ -646,7 +642,7 @@ private[tasties] class TreeUnpickler private (
       Some(SelfDef(name, tpt)(tpt.span))
     }
 
-  private def readValOrDefDef(using LocalContext): ValOrDefDef = {
+  private def readValOrDefDef: ValOrDefDef = {
     val spn = span
     val start = reader.currentAddr
     val symbol = caches.getSymbol[TermSymbol](start)
@@ -699,14 +695,14 @@ private[tasties] class TreeUnpickler private (
         else paramLists :+ Left(Nil) // add `()` at the end
   end normalizeCtorParamClauses
 
-  private def readTerms(end: Addr)(using LocalContext): List[TermTree] =
+  private def readTerms(end: Addr): List[TermTree] =
     reader.until(end)(readTerm)
 
   def definingTree(symbol: Symbol, tree: symbol.DefiningTreeType): tree.type =
     symbol.withTree(tree)
     tree
 
-  private def makeIdent(name: TermName, tpe: Type, spn: Span)(using LocalContext): Ident =
+  private def makeIdent(name: TermName, tpe: Type, spn: Span): Ident =
     val tpe1: TermRef | PackageRef = tpe match
       case tpe: TermRef    => tpe
       case tpe: PackageRef => tpe
@@ -714,7 +710,7 @@ private[tasties] class TreeUnpickler private (
     Ident(name)(tpe1)(spn)
   end makeIdent
 
-  private def readPattern(using LocalContext): PatternTree = reader.nextByte match
+  private def readPattern: PatternTree = reader.nextByte match
     case IDENT =>
       val spn = span
       reader.readByte()
@@ -767,7 +763,7 @@ private[tasties] class TreeUnpickler private (
       ExprPattern(expr)(expr.span)
   end readPattern
 
-  private def readTermOrUninitialized()(using LocalContext): TermTree = reader.nextByte match
+  private def readTermOrUninitialized(): TermTree = reader.nextByte match
     case IDENT =>
       val spn = span
       reader.readByte()
@@ -781,7 +777,7 @@ private[tasties] class TreeUnpickler private (
       readTerm
   end readTermOrUninitialized
 
-  private def readTerm(using LocalContext): TermTree = reader.nextByte match {
+  private def readTerm: TermTree = reader.nextByte match {
     case IDENT =>
       val spn = span
       reader.readByte()
@@ -1004,9 +1000,7 @@ private[tasties] class TreeUnpickler private (
     } else tag
   }
 
-  private def readCases[T <: CaseDef | TypeCaseDef](factory: AbstractCaseDefFactory[T], end: Addr)(
-    using LocalContext
-  ): List[T] =
+  private def readCases[T <: CaseDef | TypeCaseDef](factory: AbstractCaseDefFactory[T], end: Addr): List[T] =
     reader.collectWhile((nextUnsharedTag == CASEDEF) && reader.currentAddr != end) {
       if (reader.nextByte == SHAREDterm) {
         // skip the SHAREDterm tag
@@ -1018,7 +1012,7 @@ private[tasties] class TreeUnpickler private (
       else readCaseDef[T](factory)
     }
 
-  private def readCaseDef[T <: CaseDef | TypeCaseDef](factory: AbstractCaseDefFactory[T])(using LocalContext): T = {
+  private def readCaseDef[T <: CaseDef | TypeCaseDef](factory: AbstractCaseDefFactory[T]): T = {
     val spn = span
     assert(reader.readByte() == CASEDEF, posErrorMsg)
     val end = reader.readEnd()
@@ -1032,16 +1026,16 @@ private[tasties] class TreeUnpickler private (
     }
   }
 
-  private def readSymRef(using LocalContext): Symbol = {
+  private def readSymRef: Symbol = {
     val symAddr = reader.readAddr()
     assert(caches.hasSymbolAt(symAddr), posErrorMsg)
     caches.getSymbol[Symbol](symAddr)
   }
 
-  private def readTypeRef()(using LocalContext): TypeRef =
+  private def readTypeRef(): TypeRef =
     readType.asInstanceOf[TypeRef]
 
-  private def readType(using LocalContext): Type = reader.nextByte match {
+  private def readType: Type = reader.nextByte match {
     case TYPEREF =>
       reader.readByte()
       val name = readName.toTypeName
@@ -1212,7 +1206,7 @@ private[tasties] class TreeUnpickler private (
         body(result => caches.registeredBinders.update(start, result))
   end readRegisteringBinders
 
-  private def readBindersRef[A <: Binders]()(using LocalContext, scala.reflect.Typeable[A]): A =
+  private def readBindersRef[A <: Binders]()(using scala.reflect.Typeable[A]): A =
     /* Usually, we read references to binders while reading the target binders,
      * because references are always nested within the binders. That is the
      * fast path below.
@@ -1234,7 +1228,7 @@ private[tasties] class TreeUnpickler private (
     companionOp: FlagSet => LambdaTypeCompanion[N, PInfo, LT],
     nameMap: TermName => N,
     readInfo: TreeUnpickler => PInfo
-  )(using LocalContext): LT =
+  ): LT =
     readRegisteringBinders { register =>
       reader.readByte()
       val end = reader.readEnd()
@@ -1258,7 +1252,7 @@ private[tasties] class TreeUnpickler private (
           case GIVEN    => mods |= Given
 
       // Read infos -- skip names
-      def readParamInfos()(using LocalContext): List[PInfo] =
+      def readParamInfos(): List[PInfo] =
         val reader = paramInfosUnpickler.reader
         reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
           val bounds = readInfo(paramInfosUnpickler)
@@ -1278,7 +1272,7 @@ private[tasties] class TreeUnpickler private (
     }
   end readLambdaType
 
-  private def readMatchTypeCase(using LocalContext): MatchTypeCase = reader.nextByte match {
+  private def readMatchTypeCase: MatchTypeCase = reader.nextByte match {
     case MATCHCASEtype =>
       reader.readByte() // tag
       reader.readEnd() // end
@@ -1307,7 +1301,7 @@ private[tasties] class TreeUnpickler private (
           throw TastyFormatException(s"unexpected modifiers for match-type-case TYPELAMBDAtype at $posErrorMsg")
 
         // Read infos -- skip names
-        def readParamInfos()(using LocalContext): List[TypeBounds] =
+        def readParamInfos(): List[TypeBounds] =
           val reader = paramInfosUnpickler.reader
           reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
             val bounds = paramInfosUnpickler.readTypeBounds
@@ -1343,7 +1337,7 @@ private[tasties] class TreeUnpickler private (
       throw TastyFormatException(s"Unexpected type in MATCHtype case: $tag $posErrorMsg")
   }
 
-  private def readTypeTree(using LocalContext): TypeTree = reader.nextByte match {
+  private def readTypeTree: TypeTree = reader.nextByte match {
     case IDENTtpt =>
       val spn = span
       reader.readByte()
@@ -1481,7 +1475,7 @@ private[tasties] class TreeUnpickler private (
         result
   end protectReadDefiningTypeTree
 
-  private def readConstant(using LocalContext): Constant = reader.readByte() match {
+  private def readConstant: Constant = reader.readByte() match {
     case UNITconst =>
       Constant(())
     case TRUEconst =>
@@ -1511,7 +1505,7 @@ private[tasties] class TreeUnpickler private (
   }
 
   // TODO: read modifiers and return them instead
-  private def skipModifiers(end: Addr)(using LocalContext): Unit = {
+  private def skipModifiers(end: Addr): Unit = {
     def skipModifier(): Unit = reader.readByte() match {
       case PRIVATEqualified =>
         readType
@@ -1570,12 +1564,5 @@ private[tasties] object TreeUnpickler {
   extension (reader: TastyReader)
     def ifBeforeOpt[T](end: Addr)(op: => T): Option[T] =
       reader.ifBefore(end)(Some(op), None)
-
-  private inline def localCtx(using ctx: LocalContext): LocalContext = ctx
-
-  /** LocalContext is used when unpickling a given .tasty file.
-    * It contains information local to the scope.
-    */
-  private class LocalContext() {}
 
 }
