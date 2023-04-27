@@ -64,6 +64,7 @@ object Names {
     val EmptyPackageName: SimpleName = termName("<empty>")
     val Constructor: SimpleName = termName("<init>")
     val Wildcard: SimpleName = termName("_")
+    val WildcardSequence: SimpleName = termName("_*")
     val RefinementClass = typeName("<refinement>")
 
     val scalaPackageName: SimpleName = termName("scala")

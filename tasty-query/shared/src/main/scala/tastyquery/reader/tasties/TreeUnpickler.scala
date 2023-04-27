@@ -716,7 +716,7 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       val name = readName
       val typ = readType
-      if name == nme.Wildcard then WildcardPattern(typ)(spn)
+      if name == nme.Wildcard || name == nme.WildcardSequence then WildcardPattern(typ)(spn)
       else ExprPattern(makeIdent(name, typ, spn))(spn)
     case TYPED =>
       reader.readByte()

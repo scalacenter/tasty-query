@@ -457,14 +457,18 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickle("match", "simple_trees.Match") { tree =>
+    val fTree = findTree(tree) { case fTree @ DefDef(SimpleName("f"), _, _, _, _) =>
+      fTree
+    }
+
     val matchStructure: StructureCheck = {
       case Match(Ident(_), cases) if cases.length == 6 =>
     }
-    assert(containsSubtree(matchStructure)(clue(tree)))
+    assert(containsSubtree(matchStructure)(clue(fTree)))
 
     val simpleGuard: StructureCheck = { case CaseDef(ExprPattern(Literal(Constant(0))), None, body: Block) =>
     }
-    assert(containsSubtree(simpleGuard)(clue(tree)))
+    assert(containsSubtree(simpleGuard)(clue(fTree)))
 
     val guardWithAlternatives: StructureCheck = {
       case CaseDef(
@@ -479,7 +483,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             body: Block
           ) =>
     }
-    assert(containsSubtree(guardWithAlternatives)(clue(tree)))
+    assert(containsSubtree(guardWithAlternatives)(clue(fTree)))
 
     val guardAndCondition: StructureCheck = {
       case CaseDef(
@@ -490,7 +494,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             body: Block
           ) =>
     }
-    assert(containsSubtree(guardAndCondition)(clue(tree)))
+    assert(containsSubtree(guardAndCondition)(clue(fTree)))
 
     val alternativesAndCondition: StructureCheck = {
       case CaseDef(
@@ -505,7 +509,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             body: Block
           ) =>
     }
-    assert(containsSubtree(alternativesAndCondition)(clue(tree)))
+    assert(containsSubtree(alternativesAndCondition)(clue(fTree)))
 
     val defaultWithCondition: StructureCheck = {
       case CaseDef(
@@ -522,11 +526,37 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             body: Block
           ) =>
     }
-    assert(containsSubtree(defaultWithCondition)(clue(tree)))
+    assert(containsSubtree(defaultWithCondition)(clue(fTree)))
 
     val default: StructureCheck = { case CaseDef(WildcardPattern(_), None, body: Block) =>
     }
-    assert(containsSubtree(default)(clue(tree)))
+    assert(containsSubtree(default)(clue(fTree)))
+
+    val gTree = findTree(tree) { case gTree @ DefDef(SimpleName("g"), _, _, _, _) =>
+      gTree
+    }
+
+    val wildcardSequenceStructure: StructureCheck = {
+      case Bind(
+            SimpleName("elems"),
+            TypeTest(
+              WildcardPattern(
+                ty.AppliedType(
+                  TypeRefInternal(_, SimpleTypeName("Seq")),
+                  List(TypeRefInternal(_, SimpleTypeName("Any")))
+                )
+              ),
+              TypeWrapper(
+                ty.AppliedType(
+                  TypeRefInternal(_, tpnme.RepeatedParamClassMagic),
+                  List(TypeRefInternal(_, SimpleTypeName("Any")))
+                )
+              )
+            ),
+            _
+          ) =>
+    }
+    assert(containsSubtree(wildcardSequenceStructure)(clue(gTree)))
   }
 
   testUnpickle("match-case-class", "simple_trees.PatternMatchingOnCaseClass") { tree =>
