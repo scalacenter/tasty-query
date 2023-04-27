@@ -41,7 +41,7 @@ private[tasties] class TreeUnpickler private (
   ) = this(filename, reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
 
   def unpickle(): List[Tree] =
-    val fileContext = new LocalContext(Map.empty)
+    val fileContext = new LocalContext()
 
     @tailrec
     def read(acc: ListBuffer[Tree]): List[Tree] =
@@ -1147,9 +1147,9 @@ private[tasties] class TreeUnpickler private (
     case PARAMtype =>
       reader.readByte()
       reader.readEnd()
-      val lambdaAddr = reader.readAddr()
+      val lambda = readBindersRef[ParamRefBinders]()
       val num = reader.readNat()
-      localCtx.getEnclosingBinders(lambdaAddr).asInstanceOf[ParamRefBinders].paramRefs(num)
+      lambda.paramRefs(num)
     case REFINEDtype =>
       reader.readByte()
       val end = reader.readEnd()
@@ -1169,15 +1169,16 @@ private[tasties] class TreeUnpickler private (
             val isStable = !refinedMemberType.isInstanceOf[MethodicType]
             TermRefinement(underlying, isStable, refinementName, refinedMemberType)
     case RECtype =>
-      val start = reader.currentAddr
-      reader.readByte()
-      RecType { rt =>
-        readType(using localCtx.withEnclosingBinders(start, rt))
+      readRegisteringBinders { register =>
+        reader.readByte()
+        RecType { rt =>
+          register(rt)
+          readType
+        }
       }
     case RECthis =>
       reader.readByte()
-      val recType = localCtx.getEnclosingBinders(reader.readAddr()).asInstanceOf[RecType]
-      recType.recThis
+      readBindersRef[RecType]().recThis
     case MATCHtype =>
       val start = reader.currentAddr
       reader.readByte() // tag
@@ -1201,48 +1202,80 @@ private[tasties] class TreeUnpickler private (
       throw TastyFormatException(s"Unexpected type tag ${astTagToString(tag)} $posErrorMsg")
   }
 
+  private def readRegisteringBinders[A <: Binders](body: (A => Unit) => A): A =
+    val start = reader.currentAddr
+    caches.registeredBinders.get(start) match
+      case Some(existing) =>
+        skipTree()
+        existing.asInstanceOf[A]
+      case None =>
+        body(result => caches.registeredBinders.update(start, result))
+  end readRegisteringBinders
+
+  private def readBindersRef[A <: Binders]()(using LocalContext, scala.reflect.Typeable[A]): A =
+    /* Usually, we read references to binders while reading the target binders,
+     * because references are always nested within the binders. That is the
+     * fast path below.
+     *
+     * However, due to `SHAREDtype`, we sometimes read the inside of some
+     * binders without going through the binders first. In that case, the
+     * binders will not be registered yet, and we need to go read them first.
+     */
+    val addr = reader.readAddr()
+    val binders = caches.registeredBinders.get(addr) match
+      case Some(binders) => binders // fast path
+      case None          => forkAt(addr).readType
+    binders match
+      case binders: A => binders
+      case _          => throw TastyFormatException(s"Unexpected binders type $binders ${posErrorMsg(addr)}")
+  end readBindersRef
+
   private def readLambdaType[N <: Name, PInfo <: Type | TypeBounds, LT <: LambdaType](
     companionOp: FlagSet => LambdaTypeCompanion[N, PInfo, LT],
     nameMap: TermName => N,
     readInfo: TreeUnpickler => PInfo
   )(using LocalContext): LT =
-    val lambdaAddr = reader.currentAddr
-    reader.readByte()
-    val end = reader.readEnd()
+    readRegisteringBinders { register =>
+      reader.readByte()
+      val end = reader.readEnd()
 
-    val resultUnpickler = fork // remember where the result type is
-    skipTree() // skip the result type
-    val paramInfosUnpickler = fork // remember where the params are
+      val resultUnpickler = fork // remember where the result type is
+      skipTree() // skip the result type
+      val paramInfosUnpickler = fork // remember where the params are
 
-    // Read names -- skip infos, and stop if we find a modifier
-    val paramNames = reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
-      skipTree()
-      nameMap(readName)
-    }
-
-    // Read mods
-    var mods = EmptyFlagSet
-    while reader.currentAddr != end do // avoid boxing the mods
-      reader.readByte() match
-        case IMPLICIT => mods |= Implicit
-        case ERASED   => mods |= Erased
-        case GIVEN    => mods |= Given
-
-    // Read infos -- skip names
-    def readParamInfos()(using LocalContext): List[PInfo] =
-      val reader = paramInfosUnpickler.reader
-      reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
-        val bounds = readInfo(paramInfosUnpickler)
-        reader.readNat() // skip name
-        bounds
+      // Read names -- skip infos, and stop if we find a modifier
+      val paramNames = reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
+        skipTree()
+        nameMap(readName)
       }
-    end readParamInfos
 
-    val factory = companionOp(mods)
-    factory(paramNames)(
-      tl => readParamInfos()(using localCtx.withEnclosingBinders(lambdaAddr, tl)),
-      tl => resultUnpickler.readType(using localCtx.withEnclosingBinders(lambdaAddr, tl))
-    )
+      // Read mods
+      var mods = EmptyFlagSet
+      while reader.currentAddr != end do // avoid boxing the mods
+        reader.readByte() match
+          case IMPLICIT => mods |= Implicit
+          case ERASED   => mods |= Erased
+          case GIVEN    => mods |= Given
+
+      // Read infos -- skip names
+      def readParamInfos()(using LocalContext): List[PInfo] =
+        val reader = paramInfosUnpickler.reader
+        reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
+          val bounds = readInfo(paramInfosUnpickler)
+          reader.readNat() // skip name
+          bounds
+        }
+      end readParamInfos
+
+      val factory = companionOp(mods)
+      factory(paramNames)(
+        { tl =>
+          register(tl)
+          readParamInfos()
+        },
+        tl => resultUnpickler.readType
+      )
+    }
   end readLambdaType
 
   private def readMatchTypeCase(using LocalContext): MatchTypeCase = reader.nextByte match {
@@ -1256,46 +1289,50 @@ private[tasties] class TreeUnpickler private (
     case TYPELAMBDAtype =>
       // This is unfortunately a lot of copy-past wrt. readLambdaType above
 
-      val lambdaAddr = reader.currentAddr
-      reader.readByte()
-      val end = reader.readEnd()
+      readRegisteringBinders { register =>
+        reader.readByte()
+        val end = reader.readEnd()
 
-      val matchTypeCaseUnpickler = fork // remember where the underlying MATCHCASEtype is
-      skipTree() // skip the MATCHCASEtype
-      val paramInfosUnpickler = fork // remember where the params are
+        val matchTypeCaseUnpickler = fork // remember where the underlying MATCHCASEtype is
+        skipTree() // skip the MATCHCASEtype
+        val paramInfosUnpickler = fork // remember where the params are
 
-      // Read names -- skip infos, and stop if we find a modifier
-      val paramNames = reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
-        skipTree()
-        readName.toTypeName
-      }
-
-      if reader.currentAddr != end then
-        throw TastyFormatException(s"unexpected modifiers for match-type-case TYPELAMBDAtype at $posErrorMsg")
-
-      // Read infos -- skip names
-      def readParamInfos()(using LocalContext): List[TypeBounds] =
-        val reader = paramInfosUnpickler.reader
-        reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
-          val bounds = paramInfosUnpickler.readTypeBounds
-          reader.readNat() // skip name
-          bounds
+        // Read names -- skip infos, and stop if we find a modifier
+        val paramNames = reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
+          skipTree()
+          readName.toTypeName
         }
-      end readParamInfos
 
-      // Flatten out the underlying MatchTypeCase -- this is not pretty
-      var resultType: Type | Null = null
-      MatchTypeCase(paramNames)(
-        mtc => readParamInfos()(using localCtx.withEnclosingBinders(lambdaAddr, mtc)),
-        { mtc =>
-          val inner = matchTypeCaseUnpickler.readMatchTypeCase(using localCtx.withEnclosingBinders(lambdaAddr, mtc))
-          if inner.paramNames.nonEmpty then
-            throw TastyFormatException(s"unexpected nested $inner for match-type-case at $posErrorMsg")
-          resultType = inner.result
-          inner.pattern
-        },
-        mtc => resultType.nn
-      )
+        if reader.currentAddr != end then
+          throw TastyFormatException(s"unexpected modifiers for match-type-case TYPELAMBDAtype at $posErrorMsg")
+
+        // Read infos -- skip names
+        def readParamInfos()(using LocalContext): List[TypeBounds] =
+          val reader = paramInfosUnpickler.reader
+          reader.collectWhile(reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
+            val bounds = paramInfosUnpickler.readTypeBounds
+            reader.readNat() // skip name
+            bounds
+          }
+        end readParamInfos
+
+        // Flatten out the underlying MatchTypeCase -- this is not pretty
+        var resultType: Type | Null = null
+        MatchTypeCase(paramNames)(
+          { mtc =>
+            register(mtc)
+            readParamInfos()
+          },
+          { mtc =>
+            val inner = matchTypeCaseUnpickler.readMatchTypeCase
+            if inner.paramNames.nonEmpty then
+              throw TastyFormatException(s"unexpected nested $inner for match-type-case at $posErrorMsg")
+            resultType = inner.result
+            inner.pattern
+          },
+          mtc => resultType.nn
+        )
+      }
 
     case SHAREDtype =>
       reader.readByte()
@@ -1510,6 +1547,8 @@ private[tasties] object TreeUnpickler {
 
     val definingTypeTreeCache = mutable.Map.empty[Addr, TypeTree]
 
+    val registeredBinders = mutable.Map.empty[Addr, Binders]
+
     def hasSymbolAt(addr: Addr): Boolean = localSymbols.contains(addr)
 
     /** Registers a symbol at @addr with @name. */
@@ -1536,18 +1575,7 @@ private[tasties] object TreeUnpickler {
 
   /** LocalContext is used when unpickling a given .tasty file.
     * It contains information local to the scope.
-    *
-    * @param enclosingBinders
-    *   map of the type binders which have the current address in scope.
-    *   A type binder can only be referred to if it encloses the referring address.
-    *   A new FileLocalInfo (hence a new LocalContext) is created when an enclosing is added
-    *   to mimic the scoping.
     */
-  private class LocalContext(enclosingBinders: Map[Addr, Binders]) {
-    def withEnclosingBinders(addr: Addr, b: Binders): LocalContext =
-      new LocalContext(enclosingBinders.updated(addr, b))
-
-    def getEnclosingBinders(addr: Addr): Binders = enclosingBinders(addr)
-  }
+  private class LocalContext() {}
 
 }
