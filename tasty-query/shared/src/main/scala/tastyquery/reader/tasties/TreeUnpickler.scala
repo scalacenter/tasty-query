@@ -825,7 +825,7 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       val end = reader.readEnd()
       val fn = readTerm
-      TypeApply(fn, reader.until(end)(readTypeTree))(spn)
+      TypeApply(fn, reader.until(end)(readTypeOrWildcardTree(spn)))(spn)
     case SELECT =>
       val spn = span
       reader.readByte()
