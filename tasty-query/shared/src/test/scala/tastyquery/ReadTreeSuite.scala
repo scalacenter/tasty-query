@@ -2297,6 +2297,31 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     }
     assert(clue(intAliasSym.annotations).sizeIs == 1)
     assert(containsSubtree(deprecatedAnnotCheck("other reason", "forever"))(clue(intAliasSym.annotations(0).tree)))
+
+    val javaAnnotWithDefaultImplicitSym = findTree(tree) {
+      case DefDef(SimpleName("javaAnnotWithDefaultImplicit"), _, _, _, sym) =>
+        sym
+    }
+    assert(clue(javaAnnotWithDefaultImplicitSym.annotations).sizeIs == 1)
+    val javaAnnotWithDefaultImplicitAnnotCheck: StructureCheck = {
+      case Apply(Select(New(_), _), List(ident @ Ident(nme.Wildcard)))
+          if ident.tpe eq defn.uninitializedMethodTermRef =>
+    }
+    assert(
+      containsSubtree(javaAnnotWithDefaultImplicitAnnotCheck)(clue(javaAnnotWithDefaultImplicitSym.annotations(0).tree))
+    )
+
+    val javaAnnotWithDefaultExplicitSym = findTree(tree) {
+      case DefDef(SimpleName("javaAnnotWithDefaultExplicit"), _, _, _, sym) =>
+        sym
+    }
+    assert(clue(javaAnnotWithDefaultExplicitSym.annotations).sizeIs == 1)
+    val javaAnnotWithDefaultExplicitAnnotCheck: StructureCheck = {
+      case Apply(Select(New(_), _), List(Literal(Constant(false)))) =>
+    }
+    assert(
+      containsSubtree(javaAnnotWithDefaultExplicitAnnotCheck)(clue(javaAnnotWithDefaultExplicitSym.annotations(0).tree))
+    )
   }
 
   testUnpickle("uninitialized-var", "simple_trees.Uninitialized") { tree =>

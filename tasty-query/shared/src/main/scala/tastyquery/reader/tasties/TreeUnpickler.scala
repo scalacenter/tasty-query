@@ -783,9 +783,14 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       val name = readName
       val typ = readType
-      if name == nme.Wildcard then
-        throw TastyFormatException(s"unexpected _ ident with type $typ span $spn $posErrorMsg")
-      else makeIdent(name, typ, spn)
+      val typ1 =
+        if name == nme.Wildcard then
+          /* This is a bit of a hack for default arguments to Java annotations with default values.
+           * See simple_trees.Annotations.javaAnnotWithDefaultImplicit().
+           */
+          defn.uninitializedMethodTermRef
+        else typ
+      makeIdent(name, typ1, spn)
     case APPLY =>
       val spn = span
       reader.readByte()
