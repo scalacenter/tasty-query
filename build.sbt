@@ -114,6 +114,7 @@ lazy val tastyQuery =
         Seq(
           // private, so this is fine
           ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.reader.tasties.TreeUnpickler#Caches.refinedTypeTreeCache"),
+          ProblemFilters.exclude[Problem]("tastyquery.reader.tasties.TreeUnpickler#LocalContext.*"),
         )
       },
     )
