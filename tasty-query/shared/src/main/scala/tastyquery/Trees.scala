@@ -29,6 +29,7 @@ object Trees {
       case ValDef(name, tpt, rhs, symbol)           => tpt :: rhs.toList
       case DefDef(name, params, tpt, rhs, symbol)   => params.flatMap(_.merge) ::: tpt :: rhs.toList
       case Select(qualifier, name)                  => qualifier :: Nil
+      case SelectOuter(qualifier, levels)           => qualifier :: Nil
       case Super(qual, mix)                         => qual :: Nil
       case Apply(fun, args)                         => fun :: args
       case TypeApply(fun, args)                     => fun :: args
@@ -289,6 +290,13 @@ object Trees {
 
     override def withSpan(span: Span): Select = Select(qualifier, name)(selectOwner)(span)
   end Select
+
+  /** Synthetic outer selection */
+  final case class SelectOuter(qualifier: TermTree, levels: Int)(tpe: Type)(span: Span) extends TermTree(span):
+    protected final def calculateType(using Context): Type = tpe
+
+    override def withSpan(span: Span): SelectOuter = SelectOuter(qualifier, levels)(tpe)(span)
+  end SelectOuter
 
   /** `qual.this` */
   final case class This(qualifier: TypeIdent)(span: Span) extends TermTree(span) {

@@ -832,6 +832,13 @@ private[tasties] class TreeUnpickler private (
       val name = readName
       val qual = readTerm
       Select(qual, name)(selectOwner = None)(spn)
+    case SELECTouter =>
+      val spn = span
+      reader.readByte()
+      val levels = reader.readNat()
+      val qual = readTerm
+      val tpe = readType
+      SelectOuter(qual, levels)(tpe)(spn)
     case QUALTHIS =>
       val spn = span
       reader.readByte()
