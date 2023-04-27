@@ -41,7 +41,7 @@ private[tasties] class TreeUnpickler private (
   ) = this(filename, reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
 
   def unpickle(): List[Tree] =
-    val fileContext = new LocalContext(mutable.HashMap.empty, Map.empty)
+    val fileContext = new LocalContext(Map.empty)
 
     @tailrec
     def read(acc: ListBuffer[Tree]): List[Tree] =
@@ -52,7 +52,7 @@ private[tasties] class TreeUnpickler private (
     val result = read(new ListBuffer[Tree])
 
     // Check that all the Symbols we created have been completed
-    for sym <- fileContext.allRegisteredSymbols do sym.checkCompleted()
+    for sym <- caches.allRegisteredSymbols do sym.checkCompleted()
 
     result
   end unpickle
@@ -87,14 +87,14 @@ private[tasties] class TreeUnpickler private (
         val sym =
           if tag == TEMPLATE then ClassSymbol.create(name, owner)
           else TypeMemberSymbol.create(name, owner)
-        localCtx.registerSym(start, sym)
+        caches.registerSym(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case DEFDEF | VALDEF | PARAM =>
         val end = reader.readEnd()
         val name = readName
         val sym = TermSymbol.create(name, owner)
-        localCtx.registerSym(start, sym)
+        caches.registerSym(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case TYPEPARAM =>
@@ -103,7 +103,7 @@ private[tasties] class TreeUnpickler private (
         val sym =
           if owner.isClass then ClassTypeParamSymbol.create(name, owner.asClass)
           else LocalTypeParamSymbol.create(name, owner)
-        localCtx.registerSym(start, sym)
+        caches.registerSym(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case BIND =>
@@ -112,14 +112,14 @@ private[tasties] class TreeUnpickler private (
         val sym =
           if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(name.toTypeName, owner)
           else TermSymbol.create(name, owner)
-        localCtx.registerSym(start, sym)
+        caches.registerSym(start, sym)
         sym.withFlags(Case, None)
         // bind is never an owner
         reader.until(end)(createSymbols(owner))
       case REFINEDtpt =>
         val spn = spanAt(start)
         val sym = ClassSymbol.createRefinedClassSymbol(owner, EmptyFlagSet, spn)
-        localCtx.registerSym(start, sym)
+        caches.registerSym(start, sym)
         val end = reader.readEnd()
         reader.until(end)(createSymbols(owner = sym))
 
@@ -409,11 +409,11 @@ private[tasties] class TreeUnpickler private (
       val end = reader.readEnd()
       val name = readName.toTypeName
       val typeDef: ClassDef | TypeMember = if (reader.nextByte == TEMPLATE) {
-        val classSymbol = localCtx.getSymbol[ClassSymbol](start)
+        val classSymbol = caches.getSymbol[ClassSymbol](start)
         val template = readTemplate(classSymbol)
         definingTree(classSymbol, ClassDef(name, template, classSymbol)(spn))
       } else {
-        val symbol = localCtx.getSymbol[TypeMemberSymbol](start)
+        val symbol = caches.getSymbol[TypeMemberSymbol](start)
         val isOpaque = symbol.is(Opaque)
         val typeDefTree = readTypeDefinition(forOpaque = isOpaque)
         val typeDef = makeTypeMemberDefinition(typeDefTree)
@@ -550,7 +550,7 @@ private[tasties] class TreeUnpickler private (
     def readTypeParam: TypeParam = {
       val spn = span
       val start = reader.currentAddr
-      val paramSymbol = localCtx.getSymbol[TypeParamSymbol](start)
+      val paramSymbol = caches.getSymbol[TypeParamSymbol](start)
       reader.readByte()
       val end = reader.readEnd()
       val name = readName.toTypeName
@@ -649,7 +649,7 @@ private[tasties] class TreeUnpickler private (
   private def readValOrDefDef(using LocalContext): ValOrDefDef = {
     val spn = span
     val start = reader.currentAddr
-    val symbol = localCtx.getSymbol[TermSymbol](start)
+    val symbol = caches.getSymbol[TermSymbol](start)
     val tag = reader.readByte()
     val end = reader.readEnd()
     val name = readName
@@ -736,7 +736,7 @@ private[tasties] class TreeUnpickler private (
       val name = readName
       val typ = readType
       val body = readPattern
-      val symbol = localCtx.getSymbol[TermSymbol](start)
+      val symbol = caches.getSymbol[TermSymbol](start)
       readAnnotationsInModifiers(symbol, end)
       symbol.withDeclaredType(typ)
       definingTree(symbol, Bind(name, body, symbol)(spn))
@@ -1034,8 +1034,8 @@ private[tasties] class TreeUnpickler private (
 
   private def readSymRef(using LocalContext): Symbol = {
     val symAddr = reader.readAddr()
-    assert(localCtx.hasSymbolAt(symAddr), posErrorMsg)
-    localCtx.getSymbol[Symbol](symAddr)
+    assert(caches.hasSymbolAt(symAddr), posErrorMsg)
+    caches.getSymbol[Symbol](symAddr)
   }
 
   private def readTypeRef()(using LocalContext): TypeRef =
@@ -1194,7 +1194,7 @@ private[tasties] class TreeUnpickler private (
        */
       val start = reader.currentAddr
       skipTree()
-      localCtx.getSymbol[ClassSymbol](start).typeRef
+      caches.getSymbol[ClassSymbol](start).typeRef
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
     case tag =>
@@ -1320,7 +1320,7 @@ private[tasties] class TreeUnpickler private (
     case REFINEDtpt =>
       protectReadDefiningTypeTree {
         val spn = span
-        val cls = localCtx.getSymbol[ClassSymbol](reader.currentAddr)
+        val cls = caches.getSymbol[ClassSymbol](reader.currentAddr)
         reader.readByte()
         val end = reader.readEnd()
         val parent = readTypeTree
@@ -1393,7 +1393,7 @@ private[tasties] class TreeUnpickler private (
           val typ = readTypeBounds
           NamedTypeBoundsTree(typeName, typ)(identSpn)
         } else readTypeDefinition(forOpaque = false)
-        val sym = localCtx.getSymbol[LocalTypeParamSymbol](start)
+        val sym = caches.getSymbol[LocalTypeParamSymbol](start)
         readAnnotationsInModifiers(sym, end)
         sym.setBounds(bounds)
         definingTree(sym, TypeTreeBind(name, body, sym)(spn))
@@ -1504,35 +1504,11 @@ private[tasties] class TreeUnpickler private (
 private[tasties] object TreeUnpickler {
 
   private final class Caches:
+    private val localSymbols = mutable.HashMap.empty[Addr, Symbol]
+
     val sharedTypesCache = mutable.Map.empty[Addr, Type]
 
     val definingTypeTreeCache = mutable.Map.empty[Addr, TypeTree]
-  end Caches
-
-  extension (reader: TastyReader)
-    def ifBeforeOpt[T](end: Addr)(op: => T): Option[T] =
-      reader.ifBefore(end)(Some(op), None)
-
-  private inline def localCtx(using ctx: LocalContext): LocalContext = ctx
-
-  /** LocalContext is used when unpickling a given .tasty file.
-    * It contains information local to the file and to the scope.
-    *
-    * @param localSymbols
-    *   map of the symbols, created when unpickling the current file.
-    *   A symbol can be referred to from anywhere in the file, therefore once the symbol is added
-    *   to the file info, it is kept in the context and its subcontexts.
-    * @param enclosingBinders
-    *   map of the type binders which have the current address in scope.
-    *   A type binder can only be referred to if it encloses the referring address.
-    *   A new FileLocalInfo (hence a new LocalContext) is created when an enclosing is added
-    *   to mimic the scoping.
-    */
-  private class LocalContext(localSymbols: mutable.HashMap[Addr, Symbol], enclosingBinders: Map[Addr, Binders]) {
-    def withEnclosingBinders(addr: Addr, b: Binders): LocalContext =
-      new LocalContext(localSymbols, enclosingBinders.updated(addr, b))
-
-    def getEnclosingBinders(addr: Addr): Binders = enclosingBinders(addr)
 
     def hasSymbolAt(addr: Addr): Boolean = localSymbols.contains(addr)
 
@@ -1550,6 +1526,28 @@ private[tasties] object TreeUnpickler {
 
     def allRegisteredSymbols: Iterator[Symbol] =
       localSymbols.valuesIterator
+  end Caches
+
+  extension (reader: TastyReader)
+    def ifBeforeOpt[T](end: Addr)(op: => T): Option[T] =
+      reader.ifBefore(end)(Some(op), None)
+
+  private inline def localCtx(using ctx: LocalContext): LocalContext = ctx
+
+  /** LocalContext is used when unpickling a given .tasty file.
+    * It contains information local to the scope.
+    *
+    * @param enclosingBinders
+    *   map of the type binders which have the current address in scope.
+    *   A type binder can only be referred to if it encloses the referring address.
+    *   A new FileLocalInfo (hence a new LocalContext) is created when an enclosing is added
+    *   to mimic the scoping.
+    */
+  private class LocalContext(enclosingBinders: Map[Addr, Binders]) {
+    def withEnclosingBinders(addr: Addr, b: Binders): LocalContext =
+      new LocalContext(enclosingBinders.updated(addr, b))
+
+    def getEnclosingBinders(addr: Addr): Binders = enclosingBinders(addr)
   }
 
 }
