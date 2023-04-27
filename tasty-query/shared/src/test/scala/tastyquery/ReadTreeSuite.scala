@@ -2379,4 +2379,17 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     }
     assert(containsSubtree(typeQuoteMatchingCheck)(clue(typeQuoteMatchingCaseDef)))
   }
+
+  testUnpickle("anon-classes-in-constructor", "simple_trees.AnonClassesInCtor") { tree =>
+    val ctorDef = findTree(tree) {
+      case ctorDef @ DefDef(nme.Constructor, _, _, _, ctorSym) if ctorSym.owner.name == typeName("AnonClassesInCtor") =>
+        ctorDef
+    }
+    val ctorSym = ctorDef.symbol
+
+    val anonClassStructure: StructureCheck = {
+      case ClassDef(SimpleTypeName("$anon"), _, sym) if sym.owner == ctorSym =>
+    }
+    assert(containsSubtree(anonClassStructure)(clue(tree)))
+  }
 }

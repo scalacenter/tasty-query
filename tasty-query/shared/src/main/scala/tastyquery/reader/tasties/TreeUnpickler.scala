@@ -121,14 +121,33 @@ private[tasties] class TreeUnpickler private (
         val end = reader.readEnd()
         reader.until(end)(createSymbols(owner = sym))
 
+      case TEMPLATE =>
+        /* In a template, top-level definitions must have the enclosing class as owner.
+         * However, any definition nested in a statement, such as a block, must instead
+         * be owned by the primary constructor (in dotc, there is a "local dummy"
+         * instead, but a similar problem essentially exists).
+         * We must therefore first create the symbol for the primary constructor,
+         * which is the first DEFDEF in the template. Then, we go back and create
+         * everything else, passing the right owner depending on the kind of nested
+         * tree.
+         */
+        val cls = owner.asClass
+        val end = reader.readEnd()
+        val parentsAndSelfDefReader = fork
+        while reader.nextByte != DEFDEF do skipTree()
+        val ctorAddr = reader.currentAddr
+        createSymbols(owner)
+        val ctor = caches.getSymbol[TermSymbol](ctorAddr)
+        parentsAndSelfDefReader.reader.until(ctorAddr)(parentsAndSelfDefReader.createSymbolsInTemplate(cls, ctor))
+        reader.until(end)(createSymbolsInTemplate(cls, ctor))
+
       // ---------- tags with potentially nested symbols --------------------------------
       case tag if firstASTTreeTag <= tag && tag < firstNatASTTreeTag => createSymbols(owner)
       case tag if firstNatASTTreeTag <= tag && tag < firstLengthTreeTag =>
         reader.readNat()
         createSymbols(owner)
-      case TEMPLATE | APPLY | TYPEAPPLY | SUPER | TYPED | ASSIGN | BLOCK | INLINED | LAMBDA | IF | MATCH | TRY | WHILE |
-          REPEATED | ALTERNATIVE | UNAPPLY | APPLIEDtpt | LAMBDAtpt | TYPEBOUNDStpt | ANNOTATEDtpt | MATCHtpt |
-          CASEDEF =>
+      case APPLY | TYPEAPPLY | SUPER | TYPED | ASSIGN | BLOCK | INLINED | LAMBDA | IF | MATCH | TRY | WHILE | REPEATED |
+          ALTERNATIVE | UNAPPLY | APPLIEDtpt | LAMBDAtpt | TYPEBOUNDStpt | ANNOTATEDtpt | MATCHtpt | CASEDEF =>
         val end = reader.readEnd()
         reader.until(end)(createSymbols(owner))
       case SELECTin =>
@@ -144,6 +163,14 @@ private[tasties] class TreeUnpickler private (
       case _ => skipTree(tag)
     }
   }
+
+  private def createSymbolsInTemplate(classOwner: ClassSymbol, ctorOwner: TermSymbol): Unit =
+    reader.nextByte match
+      case TYPEDEF | DEFDEF | VALDEF | PARAM | TYPEPARAM =>
+        createSymbols(classOwner)
+      case _ =>
+        createSymbols(ctorOwner)
+  end createSymbolsInTemplate
 
   private def normalizeFlags(sym: Symbol, tag: Int, givenFlags: FlagSet, rhsIsEmpty: Boolean): FlagSet =
     var flags = givenFlags
