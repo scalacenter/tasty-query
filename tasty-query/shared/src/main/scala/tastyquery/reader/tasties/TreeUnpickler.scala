@@ -28,6 +28,7 @@ private[tasties] case object CaseDefFactory extends AbstractCaseDefFactory[CaseD
 private[tasties] case object TypeCaseDefFactory extends AbstractCaseDefFactory[TypeCaseDef]
 
 private[tasties] class TreeUnpickler private (
+  filename: String,
   protected val reader: TastyReader,
   nameAtRef: NameTable,
   posUnpicklerOpt: Option[PositionUnpickler],
@@ -35,11 +36,12 @@ private[tasties] class TreeUnpickler private (
 )(using Context) {
   import TreeUnpickler.*
 
-  def this(reader: TastyReader, nameAtRef: NameTable, posUnpicklerOpt: Option[PositionUnpickler])(using Context) =
-    this(reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
+  def this(filename: String, reader: TastyReader, nameAtRef: NameTable, posUnpicklerOpt: Option[PositionUnpickler])(
+    using Context
+  ) = this(filename, reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
 
-  def unpickle(filename: String): List[Tree] =
-    val fileContext = new LocalContext(filename, mutable.HashMap.empty, Map.empty)
+  def unpickle(): List[Tree] =
+    val fileContext = new LocalContext(mutable.HashMap.empty, Map.empty)
 
     @tailrec
     def read(acc: ListBuffer[Tree]): List[Tree] =
@@ -161,8 +163,8 @@ private[tasties] class TreeUnpickler private (
     if tag == TYPEPARAM then flags |= TypeParameter
     flags
 
-  private def posErrorMsg(using LocalContext): String = s"at address ${reader.currentAddr} in file ${localCtx.getFile}"
-  private def posErrorMsg(atAddr: Addr)(using LocalContext): String = s"at address $atAddr in file ${localCtx.getFile}"
+  private def posErrorMsg(using LocalContext): String = s"at address ${reader.currentAddr} in file $filename"
+  private def posErrorMsg(atAddr: Addr)(using LocalContext): String = s"at address $atAddr in file $filename"
 
   def spanAt(addr: Addr): Span =
     posUnpicklerOpt match {
@@ -179,7 +181,7 @@ private[tasties] class TreeUnpickler private (
   private def spanSeqT(trees: Seq[TypeTree]): Span = trees.foldLeft(NoSpan)((s, t) => s.union(t.span))
 
   def forkAt(start: Addr): TreeUnpickler =
-    new TreeUnpickler(reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt, caches)
+    new TreeUnpickler(filename, reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt, caches)
 
   def fork: TreeUnpickler =
     forkAt(reader.currentAddr)
@@ -1516,8 +1518,6 @@ private[tasties] object TreeUnpickler {
   /** LocalContext is used when unpickling a given .tasty file.
     * It contains information local to the file and to the scope.
     *
-    * @param filename
-    *   the .tasty file being unpickled, used for error reporting
     * @param localSymbols
     *   map of the symbols, created when unpickling the current file.
     *   A symbol can be referred to from anywhere in the file, therefore once the symbol is added
@@ -1528,16 +1528,9 @@ private[tasties] object TreeUnpickler {
     *   A new FileLocalInfo (hence a new LocalContext) is created when an enclosing is added
     *   to mimic the scoping.
     */
-  private class LocalContext(
-    filename: String,
-    localSymbols: mutable.HashMap[Addr, Symbol],
-    enclosingBinders: Map[Addr, Binders]
-  ) { base =>
-
+  private class LocalContext(localSymbols: mutable.HashMap[Addr, Symbol], enclosingBinders: Map[Addr, Binders]) {
     def withEnclosingBinders(addr: Addr, b: Binders): LocalContext =
-      new LocalContext(filename, localSymbols, enclosingBinders.updated(addr, b))
-
-    def getFile: String = filename
+      new LocalContext(localSymbols, enclosingBinders.updated(addr, b))
 
     def getEnclosingBinders(addr: Addr): Binders = enclosingBinders(addr)
 

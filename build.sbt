@@ -115,6 +115,9 @@ lazy val tastyQuery =
           // private, so this is fine
           ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.reader.tasties.TreeUnpickler#Caches.refinedTypeTreeCache"),
           ProblemFilters.exclude[Problem]("tastyquery.reader.tasties.TreeUnpickler#LocalContext.*"),
+
+          // private[reader], so this is fine
+          ProblemFilters.exclude[Problem]("tastyquery.reader.tasties.TastyUnpickler#*"),
         )
       },
     )
