@@ -626,34 +626,25 @@ private[tasties] class TreeUnpickler private (
 
   private def readAllParams: List[ParamsClause] =
     reader.nextByte match {
-      case PARAM => Left(readParams) :: readAllParams
+      case PARAM =>
+        Left(readParams) :: readAllParams
       case EMPTYCLAUSE =>
         reader.readByte()
         Left(Nil) :: readAllParams
-      case TYPEPARAM => Right(readTypeParams) :: readAllParams
-      case _         => Nil
+      case TYPEPARAM =>
+        Right(readTypeParams) :: readAllParams
+      case SPLITCLAUSE =>
+        reader.readByte()
+        readAllParams
+      case _ =>
+        Nil
     }
-
-  private def readParamLists: List[List[ValDef]] = {
-    var acc = new ListBuffer[List[ValDef]]()
-    while (reader.nextByte == PARAM || reader.nextByte == EMPTYCLAUSE) {
-      reader.nextByte match {
-        case PARAM => acc += readParams
-        case EMPTYCLAUSE =>
-          reader.readByte()
-          acc += Nil
-      }
-    }
-    acc.toList
-  }
+  end readAllParams
 
   private def readParams: List[ValDef] = {
     var acc = new ListBuffer[ValDef]()
     while (reader.nextByte == PARAM) {
       acc += readValOrDefDef.asInstanceOf[ValDef]
-    }
-    if (reader.nextByte == SPLITCLAUSE) {
-      reader.readByte()
     }
     acc.toList
   }

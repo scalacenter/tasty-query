@@ -2392,4 +2392,25 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     }
     assert(containsSubtree(anonClassStructure)(clue(tree)))
   }
+
+  testUnpickle("double-poly-extensions", "simple_trees.DoublePolyExtensions") { tree =>
+    val myMapDef = findTree(tree) { case myMapDef @ DefDef(SimpleName("+++:"), _, _, _, _) =>
+      myMapDef
+    }
+    val myMapStructure: StructureCheck = {
+      case DefDef(
+            SimpleName("+++:"),
+            List(
+              Right(List(TypeParam(SimpleTypeName("A"), _, _))),
+              Right(List(TypeParam(SimpleTypeName("B"), _, _))),
+              Left(List(ValDef(SimpleName("x"), _, _, _))),
+              Left(List(ValDef(SimpleName("list"), _, _, _)))
+            ),
+            _,
+            _,
+            _
+          ) =>
+    }
+    assert(containsSubtree(myMapStructure)(clue(myMapDef)))
+  }
 }
