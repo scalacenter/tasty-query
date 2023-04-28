@@ -457,14 +457,18 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickle("match", "simple_trees.Match") { tree =>
+    val fTree = findTree(tree) { case fTree @ DefDef(SimpleName("f"), _, _, _, _) =>
+      fTree
+    }
+
     val matchStructure: StructureCheck = {
       case Match(Ident(_), cases) if cases.length == 6 =>
     }
-    assert(containsSubtree(matchStructure)(clue(tree)))
+    assert(containsSubtree(matchStructure)(clue(fTree)))
 
     val simpleGuard: StructureCheck = { case CaseDef(ExprPattern(Literal(Constant(0))), None, body: Block) =>
     }
-    assert(containsSubtree(simpleGuard)(clue(tree)))
+    assert(containsSubtree(simpleGuard)(clue(fTree)))
 
     val guardWithAlternatives: StructureCheck = {
       case CaseDef(
@@ -479,7 +483,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             body: Block
           ) =>
     }
-    assert(containsSubtree(guardWithAlternatives)(clue(tree)))
+    assert(containsSubtree(guardWithAlternatives)(clue(fTree)))
 
     val guardAndCondition: StructureCheck = {
       case CaseDef(
@@ -490,7 +494,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             body: Block
           ) =>
     }
-    assert(containsSubtree(guardAndCondition)(clue(tree)))
+    assert(containsSubtree(guardAndCondition)(clue(fTree)))
 
     val alternativesAndCondition: StructureCheck = {
       case CaseDef(
@@ -505,7 +509,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             body: Block
           ) =>
     }
-    assert(containsSubtree(alternativesAndCondition)(clue(tree)))
+    assert(containsSubtree(alternativesAndCondition)(clue(fTree)))
 
     val defaultWithCondition: StructureCheck = {
       case CaseDef(
@@ -522,11 +526,37 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             body: Block
           ) =>
     }
-    assert(containsSubtree(defaultWithCondition)(clue(tree)))
+    assert(containsSubtree(defaultWithCondition)(clue(fTree)))
 
     val default: StructureCheck = { case CaseDef(WildcardPattern(_), None, body: Block) =>
     }
-    assert(containsSubtree(default)(clue(tree)))
+    assert(containsSubtree(default)(clue(fTree)))
+
+    val gTree = findTree(tree) { case gTree @ DefDef(SimpleName("g"), _, _, _, _) =>
+      gTree
+    }
+
+    val wildcardSequenceStructure: StructureCheck = {
+      case Bind(
+            SimpleName("elems"),
+            TypeTest(
+              WildcardPattern(
+                ty.AppliedType(
+                  TypeRefInternal(_, SimpleTypeName("Seq")),
+                  List(TypeRefInternal(_, SimpleTypeName("Any")))
+                )
+              ),
+              TypeWrapper(
+                ty.AppliedType(
+                  TypeRefInternal(_, tpnme.RepeatedParamClassMagic),
+                  List(TypeRefInternal(_, SimpleTypeName("Any")))
+                )
+              )
+            ),
+            _
+          ) =>
+    }
+    assert(containsSubtree(wildcardSequenceStructure)(clue(gTree)))
   }
 
   testUnpickle("match-case-class", "simple_trees.PatternMatchingOnCaseClass") { tree =>
@@ -2267,6 +2297,31 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     }
     assert(clue(intAliasSym.annotations).sizeIs == 1)
     assert(containsSubtree(deprecatedAnnotCheck("other reason", "forever"))(clue(intAliasSym.annotations(0).tree)))
+
+    val javaAnnotWithDefaultImplicitSym = findTree(tree) {
+      case DefDef(SimpleName("javaAnnotWithDefaultImplicit"), _, _, _, sym) =>
+        sym
+    }
+    assert(clue(javaAnnotWithDefaultImplicitSym.annotations).sizeIs == 1)
+    val javaAnnotWithDefaultImplicitAnnotCheck: StructureCheck = {
+      case Apply(Select(New(_), _), List(ident @ Ident(nme.Wildcard)))
+          if ident.tpe eq defn.uninitializedMethodTermRef =>
+    }
+    assert(
+      containsSubtree(javaAnnotWithDefaultImplicitAnnotCheck)(clue(javaAnnotWithDefaultImplicitSym.annotations(0).tree))
+    )
+
+    val javaAnnotWithDefaultExplicitSym = findTree(tree) {
+      case DefDef(SimpleName("javaAnnotWithDefaultExplicit"), _, _, _, sym) =>
+        sym
+    }
+    assert(clue(javaAnnotWithDefaultExplicitSym.annotations).sizeIs == 1)
+    val javaAnnotWithDefaultExplicitAnnotCheck: StructureCheck = {
+      case Apply(Select(New(_), _), List(Literal(Constant(false)))) =>
+    }
+    assert(
+      containsSubtree(javaAnnotWithDefaultExplicitAnnotCheck)(clue(javaAnnotWithDefaultExplicitSym.annotations(0).tree))
+    )
   }
 
   testUnpickle("uninitialized-var", "simple_trees.Uninitialized") { tree =>
@@ -2323,5 +2378,39 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
           ) if tSymRef == tSym && uSymRef == uSym && tSym != uSym =>
     }
     assert(containsSubtree(typeQuoteMatchingCheck)(clue(typeQuoteMatchingCaseDef)))
+  }
+
+  testUnpickle("anon-classes-in-constructor", "simple_trees.AnonClassesInCtor") { tree =>
+    val ctorDef = findTree(tree) {
+      case ctorDef @ DefDef(nme.Constructor, _, _, _, ctorSym) if ctorSym.owner.name == typeName("AnonClassesInCtor") =>
+        ctorDef
+    }
+    val ctorSym = ctorDef.symbol
+
+    val anonClassStructure: StructureCheck = {
+      case ClassDef(SimpleTypeName("$anon"), _, sym) if sym.owner == ctorSym =>
+    }
+    assert(containsSubtree(anonClassStructure)(clue(tree)))
+  }
+
+  testUnpickle("double-poly-extensions", "simple_trees.DoublePolyExtensions") { tree =>
+    val myMapDef = findTree(tree) { case myMapDef @ DefDef(SimpleName("+++:"), _, _, _, _) =>
+      myMapDef
+    }
+    val myMapStructure: StructureCheck = {
+      case DefDef(
+            SimpleName("+++:"),
+            List(
+              Right(List(TypeParam(SimpleTypeName("A"), _, _))),
+              Right(List(TypeParam(SimpleTypeName("B"), _, _))),
+              Left(List(ValDef(SimpleName("x"), _, _, _))),
+              Left(List(ValDef(SimpleName("list"), _, _, _)))
+            ),
+            _,
+            _,
+            _
+          ) =>
+    }
+    assert(containsSubtree(myMapStructure)(clue(myMapDef)))
   }
 }

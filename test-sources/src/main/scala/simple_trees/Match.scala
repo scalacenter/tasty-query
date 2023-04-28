@@ -9,4 +9,8 @@ class Match {
     case _ if (x % 2 == 0) => x / 2
     case _ => -x
   }
+
+  def g(xs: Seq[Int]): Int = xs match
+    case List(elems: _*) => 0
+    case _               => 1
 }

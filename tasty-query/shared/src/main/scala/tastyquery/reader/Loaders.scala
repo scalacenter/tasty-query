@@ -103,10 +103,13 @@ private[tastyquery] object Loaders {
         val unpickler = TastyUnpickler(Array.from(tastyData.bytes))
         val trees = unpickler
           .unpickle(
-            TastyUnpickler.TreeSectionUnpickler(unpickler.unpickle(new TastyUnpickler.PositionSectionUnpickler))
+            tastyData.debugPath,
+            TastyUnpickler.TreeSectionUnpickler(
+              unpickler.unpickle(tastyData.debugPath, new TastyUnpickler.PositionSectionUnpickler)
+            )
           )
           .get
-          .unpickle(tastyData.debugPath)
+          .unpickle()
         topLevelTastys += root -> trees
       end enterTasty
 

@@ -110,7 +110,9 @@ class PositionSuite extends RestrictedUnpicklingSuite {
         "case 7 if x == 7 => x - 1",
         "case 3 | 4 | 5 if x < 5 => 0",
         "case _ if (x % 2 == 0) => x / 2",
-        "case _ => -x"
+        "case _ => -x",
+        "case List(elems: _*) => 0",
+        "case _               => 1"
       )
     )
   }
