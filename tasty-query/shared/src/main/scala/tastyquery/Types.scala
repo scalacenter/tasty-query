@@ -1293,6 +1293,17 @@ object Types {
     type ParamRefType = TermParamRef
 
     protected def newParamRef(n: Int): ParamRefType = TermParamRef(this, n)
+
+    def paramTypes: List[Type]
+
+    final def paramInfos: List[PInfo] =
+      paramTypes
+
+    final def instantiate(args: List[Type])(using Context): Type =
+      Substituters.substParams(resultType, this, args)
+
+    final def instantiateParamTypes(args: List[Type])(using Context): List[Type] =
+      paramTypes.map(Substituters.substParams(_, this, args))
   end TermLambdaType
 
   sealed trait TypeLambdaType extends LambdaType with TypeBinders:
@@ -1303,8 +1314,16 @@ object Types {
 
     protected def newParamRef(n: Int): ParamRefType = TypeParamRef(this, n)
 
-    def instantiate(args: List[Type])(using Context): Type =
+    def paramTypeBounds: List[TypeBounds]
+
+    final def paramInfos: List[PInfo] =
+      paramTypeBounds
+
+    final def instantiate(args: List[Type])(using Context): Type =
       Substituters.substParams(resultType, this, args)
+
+    final def instantiateParamTypeBounds(args: List[Type])(using Context): List[TypeBounds] =
+      paramTypeBounds.map(Substituters.substParams(_, this, args))
 
     /** The type-bounds `[tparams := this.paramRefs] bounds`, where `tparams` is a list of type parameter symbols */
     private[tastyquery] def integrate(tparams: List[TypeParamSymbol], bounds: TypeBounds): TypeBounds =
@@ -1323,9 +1342,6 @@ object Types {
     private val myRes: Type = resultTypeExp(this: @unchecked)
     initialized = true
 
-    def instantiate(args: List[Type])(using Context): Type =
-      Substituters.substParams(resultType, this, args)
-
     def paramTypes: List[Type] =
       if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
       myParamTypes.nn
@@ -1333,9 +1349,6 @@ object Types {
     def resultType: Type =
       if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
       myRes.nn
-
-    def paramInfos: List[PInfo] =
-      paramTypes
 
     def companion: LambdaTypeCompanion[TermName, Type, MethodType] = MethodType
 
@@ -1434,8 +1447,6 @@ object Types {
       if !initialized then throw CyclicReferenceException(s"polymorphic method [$paramNames]=>???")
       myRes.nn
 
-    def paramInfos: List[PInfo] = paramTypeBounds
-
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, PolyType] =
       PolyType
 
@@ -1521,8 +1532,6 @@ object Types {
     def resultType: Type =
       if !initialized then throw CyclicReferenceException(s"type lambda [$paramNames]=>???")
       myRes.nn
-
-    def paramInfos: List[PInfo] = paramTypeBounds
 
     private[tastyquery] lazy val typeLambdaParams: List[TypeLambdaParam] =
       List.tabulate(paramNames.size)(num => TypeLambdaParam(this, num))
