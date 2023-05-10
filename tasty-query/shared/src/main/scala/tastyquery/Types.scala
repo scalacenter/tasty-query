@@ -1884,6 +1884,11 @@ object Types {
       else if that.contains(this) then this
       else RealTypeBounds(this.low | that.low, this.high & that.high)
 
+    final def union(that: TypeBounds)(using Context): TypeBounds =
+      if this.contains(that) then this
+      else if that.contains(this) then that
+      else RealTypeBounds(this.low & that.low, this.high | that.high)
+
     private[tastyquery] def mapBounds(f: Type => Type): TypeBounds = this match
       case RealTypeBounds(low, high) => derivedTypeBounds(f(low), f(high))
       case self @ TypeAlias(alias)   => self.derivedTypeAlias(f(alias))
