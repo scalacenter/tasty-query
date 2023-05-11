@@ -18,6 +18,7 @@ import ClassfileReader.*
 import ClassfileReader.Access.AccessFlags
 
 private[reader] object ClassfileParser {
+  private val javaLangObjectBinaryName = termName("java/lang/Object")
 
   transparent inline def innerClasses(using innerClasses: InnerClasses): innerClasses.type = innerClasses
   transparent inline def resolver(using resolver: Resolver): resolver.type = resolver
@@ -41,6 +42,8 @@ private[reader] object ClassfileParser {
         case Some(InnerClassRef(name, outer, isStaticInner)) =>
           val pre = lookup(outer, isStaticInner)
           pre.select(if isStatic then name else name.toTypeName)
+        case None if !isStatic && binaryName == javaLangObjectBinaryName =>
+          defn.FromJavaObjectType
         case None =>
           val (pkgRef, cls) = binaryName.name.lastIndexOf('/') match
             case -1 => (defn.RootPackage.packageRef, binaryName)
@@ -215,7 +218,10 @@ private[reader] object ClassfileParser {
             Descriptors.parseSupers(cls, superClass, interfaces)
           }
       end parents
-      cls.withParentsDirect(parents)
+      val parents1 =
+        if parents.head eq defn.FromJavaObjectType then defn.ObjectType :: parents.tail
+        else parents
+      cls.withParentsDirect(parents1)
     end initParents
 
     cls.withGivenSelfType(None)

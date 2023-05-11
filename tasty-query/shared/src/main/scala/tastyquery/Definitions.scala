@@ -14,6 +14,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val RootPackage = rootPackage
   val EmptyPackage = emptyPackage
 
+  val specialOpsPackage = RootPackage.getPackageDeclOrCreate(nme.specialOpsPackageName)
+
   val scalaPackage = RootPackage.getPackageDeclOrCreate(nme.scalaPackageName)
   private val javaPackage = RootPackage.getPackageDeclOrCreate(nme.javaPackageName)
   val javaLangPackage = javaPackage.getPackageDeclOrCreate(nme.langPackageName)
@@ -153,6 +155,30 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     scala2NoTypeAlias.setAnnotations(Nil)
     scala2NoTypeAlias.checkCompleted()
   }
+
+  /** A type alias of Object used to represent any reference to Object in a Java signature.
+    *
+    * The secret sauce is that subtype checking treats it specially:
+    *
+    *   tp <:< FromJavaObject
+    *
+    * is equivalent to:
+    *
+    *   tp <:< Any
+    *
+    * For more details, see the comment on `FromJavaObjectSymbol` in the
+    * compiler's `Definitions.scala` file.
+    */
+  val FromJavaObjectAlias: TypeMemberSymbol =
+    val sym = TypeMemberSymbol.create(tpnme.FromJavaObjectAliasMagic, specialOpsPackage)
+    sym.withFlags(JavaDefined, None)
+    sym.withDefinition(TypeMemberDefinition.TypeAlias(ObjectType))
+    sym.setAnnotations(Nil)
+    sym.checkCompleted()
+    sym
+  end FromJavaObjectAlias
+
+  val FromJavaObjectType: TypeRef = TypeRef(specialOpsPackage.packageRef, FromJavaObjectAlias)
 
   private def equalityMethodType: MethodType =
     MethodType(List(termName("that")), List(AnyType), BooleanType)

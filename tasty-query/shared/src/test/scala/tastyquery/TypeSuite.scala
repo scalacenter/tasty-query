@@ -739,7 +739,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val tpe = refInterface.declaredType.asInstanceOf[TypeLambdaType]
       val List(tparamRefA) = tpe.paramRefs: @unchecked
       assert(
-        tparamRefA.bounds.high.isIntersectionOf(_.isAny, _.isRef(JavaInterface1), _.isRef(JavaInterface2)),
+        tparamRefA.bounds.high.isIntersectionOf(_.isFromJavaObject, _.isRef(JavaInterface1), _.isRef(JavaInterface2)),
         clues(tparamRefA.bounds)
       )
     }
@@ -766,8 +766,28 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
 
     testDef(name"gencontravarient") { gencontravarient =>
-      assert(gencontravarient.declaredType.isGenJavaClassOf(_.isBounded(_.isRef(JavaDefinedClass), _.isAny)))
+      assert(gencontravarient.declaredType.isGenJavaClassOf(_.isBounded(_.isRef(JavaDefinedClass), _.isFromJavaObject)))
     }
+  }
+
+  testWithContext("generic-java-class-type-param-bounds") {
+    val GenericJavaClass = ctx.findTopLevelClass("javadefined.GenericJavaClass")
+
+    assert(clue(GenericJavaClass.typeParams).sizeIs == 1)
+    val tparam = GenericJavaClass.typeParams.head
+
+    assert(clue(tparam.lowerBound).isNothing)
+    assert(clue(tparam.upperBound).isFromJavaObject)
+  }
+
+  testWithContext("inferred-from-java-object") {
+    val InferredFromJavaObjectClass = ctx.findTopLevelClass("javacompat.InferredFromJavaObject")
+
+    val atTopLevel = InferredFromJavaObjectClass.findDecl(termName("atTopLevel"))
+    assert(clue(atTopLevel.declaredType).isFromJavaObject)
+
+    val inArray = InferredFromJavaObjectClass.findDecl(termName("inArray"))
+    assert(clue(inArray.declaredType).isArrayOf(_.isFromJavaObject))
   }
 
   testWithContext("java-class-parents") {
@@ -2274,7 +2294,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     testApply("testNotifyAll", termName("notifyAll"), _.isRef(defn.UnitClass))
     testApply("testWait", termName("wait"), _.isRef(defn.UnitClass))
 
-    testApply("testClone", termName("clone"), _.isRef(defn.ObjectClass))
+    testApply("testClone", termName("clone"), _.isFromJavaObject)
 
     /* Check that the symbols we found are also the ones of `defn.Object_x`.
      * Wheck do this *after* having performed the rest of the tests, because we want to

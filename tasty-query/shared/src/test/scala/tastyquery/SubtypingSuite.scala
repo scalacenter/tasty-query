@@ -450,6 +450,12 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(z, OtherSimplePathsClass.typeRef)
     assertStrictSubtype(xAlias, SimplePathsClass.typeRef)
 
+    // Weird spec stuff: Null <: x.type is true because the declared type U of x is such that Null <: U
+    // No 'withRef' because this codebase uses explicit nulls; we would need an Any-typed or (T | Null)-typed reference
+    assertStrictSubtype(defn.NullType, x)
+    assertStrictSubtype(defn.NullType, xAlias)
+    assertStrictSubtype(defn.NullType, xAlias.symbol.declaredType)
+
     assertEquiv(x.select(tname"AbstractType"), x.select(tname"AbstractType"))
       .withRef[refx.AbstractType, refx.AbstractType]
     assertEquiv(x.select(tname"AbstractType"), x.select(tname"AliasOfAbstractType"))
@@ -1271,9 +1277,22 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       assert(tree.tpe.isSubtype(finalResultType(decl.declaredType)))
 
       tree match
-        case Apply(fun, List(arg)) =>
-          val methodType = fun.tpe.widen.asInstanceOf[MethodType]
-          assert(clue(arg.tpe).isSubtype(clue(methodType.paramTypes.head)))
+        case Apply(method @ TypeApply(poly, List(targ)), List(arg)) =>
+          // Check that the term argument corresponds to the declared term param type
+          val methodType = method.tpe.widen.asInstanceOf[MethodType]
+          assert(clue(methodType.paramNames).sizeIs == 1)
+          val argTpe = arg.tpe
+          val paramTpe = methodType.instantiateParamTypes(List(argTpe)).head
+          assertStrictSubtype(argTpe, paramTpe)
+
+          // Check that the type argument corresponds to the declared type param bounds
+          val polyType = poly.tpe.widen.asInstanceOf[PolyType]
+          assert(clue(polyType.paramNames).sizeIs == 1)
+          val targTpe = targ.toType
+          val tParamBounds = polyType.instantiateParamTypeBounds(List(targTpe)).head
+          assertStrictSubtype(tParamBounds.low, targTpe)
+          assertStrictSubtype(targTpe, tParamBounds.high)
+
           applyBodyCount += 1
 
         case Literal(_) =>
@@ -1304,6 +1323,19 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val expectedType2 = valDef.tpt.toType
     assert(clue(expectedType2).isInstanceOf[RecType])
     assertEquiv(expectedType1, expectedType2)
+  }
+
+  testWithContext("from-java-object") {
+    // By definition, tp <:< FromJavaObject is treated as tp <:< Any
+
+    assertEquiv(defn.AnyType, defn.FromJavaObjectType)
+    assertEquiv(defn.ObjectType, defn.FromJavaObjectType)
+    assertStrictSubtype(defn.ObjectType, defn.AnyType) // yup, equivalence is not transitive
+
+    assertStrictSubtype(defn.IntType, defn.FromJavaObjectType)
+    assertStrictSubtype(defn.StringType, defn.FromJavaObjectType)
+
+    assertEquiv(defn.ArrayTypeOf(defn.AnyType), defn.ArrayTypeOf(defn.FromJavaObjectType))
   }
 
 end SubtypingSuite

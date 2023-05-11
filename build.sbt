@@ -118,6 +118,9 @@ lazy val tastyQuery =
 
           // private[reader], so this is fine
           ProblemFilters.exclude[Problem]("tastyquery.reader.tasties.TastyUnpickler#*"),
+
+          // new abstract method in fully sealed trait, so this is fine
+          ProblemFilters.exclude[ReversedMissingMethodProblem]("tastyquery.Types#TermLambdaType.paramTypes"),
         )
       },
     )

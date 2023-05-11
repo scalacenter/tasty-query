@@ -489,8 +489,25 @@ object Symbols {
 
     def bounds(using Context): TypeBounds
 
-    private[tastyquery] def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
-      bounds.mapBounds(_.asSeenFrom(prefix, owner))
+    private[tastyquery] final def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
+      def default: TypeBounds =
+        bounds.mapBounds(_.asSeenFrom(prefix, owner))
+
+      this match
+        case sym: ClassTypeParamSymbol =>
+          prefix match
+            case prefix: ThisType if prefix.cls == owner =>
+              bounds
+            case prefix: Type =>
+              sym.argForParam(prefix, widenAbstract = true) match
+                case Some(wild: WildcardTypeBounds) => wild.bounds
+                case Some(alias)                    => TypeAlias(alias)
+                case None                           => default
+            case NoPrefix =>
+              throw InvalidProgramStructureException(s"invalid NoPrefix for class type parameter $this")
+        case _ =>
+          default
+    end boundsAsSeenFrom
 
     def lowerBound(using Context): Type
 
@@ -574,8 +591,18 @@ object Symbols {
               val variance = this.paramVariance.sign
               val result: Type =
                 if tp1.isInstanceOf[WildcardTypeBounds] || tp2.isInstanceOf[WildcardTypeBounds] || variance == 0 then
-                  // TODO? Compute based on bounds, instead of returning the original reference
-                  TypeRef(pre, this)
+                  // Compute based on bounds, instead of returning the original reference
+                  def toBounds(tp: Type): TypeBounds = tp match
+                    case tp: WildcardTypeBounds => tp.bounds
+                    case _                      => TypeAlias(tp)
+                  val bounds1 = toBounds(tp1)
+                  val bounds2 = toBounds(tp2)
+                  val mergedBounds =
+                    if variance >= 0 then bounds1.intersect(bounds2)
+                    else bounds1.union(bounds2)
+                  mergedBounds match
+                    case TypeAlias(alias)  => alias // can happen for variance == 0 if tp1 =:= tp2
+                    case _: RealTypeBounds => WildcardTypeBounds(mergedBounds)
                 else if variance > 0 then tp1 & tp2
                 else tp1 | tp2
               end result

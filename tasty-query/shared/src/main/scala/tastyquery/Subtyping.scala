@@ -16,6 +16,9 @@ private[tastyquery] object Subtyping:
     (tp1 eq tp2) || level1(tp1, tp2)
 
   private def level1(tp1: Type, tp2: Type)(using Context): Boolean = tp2 match
+    case tp2: TypeRef if tp2.isFromJavaObject =>
+      isSubtype(tp1, defn.AnyType)
+
     case tp2: TypeRef =>
       tp2.optAliasedType match
         case Some(alias) =>
@@ -485,6 +488,9 @@ private[tastyquery] object Subtyping:
       !cls.isValueClass && !cls.is(Module) && cls != defn.NothingClass
     case tp: TypeRef =>
       false
+    case tp: TermRef =>
+      // Weird spec thing: x.type represents {x, null} when the underlying type of x is nullable :(
+      isNullable(tp.underlying)
     case tp: AppliedType =>
       isNullable(tp.tycon)
     case tp: RefinedType =>

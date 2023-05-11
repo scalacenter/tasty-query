@@ -412,6 +412,22 @@ object Types {
           this.isRef(sym)
       }
 
+    /** Is this type considered as "FromJavaObject" for the purposes of subtyping?
+      *
+      * See [Definitions.FromJavaObjectAlias] for details.
+      */
+    final def isFromJavaObject(using Context): Boolean =
+      this match
+        case tp: TypeRef =>
+          if tp.optSymbol.contains(defn.FromJavaObjectAlias) then true
+          else
+            tp.optAliasedType match
+              case Some(alias) => alias.isFromJavaObject
+              case None        => false
+        case _ =>
+          false
+    end isFromJavaObject
+
     /** The lower bound of a TypeBounds type, the type itself otherwise */
     private[tastyquery] final def lowerBound: Type = this match {
       case self: WildcardTypeBounds => self.bounds.low
@@ -1293,6 +1309,17 @@ object Types {
     type ParamRefType = TermParamRef
 
     protected def newParamRef(n: Int): ParamRefType = TermParamRef(this, n)
+
+    def paramTypes: List[Type]
+
+    final def paramInfos: List[PInfo] =
+      paramTypes
+
+    final def instantiate(args: List[Type])(using Context): Type =
+      Substituters.substParams(resultType, this, args)
+
+    final def instantiateParamTypes(args: List[Type])(using Context): List[Type] =
+      paramTypes.map(Substituters.substParams(_, this, args))
   end TermLambdaType
 
   sealed trait TypeLambdaType extends LambdaType with TypeBinders:
@@ -1303,8 +1330,16 @@ object Types {
 
     protected def newParamRef(n: Int): ParamRefType = TypeParamRef(this, n)
 
-    def instantiate(args: List[Type])(using Context): Type =
+    def paramTypeBounds: List[TypeBounds]
+
+    final def paramInfos: List[PInfo] =
+      paramTypeBounds
+
+    final def instantiate(args: List[Type])(using Context): Type =
       Substituters.substParams(resultType, this, args)
+
+    final def instantiateParamTypeBounds(args: List[Type])(using Context): List[TypeBounds] =
+      paramTypeBounds.map(Substituters.substParams(_, this, args))
 
     /** The type-bounds `[tparams := this.paramRefs] bounds`, where `tparams` is a list of type parameter symbols */
     private[tastyquery] def integrate(tparams: List[TypeParamSymbol], bounds: TypeBounds): TypeBounds =
@@ -1323,9 +1358,6 @@ object Types {
     private val myRes: Type = resultTypeExp(this: @unchecked)
     initialized = true
 
-    def instantiate(args: List[Type])(using Context): Type =
-      Substituters.substParams(resultType, this, args)
-
     def paramTypes: List[Type] =
       if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
       myParamTypes.nn
@@ -1333,9 +1365,6 @@ object Types {
     def resultType: Type =
       if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
       myRes.nn
-
-    def paramInfos: List[PInfo] =
-      paramTypes
 
     def companion: LambdaTypeCompanion[TermName, Type, MethodType] = MethodType
 
@@ -1434,8 +1463,6 @@ object Types {
       if !initialized then throw CyclicReferenceException(s"polymorphic method [$paramNames]=>???")
       myRes.nn
 
-    def paramInfos: List[PInfo] = paramTypeBounds
-
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, PolyType] =
       PolyType
 
@@ -1521,8 +1548,6 @@ object Types {
     def resultType: Type =
       if !initialized then throw CyclicReferenceException(s"type lambda [$paramNames]=>???")
       myRes.nn
-
-    def paramInfos: List[PInfo] = paramTypeBounds
 
     private[tastyquery] lazy val typeLambdaParams: List[TypeLambdaParam] =
       List.tabulate(paramNames.size)(num => TypeLambdaParam(this, num))
@@ -1874,6 +1899,11 @@ object Types {
       if this.contains(that) then that
       else if that.contains(this) then this
       else RealTypeBounds(this.low | that.low, this.high & that.high)
+
+    final def union(that: TypeBounds)(using Context): TypeBounds =
+      if this.contains(that) then this
+      else if that.contains(this) then that
+      else RealTypeBounds(this.low & that.low, this.high | that.high)
 
     private[tastyquery] def mapBounds(f: Type => Type): TypeBounds = this match
       case RealTypeBounds(low, high) => derivedTypeBounds(f(low), f(high))

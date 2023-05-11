@@ -222,6 +222,11 @@ private[tastyquery] object TypeMatching:
       })
 
     (tp1.dealias, tp2.dealias) match
+      case _ if tp1.isFromJavaObject =>
+        provablyDisjoint(defn.AnyType, tp2)
+      case _ if tp2.isFromJavaObject =>
+        provablyDisjoint(tp1, defn.AnyType)
+
       case (tp1: ConstantType, tp2: ConstantType) =>
         // Property 3
         tp1.value != tp2.value
