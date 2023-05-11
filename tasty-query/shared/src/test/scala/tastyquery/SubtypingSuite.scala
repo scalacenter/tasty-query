@@ -1319,4 +1319,17 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertEquiv(expectedType1, expectedType2)
   }
 
+  testWithContext("from-java-object") {
+    // By definition, tp <:< FromJavaObject is treated as tp <:< Any
+
+    assertEquiv(defn.AnyType, defn.FromJavaObjectType)
+    assertEquiv(defn.ObjectType, defn.FromJavaObjectType)
+    assertStrictSubtype(defn.ObjectType, defn.AnyType) // yup, equivalence is not transitive
+
+    assertStrictSubtype(defn.IntType, defn.FromJavaObjectType)
+    assertStrictSubtype(defn.StringType, defn.FromJavaObjectType)
+
+    assertEquiv(defn.ArrayTypeOf(defn.AnyType), defn.ArrayTypeOf(defn.FromJavaObjectType))
+  }
+
 end SubtypingSuite

@@ -67,6 +67,7 @@ object Names {
     val WildcardSequence: SimpleName = termName("_*")
     val RefinementClass = typeName("<refinement>")
 
+    val specialOpsPackageName: SimpleName = termName("<special-ops>")
     val scalaPackageName: SimpleName = termName("scala")
     val javaPackageName: SimpleName = termName("java")
     val langPackageName: SimpleName = termName("lang")
@@ -116,6 +117,7 @@ object Names {
     val RefinedClassMagic: TypeName = typeName("<refinement>")
     val ByNameParamClassMagic: TypeName = typeName("<byname>")
     val RepeatedParamClassMagic: TypeName = typeName("<repeated>")
+    val FromJavaObjectAliasMagic: TypeName = typeName("<FromJavaObject>")
 
     val scala2PackageObjectClass: TypeName = termName("package").withObjectSuffix.toTypeName
 

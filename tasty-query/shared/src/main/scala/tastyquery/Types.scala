@@ -412,6 +412,22 @@ object Types {
           this.isRef(sym)
       }
 
+    /** Is this type considered as "FromJavaObject" for the purposes of subtyping?
+      *
+      * See [Definitions.FromJavaObjectAlias] for details.
+      */
+    final def isFromJavaObject(using Context): Boolean =
+      this match
+        case tp: TypeRef =>
+          if tp.optSymbol.contains(defn.FromJavaObjectAlias) then true
+          else
+            tp.optAliasedType match
+              case Some(alias) => alias.isFromJavaObject
+              case None        => false
+        case _ =>
+          false
+    end isFromJavaObject
+
     /** The lower bound of a TypeBounds type, the type itself otherwise */
     private[tastyquery] final def lowerBound: Type = this match {
       case self: WildcardTypeBounds => self.bounds.low

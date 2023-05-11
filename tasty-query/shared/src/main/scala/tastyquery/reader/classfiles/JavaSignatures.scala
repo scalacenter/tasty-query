@@ -177,9 +177,15 @@ private[classfiles] object JavaSignatures:
           case '*' =>
             commitSimple(1, WildcardTypeBounds(defn.NothingAnyBounds))
           case '+' =>
-            commit(1) { val upper = referenceType(env); WildcardTypeBounds(RealTypeBounds(defn.NothingType, upper)) }
+            commit(1) {
+              val upper = referenceType(env)
+              WildcardTypeBounds(RealTypeBounds(defn.NothingType, upper))
+            }
           case '-' =>
-            commit(1) { val lower = referenceType(env); WildcardTypeBounds(RealTypeBounds(lower, defn.AnyType)) }
+            commit(1) {
+              val lower = referenceType(env)
+              WildcardTypeBounds(RealTypeBounds(lower, defn.FromJavaObjectType))
+            }
           case _ =>
             referenceType(env)
       else abort
@@ -193,7 +199,7 @@ private[classfiles] object JavaSignatures:
         expect(':')
         referenceTypeSignature(env) match
           case Some(tpe) => tpe
-          case _         => defn.AnyType
+          case _         => defn.FromJavaObjectType
       val interfaceBounds = readWhile(':', referenceType(env))
       if env.withAddedParam(tname) then emptyTypeBounds // shortcut as we will throw away the bounds
       else RealTypeBounds(defn.NothingType, interfaceBounds.foldLeft(classBound)(AndType(_, _)))
