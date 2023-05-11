@@ -488,6 +488,9 @@ private[tastyquery] object Subtyping:
       !cls.isValueClass && !cls.is(Module) && cls != defn.NothingClass
     case tp: TypeRef =>
       false
+    case tp: TermRef =>
+      // Weird spec thing: x.type represents {x, null} when the underlying type of x is nullable :(
+      isNullable(tp.underlying)
     case tp: AppliedType =>
       isNullable(tp.tycon)
     case tp: RefinedType =>

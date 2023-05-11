@@ -450,6 +450,12 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(z, OtherSimplePathsClass.typeRef)
     assertStrictSubtype(xAlias, SimplePathsClass.typeRef)
 
+    // Weird spec stuff: Null <: x.type is true because the declared type U of x is such that Null <: U
+    // No 'withRef' because this codebase uses explicit nulls; we would need an Any-typed or (T | Null)-typed reference
+    assertStrictSubtype(defn.NullType, x)
+    assertStrictSubtype(defn.NullType, xAlias)
+    assertStrictSubtype(defn.NullType, xAlias.symbol.declaredType)
+
     assertEquiv(x.select(tname"AbstractType"), x.select(tname"AbstractType"))
       .withRef[refx.AbstractType, refx.AbstractType]
     assertEquiv(x.select(tname"AbstractType"), x.select(tname"AliasOfAbstractType"))
