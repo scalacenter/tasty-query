@@ -104,7 +104,7 @@ private[tastyquery] object Erasure:
         throw UnsupportedOperationException(s"Cannot erase $tpe")
       case tpe: TypeProxy =>
         preErase(tpe.underlying)
-      case _: MethodicType | _: PackageRef | _: CustomTransientGroundType =>
+      case _: MethodicType | _: TypeLambda | _: PackageRef | _: CustomTransientGroundType =>
         throw IllegalArgumentException(s"Unexpected type in erasure: $tpe")
   end preErase
 

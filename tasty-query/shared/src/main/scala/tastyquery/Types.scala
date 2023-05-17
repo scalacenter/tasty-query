@@ -1610,7 +1610,7 @@ object Types {
   final class TypeLambda(val paramNames: List[TypeName])(
     @constructorOnly paramTypeBoundsExp: TypeLambda => List[TypeBounds],
     @constructorOnly resultTypeExp: TypeLambda => Type
-  ) extends TypeProxy
+  ) extends GroundType
       with ValueType
       with TypeLambdaType {
     type This = TypeLambda
@@ -1633,7 +1633,13 @@ object Types {
 
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, TypeLambda] = TypeLambda
 
-    override def underlying(using Context): Type = defn.AnyType
+    def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      ResolveMemberResult.NotFound
+
+    def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      ResolveMemberResult.NotFound
 
     override def toString: String =
       if !initialized then s"TypeLambda($paramNames)(<evaluating>)"

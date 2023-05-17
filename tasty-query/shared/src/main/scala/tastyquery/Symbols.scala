@@ -1129,7 +1129,7 @@ object Symbols {
         // TODO Handle OrType
         None
 
-      case _: PackageRef =>
+      case _: TypeLambda | _: PackageRef =>
         None
 
       case _: MethodicType | _: CustomTransientGroundType =>
