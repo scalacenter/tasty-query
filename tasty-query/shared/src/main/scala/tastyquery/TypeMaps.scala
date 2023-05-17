@@ -175,11 +175,11 @@ private[tastyquery] object TypeMaps {
     override protected def derivedSelect(tp: NamedType, pre: Type): Type =
       tp.normalizedDerivedSelect(pre)
 
-    protected def mapArgs(args: List[Type], tparams: List[TypeParamInfo]): List[Type] = args match
+    protected def mapArgs(args: List[Type], tparams: List[TypeConstructorParam]): List[Type] = args match
       case arg :: otherArgs if tparams.nonEmpty =>
         val arg1 = arg match
           case arg: WildcardTypeBounds => this(arg)
-          case arg                     => atVariance(variance * tparams.head.paramVariance.sign)(this(arg))
+          case arg                     => atVariance(variance * tparams.head.variance.sign)(this(arg))
         val otherArgs1 = mapArgs(otherArgs, tparams.tail)
         if ((arg1 eq arg) && (otherArgs1 eq otherArgs)) args
         else arg1 :: otherArgs1
@@ -386,9 +386,9 @@ private[tastyquery] object TypeMaps {
             // Fail for non-variant argument ranges (see use-site else branch below).
             // If successful, the L-arguments are in loBut, the H-arguments in hiBuf.
             // @return  operation succeeded for all arguments.
-            def distributeArgs(args: List[Type], tparams: List[TypeParamInfo]): Boolean = args match {
+            def distributeArgs(args: List[Type], tparams: List[TypeConstructorParam]): Boolean = args match {
               case Range(lo, hi) :: args1 =>
-                val v = tparams.head.paramVariance.sign
+                val v = tparams.head.variance.sign
                 if (v == 0) false
                 else {
                   if (v > 0) { loBuf += lo; hiBuf += hi }

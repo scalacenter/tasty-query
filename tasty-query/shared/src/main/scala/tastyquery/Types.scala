@@ -120,19 +120,23 @@ object Types {
     end merge
   end ResolveMemberResult
 
-  /** A common super trait of Symbol and LambdaParam.
-    * Used to capture the attributes of type parameters which can be implemented as either.
+  /** A type parameter of a type constructor.
+    *
+    * Type parameters of polymorphic class types are [[Symbols.ClassTypeParamSymbol]]s.
+    * For other type constructors, they are instances of an unspecified subclass.
+    *
+    * See [[Type.typeParams]].
     */
-  private[tastyquery] trait TypeParamInfo:
-    /** The variance of the type parameter */
-    private[tastyquery] def paramVariance(using Context): Variance
+  trait TypeConstructorParam private[tastyquery] ():
+    /** The variance of the type parameter. */
+    def variance(using Context): Variance
 
-    /** The name of the type parameter */
-    private[tastyquery] def paramName: TypeName
+    /** The name of the type parameter. */
+    def name: TypeName
 
-    /** The bounds of the type parameter */
-    private[tastyquery] def paramTypeBounds(using Context): TypeBounds
-  end TypeParamInfo
+    /** The bounds of the type parameter. */
+    def bounds(using Context): TypeBounds
+  end TypeConstructorParam
 
   sealed trait TypeMappable:
     type ThisTypeMappableType >: this.type <: TypeMappable
@@ -222,16 +226,20 @@ object Types {
     final def lookupMember(name: TypeName)(using Context): Option[TypeRef] =
       lookupMember(name: Name).map(_.asType)
 
-    /** The type parameters of this type are:
-      * For a ClassInfo type, the type parameters of its class.
-      * For a typeref referring to a class, the type parameters of the class.
-      * For a refinement type, the type parameters of its parent, dropping
-      * any type parameter that is-rebound by the refinement.
+    /** The type parameters of this type, if it is a type constructor.
       *
-      * For any *-kinded type, returns `Nil`.
+      * If this type is a type constructor, returns a non-empty list of its
+      * type parameters.
+      *
+      * For all other types (proper types, any-kinded types, methodic types
+      * and package refs), returns `Nil`.
+      *
+      * Special case: for `Nothing`, returns `Nil` as well (although `Nothing`
+      * is universally-kinded, so it is a type constructor for all possible
+      * type constructor signatures).
       */
     @tailrec
-    private[tastyquery] final def typeParams(using Context): List[TypeParamInfo] =
+    final def typeParams(using Context): List[TypeConstructorParam] =
       this match
         case TypeRef.OfClass(cls) =>
           cls.typeParams
@@ -243,13 +251,20 @@ object Types {
           self.tycon match
             case TypeRef.OfClass(_) => Nil
             case _                  => self.superType.typeParams
-        case _: SingletonType | _: RefinedType =>
-          Nil
+        case self: TypeParamRef =>
+          self.superType.typeParams
+        case self: AnnotatedType =>
+          self.superType.typeParams
         case self: WildcardTypeBounds =>
           self.bounds.high.typeParams
-        case self: TypeProxy =>
-          self.superType.typeParams
-        case _ =>
+        case _: SingletonType | _: RefinedType | _: ByNameType | _: MatchType | _: RecType =>
+          // These types are always proper types
+          Nil
+        case _: OrType | _: AndType =>
+          // Should these inherit their typeParams when they are mergeable? (dotc does not do it)
+          Nil
+        case _: MethodicType | _: PackageRef | _: CustomTransientGroundType =>
+          // For these types it does not really make sense to ask the question, but we return Nil anyway
           Nil
     end typeParams
 
@@ -635,7 +650,7 @@ object Types {
     private[tastyquery] final def isClassTypeParamRef(sym: ClassTypeParamSymbol): Boolean =
       designator eq sym
 
-    private[tastyquery] final def isTypeParamRef(tparam: TypeParamInfo): Boolean =
+    private[tastyquery] final def isTypeParamRef(tparam: TypeConstructorParam): Boolean =
       designator eq tparam
 
     final def isType: Boolean = isInstanceOf[TypeRef]
@@ -1181,7 +1196,7 @@ object Types {
         // tryNormalize.orElse(superType) // TODO for match types
         superType
 
-    private[tastyquery] def tyconTypeParams(using Context): List[TypeParamInfo] =
+    private[tastyquery] def tyconTypeParams(using Context): List[TypeConstructorParam] =
       val tparams = tycon.typeParams
       /*if (tparams.isEmpty) HKTypeLambda.any(args.length).typeParams else*/
       tparams
@@ -1517,14 +1532,14 @@ object Types {
   sealed trait ParamRef extends BoundType:
     def paramNum: Int
 
-  private[tastyquery] final class TypeLambdaParam(val typeLambda: TypeLambda, num: Int) extends TypeParamInfo:
-    override def paramVariance(using Context): Variance =
-      Variance.Invariant // TODO? Should we set structure variances?
+  private[tastyquery] final class TypeLambdaParam(val typeLambda: TypeLambda, num: Int) extends TypeConstructorParam:
+    def variance(using Context): Variance =
+      Variance.Invariant // TODO Set structured variances
 
-    private[tastyquery] def paramName: TypeName =
+    def name: TypeName =
       typeLambda.paramNames(num)
 
-    private[tastyquery] def paramTypeBounds(using Context): TypeBounds =
+    def bounds(using Context): TypeBounds =
       typeLambda.paramTypeBounds(num)
   end TypeLambdaParam
 
@@ -1572,10 +1587,10 @@ object Types {
     ): TypeLambda =
       apply(params.map(_.name))(_ => params.map(_.symbol.bounds), resultTypeExp)
 
-    private[tastyquery] def fromParamInfos(params: List[TypeParamInfo])(resultTypeExp: TypeLambda => Type)(
+    private[tastyquery] def fromParamInfos(params: List[TypeConstructorParam])(resultTypeExp: TypeLambda => Type)(
       using Context
     ): TypeLambda =
-      apply(params.map(_.paramName))(_ => params.map(_.paramTypeBounds), resultTypeExp)
+      apply(params.map(_.name))(_ => params.map(_.bounds), resultTypeExp)
   end TypeLambda
 
   final class TypeParamRef(val binders: TypeBinders, val paramNum: Int) extends TypeProxy with ValueType with ParamRef {

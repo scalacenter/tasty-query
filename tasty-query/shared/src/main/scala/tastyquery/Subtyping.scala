@@ -295,11 +295,11 @@ private[tastyquery] object Subtyping:
         false
   end compareAppliedType2
 
-  private def isSubArgs(tp1: Type, args1: List[Type], args2: List[Type], tparams: List[TypeParamInfo])(
+  private def isSubArgs(tp1: Type, args1: List[Type], args2: List[Type], tparams: List[TypeConstructorParam])(
     using Context
   ): Boolean =
-    def isSubArg(arg1: Type, arg2: Type, tparam: TypeParamInfo): Boolean =
-      val variance = tparam.paramVariance
+    def isSubArg(arg1: Type, arg2: Type, tparam: TypeConstructorParam): Boolean =
+      val variance = tparam.variance
 
       arg2 match
         case arg2: WildcardTypeBounds =>
@@ -334,7 +334,7 @@ private[tastyquery] object Subtyping:
     }
   end isSubArgs
 
-  private def etaExpand(tp: Type, tparams: List[TypeParamInfo])(using Context): TypeLambda =
+  private def etaExpand(tp: Type, tparams: List[TypeConstructorParam])(using Context): TypeLambda =
     TypeLambda.fromParamInfos(tparams)(tl => tp.appliedTo(tl.paramRefs))
 
   private def hasMatchingRefinedMember(tp1: Type, tp2: RefinedType)(using Context): Boolean =

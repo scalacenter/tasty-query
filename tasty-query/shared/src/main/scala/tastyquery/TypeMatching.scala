@@ -104,14 +104,18 @@ private[tastyquery] object TypeMatching:
       case pattern: AppliedType if containsCapturesOf(pattern, caze) =>
         // !!! There is similar code in Subtyping.compareAppliedType2
 
-        def tryMatchArgs(scrutineeArgs: List[Type], patternArgs: List[Type], tparams: List[TypeParamInfo]): Boolean =
+        def tryMatchArgs(
+          scrutineeArgs: List[Type],
+          patternArgs: List[Type],
+          tparams: List[TypeConstructorParam]
+        ): Boolean =
           assert(
             scrutineeArgs.isEmpty == patternArgs.isEmpty && scrutineeArgs.isEmpty == tparams.isEmpty,
             s"tryMatchArgs($scrutineeArgs, $patternArgs, $tparams)"
           )
           if scrutineeArgs.isEmpty then true
           else
-            val innerVariance = tparams.head.paramVariance * variance
+            val innerVariance = tparams.head.variance * variance
             tryMatchPattern(scrutineeArgs.head, patternArgs.head, innerVariance, caze, typeParamInstantiations)
             && tryMatchArgs(scrutineeArgs.tail, patternArgs.tail, tparams.tail)
         end tryMatchArgs
@@ -183,7 +187,7 @@ private[tastyquery] object TypeMatching:
         provablyEmpty(tp.first) && provablyEmpty(tp.second)
       case tp: AppliedType =>
         tp.args.lazyZip(tp.tycon.typeParams).exists { (arg, tparam) =>
-          tparam.paramVariance.sign >= 0
+          tparam.variance.sign >= 0
           && provablyEmpty(arg)
           && typeparamCorrespondsToField(tp.tycon, tparam)
         }
@@ -254,13 +258,13 @@ private[tastyquery] object TypeMatching:
          * (Type parameter disjointness is not enough by itself as it could
          * lead to incorrect conclusions for phantom type parameters).
          */
-        def covariantDisjoint(tp1: Type, tp2: Type, tparam: TypeParamInfo): Boolean =
+        def covariantDisjoint(tp1: Type, tp2: Type, tparam: TypeConstructorParam): Boolean =
           provablyDisjoint(tp1, tp2) && typeparamCorrespondsToField(tycon1, tparam)
 
         /* Contravariant case: a value where this type parameter is
          * instantiated to `Any` belongs to both types.
          */
-        def contravariantDisjoint(tp1: Type, tp2: Type, tparam: TypeParamInfo): Boolean =
+        def contravariantDisjoint(tp1: Type, tp2: Type, tparam: TypeConstructorParam): Boolean =
           false
 
         /* In the invariant case, we also use a stronger notion of disjointness:
@@ -273,14 +277,14 @@ private[tastyquery] object TypeMatching:
          * doesn't have type tags, meaning that users cannot write patterns
          * that do type tests on higher kinded types.
          */
-        def invariantDisjoint(tp1: Type, tp2: Type, tparam: TypeParamInfo): Boolean =
+        def invariantDisjoint(tp1: Type, tp2: Type, tparam: TypeConstructorParam): Boolean =
           provablyDisjoint(tp1, tp2) /*||
           !isSameType(tp1, tp2) &&
           fullyInstantiated(tp1) && // We can only trust a "no" from `isSameType` when
           fullyInstantiated(tp2)    // both `tp1` and `tp2` are fully instantiated.*/
 
         tp1.args.lazyZip(tp2.args).lazyZip(tycon1.typeParams).exists { (arg1, arg2, tparam) =>
-          val v = tparam.paramVariance
+          val v = tparam.variance
           if v.isCovariant then covariantDisjoint(arg1, arg2, tparam)
           else if v.isContravariant then contravariantDisjoint(arg1, arg2, tparam)
           else invariantDisjoint(arg1, arg2, tparam)
@@ -311,7 +315,7 @@ private[tastyquery] object TypeMatching:
   end provablyDisjoint
 
   /** Does `tycon` have a field with type `tparam`? */
-  private def typeparamCorrespondsToField(tycon: Type, tparam: TypeParamInfo)(using Context): Boolean =
+  private def typeparamCorrespondsToField(tycon: Type, tparam: TypeConstructorParam)(using Context): Boolean =
     productSelectorTypes(tycon).exists {
       case tp: TypeRef => tp.isTypeParamRef(tparam)
       case tp          => false

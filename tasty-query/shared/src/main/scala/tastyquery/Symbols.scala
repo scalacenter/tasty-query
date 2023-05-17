@@ -542,15 +542,11 @@ object Symbols {
 
   final class ClassTypeParamSymbol private (name: TypeName, override val owner: ClassSymbol)
       extends TypeParamSymbol(name, owner)
-      with TypeParamInfo:
+      with TypeConstructorParam:
     type DefiningTreeType = TypeParam
 
-    private[tastyquery] def paramVariance(using Context): Variance =
+    def variance(using Context): Variance =
       Variance.fromFlags(flags)
-
-    private[tastyquery] def paramName: TypeName = name
-
-    private[tastyquery] def paramTypeBounds(using Context): TypeBounds = bounds
 
     final def typeRef(using Context): TypeRef = TypeRef(ThisType(owner.typeRef), this)
 
@@ -588,7 +584,7 @@ object Symbols {
             case (tp1, None) =>
               tp1
             case (Some(tp1), Some(tp2)) =>
-              val variance = this.paramVariance.sign
+              val variance = this.variance.sign
               val result: Type =
                 if tp1.isInstanceOf[WildcardTypeBounds] || tp2.isInstanceOf[WildcardTypeBounds] || variance == 0 then
                   // Compute based on bounds, instead of returning the original reference
