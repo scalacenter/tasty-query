@@ -102,8 +102,10 @@ private[tastyquery] object Erasure:
         erasedLub(preErase(tpe.first), preErase(tpe.second))
       case tpe: AndType =>
         throw UnsupportedOperationException(s"Cannot erase $tpe")
-      case tpe: TypeProxy =>
-        preErase(tpe.underlying)
+      case tpe: RecType =>
+        preErase(tpe.parent)
+      case _: SingletonType | _: ByNameType | _: AnnotatedType | _: RefinedType =>
+        throw AssertionError(s"Unexpected widened type $tpe")
       case _: MethodicType | _: TypeLambda | _: PackageRef | _: CustomTransientGroundType =>
         throw IllegalArgumentException(s"Unexpected type in erasure: $tpe")
   end preErase
