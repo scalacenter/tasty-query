@@ -119,6 +119,14 @@ lazy val tastyQuery =
           // private[reader], so this is fine
           ProblemFilters.exclude[Problem]("tastyquery.reader.tasties.TastyUnpickler#*"),
 
+          // private[tastyquery], so this is fine
+          ProblemFilters.exclude[MissingClassProblem]("tastyquery.Types$TypeParamInfo"),
+
+          /* We removed TypeParamInfo from the parents of ClassTypeParam.
+           * Since TypeParamInfo was `private[tastyquery]`, there is little chance it leaked.
+           */
+          ProblemFilters.exclude[MissingTypesProblem]("tastyquery.Symbols$ClassTypeParamSymbol"),
+
           // new abstract method in fully sealed trait, so this is fine
           ProblemFilters.exclude[ReversedMissingMethodProblem]("tastyquery.Types#TermLambdaType.paramTypes"),
         )
