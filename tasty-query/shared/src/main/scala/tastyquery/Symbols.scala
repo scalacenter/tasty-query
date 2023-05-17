@@ -1221,7 +1221,7 @@ object Symbols {
     private var myThisType: ThisType | Null = null
 
     /** The `ThisType` for this class, as visible from inside this class. */
-    private[tastyquery] final def thisType(using Context): ThisType =
+    final def thisType(using Context): ThisType =
       val local = myThisType
       if local != null then local
       else
