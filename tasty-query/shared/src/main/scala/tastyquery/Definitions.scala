@@ -256,7 +256,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val cls = ClassSymbol.create(name, scalaPackage)
 
     val tparam = ClassTypeParamSymbol.create(typeName("T"), cls)
-    tparam.withFlags(ClassTypeParam, None)
+    tparam.withFlags(ClassTypeParam | paramFlags, None)
     tparam.setBounds(NothingAnyBounds)
     tparam.setAnnotations(Nil)
     tparam.checkCompleted()
@@ -264,7 +264,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     cls.withTypeParams(tparam :: Nil)
     cls.withFlags(EmptyFlagSet | Artifact, None)
 
-    val parents = parentConstrs(TypeRef(NoPrefix, tparam))
+    val parents = parentConstrs(TypeRef(cls.thisType, tparam))
     cls.withParentsDirect(parents)
     cls
   end createSpecialPolyClass

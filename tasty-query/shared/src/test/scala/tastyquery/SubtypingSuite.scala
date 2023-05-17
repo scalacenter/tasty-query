@@ -322,6 +322,18 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       .withRef[IList[JString], Seq[Int]]
   }
 
+  testWithContext("repeated-type") {
+    assertEquiv(defn.RepeatedTypeOf(defn.IntType), defn.RepeatedTypeOf(defn.IntType))
+    assertStrictSubtype(defn.RepeatedTypeOf(defn.IntType), defn.SeqTypeOf(defn.IntType))
+
+    assertNeitherSubtype(defn.RepeatedTypeOf(defn.IntType), defn.RepeatedTypeOf(defn.StringType))
+    assertNeitherSubtype(defn.RepeatedTypeOf(defn.IntType), defn.SeqTypeOf(defn.StringType))
+
+    // Covariance
+    assertStrictSubtype(defn.RepeatedTypeOf(defn.IntType), defn.RepeatedTypeOf(defn.AnyValType))
+    assertStrictSubtype(defn.RepeatedTypeOf(defn.IntType), defn.SeqTypeOf(defn.AnyValType))
+  }
+
   testWithContext("polymorphic-opaque-type-alias") {
     val IArraySym = ctx.findStaticType("scala.IArray$package.IArray").asInstanceOf[TypeMemberSymbol]
 
