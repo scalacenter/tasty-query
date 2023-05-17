@@ -53,13 +53,13 @@ import tastyquery.Variances.*
   *     |  +- MethodType           `(termParams): resultType`
   *     |  +- PolyType             `[TypeParams]: resultType`
   *     |
-  *     +- ByNameType              type of a by-name parameter `=> T`
-  *     |
-  *     +- ValueType               a type that can be the type of a run-time value
+  *     +- ValueType               a type that can be the type of a run-time value or type lambda,
+  *        |                       i.e., what the spec calls a regular *type*
   *        +- NamedType
   *        |  +- TypeRef           type selection of the form `prefix.T`
   *        |  +- TermRef           term selection of the form `prefix.t`
   *        +- AppliedType          `C[T1, ..., Tn]`
+  *        +- ByNameType            type of a by-name parameter `=> T`
   *        +- ThisType             `C.this`
   *        +- OrType               `A | B`
   *        +- AndType              `A & B`
@@ -658,8 +658,7 @@ object Types {
     *
     * The only standard [[Type]] that is not a [[TermType]] is [[WildcardTypeBounds]].
     *
-    * Partitioned into [[ValueType]], [[MethodicType]], [[ByNameType]] and
-    * [[PackageRef]].
+    * Partitioned into [[ValueType]], [[MethodicType]] and [[PackageRef]].
     */
   sealed trait TermType extends Type
 
@@ -669,10 +668,12 @@ object Types {
     */
   sealed trait MethodicType extends GroundType with TermType
 
-  /** A marker trait for the type of values.
+  /** A marker trait for the type of values or type lambdas.
+    *
+    * In other words, what the spec calls a regular *type*.
     *
     * Most [[TermType]]s are [[ValueType]]. The only exceptions are
-    * [[MethodicType]], [[ByNameType]] and [[PackageRef]].
+    * [[MethodicType]] and [[PackageRef]].
     */
   sealed trait ValueType extends TermType
 
@@ -1305,7 +1306,7 @@ object Types {
   }
 
   /** A by-name parameter type of the form `=> T`. */
-  final class ByNameType(val resultType: Type) extends TypeProxy with TermType {
+  final class ByNameType(val resultType: Type) extends TypeProxy with ValueType {
     override def underlying(using Context): Type = resultType
 
     private[tastyquery] final def derivedByNameType(resultType: Type): ByNameType =

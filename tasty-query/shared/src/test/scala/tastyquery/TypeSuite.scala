@@ -87,8 +87,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def valueAndMethodic(tp: TermType): Int = tp match
       case _: ValueType    => 1
       case _: MethodicType => 2
-      case _: ByNameType   => 3
-      case _: PackageRef   => 4
+      case _: PackageRef   => 3
 
     // Nothing to do
     ()
