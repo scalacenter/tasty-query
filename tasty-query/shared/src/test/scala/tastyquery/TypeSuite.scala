@@ -63,7 +63,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val gcdSym = RecApplyClass.findNonOverloadedDecl(name"gcd")
     val NumClass = RecApplyClass.findDecl(tname"Num").asClass
 
-    val Some(gcdTree @ _: DefDef) = gcdSym.tree: @unchecked
+    val Some(gcdTree: DefDef) = gcdSym.tree: @unchecked
 
     var recCallCount = 0
 
@@ -105,7 +105,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
       val callSym = OverloadedApplyClass.findDecl(termName(callMethod))
 
-      val Some(callTree @ _: DefDef) = callSym.tree: @unchecked
+      val Some(callTree: DefDef) = callSym.tree: @unchecked
 
       var callCount = 0
 
@@ -160,7 +160,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val callSym = OverloadedApplyClass.findNonOverloadedDecl(termName("callF"))
 
-    val Some(callTree @ _: DefDef) = callSym.tree: @unchecked
+    val Some(callTree: DefDef) = callSym.tree: @unchecked
 
     var callCount = 0
 
@@ -188,7 +188,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val List(Right(List(TRef @ _)), Left(List(eRef))) = evalParamRefss: @unchecked
 
-    val Some(evalTree @ _: DefDef) = evalSym.tree: @unchecked
+    val Some(evalTree: DefDef) = evalSym.tree: @unchecked
 
     var recCallCount = 0
 
@@ -435,9 +435,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val boxedSym = BoxedJavaClass.getDecl(name"boxed").get.asTerm
 
-    val (JavaDefinedRef @ _: TypeRef) = boxedSym.declaredType: @unchecked
+    val (javaDefinedRef: TypeRef) = boxedSym.declaredType: @unchecked
 
-    assert(clue(JavaDefinedRef.optSymbol) == Some(JavaDefinedClass))
+    assert(clue(javaDefinedRef.optSymbol) == Some(JavaDefinedClass))
   }
 
   testWithContext("package-private-class") {
@@ -841,7 +841,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val Some(DefDef(_, _, _, Some(Apply(getXSelection, _)), _)) = xMethodSym.tree: @unchecked
 
-    val (getXRef @ _: TermRef) = getXSelection.tpe: @unchecked
+    val (getXRef: TermRef) = getXSelection.tpe: @unchecked
 
     assert(clue(getXRef.symbol) == getX)
   }
@@ -855,7 +855,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val Some(DefDef(_, _, _, Some(xSelection), _)) = xFieldSym.tree: @unchecked
 
-    val (xRef @ _: TermRef) = xSelection.tpe: @unchecked
+    val (xRef: TermRef) = xSelection.tpe: @unchecked
 
     assert(clue(xRef.symbol) == x)
   }
@@ -899,7 +899,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val Some(DefDef(_, _, _, Some(unitValSelection), _)) = boxedUnitValSym.tree: @unchecked
 
-    val (unitValRef @ _: TermRef) = unitValSelection.tpe: @unchecked
+    val (unitValRef: TermRef) = unitValSelection.tpe: @unchecked
 
     assert(clue(unitValRef.symbol) == unitVal)
   }
@@ -918,7 +918,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val Some(DefDef(_, _, _, Some(Apply(getXSelection, _)), _)) = xMethodSym.tree: @unchecked
 
-    val (getXRef @ _: TermRef) = getXSelection.tpe: @unchecked
+    val (getXRef: TermRef) = getXSelection.tpe: @unchecked
 
     assert(clue(getXRef.symbol) == getX)
   }

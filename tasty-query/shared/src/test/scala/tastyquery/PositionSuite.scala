@@ -118,7 +118,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickleWithCode("bind", "simple_trees.Bind") { (tree, code) =>
-    assertEquals(collectCode[Bind](tree, code), List("t @ y", "y", "s: String", "k @ Some(_)"))
+    assertEquals(collectCode[Bind](tree, code), List("t @ (y: Int)", "y: Int", "s: String", "k @ Some(_)"))
   }
 
   /** Functions */
