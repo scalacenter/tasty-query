@@ -62,7 +62,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   testWithContext("top-level-package-object[value]-empty-package", "toplevelEmptyPackage$package$") {
     val toplevelEmptyPackage_packageValue = ctx.findStaticTerm("toplevelEmptyPackage$package")
 
-    val (tree @ _: ValDef) = toplevelEmptyPackage_packageValue.tree.get: @unchecked
+    val (tree: ValDef) = toplevelEmptyPackage_packageValue.tree.get: @unchecked
 
     assert(tree.name == termName("toplevelEmptyPackage$package"))
     assert(tree.symbol == toplevelEmptyPackage_packageValue)
@@ -150,7 +150,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
     assert(simpleTreesPkg.fullName.toString == "simple_trees")
 
-    val (simpleTreesNestedPkg @ _: PackageSymbol) = simpleTreesPkg.getDecl(name"nested").get: @unchecked
+    val (simpleTreesNestedPkg: PackageSymbol) = simpleTreesPkg.getDecl(name"nested").get: @unchecked
 
     assert(simpleTreesNestedPkg.fullName.toString == "simple_trees.nested")
 

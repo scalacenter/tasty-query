@@ -791,7 +791,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val setterMatch: StructureCheck = {
       case DefDef(
             SimpleName("x_="),
-            Left((ValDef(SimpleName("x$1"), _, _, _): Matchable) :: Nil) :: Nil,
+            Left(ValDef(SimpleName("x$1"), _, _, _) :: Nil) :: Nil,
             TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Unit")))),
             Some(Literal(Constant(()))),
             symbol
@@ -884,13 +884,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   testUnpickle("trait-with-parameter", "simple_trees.TraitWithParameter") { tree =>
     val traitMatch: StructureCheck = {
       case Template(
-            DefDef(
-              SimpleName("<init>"),
-              List(Left((ValDef(SimpleName("param"), _, _, _): Matchable) :: Nil)),
-              _,
-              None,
-              _
-            ),
+            DefDef(SimpleName("<init>"), List(Left(ValDef(SimpleName("param"), _, _, _) :: Nil)), _, None, _),
             TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Object")))) :: Nil,
             _,
             ValDef(SimpleName("param"), _, _, _) :: Nil
@@ -1082,7 +1076,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 List(
                   DefDef(
                     SimpleName("$anonfun"),
-                    Left((ValDef(SimpleName("second"), _, _, _): Matchable) :: Nil) :: Nil,
+                    Left(ValDef(SimpleName("second"), _, _, _) :: Nil) :: Nil,
                     _,
                     Some(
                       Apply(
@@ -1740,7 +1734,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                     ),
                     None,
                     _
-                  ): Matchable
+                  )
                 )
               )
             ),
