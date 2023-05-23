@@ -42,9 +42,6 @@ private[tastyquery] object Subtyping:
         case tp1: TermRef => level1NamedNamed(tp1, tp2)
         case _            => level2(tp1, tp2)
 
-    case tp2: WildcardTypeBounds =>
-      isSubtype(tp1, tp2.bounds.high)
-
     case tp2: ThisType =>
       val cls2 = tp2.cls
       tp1 match
@@ -131,9 +128,6 @@ private[tastyquery] object Subtyping:
         case _ =>
           level3(tp1, tp2)
       }
-
-    case tp1: WildcardTypeBounds =>
-      isSubtype(tp1.bounds.low, tp2)
 
     case tp1: OrType =>
       isSubtype(tp1.first, tp2) && isSubtype(tp1.second, tp2)
@@ -321,21 +315,25 @@ private[tastyquery] object Subtyping:
     using Context
   ): Boolean =
     def isSubArg(arg1: Type, arg2: Type, tparam: TypeConstructorParam): Boolean =
-      val variance = tparam.variance
+      tparam.variance.sign match
+        case 1 =>
+          def highIfWildcard(tp: Type): Type = tp match
+            case tp: WildcardTypeBounds => tp.bounds.high
+            case _                      => tp
+          isSubtype(highIfWildcard(arg1), highIfWildcard(arg2))
 
-      arg2 match
-        case arg2: WildcardTypeBounds =>
-          arg2.bounds.contains(arg1)
-        case _ =>
-          arg1 match
-            case arg1: WildcardTypeBounds =>
-              // TODO Approximate if co- or contravariant
-              false
+        case -1 =>
+          def lowIfWildcard(tp: Type): Type = tp match
+            case tp: WildcardTypeBounds => tp.bounds.low
+            case _                      => tp
+          isSubtype(lowIfWildcard(arg2), lowIfWildcard(arg1))
+
+        case 0 =>
+          arg2 match
+            case arg2: WildcardTypeBounds =>
+              arg2.bounds.contains(arg1)
             case _ =>
-              variance.sign match
-                case 1  => isSubtype(arg1, arg2)
-                case -1 => isSubtype(arg2, arg1)
-                case 0  => isSameType(arg1, arg2)
+              !arg1.isInstanceOf[WildcardTypeBounds] && isSameType(arg1, arg2)
     end isSubArg
 
     if args1.sizeCompare(args2) != 0 || args2.sizeCompare(tparams) != 0 then
