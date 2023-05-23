@@ -22,4 +22,8 @@ class TypeRefIn {
   def withArrayExactAnyRef(array: Array[AnyRef]): Unit = ()
 
   def withArrayExactAnyVal(array: Array[AnyVal]): Unit = ()
+
+  def withListOfSubtypeOfInt[T <: Int](x: List[T]): Unit = ()
+
+  def withListOfSubtypeOfSubtypeOfInt[T <: Int](x: List[_ <: T]): Unit = withListOfSubtypeOfInt(x)
 }

@@ -231,13 +231,35 @@ private[tastyquery] object Subtyping:
 
   private def level3WithBaseType(tp1: Type, tp2: Type, cls2: ClassSymbol)(using Context): Boolean =
     nonExprBaseType(tp1, cls2) match
-      case Some(base) if base ne tp1 => isSubtype(base, tp2)
+      case Some(base) if base ne tp1 => isSubtype(tryCaptureConversion(tp1, base), tp2)
       case _                         => level4(tp1, tp2)
   end level3WithBaseType
 
   private def nonExprBaseType(tp1: Type, cls2: ClassSymbol)(using Context): Option[Type] =
     if tp1.isInstanceOf[ByNameType] then None
     else tp1.baseType(cls2)
+
+  private def tryCaptureConversion(tp1: Type, base: Type)(using Context): Type =
+    tp1 match
+      case tp1: SingletonType =>
+        base match
+          case base: AppliedType if base.args.exists(_.isInstanceOf[WildcardTypeBounds]) =>
+            base.tycon match
+              case tycon @ TypeRef.OfClass(cls) =>
+                val typeParams = cls.typeParams
+                val newArgs = base.args.lazyZip(typeParams).map { (arg, tparam) =>
+                  arg match
+                    case arg: WildcardTypeBounds => TypeRef(tp1, tparam)
+                    case _                       => arg
+                }
+                AppliedType(tycon, newArgs)
+              case _ =>
+                base
+          case _ =>
+            base
+      case _ =>
+        base
+  end tryCaptureConversion
 
   private def compareAppliedType2(tp1: Type, tp2: AppliedType)(using Context): Boolean =
     // !!! There is similar code in TypeMatching.tryMatchPattern
@@ -307,18 +329,8 @@ private[tastyquery] object Subtyping:
         case _ =>
           arg1 match
             case arg1: WildcardTypeBounds =>
-              // Attempt capture conversion
-              tp1 match
-                case tp1: SingletonType =>
-                  tparam match
-                    case tparam: ClassTypeParamSymbol =>
-                      val wildcardConverted = TypeRef(tp1, tparam)
-                      isSubArg(wildcardConverted, arg2, tparam)
-                    case _ =>
-                      false
-                case _ =>
-                  // TODO Approximate if co- or contravariant
-                  false
+              // TODO Approximate if co- or contravariant
+              false
             case _ =>
               variance.sign match
                 case 1  => isSubtype(arg1, arg2)
