@@ -18,6 +18,75 @@ import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Variances.*
 
+/** Types in the Scala type system.
+  *
+  * Every type from the Scala type system is represented in tasty-query as an
+  * instance of [[Type]]. That abstract class has a number of subtypes for all
+  * the possible "shapes" of types.
+  *
+  * For example, a reference to the class `scala.Int` is represented as
+  *
+  * ```
+  * TypeRef(PackageRef("scala"), TypeName("Int"))
+  * ```
+  *
+  * Type applications of the form `C[T1, ..., Tn]` are represented as
+  *
+  * ```
+  * AppliedType(typeForC, List(typeForT1, ..., typeForTn))
+  * ```
+  *
+  * etc.
+  *
+  * The full hierarchy is organized as follows:
+  *
+  * ```none
+  * Type
+  *  |
+  *  +- WildcardTypeBounds         `? >: L <: H`
+  *  |
+  *  +- TermType                   a type that can be the type of a term tree
+  *     |
+  *     +- PackageRef              a reference to a package (typically used as `prefix` of `NamedType`s)
+  *     |
+  *     +- MethodicType            types of methods
+  *     |  +- MethodType           `(termParams): resultType`
+  *     |  +- PolyType             `[TypeParams]: resultType`
+  *     |
+  *     +- ValueType               a type that can be the type of a run-time value or type lambda,
+  *        |                       i.e., what the spec calls a regular *type*
+  *        +- NamedType
+  *        |  +- TypeRef           type selection of the form `prefix.T`
+  *        |  +- TermRef           term selection of the form `prefix.t`
+  *        +- AppliedType          `C[T1, ..., Tn]`
+  *        +- ByNameType            type of a by-name parameter `=> T`
+  *        +- ThisType             `C.this`
+  *        +- OrType               `A | B`
+  *        +- AndType              `A & B`
+  *        +- TypeLambda           `[T1, ..., Tn] => R`
+  *        +- TypeParamRef         reference to a type parameter of an enclosing `TypeLambda` or `PolyType`
+  *        +- TermParamRef         reference to a term parameter of an enclosing `MethodType`
+  *        +- AnnotatedType        `T @annotation`
+  *        +- ConstantType         literal singleton type, such as `42` or `"foo"`
+  *        +- MatchType            `T match { case ... }`
+  *        +- RefinedType
+  *        |  +- TypeRefinement    `P { type T >: L <: H }`
+  *        |  +- TermRefinement    `P { val/def t: T }`
+  *        +- RecType              recursive type that introduces a recursive `this` binding
+  *        +- RecThis              recursive reference to the `this` of a `RecType`
+  *        +- SuperType            `super[mix]` (typically used as `prefix` of `NamedType`s)
+  * ```
+  *
+  * Common shapes of types can be constructed with properties of [[Symbols.Symbol]]
+  * and with combinator methods on [[Type]]:
+  *
+  * - [[Symbols.TypeSymbol.staticRef typeSymbol.staticRef]] constructs a `TypeRef` to the given static `typeSymbol`
+  * - [[Symbols.TermSymbol.staticRef termSymbol.staticRef]] constructs a `TermRef` to the given static `termSymbol`
+  * - [[Type.appliedTo tpe1.appliedTo(tpe2)]] constructs the application `tpe1[tpe2]`
+  *   (there is an overload that accepts a list of type arguments)
+  * - [[Type.| tpe1 | tpe2]] constructs a union type
+  * - [[Type.& tpe1 & tpe2]] constructs an intersection type
+  */
 object Types {
   private[tastyquery] final case class LookupIn(ownerRef: TypeRef, name: TermName)
   private[tastyquery] final case class LookupTypeIn(ownerRef: TypeRef, name: TypeName)
@@ -139,23 +208,11 @@ object Types {
   end TypeConstructorParam
 
   sealed trait TypeMappable:
-    type ThisTypeMappableType >: this.type <: TypeMappable
+    private[tastyquery] type ThisTypeMappableType >: this.type <: TypeMappable
   end TypeMappable
 
   sealed abstract class Prefix extends TypeMappable:
-    type ThisTypeMappableType >: this.type <: Prefix
-
-    final def memberType(member: TermSymbol)(using Context): Type =
-      member.declaredType.asSeenFrom(this, member.owner)
-
-    final def memberTypeBoundsLow(member: TypeSymbolWithBounds)(using Context): Type =
-      member.lowerBound.asSeenFrom(this, member.owner)
-
-    final def memberTypeBoundsHigh(member: TypeSymbolWithBounds)(using Context): Type =
-      member.upperBound.asSeenFrom(this, member.owner)
-
-    final def select(sym: TermOrTypeSymbol)(using Context): NamedType =
-      NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
+    private[tastyquery] type ThisTypeMappableType >: this.type <: Prefix
 
     /** True iff `sym` is a symbol of a class type parameter and the reference
       * `<pre> . <sym>` is an actual argument reference, i.e., `pre` is not the
@@ -170,13 +227,20 @@ object Types {
   end Prefix
 
   object NoPrefix extends Prefix:
-    type ThisTypeMappableType = this.type
+    private[tastyquery] type ThisTypeMappableType = this.type
 
     override def toString(): String = "NoPrefix"
   end NoPrefix
 
+  /** A type in the Scala type system.
+    *
+    * Partitioned into [[GroundType]] and [[TypeProxy]].
+    *
+    * Also partitioned into [[TermType]], [[WildcardTypeBounds]] and
+    * [[CustomTransientGroundType]].
+    */
   sealed abstract class Type extends Prefix {
-    type ThisTypeMappableType = Type
+    private[tastyquery] type ThisTypeMappableType = Type
 
     final def isSubtype(that: Type)(using Context): Boolean =
       Subtyping.isSubtype(this, that)
@@ -206,6 +270,15 @@ object Types {
 
     final def select(name: TypeName)(using Context): TypeRef =
       TypeRef(this, name)
+
+    final def select(sym: TermOrTypeSymbol)(using Context): NamedType =
+      NamedType(this, sym) // dotc also calls reduceProjection here, should we do it?
+
+    final def select(sym: TermSymbol)(using Context): TermRef =
+      TermRef(this, sym) // same comment about reduceProjection
+
+    final def select(sym: TypeSymbol)(using Context): TypeRef =
+      TypeRef(this, sym) // same comment about reduceProjection
 
     final def lookupMember(name: Name)(using Context): Option[NamedType] =
       resolveMember(name, this) match
@@ -401,31 +474,12 @@ object Types {
     final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): Type =
       TypeOps.asSeenFrom(this, pre, cls)
 
-    final def isRef(sym: Symbol)(using Context): Boolean =
-      this match {
-        case tpe: NamedType    => tpe.optSymbol.contains(sym)
-        case tpe: AppliedType  => tpe.underlying.isRef(sym)
-        case tpe: TermParamRef => tpe.underlying.isRef(sym)
-        case tpe: TypeParamRef => tpe.bounds.high.isRef(sym)
-        case _                 => false // todo: add ProxyType (need to fill in implementations of underlying)
-      }
-
     /** Is this type exactly Nothing (no vars, aliases, refinements etc allowed)? */
-    final def isExactlyNothing(using Context): Boolean = this match
+    private[tastyquery] final def isExactlyNothing(using Context): Boolean = this match
       case tp: TypeRef =>
         tp.name == tpnme.Nothing && tp.isSpecificClass(defn.NothingClass)
       case _ =>
         false
-
-    final def isOfClass(sym: Symbol)(using Context): Boolean =
-      this match {
-        case tpe: TermRef =>
-          tpe.underlying.isOfClass(sym)
-        case tpe: ConstantType =>
-          tpe.underlying.isOfClass(sym)
-        case _ =>
-          this.isRef(sym)
-      }
 
     /** Is this type considered as "FromJavaObject" for the purposes of subtyping?
       *
@@ -600,14 +654,27 @@ object Types {
 
   // ----- Marker traits ------------------------------------------------
 
-  /** A marker trait for types that apply only to term symbols or that
-    * represent higher-kinded types.
+  /** A marker trait for types that can be the type of a [[Trees.TermTree]].
+    *
+    * The only standard [[Type]] that is not a [[TermType]] is [[WildcardTypeBounds]].
+    *
+    * Partitioned into [[ValueType]], [[MethodicType]] and [[PackageRef]].
     */
   sealed trait TermType extends Type
 
-  sealed trait MethodicType extends TermType
+  /** The type of a `def` that has at least one (term or type) parameter list.
+    *
+    * Partitioned into [[MethodType]] and [[PolyType]].
+    */
+  sealed trait MethodicType extends GroundType with TermType
 
-  /** A marker trait for types that can be types of values or that are higher-kinded */
+  /** A marker trait for the type of values or type lambdas.
+    *
+    * In other words, what the spec calls a regular *type*.
+    *
+    * Most [[TermType]]s are [[ValueType]]. The only exceptions are
+    * [[MethodicType]] and [[PackageRef]].
+    */
   sealed trait ValueType extends TermType
 
   /** A marker trait for types that are guaranteed to contain only a
@@ -619,11 +686,9 @@ object Types {
       case _           => true
   end SingletonType
 
-  sealed trait PathType extends TypeProxy with ValueType
-
   // ----- Type Proxies -------------------------------------------------
 
-  sealed abstract class NamedType extends PathType {
+  sealed abstract class NamedType extends TypeProxy with ValueType {
     protected type AnyDesignatorType = TermOrTypeSymbol | Name | LookupIn | LookupTypeIn | Scala2ExternalSymRef
 
     type ThisName <: Name
@@ -876,7 +941,7 @@ object Types {
     end resolveLookupIn
   end TermRef
 
-  final class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends Type {
+  final class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends GroundType with TermType {
     private var packageSymbol: PackageSymbol | Null = null
 
     def this(packageSym: PackageSymbol) =
@@ -1118,7 +1183,7 @@ object Types {
     end resolveLookupTypeIn
   end TypeRef
 
-  final class ThisType(val tref: TypeRef) extends PathType with SingletonType {
+  final class ThisType(val tref: TypeRef) extends SingletonType {
     private var myUnderlying: Type | Null = null
 
     override def underlying(using Context): Type =
@@ -1241,7 +1306,7 @@ object Types {
   }
 
   /** A by-name parameter type of the form `=> T`. */
-  final class ByNameType(val resultType: Type) extends TypeProxy with TermType {
+  final class ByNameType(val resultType: Type) extends TypeProxy with ValueType {
     override def underlying(using Context): Type = resultType
 
     private[tastyquery] final def derivedByNameType(resultType: Type): ByNameType =
@@ -1546,8 +1611,8 @@ object Types {
   final class TypeLambda(val paramNames: List[TypeName])(
     @constructorOnly paramTypeBoundsExp: TypeLambda => List[TypeBounds],
     @constructorOnly resultTypeExp: TypeLambda => Type
-  ) extends TypeProxy
-      with TermType
+  ) extends GroundType
+      with ValueType
       with TypeLambdaType {
     type This = TypeLambda
 
@@ -1569,7 +1634,13 @@ object Types {
 
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, TypeLambda] = TypeLambda
 
-    override def underlying(using Context): Type = defn.AnyType
+    def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      ResolveMemberResult.NotFound
+
+    def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
+      using Context
+    ): ResolveMemberResult =
+      ResolveMemberResult.NotFound
 
     override def toString: String =
       if !initialized then s"TypeLambda($paramNames)(<evaluating>)"
@@ -1632,9 +1703,9 @@ object Types {
     override def toString(): String = s"AnnotatedType($typ, $annotation)"
   }
 
-  sealed abstract class RefinedOrRecType extends TypeProxy
+  sealed abstract class RefinedOrRecType extends TypeProxy with ValueType
 
-  sealed abstract class RefinedType extends RefinedOrRecType with ValueType:
+  sealed abstract class RefinedType extends RefinedOrRecType:
     val parent: Type
     val refinedName: Name
 
@@ -1893,7 +1964,7 @@ object Types {
   end MatchType
 
   sealed abstract class TypeBounds(val low: Type, val high: Type) extends TypeMappable {
-    type ThisTypeMappableType = TypeBounds
+    private[tastyquery] type ThisTypeMappableType = TypeBounds
 
     /** The non-alias type bounds type with given bounds */
     private[tastyquery] def derivedTypeBounds(low: Type, high: Type): TypeBounds =

@@ -18,6 +18,22 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       elems.corresponds(tests)((t, test) => test(t))
 
   extension (tpe: Type)
+    def isTypeRefOf(cls: ClassSymbol)(using Context): Boolean = tpe match
+      case TypeRef.OfClass(tpeCls) => tpeCls == cls
+      case _                       => false
+
+    def isRef(sym: TypeSymbol)(using Context): Boolean = tpe match
+      case tpe: TypeRef => tpe.optSymbol.contains(sym)
+      case _            => false
+
+    def isRef(sym: TermSymbol)(using Context): Boolean = tpe match
+      case tpe: TermRef => tpe.symbol == sym
+      case _            => false
+
+    def isOfClass(cls: ClassSymbol)(using Context): Boolean = tpe match
+      case tpe: TermRef => tpe.underlying.isRef(cls)
+      case _            => false
+
     def isAny(using Context): Boolean = tpe.isRef(defn.AnyClass)
 
     def isNothing(using Context): Boolean = tpe.isRef(defn.NothingClass)
@@ -47,14 +63,42 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         case _               => false
 
     def isArrayOf(arg: Type => Boolean)(using Context): Boolean =
-      isApplied(_.isRef(defn.ArrayClass), Seq(arg))
+      isApplied(_.isTypeRefOf(defn.ArrayClass), Seq(arg))
+
+    def isConstant(constant: Constant)(using Context): Boolean = tpe match
+      case tpe: ConstantType => tpe.value == constant
+      case _                 => false
+  end extension
+
+  testWithContext("hierarchy-partitions") {
+    /* These no-op matches test that the set of all possible `Type`s is
+     * partitioned into certain sets of sub-classes and sub-traits.
+     */
+
+    def groundAndProxy(tp: Type): Int = tp match
+      case _: GroundType => 1
+      case _: TypeProxy  => 2
+
+    def termAndNonTerm(tp: Type): Int = tp match
+      case _: TermType                  => 1
+      case _: WildcardTypeBounds        => 2
+      case _: CustomTransientGroundType => 3
+
+    def valueAndMethodic(tp: TermType): Int = tp match
+      case _: ValueType    => 1
+      case _: MethodicType => 2
+      case _: PackageRef   => 3
+
+    // Nothing to do
+    ()
+  }
 
   testWithContext("apply-dependent") {
     val DependentMethodClass = ctx.findTopLevelClass("simple_trees.DependentMethod")
     val testVal = DependentMethodClass.findNonOverloadedDecl(name"test")
     val testDef = testVal.tree.get.asInstanceOf[ValDef]
     val applyTree = testDef.rhs.get.asInstanceOf[Apply]
-    assert(applyTree.tpe.isOfClass(defn.StringClass))
+    assert(clue(applyTree.tpe).isConstant(Constant("hello")))
   }
 
   testWithContext("apply-recursive") {
@@ -142,7 +186,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         .findDecl(termName("Bar"))
     )
   )
-  applyOverloadedTest("apply-overloaded-arrayObj")("callD", _.isRef(defn.ArrayClass))
+  applyOverloadedTest("apply-overloaded-arrayObj")("callD", _.isArrayOf(_ => true))
   applyOverloadedTest("apply-overloaded-byName")(
     "callE",
     _.isByName(_.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Num")))
@@ -379,7 +423,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       tree match {
         case tree @ Assign(lhs, rhs) =>
           assignCount += 1
-          assert(tree.tpe.isOfClass(defn.UnitClass), clue(tree.tpe))
+          assert(tree.tpe.isRef(defn.UnitClass), clue(tree.tpe))
         case _ =>
           ()
       }
@@ -395,15 +439,15 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     // val start: Int
     val startSym = RangeClass.findDecl(name"start")
-    assert(startSym.declaredType.isOfClass(defn.IntClass), clue(startSym.declaredType))
+    assert(startSym.declaredType.isRef(defn.IntClass), clue(startSym.declaredType))
 
     // val isEmpty: Boolean
     val isEmptySym = RangeClass.findDecl(name"isEmpty")
-    assert(isEmptySym.declaredType.isOfClass(defn.BooleanClass), clue(isEmptySym.declaredType))
+    assert(isEmptySym.declaredType.isRef(defn.BooleanClass), clue(isEmptySym.declaredType))
 
     // def isInclusive: Boolean
     val isInclusiveSym = RangeClass.findDecl(name"isInclusive")
-    assert(isInclusiveSym.declaredType.isOfClass(defn.BooleanClass), clue(isInclusiveSym.declaredType))
+    assert(isInclusiveSym.declaredType.isRef(defn.BooleanClass), clue(isInclusiveSym.declaredType))
 
     // def by(step: Int): Range
     locally {
@@ -411,8 +455,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val mt = bySym.declaredType.asInstanceOf[MethodType]
       assertEquals(List[TermName](name"step"), mt.paramNames, clue(mt.paramNames))
       assert(mt.paramTypes.sizeIs == 1)
-      assert(mt.paramTypes.head.isOfClass(defn.IntClass), clue(mt.paramTypes.head))
-      assert(mt.resultType.isOfClass(RangeClass), clue(mt.resultType))
+      assert(mt.paramTypes.head.isRef(defn.IntClass), clue(mt.paramTypes.head))
+      assert(mt.resultType.isRef(RangeClass), clue(mt.resultType))
     }
 
     // def map[B](f: Int => B): IndexedSeq[B]
@@ -424,8 +468,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(pt.paramTypeBounds.sizeIs == 1)
       assertEquals(List[TermName](name"f"), mt.paramNames, clue(mt.paramNames))
       assert(mt.paramTypes.sizeIs == 1)
-      assert(mt.paramTypes.head.isOfClass(Function1Class), clue(mt.paramTypes.head))
-      assert(mt.resultType.isOfClass(IndexedSeqClass), clue(mt.resultType))
+      assert(
+        mt.paramTypes.head.isApplied(_.isRef(Function1Class), List(_.isRef(defn.IntClass), _ => true)),
+        clue(mt.paramTypes.head)
+      )
+      assert(mt.resultType.isApplied(_.isRef(IndexedSeqClass), List(_ => true)), clue(mt.resultType))
     }
   }
 
@@ -868,8 +915,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val boxedSym = BoxedConsClass.findDecl(name"boxed")
 
     val app = boxedSym.declaredType.asInstanceOf[AppliedType]
-    assert(clue(app.tycon).isOfClass(ConsClass))
-    assert(clue(app.args).isListOf(_.isOfClass(JavaDefinedClass)))
+    assert(clue(app.tycon).isRef(ConsClass))
+    assert(clue(app.args).isListOf(_.isRef(JavaDefinedClass)))
   }
 
   testWithContext("select-method-from-scala-2-stdlib-class") {
@@ -886,8 +933,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val mt = underlyingType.asInstanceOf[MethodType]
     assertEquals(List[TermName](name"that"), mt.paramNames, clue(mt.paramNames))
     assert(mt.paramTypes.sizeIs == 1, clue(mt.paramTypes))
-    assert(mt.paramTypes.head.isOfClass(defn.AnyClass), clue(mt.paramTypes.head))
-    assert(mt.resultType.isOfClass(defn.BooleanClass), clue(mt.resultType))
+    assert(mt.paramTypes.head.isRef(defn.AnyClass), clue(mt.paramTypes.head))
+    assert(mt.resultType.isRef(defn.BooleanClass), clue(mt.resultType))
   }
 
   testWithContext("select-field-from-tasty-in-other-package:dependency-from-class-file") {
@@ -931,7 +978,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val Select(qual, fieldName) = body: @unchecked
 
-    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(defn.IntClass))))
+    assert(clue(qual.tpe).isApplied(_.isRef(GenClass), List(_.isRef(defn.IntClass))))
     assertEquals(fieldName, name"field")
     assert(clue(body.tpe).isOfClass(defn.IntClass))
   }
@@ -944,7 +991,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val Select(qual, getterName) = body: @unchecked
 
-    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(defn.IntClass))))
+    assert(clue(qual.tpe).isApplied(_.isRef(GenClass), List(_.isRef(defn.IntClass))))
     assertEquals(getterName, name"getter")
     assert(clue(body.tpe).isOfClass(defn.IntClass))
   }
@@ -957,17 +1004,17 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val Apply(fun @ Select(qual, methodName), List(arg)) = body: @unchecked
 
-    assert(clue(qual.tpe).isApplied(_.isOfClass(GenClass), List(_.isOfClass(defn.IntClass))))
+    assert(clue(qual.tpe).isApplied(_.isRef(GenClass), List(_.isRef(defn.IntClass))))
     methodName match {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"method")
     }
     (fun.tpe.widen: @unchecked) match {
       case mt: MethodType =>
         assert(clue(mt.paramNames) == List(name"x"))
-        assert(clue(mt.paramTypes.head).isOfClass(defn.IntClass))
-        assert(clue(mt.resultType).isOfClass(defn.IntClass))
+        assert(clue(mt.paramTypes.head).isRef(defn.IntClass))
+        assert(clue(mt.resultType).isRef(defn.IntClass))
     }
-    assert(clue(body.tpe).isOfClass(defn.IntClass))
+    assert(clue(body.tpe).isRef(defn.IntClass))
   }
 
   testWithContext("select-and-apply-poly-method") {
@@ -986,10 +1033,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     (tapp.tpe.widen: @unchecked) match {
       case mt: MethodType =>
         assert(clue(mt.paramNames) == List(name"x"))
-        assert(clue(mt.paramTypes.head).isOfClass(defn.IntClass))
-        assert(clue(mt.resultType).isOfClass(defn.IntClass))
+        assert(clue(mt.paramTypes.head).isRef(defn.IntClass))
+        assert(clue(mt.resultType).isRef(defn.IntClass))
     }
-    assert(clue(body.tpe).isOfClass(defn.IntClass))
+    assert(clue(body.tpe).isRef(defn.IntClass))
   }
 
   testWithContext("poly-new") {
@@ -1004,7 +1051,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
       assert(clue(targ.toType).isRef(defn.IntClass), testMethodName)
       assert(clue(fun.symbol).name == nme.Constructor, testMethodName)
-      assert(clue(args.map(_.tpe)).forall(_.isOfClass(defn.IntClass)), testMethodName)
+      assert(clue(args.map(_.tpe)).forall(_.isConstant(Constant(1))), testMethodName)
       assert(clue(tapp.tpe).isInstanceOf[MethodType], testMethodName)
       assert(clue(body.tpe).isApplied(_.isRef(GenericClass), List(_.isRef(defn.IntClass))), testMethodName)
     end for
@@ -1573,7 +1620,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val StringClass = defn.StringClass
 
     extension (meth: TermSymbol)
-      def firstParamTypeIsRef(cls: Symbol): Boolean =
+      def firstParamTypeIsRef(cls: ClassSymbol): Boolean =
         meth.declaredType.asInstanceOf[MethodType].paramTypes.head.isRef(cls)
       def typeParamCountIs(count: Int): Boolean =
         meth.declaredType.asInstanceOf[PolyType].paramNames.sizeIs == count
@@ -1783,7 +1830,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val IntClass = defn.IntClass
 
     extension (meth: TermSymbol)
-      def firstParamTypeIsRef(cls: Symbol): Boolean =
+      def firstParamTypeIsRef(cls: TypeSymbol): Boolean =
         meth.declaredType.asInstanceOf[MethodType].paramTypes.head.isRef(cls)
 
     val fooInSuper = SuperPolyClass.findAllOverloadedDecls(name"foo")
