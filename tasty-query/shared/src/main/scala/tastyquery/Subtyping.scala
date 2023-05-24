@@ -42,9 +42,6 @@ private[tastyquery] object Subtyping:
         case tp1: TermRef => level1NamedNamed(tp1, tp2)
         case _            => level2(tp1, tp2)
 
-    case tp2: WildcardTypeBounds =>
-      isSubtype(tp1, tp2.bounds.high)
-
     case tp2: ThisType =>
       val cls2 = tp2.cls
       tp1 match
@@ -131,9 +128,6 @@ private[tastyquery] object Subtyping:
         case _ =>
           level3(tp1, tp2)
       }
-
-    case tp1: WildcardTypeBounds =>
-      isSubtype(tp1.bounds.low, tp2)
 
     case tp1: OrType =>
       isSubtype(tp1.first, tp2) && isSubtype(tp1.second, tp2)
@@ -231,13 +225,35 @@ private[tastyquery] object Subtyping:
 
   private def level3WithBaseType(tp1: Type, tp2: Type, cls2: ClassSymbol)(using Context): Boolean =
     nonExprBaseType(tp1, cls2) match
-      case Some(base) if base ne tp1 => isSubtype(base, tp2)
+      case Some(base) if base ne tp1 => isSubtype(tryCaptureConversion(tp1, base), tp2)
       case _                         => level4(tp1, tp2)
   end level3WithBaseType
 
   private def nonExprBaseType(tp1: Type, cls2: ClassSymbol)(using Context): Option[Type] =
     if tp1.isInstanceOf[ByNameType] then None
     else tp1.baseType(cls2)
+
+  private def tryCaptureConversion(tp1: Type, base: Type)(using Context): Type =
+    tp1 match
+      case tp1: SingletonType =>
+        base match
+          case base: AppliedType if base.args.exists(_.isInstanceOf[WildcardTypeBounds]) =>
+            base.tycon match
+              case tycon @ TypeRef.OfClass(cls) =>
+                val typeParams = cls.typeParams
+                val newArgs = base.args.lazyZip(typeParams).map { (arg, tparam) =>
+                  arg match
+                    case arg: WildcardTypeBounds => TypeRef(tp1, tparam)
+                    case _                       => arg
+                }
+                AppliedType(tycon, newArgs)
+              case _ =>
+                base
+          case _ =>
+            base
+      case _ =>
+        base
+  end tryCaptureConversion
 
   private def compareAppliedType2(tp1: Type, tp2: AppliedType)(using Context): Boolean =
     // !!! There is similar code in TypeMatching.tryMatchPattern
@@ -299,31 +315,25 @@ private[tastyquery] object Subtyping:
     using Context
   ): Boolean =
     def isSubArg(arg1: Type, arg2: Type, tparam: TypeConstructorParam): Boolean =
-      val variance = tparam.variance
+      tparam.variance.sign match
+        case 1 =>
+          def highIfWildcard(tp: Type): Type = tp match
+            case tp: WildcardTypeBounds => tp.bounds.high
+            case _                      => tp
+          isSubtype(highIfWildcard(arg1), highIfWildcard(arg2))
 
-      arg2 match
-        case arg2: WildcardTypeBounds =>
-          arg2.bounds.contains(arg1)
-        case _ =>
-          arg1 match
-            case arg1: WildcardTypeBounds =>
-              // Attempt capture conversion
-              tp1 match
-                case tp1: SingletonType =>
-                  tparam match
-                    case tparam: ClassTypeParamSymbol =>
-                      val wildcardConverted = TypeRef(tp1, tparam)
-                      isSubArg(wildcardConverted, arg2, tparam)
-                    case _ =>
-                      false
-                case _ =>
-                  // TODO Approximate if co- or contravariant
-                  false
+        case -1 =>
+          def lowIfWildcard(tp: Type): Type = tp match
+            case tp: WildcardTypeBounds => tp.bounds.low
+            case _                      => tp
+          isSubtype(lowIfWildcard(arg2), lowIfWildcard(arg1))
+
+        case 0 =>
+          arg2 match
+            case arg2: WildcardTypeBounds =>
+              arg2.bounds.contains(arg1)
             case _ =>
-              variance.sign match
-                case 1  => isSubtype(arg1, arg2)
-                case -1 => isSubtype(arg2, arg1)
-                case 0  => isSameType(arg1, arg2)
+              !arg1.isInstanceOf[WildcardTypeBounds] && isSameType(arg1, arg2)
     end isSubArg
 
     if args1.sizeCompare(args2) != 0 || args2.sizeCompare(tparams) != 0 then

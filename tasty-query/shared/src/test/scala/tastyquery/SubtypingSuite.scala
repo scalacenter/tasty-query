@@ -1316,7 +1316,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       end match
     end for
 
-    assert(clue(applyBodyCount) == 4)
+    assert(clue(applyBodyCount) == 5)
   }
 
   testWithContext("recursive-types") {
