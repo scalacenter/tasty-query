@@ -6,9 +6,9 @@ import tastyquery.Types.*
 import tastyquery.TypeMaps.*
 
 private[tastyquery] object TypeOps:
-  def asSeenFrom(tp: Type, pre: Prefix, cls: Symbol)(using Context): Type =
+  def asSeenFrom(tp: TypeOrMethodic, pre: Prefix, cls: Symbol)(using Context): tp.ThisTypeMappableType =
     pre match
-      case NoPrefix                        => tp
+      case NoPrefix | _: PackageRef        => tp
       case pre: ThisType if pre.cls == cls => tp // This is necessary to cut down infinite recursions
       case pre: Type                       => new AsSeenFromMap(pre, cls).apply(tp)
   end asSeenFrom
@@ -19,7 +19,7 @@ private[tastyquery] object TypeOps:
     /** Set to true when the result of `apply` was approximated to avoid an unstable prefix. */
     var approximated: Boolean = false
 
-    def apply(tp: Type): Type = {
+    def transform(tp: TypeMappable): TypeMappable = {
 
       /** Map a `C.this` type to the right prefix. If the prefix is unstable, and
         *  the current variance is <= 0, return a range.
@@ -27,16 +27,16 @@ private[tastyquery] object TypeOps:
         *  @param  cls     The class in which the `C.this` type occurs
         *  @param  thiscls The prefix `C` of the `C.this` type.
         */
-      def toPrefix(pre: Prefix, cls: Symbol, thiscls: ClassSymbol): Type =
+      def toPrefix(origTp: ThisType, pre: Prefix, cls: Symbol, thiscls: ClassSymbol): Type =
         pre match
-          case NoPrefix =>
-            tp
+          case NoPrefix | _: PackageRef =>
+            origTp
           case pre: SuperType =>
-            toPrefix(pre.thistpe, cls, thiscls)
+            toPrefix(origTp, pre.thistpe, cls, thiscls)
           case pre: Type =>
             cls match
               case cls: PackageSymbol =>
-                tp
+                origTp
               case cls: ClassSymbol =>
                 if (thiscls.isSubclass(cls) && pre.baseType(thiscls).isDefined)
                   /*if (variance <= 0 && !isLegalPrefix(pre)) // isLegalPrefix always true?
@@ -56,18 +56,18 @@ private[tastyquery] object TypeOps:
                 toPrefix(pre.select(nme.PACKAGE), cls, thiscls)*/
                 else
                   pre.baseType(cls).flatMap(_.normalizedPrefix) match
-                    case Some(normalizedPrefix) => toPrefix(normalizedPrefix, cls.owner.nn, thiscls)
-                    case None                   => tp
+                    case Some(normalizedPrefix) => toPrefix(origTp, normalizedPrefix, cls.owner.nn, thiscls)
+                    case None                   => origTp
               case _ =>
                 throw AssertionError(
-                  s"While computing asSeenFrom for $tp;\n"
+                  s"While computing asSeenFrom for $origTp;\n"
                     + s"found unexpected cls = $cls in toPrefix($pre, $cls, $thiscls)"
                 )
       end toPrefix
 
       tp match {
         case tp: ThisType =>
-          toPrefix(pre, cls, tp.cls)
+          toPrefix(tp, pre, cls, tp.cls)
         case _ =>
           mapOver(tp)
       }
@@ -86,7 +86,7 @@ private[tastyquery] object TypeOps:
   // Tests around `matches`
 
   /** The implementation for `tp1.matches(tp2)`. */
-  final def matchesType(tp1: Type, tp2: Type)(using Context): Boolean = tp1.widen match
+  final def matchesType(tp1: TypeOrMethodic, tp2: TypeOrMethodic)(using Context): Boolean = tp1.widen match
     case tp1: MethodType =>
       tp2.widen match
         case tp2: MethodType =>

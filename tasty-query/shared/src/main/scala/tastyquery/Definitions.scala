@@ -45,13 +45,13 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val ObjectType: TypeRef = TypeRef(javaLangPackage.packageRef, typeName("Object"))
 
   val ArrayTypeUnapplied: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Array"))
-  def ArrayTypeOf(tpe: Type): AppliedType = AppliedType(ArrayTypeUnapplied, List(tpe))
+  def ArrayTypeOf(tpe: TypeOrWildcard): AppliedType = AppliedType(ArrayTypeUnapplied, List(tpe))
 
   val SeqTypeUnapplied: TypeRef = TypeRef(scalaCollectionImmutablePackage.packageRef, typeName("Seq"))
-  def SeqTypeOf(tpe: Type): AppliedType = AppliedType(SeqTypeUnapplied, List(tpe))
+  def SeqTypeOf(tpe: TypeOrWildcard): AppliedType = AppliedType(SeqTypeUnapplied, List(tpe))
 
   val RepeatedTypeUnapplied: TypeRef = TypeRef(scalaPackage.packageRef, tpnme.RepeatedParamClassMagic)
-  def RepeatedTypeOf(tpe: Type): AppliedType = AppliedType(RepeatedTypeUnapplied, List(tpe))
+  def RepeatedTypeOf(tpe: TypeOrWildcard): AppliedType = AppliedType(RepeatedTypeUnapplied, List(tpe))
 
   val IntType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Int"))
   val LongType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Long"))
@@ -66,7 +66,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val StringType: TypeRef = TypeRef(javaLangPackage.packageRef, typeName("String"))
 
   val UnappliedClassType: TypeRef = TypeRef(javaLangPackage.packageRef, typeName("Class"))
-  def ClassTypeOf(tpe: Type): AppliedType = AppliedType(UnappliedClassType, List(tpe))
+  def ClassTypeOf(tpe: TypeOrWildcard): AppliedType = AppliedType(UnappliedClassType, List(tpe))
 
   val ThrowableType: TypeRef = TypeRef(javaLangPackage.packageRef, typeName("Throwable"))
 
@@ -78,9 +78,10 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val NonEmptyTupleType: TypeRef = TypeRef(scalaPackage.packageRef, tpnme.NonEmptyTuple)
 
   val TupleConsTypeUnapplied: TypeRef = TypeRef(scalaPackage.packageRef, tpnme.TupleCons)
-  def TupleConsTypeOf(head: Type, tail: Type): AppliedType = AppliedType(TupleConsTypeUnapplied, List(head, tail))
+  def TupleConsTypeOf(head: TypeOrWildcard, tail: TypeOrWildcard): AppliedType =
+    AppliedType(TupleConsTypeUnapplied, List(head, tail))
 
-  def GenericTupleTypeOf(elementTypes: List[Type]): Type =
+  def GenericTupleTypeOf(elementTypes: List[TypeOrWildcard]): Type =
     elementTypes.foldRight[Type](EmptyTupleType)(TupleConsTypeOf(_, _))
 
   // Magic symbols that are not found on the classpath, but rather created by hand
@@ -98,7 +99,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   private def createSpecialMethod(
     owner: ClassSymbol,
     name: TermName,
-    tpe: Type,
+    tpe: TypeOrMethodic,
     flags: FlagSet = EmptyFlagSet
   ): TermSymbol =
     val sym = TermSymbol

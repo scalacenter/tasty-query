@@ -83,35 +83,43 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   def ScalaPackageObjectPrefix(using Context): Type =
     ctx.findStaticTerm("scala.package").staticRef
 
-  def javaLangPrefix(using Context): Type =
+  def javaLangPrefix(using Context): PackageRef =
     defn.javaLangPackage.packageRef
 
-  def javaIOPrefix(using Context): Type =
+  def javaIOPrefix(using Context): PackageRef =
     ctx.findPackage("java.io").packageRef
 
-  def scalaPrefix(using Context): Type =
+  def scalaPrefix(using Context): PackageRef =
     defn.scalaPackage.packageRef
 
-  def listOf(tpe: Type)(using Context): Type =
+  def listOf(tpe: TypeOrWildcard)(using Context): Type =
     ListClass.typeRef.appliedTo(tpe)
 
-  def optionOf(tpe: Type)(using Context): Type =
+  def optionOf(tpe: TypeOrWildcard)(using Context): Type =
     OptionClass.typeRef.appliedTo(tpe)
 
-  def genSeqOf(tpe: Type)(using Context): Type =
+  def genSeqOf(tpe: TypeOrWildcard)(using Context): Type =
     ctx.findTopLevelClass("scala.collection.Seq").typeRef.appliedTo(tpe)
 
-  def mutableSeqOf(tpe: Type)(using Context): Type =
+  def mutableSeqOf(tpe: TypeOrWildcard)(using Context): Type =
     ctx.findTopLevelClass("scala.collection.mutable.Seq").typeRef.appliedTo(tpe)
 
-  def iarrayOf(tpe: Type)(using Context): Type =
+  def iarrayOf(tpe: TypeOrWildcard)(using Context): Type =
     ctx.findStaticType("scala.IArray$package.IArray").staticRef.appliedTo(tpe)
 
   def findTypesFromTASTyNamed(name: String)(using Context): Type =
-    ctx.findTopLevelClass("subtyping.TypesFromTASTy").findNonOverloadedDecl(termName(name)).declaredType
+    ctx.findTopLevelClass("subtyping.TypesFromTASTy").findNonOverloadedDecl(termName(name)).declaredType.requireType
 
   def findTypesFromTASTyNamed(name: TypeName)(using Context): Type =
     ctx.findTopLevelClass("subtyping.TypesFromTASTy").findDecl(name).asInstanceOf[TypeMemberSymbol].aliasedType
+
+  def findMethodicTypesFromTASTyNamed(name: String)(using Context): MethodicType =
+    ctx
+      .findTopLevelClass("subtyping.TypesFromTASTy")
+      .findNonOverloadedDecl(termName(name))
+      .declaredType
+      .asInstanceOf[MethodicType]
+  end findMethodicTypesFromTASTyNamed
 
   def thisTypeRefFromTASTy(name: TypeName)(using Context): TypeRef =
     ctx.findTopLevelClass("subtyping.TypesFromTASTy").thisType.select(name)
@@ -466,7 +474,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     // No 'withRef' because this codebase uses explicit nulls; we would need an Any-typed or (T | Null)-typed reference
     assertStrictSubtype(defn.NullType, x)
     assertStrictSubtype(defn.NullType, xAlias)
-    assertStrictSubtype(defn.NullType, xAlias.symbol.declaredType)
+    assertStrictSubtype(defn.NullType, xAlias.symbol.declaredType.requireType)
 
     assertEquiv(x.select(tname"AbstractType"), x.select(tname"AbstractType"))
       .withRef[refx.AbstractType, refx.AbstractType]
@@ -680,8 +688,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val ParentClass = ctx.findStaticClass(s"$paths.NestedClasses.Parent")
     val inner = ctx.findStaticTerm(s"$paths.NestedClasses.inner")
 
-    assertNeitherSubtype(inner.declaredType, defn.IntType).withRef[NestedClasses.inner.type, Int]
-    assertStrictSubtype(inner.declaredType, ParentClass.typeRef).withRef[NestedClasses.inner.type, NestedClasses.Parent]
+    assertNeitherSubtype(inner.declaredType.requireType, defn.IntType).withRef[NestedClasses.inner.type, Int]
+    assertStrictSubtype(inner.declaredType.requireType, ParentClass.typeRef)
+      .withRef[NestedClasses.inner.type, NestedClasses.Parent]
   }
 
   testWithContext("refinement-types-subtyping") {
@@ -707,7 +716,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       val polyHigh = TypeLambda(List(typeName("X")), List(defn.NothingAnyBounds), high)
       TypeRefinement(SimplePathsClass.appliedRef, typeName(name), RealTypeBounds(polyLow, polyHigh))
 
-    def refineTerm(name: String, tpe: Type): Type =
+    def refineTerm(name: String, tpe: TypeOrMethodic): Type =
       TermRefinement(SimplePathsClass.appliedRef, isStable = false, termName(name), tpe)
 
     // type refinement - exists in class
@@ -1022,7 +1031,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
           )
       )
 
-    val fromTASTy = findTypesFromTASTyNamed("higherKinded").asInstanceOf[PolyType]
+    val fromTASTy = findMethodicTypesFromTASTyNamed("higherKinded").asInstanceOf[PolyType]
 
     // within higherKindedPoly
 
@@ -1304,10 +1313,10 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("capture-conversion") {
     val TypeRefInClass = ctx.findTopLevelClass("simple_trees.TypeRefIn")
 
-    def finalResultType(tpe: Type): Type = tpe match
+    def finalResultType(tpe: TypeOrMethodic): Type = tpe match
       case tpe: MethodType => finalResultType(tpe.resultType)
       case tpe: PolyType   => finalResultType(tpe.resultType)
-      case _               => tpe
+      case tpe: Type       => tpe
 
     var applyBodyCount = 0
 
@@ -1316,14 +1325,14 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       if decl.is(Method) && decl.name != nme.Constructor
     do
       val tree = decl.tree.get.asInstanceOf[DefDef].rhs.get
-      assert(tree.tpe.isSubtype(finalResultType(decl.declaredType)))
+      assert(tree.tpe.requireType.isSubtype(finalResultType(decl.declaredType)))
 
       tree match
         case Apply(method @ TypeApply(poly, List(targ)), List(arg)) =>
           // Check that the term argument corresponds to the declared term param type
           val methodType = method.tpe.widen.asInstanceOf[MethodType]
           assert(clue(methodType.paramNames).sizeIs == 1)
-          val argTpe = arg.tpe
+          val argTpe = arg.tpe.requireType
           val paramTpe = methodType.instantiateParamTypes(List(argTpe)).head
           assertStrictSubtype(argTpe, paramTpe)
 
@@ -1356,7 +1365,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val valDef = innerRefValSym.tree.get.asInstanceOf[ValDef]
     val Block(List(anonClassDef: ClassDef), Typed(anonInstance, tpt)) = valDef.rhs.get: @unchecked
 
-    val anonInstanceType = anonInstance.tpe
+    val anonInstanceType = anonInstance.tpe.requireType
 
     val expectedType1 = tpt.toType
     assert(clue(expectedType1).isInstanceOf[RecType])
@@ -1422,10 +1431,10 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       (body.tpe: @unchecked) match
         case tpe: TermRef =>
           assert(tpe.prefix == NoPrefix)
-          assertEquiv(tpe.symbol.declaredType, defn.IntType)
+          assertEquiv(tpe.symbol.declaredType.requireType, defn.IntType)
 
       val methodType = makeMethodSym.declaredType.asInstanceOf[MethodType]
-      assertStrictSubtype(body.tpe, methodType.resultType)
+      assertStrictSubtype(body.tpe.requireType, methodType.resultType.requireType)
     }
 
     // Opaque in object
@@ -1450,10 +1459,10 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       (body.tpe: @unchecked) match
         case tpe: TermRef =>
           assert(tpe.prefix == NoPrefix)
-          assertEquiv(tpe.symbol.declaredType, defn.IntType)
+          assertEquiv(tpe.symbol.declaredType.requireType, defn.IntType)
 
       val methodType = makeMethodSym.declaredType.asInstanceOf[MethodType]
-      assertStrictSubtype(body.tpe, methodType.resultType)
+      assertStrictSubtype(body.tpe.requireType, methodType.resultType.requireType)
     }
   }
 

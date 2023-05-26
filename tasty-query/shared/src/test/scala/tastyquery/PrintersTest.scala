@@ -95,7 +95,7 @@ class PrintersTest extends UnrestrictedUnpicklingSuite:
     )
     testShowBasic(
       TermRefinement(ProductType, isStable = false, termName("foo"), MethodType(Nil, Nil, defn.IntType)),
-      "(scala.Product { def foo: ()scala.Int })"
+      "(scala.Product { def foo()scala.Int })"
     )
 
     testShowBasic(defn.ArrayTypeOf(WildcardTypeBounds(defn.NothingAnyBounds)), "scala.Array[?]")

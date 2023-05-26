@@ -65,7 +65,7 @@ private[tastyquery] object TypeMatching:
       else MatchResult.Stuck
   end matchCase
 
-  private def containsCapturesOf(pattern: Type, caze: MatchTypeCase)(using Context): Boolean =
+  private def containsCapturesOf(pattern: TypeOrWildcard, caze: MatchTypeCase)(using Context): Boolean =
     pattern match
       case pattern: TypeParamRef =>
         pattern.binders eq caze
@@ -76,8 +76,8 @@ private[tastyquery] object TypeMatching:
   end containsCapturesOf
 
   private def tryMatchPattern(
-    scrutinee: Type,
-    pattern: Type,
+    scrutinee: TypeOrWildcard,
+    pattern: TypeOrWildcard,
     variance: Variance,
     caze: MatchTypeCase,
     typeParamInstantiations: Array[Type | Null]
@@ -91,7 +91,7 @@ private[tastyquery] object TypeMatching:
             else if variance.isContravariant then Some(bounds.low)
             else if bounds.low.isSameType(bounds.high) then Some(bounds.low)
             else None
-          case _ =>
+          case scrutinee: Type =>
             Some(scrutinee)
 
         instantiation match
@@ -105,8 +105,8 @@ private[tastyquery] object TypeMatching:
         // !!! There is similar code in Subtyping.compareAppliedType2
 
         def tryMatchArgs(
-          scrutineeArgs: List[Type],
-          patternArgs: List[Type],
+          scrutineeArgs: List[TypeOrWildcard],
+          patternArgs: List[TypeOrWildcard],
           tparams: List[TypeConstructorParam]
         ): Boolean =
           assert(
@@ -120,7 +120,7 @@ private[tastyquery] object TypeMatching:
             && tryMatchArgs(scrutineeArgs.tail, patternArgs.tail, tparams.tail)
         end tryMatchArgs
 
-        def tryMatchingApply(patternTycon: TypeRef): Boolean = scrutinee.widen match
+        def tryMatchingApply(patternTycon: TypeRef): Boolean = scrutinee.highIfWildcard.widen match
           case scrutinee: AppliedType =>
             scrutinee.tycon match
               case scrutineeTycon: TypeRef =>
@@ -147,12 +147,15 @@ private[tastyquery] object TypeMatching:
              */
             false
 
+          case _ if !variance.isCovariant && scrutinee.isInstanceOf[WildcardTypeBounds] =>
+            false
+
           case patternTycon: TypeRef =>
             if tryMatchingApply(patternTycon) then true
             else
               patternTycon.optSymbol match
                 case Some(patternCls: ClassSymbol) =>
-                  scrutinee.baseType(patternCls) match
+                  scrutinee.highIfWildcard.baseType(patternCls) match
                     case Some(scrutineeBase) if scrutineeBase ne scrutinee =>
                       tryMatchPattern(scrutineeBase, pattern, variance, caze, typeParamInstantiations)
                     case _ =>
@@ -167,10 +170,7 @@ private[tastyquery] object TypeMatching:
             false
 
       case _ =>
-        variance.sign match
-          case 0  => isSameType(scrutinee, pattern)
-          case 1  => isSubtype(scrutinee, pattern)
-          case -1 => isSubtype(pattern, scrutinee)
+        Subtyping.isSubTypeArg(scrutinee, pattern, variance.sign)
   end tryMatchPattern
 
   /** Is `tp` a provably empty type?
@@ -188,7 +188,7 @@ private[tastyquery] object TypeMatching:
       case tp: AppliedType =>
         tp.args.lazyZip(tp.tycon.typeParams).exists { (arg, tparam) =>
           tparam.variance.sign >= 0
-          && provablyEmpty(arg)
+          && provablyEmpty(arg.highIfWildcard)
           && typeparamCorrespondsToField(tp.tycon, tparam)
         }
       case TypeRef.OfClass(_) =>
@@ -258,13 +258,13 @@ private[tastyquery] object TypeMatching:
          * (Type parameter disjointness is not enough by itself as it could
          * lead to incorrect conclusions for phantom type parameters).
          */
-        def covariantDisjoint(tp1: Type, tp2: Type, tparam: TypeConstructorParam): Boolean =
-          provablyDisjoint(tp1, tp2) && typeparamCorrespondsToField(tycon1, tparam)
+        def covariantDisjoint(tp1: TypeOrWildcard, tp2: TypeOrWildcard, tparam: TypeConstructorParam): Boolean =
+          provablyDisjoint(tp1.highIfWildcard, tp2.highIfWildcard) && typeparamCorrespondsToField(tycon1, tparam)
 
         /* Contravariant case: a value where this type parameter is
          * instantiated to `Any` belongs to both types.
          */
-        def contravariantDisjoint(tp1: Type, tp2: Type, tparam: TypeConstructorParam): Boolean =
+        def contravariantDisjoint(tp1: TypeOrWildcard, tp2: TypeOrWildcard, tparam: TypeConstructorParam): Boolean =
           false
 
         /* In the invariant case, we also use a stronger notion of disjointness:
@@ -277,8 +277,8 @@ private[tastyquery] object TypeMatching:
          * doesn't have type tags, meaning that users cannot write patterns
          * that do type tests on higher kinded types.
          */
-        def invariantDisjoint(tp1: Type, tp2: Type, tparam: TypeConstructorParam): Boolean =
-          provablyDisjoint(tp1, tp2) /*||
+        def invariantDisjoint(tp1: TypeOrWildcard, tp2: TypeOrWildcard, tparam: TypeConstructorParam): Boolean =
+          provablyDisjoint(tp1.highIfWildcard, tp2.highIfWildcard) /*||
           !isSameType(tp1, tp2) &&
           fullyInstantiated(tp1) && // We can only trust a "no" from `isSameType` when
           fullyInstantiated(tp2)    // both `tp1` and `tp2` are fully instantiated.*/
@@ -327,8 +327,8 @@ private[tastyquery] object TypeMatching:
       .from(1)
       .map { index =>
         tycon.resolveMember(termName("_" + index), tycon) match
-          case ResolveMemberResult.TermMember(_, declaredType) => Some(declaredType)
-          case _                                               => None
+          case ResolveMemberResult.TermMember(_, declaredType: Type) => Some(declaredType)
+          case _                                                     => None
       }
       .takeWhile(_.isDefined)
       .map(_.get)

@@ -29,7 +29,7 @@ private[classfiles] object Descriptors:
     resolver.resolve(binaryName)
 
   @throws[ClassfileFormatException]
-  def parseDescriptor(member: Symbol, desc: String)(using Context, InnerClasses, Resolver): Type =
+  def parseDescriptor(member: Symbol, desc: String)(using Context, InnerClasses, Resolver): TypeOrMethodic =
     // TODO: once we support inner classes, decide if we merge with parseSignature
     var offset = 0
     var end = desc.length
@@ -91,7 +91,7 @@ private[classfiles] object Descriptors:
       if consume('V') then defn.UnitType
       else fieldDescriptor
 
-    def methodDescriptor: Type =
+    def methodDescriptor: MethodType =
       if consume('(') then // must have '(', ')', and return type
         def paramDescriptors(acc: List[Type]): List[Type] =
           if consume(')') then acc.reverse
