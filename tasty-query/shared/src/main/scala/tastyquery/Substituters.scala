@@ -54,7 +54,7 @@ private[tastyquery] object Substituters:
         case tp: NamedType =>
           tp.prefix match
             case NoPrefix     => tp
-            case prefix: Type => tp.derivedSelect(apply(prefix))
+            case prefix: Type => tp.normalizedDerivedSelect(apply(prefix))
         case _: ThisType =>
           tp
         case tp: AppliedType =>
@@ -72,7 +72,7 @@ private[tastyquery] object Substituters:
         case tp: NamedType =>
           tp.prefix match
             case NoPrefix     => tp
-            case prefix: Type => tp.derivedSelect(apply(prefix))
+            case prefix: Type => tp.normalizedDerivedSelect(apply(prefix))
         case _: ThisType =>
           tp
         case tp: AppliedType =>
