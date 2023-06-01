@@ -534,6 +534,9 @@ object Symbols {
       this
 
     final def bounds(using Context): TypeBounds =
+      boundsDirect
+
+    private[tastyquery] final def boundsDirect: TypeBounds =
       val local = myBounds
       if local == null then throw IllegalStateException(s"$this was not assigned type bounds")
       else local

@@ -33,11 +33,11 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
 
   def assertSubtype(tp1: Type, tp2: Type)(using Context): Unit =
     val sub = tp1.isSubtype(tp2)
-    assert(sub, clues(tp1, tp2))
+    assert(sub, clues(tp1.showBasic, tp2.showBasic, tp1, tp2))
 
   def assertNotSubtype(tp1: Type, tp2: Type)(using Context): Unit =
     val sub = tp1.isSubtype(tp2)
-    assert(!sub, clues(tp1, tp2))
+    assert(!sub, clues(tp1.showBasic, tp2.showBasic, tp1, tp2))
 
   def assertEquiv(tp1: Type, tp2: Type)(using Context): EquivResult.type =
     assertSubtype(tp1, tp2)

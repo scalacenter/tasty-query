@@ -214,6 +214,9 @@ object Types {
 
   sealed trait TypeMappable:
     private[tastyquery] type ThisTypeMappableType >: this.type <: TypeMappable
+
+    def showBasic: String =
+      Printers.withWriterToString(writer => new Printers.Printer(writer).print(this))
   end TypeMappable
 
   sealed abstract class Prefix extends TypeMappable:
@@ -1613,6 +1616,9 @@ object Types {
       typeLambda.paramNames(num)
 
     def bounds(using Context): TypeBounds =
+      boundsDirect
+
+    private[tastyquery] def boundsDirect: TypeBounds =
       typeLambda.paramTypeBounds(num)
   end TypeLambdaParam
 
