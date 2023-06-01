@@ -175,16 +175,16 @@ private[classfiles] object JavaSignatures:
       if available >= 1 then
         (peek: @switch) match
           case '*' =>
-            commitSimple(1, WildcardTypeBounds(defn.NothingAnyBounds))
+            commitSimple(1, WildcardTypeArg(defn.NothingAnyBounds))
           case '+' =>
             commit(1) {
               val upper = referenceType(env)
-              WildcardTypeBounds(RealTypeBounds(defn.NothingType, upper))
+              WildcardTypeArg(RealTypeBounds(defn.NothingType, upper))
             }
           case '-' =>
             commit(1) {
               val lower = referenceType(env)
-              WildcardTypeBounds(RealTypeBounds(lower, defn.FromJavaObjectType))
+              WildcardTypeArg(RealTypeBounds(lower, defn.FromJavaObjectType))
             }
           case _ =>
             referenceType(env)

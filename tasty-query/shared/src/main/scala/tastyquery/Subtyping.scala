@@ -50,12 +50,12 @@ private[tastyquery] object Subtyping:
 
       case 0 =>
         arg2 match
-          case arg2: WildcardTypeBounds =>
+          case arg2: WildcardTypeArg =>
             arg2.bounds.contains(arg1)
           case arg2: Type =>
             arg1 match
-              case arg1: Type            => isSameType(arg1, arg2)
-              case _: WildcardTypeBounds => false
+              case arg1: Type         => isSameType(arg1, arg2)
+              case _: WildcardTypeArg => false
   end isSubTypeArg
 
   private def level1(tp1: Type, tp2: Type)(using Context): Boolean = tp2 match
@@ -262,14 +262,14 @@ private[tastyquery] object Subtyping:
     tp1 match
       case tp1: SingletonType =>
         base match
-          case base: AppliedType if base.args.exists(_.isInstanceOf[WildcardTypeBounds]) =>
+          case base: AppliedType if base.args.exists(_.isInstanceOf[WildcardTypeArg]) =>
             base.tycon match
               case tycon @ TypeRef.OfClass(cls) =>
                 val typeParams = cls.typeParams
                 val newArgs = base.args.lazyZip(typeParams).map { (arg, tparam) =>
                   arg match
-                    case arg: WildcardTypeBounds => TypeRef(tp1, tparam)
-                    case _                       => arg
+                    case arg: WildcardTypeArg => TypeRef(tp1, tparam)
+                    case _                    => arg
                 }
                 AppliedType(tycon, newArgs)
               case _ =>

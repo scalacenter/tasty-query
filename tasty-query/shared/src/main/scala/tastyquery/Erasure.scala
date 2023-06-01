@@ -62,9 +62,9 @@ private[tastyquery] object Erasure:
               case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => arrayOf(alias)
           case _ =>
             arrayOfBounds(tpe.bounds)
-      case tpe: TypeParamRef       => arrayOfBounds(tpe.bounds)
-      case tpe: Type               => preErase(tpe).arrayOf()
-      case tpe: WildcardTypeBounds => arrayOfBounds(tpe.bounds)
+      case tpe: TypeParamRef    => arrayOfBounds(tpe.bounds)
+      case tpe: Type            => preErase(tpe).arrayOf()
+      case tpe: WildcardTypeArg => arrayOfBounds(tpe.bounds)
     end arrayOf
 
     tpe.widen match

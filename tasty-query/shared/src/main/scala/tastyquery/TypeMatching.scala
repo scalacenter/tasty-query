@@ -85,7 +85,7 @@ private[tastyquery] object TypeMatching:
     pattern match
       case pattern: TypeParamRef if pattern.binders eq caze =>
         val instantiation = scrutinee match
-          case scrutinee: WildcardTypeBounds =>
+          case scrutinee: WildcardTypeArg =>
             val bounds = scrutinee.bounds
             if variance.isCovariant then Some(bounds.high)
             else if variance.isContravariant then Some(bounds.low)
@@ -147,7 +147,7 @@ private[tastyquery] object TypeMatching:
              */
             false
 
-          case _ if !variance.isCovariant && scrutinee.isInstanceOf[WildcardTypeBounds] =>
+          case _ if !variance.isCovariant && scrutinee.isInstanceOf[WildcardTypeArg] =>
             false
 
           case patternTycon: TypeRef =>

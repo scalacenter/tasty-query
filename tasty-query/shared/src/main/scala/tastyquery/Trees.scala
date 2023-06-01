@@ -69,7 +69,7 @@ object Trees {
       case MatchTypeTree(bound, selector, cases)          => bound.toList ::: selector :: cases
       case TypeCaseDef(pattern, body)                     => pattern :: body :: Nil
       case TypeTreeBind(name, body, symbol)               => body :: Nil
-      case WildcardTypeBoundsTree(bounds)                 => bounds :: Nil
+      case WildcardTypeArgTree(bounds)                    => bounds :: Nil
       case TypeLambdaTree(tparams, body)                  => tparams ::: body :: Nil
       case TypeBindingsTree(bindings, body)               => bindings ::: body :: Nil
 
@@ -839,20 +839,20 @@ object Trees {
     override final def withSpan(span: Span): TypeTreeBind = TypeTreeBind(name, body, symbol)(span)
   }
 
-  final case class WildcardTypeBoundsTree(bounds: TypeBoundsTree)(span: Span) extends TypeArgTree(span) {
-    private var myTypeOrWildcard: WildcardTypeBounds | Null = null
+  final case class WildcardTypeArgTree(bounds: TypeBoundsTree)(span: Span) extends TypeArgTree(span) {
+    private var myTypeOrWildcard: WildcardTypeArg | Null = null
 
     def toTypeOrWildcard(using Context): TypeOrWildcard =
       val local = myTypeOrWildcard
       if local != null then local
       else
-        val computed = WildcardTypeBounds(bounds.toTypeBounds)
+        val computed = WildcardTypeArg(bounds.toTypeBounds)
         myTypeOrWildcard = computed
         computed
     end toTypeOrWildcard
 
-    override final def withSpan(span: Span): WildcardTypeBoundsTree =
-      WildcardTypeBoundsTree(bounds)(span)
+    override final def withSpan(span: Span): WildcardTypeArgTree =
+      WildcardTypeArgTree(bounds)(span)
   }
 
   final case class TypeLambdaTree(tparams: List[TypeParam], body: TypeTree)(span: Span) extends TypeTree(span) {

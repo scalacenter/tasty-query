@@ -26,8 +26,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       isBounded(_.isNothing, _.isAny)
 
     def isBounded(lo: Type => Boolean, hi: Type => Boolean)(using Context): Boolean = tpe match
-      case tpe: WildcardTypeBounds => lo(tpe.bounds.low) && hi(tpe.bounds.high)
-      case _                       => false
+      case tpe: WildcardTypeArg => lo(tpe.bounds.low) && hi(tpe.bounds.high)
+      case _                    => false
 
     def isTypeRefOf(cls: ClassSymbol)(using Context): Boolean = tpe match
       case TypeRef.OfClass(tpeCls) => tpeCls == cls
@@ -106,8 +106,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case _: PolyType   => 2
 
     def typeOrWildcard(tp: TypeOrWildcard): Int = tp match
-      case _: Type               => 1
-      case _: WildcardTypeBounds => 2
+      case _: Type            => 1
+      case _: WildcardTypeArg => 2
 
     def prefix(tp: Prefix): Int = tp match
       case NoPrefix          => 1

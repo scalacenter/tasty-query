@@ -503,9 +503,9 @@ object Symbols {
               bounds
             case prefix: Type =>
               sym.argForParam(prefix, widenAbstract = true) match
-                case Some(wild: WildcardTypeBounds) => wild.bounds
-                case Some(alias: Type)              => TypeAlias(alias)
-                case None                           => default
+                case Some(wild: WildcardTypeArg) => wild.bounds
+                case Some(alias: Type)           => TypeAlias(alias)
+                case None                        => default
             case NoPrefix | _: PackageRef =>
               throw InvalidProgramStructureException(s"invalid prefix $prefix for class type parameter $this")
 
@@ -574,7 +574,7 @@ object Symbols {
 
     /** The argument corresponding to this class type parameter as seen from prefix `pre`.
       *
-      * Can produce a WildcardTypeBounds type if `widenAbstract` is true,
+      * Can produce a WildcardTypeArg type if `widenAbstract` is true,
       * or prefix is an & or | type and parameter is non-variant.
       * Otherwise, a typebounds argument is dropped and the original type parameter
       * reference is returned.
@@ -592,8 +592,8 @@ object Symbols {
           while (tparams.nonEmpty && args.nonEmpty) {
             if (tparams.head.eq(this))
               return Some(args.head match {
-                case _: WildcardTypeBounds if !widenAbstract => TypeRef(pre, this)
-                case arg                                     => arg
+                case _: WildcardTypeArg if !widenAbstract => TypeRef(pre, this)
+                case arg                                  => arg
               })
             tparams = tparams.tail
             args = args.tail
@@ -616,8 +616,8 @@ object Symbols {
                 case _ =>
                   // Compute based on bounds, instead of returning the original reference
                   def toBounds(tp: TypeOrWildcard): TypeBounds = tp match
-                    case tp: WildcardTypeBounds => tp.bounds
-                    case tp: Type               => TypeAlias(tp)
+                    case tp: WildcardTypeArg => tp.bounds
+                    case tp: Type            => TypeAlias(tp)
                   val bounds1 = toBounds(tp1)
                   val bounds2 = toBounds(tp2)
                   val mergedBounds =
@@ -625,7 +625,7 @@ object Symbols {
                     else bounds1.union(bounds2)
                   mergedBounds match
                     case TypeAlias(alias)  => alias // can happen for variance == 0 if tp1 =:= tp2
-                    case _: RealTypeBounds => WildcardTypeBounds(mergedBounds)
+                    case _: RealTypeBounds => WildcardTypeArg(mergedBounds)
               end result
               Some(result)
           end match

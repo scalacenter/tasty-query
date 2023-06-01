@@ -236,7 +236,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     // def getClass[A >: this.type](): Class[? <: A]
     val tpe = PolyType(List(typeName("A")))(
       pt => List(RealTypeBounds(AnyClass.thisType, AnyType)),
-      pt => MethodType(Nil, Nil, ClassTypeOf(WildcardTypeBounds(RealTypeBounds(NothingType, pt.paramRefs.head))))
+      pt => MethodType(Nil, Nil, ClassTypeOf(WildcardTypeArg(RealTypeBounds(NothingType, pt.paramRefs.head))))
     )
     createSpecialMethod(AnyClass, nme.m_getClass, tpe, Final)
   end Any_getClass

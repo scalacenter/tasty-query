@@ -524,7 +524,7 @@ private[tasties] class TreeUnpickler private (
     readPotentiallyShared {
       reader.nextByte match
         case TYPEBOUNDS =>
-          WildcardTypeBounds(readTypeBounds)
+          WildcardTypeArg(readTypeBounds)
         case _ =>
           readTrueType()
     }
@@ -535,7 +535,7 @@ private[tasties] class TreeUnpickler private (
       reader.nextByte match
         case TYPEBOUNDS | TYPEBOUNDStpt =>
           val bounds = readTypeDefinition(forOpaque = false).asInstanceOf[TypeBoundsTree]
-          WildcardTypeBoundsTree(bounds)(span)
+          WildcardTypeArgTree(bounds)(span)
         case _ =>
           readTypeTree
     }

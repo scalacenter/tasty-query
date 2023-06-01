@@ -89,7 +89,7 @@ import tastyquery.Variances.*
   *
   * TypeOrWildcard             either a type or a wildcard, used in the type arguments of `AppliedType`
   *  +- Type
-  *  +- WildcardTypeBounds     `? >: L <: H`
+  *  +- WildcardTypeArg        `? >: L <: H`
   * ```
   *
   * All of the above types inherit from `TypeMappable`, which represents things
@@ -331,18 +331,18 @@ object Types {
 
   /** A type or a wildcard, as used in the type parameters of an `AppliedType`.
     *
-    * Partitioned into [[Type]] and [[WildcardTypeBounds]].
+    * Partitioned into [[Type]] and [[WildcardTypeArg]].
     */
   sealed trait TypeOrWildcard extends TypeMappable:
     private[tastyquery] type ThisTypeMappableType >: this.type <: TypeOrWildcard
 
     def highIfWildcard: Type = this match
-      case self: Type               => self
-      case self: WildcardTypeBounds => self.bounds.high
+      case self: Type            => self
+      case self: WildcardTypeArg => self.bounds.high
 
     def lowIfWildcard: Type = this match
-      case self: Type               => self
-      case self: WildcardTypeBounds => self.bounds.low
+      case self: Type            => self
+      case self: WildcardTypeArg => self.bounds.low
   end TypeOrWildcard
 
   /** A marker trait for types that can be the type of a [[Trees.TermTree]].
@@ -1220,7 +1220,7 @@ object Types {
       result1 match
         case Some(res: Type) =>
           res
-        case None | Some(_: WildcardTypeBounds) =>
+        case None | Some(_: WildcardTypeArg) =>
           designator match
             case sym: TypeMemberSymbol if !sym.is(Private) =>
               TypeRef(prefix, sym.name)
@@ -2100,7 +2100,7 @@ object Types {
       else RealTypeBounds(low, high)
 
     final def contains(tp: TypeOrWildcard)(using Context): Boolean = tp match
-      case tp: WildcardTypeBounds =>
+      case tp: WildcardTypeArg =>
         contains(tp.bounds)
       case tp: Type =>
         low.isSubtype(tp) && tp.isSubtype(high)
@@ -2161,22 +2161,22 @@ object Types {
     def debugID: Int = System.identityHashCode(this)
   }
 
-  final class WildcardTypeBounds(val bounds: TypeBounds) extends TypeMappable with TypeOrWildcard {
-    private[tastyquery] type ThisTypeMappableType = WildcardTypeBounds
+  final class WildcardTypeArg(val bounds: TypeBounds) extends TypeMappable with TypeOrWildcard {
+    private[tastyquery] type ThisTypeMappableType = WildcardTypeArg
 
     def underlying(using Context): Type = bounds.high
 
-    private[tastyquery] def derivedWildcardTypeBounds(bounds: TypeBounds): WildcardTypeBounds =
+    private[tastyquery] def derivedWildcardTypeArg(bounds: TypeBounds): WildcardTypeArg =
       if bounds eq this.bounds then this
-      else WildcardTypeBounds(bounds)
+      else WildcardTypeArg(bounds)
 
-    override def toString(): String = s"WildcardTypeBounds($bounds)"
+    override def toString(): String = s"WildcardTypeArg($bounds)"
   }
 
-  object WildcardTypeBounds:
-    def NothingAny(using Context): WildcardTypeBounds =
-      WildcardTypeBounds(defn.NothingAnyBounds)
-  end WildcardTypeBounds
+  object WildcardTypeArg:
+    def NothingAny(using Context): WildcardTypeArg =
+      WildcardTypeArg(defn.NothingAnyBounds)
+  end WildcardTypeArg
 
   // ----- Ground Types -------------------------------------------------
 

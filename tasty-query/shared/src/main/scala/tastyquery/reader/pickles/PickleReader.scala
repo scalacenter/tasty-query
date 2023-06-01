@@ -604,7 +604,7 @@ private[pickles] class PickleReader {
         val lo = readTrueTypeRef()
         val hi = readTrueTypeRef()
         // TODO? createNullableTypeBounds(lo, hi)
-        WildcardTypeBounds(RealTypeBounds(lo, hi))
+        WildcardTypeArg(RealTypeBounds(lo, hi))
       case REFINEDtpe =>
         val clazzIndex = pkl.readNat()
         val clazz = readLocalSymbolAt(clazzIndex).asClass
@@ -677,12 +677,12 @@ private[pickles] class PickleReader {
   private def translateTempPolyForTypeArg(tp: TypeOrWildcard)(using Context): TypeOrWildcard =
     translateTempPolyForTypeMember(tp) match
       case TypeAlias(alias)       => alias
-      case bounds: RealTypeBounds => WildcardTypeBounds(bounds)
+      case bounds: RealTypeBounds => WildcardTypeArg(bounds)
   end translateTempPolyForTypeArg
 
   /** Convert temp poly type to TypeLambda and leave other types alone. */
   private def translateTempPolyForTypeMember(tp: TypeOrWildcard)(using Context): TypeBounds = tp match
-    case tp: WildcardTypeBounds =>
+    case tp: WildcardTypeArg =>
       def rec(bound: Type): Type =
         translateTempPolyForTypeMember(bound).asInstanceOf[TypeAlias].alias
       RealTypeBounds(rec(tp.bounds.low), rec(tp.bounds.high))
@@ -690,7 +690,7 @@ private[pickles] class PickleReader {
     case TempPolyType(tparams, restpe) =>
       val localTParams = tparams.asInstanceOf[List[LocalTypeParamSymbol]] // no class type params in type lambdas
       restpe match
-        case restpe: WildcardTypeBounds =>
+        case restpe: WildcardTypeArg =>
           val low =
             if restpe.bounds.low.isExactlyNothing then restpe.bounds.low
             else TypeLambda.fromParams(localTParams, restpe.bounds.low)
@@ -793,7 +793,7 @@ private[pickles] class PickleReader {
     def mapArg(arg: TypeOrWildcard): TypeOrWildcard = arg match {
       case arg: TypeRef =>
         boundSymOf(arg) match
-          case Some(sym) => WildcardTypeBounds(sym.bounds)
+          case Some(sym) => WildcardTypeArg(sym.bounds)
           case None      => arg
       case _ =>
         arg

@@ -133,8 +133,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       def unapply(tpe: Types.TermRefinement): (Type, Name, TypeOrMethodic) =
         (tpe.parent, tpe.refinedName, tpe.refinedType)
 
-    object WildcardTypeBounds:
-      def unapply(tpe: Types.WildcardTypeBounds): Some[TypeBounds] = Some(tpe.bounds)
+    object WildcardTypeArg:
+      def unapply(tpe: Types.WildcardTypeArg): Some[TypeBounds] = Some(tpe.bounds)
 
     object MatchType:
       def unapply(tpe: Types.MatchType): (Type, Type, List[MatchTypeCase]) = (tpe.bound, tpe.scrutinee, tpe.cases)
@@ -2111,7 +2111,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeWrapper(
               ty.AppliedType(
                 TypeRefInternal(_: PackageRef, TypeName(SimpleName("List"))),
-                ty.WildcardTypeBounds(NothingAnyTypeBounds()) :: Nil
+                ty.WildcardTypeArg(NothingAnyTypeBounds()) :: Nil
               )
             ),
             None,
@@ -2126,7 +2126,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             SimpleName("anyList"),
             AppliedTypeTree(
               TypeIdent(TypeName(SimpleName("List"))),
-              WildcardTypeBoundsTree(NothingAnyTypeBoundsTree()) :: Nil
+              WildcardTypeArgTree(NothingAnyTypeBoundsTree()) :: Nil
             ),
             None,
             _
@@ -2139,7 +2139,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case New(
             AppliedTypeTree(
               TypeIdent(TypeName(SimpleName("GenericWithTypeBound"))),
-              WildcardTypeBoundsTree(
+              WildcardTypeArgTree(
                 InferredTypeBoundsTree(
                   RealTypeBounds(
                     TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Nothing"))),
