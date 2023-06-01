@@ -24,9 +24,11 @@ object Trees {
       case Import(expr, selectors)                  => expr :: selectors
       case Export(expr, selectors)                  => expr :: selectors
       case ClassDef(name, rhs, symbol)              => rhs :: Nil
-      case TypeMember(_, rhs, _)                    => rhs :: Nil
+      case TypeMember(name, rhs, symbol)            => rhs :: Nil
+      case TypeParam(name, bounds, symbol)          => bounds :: Nil
       case Template(constr, parents, self, body)    => constr :: parents ::: self.toList ::: body
       case ValDef(name, tpt, rhs, symbol)           => tpt :: rhs.toList
+      case SelfDef(name, tpt)                       => tpt :: Nil
       case DefDef(name, params, tpt, rhs, symbol)   => params.flatMap(_.merge) ::: tpt :: rhs.toList
       case Select(qualifier, name)                  => qualifier :: Nil
       case SelectOuter(qualifier, levels)           => qualifier :: Nil
@@ -78,9 +80,7 @@ object Trees {
       case PolyTypeDefinitionTree(tparams, body)        => tparams ::: body :: Nil
       case NamedTypeBoundsTree(name, bounds)            => Nil
 
-      case _: ImportIdent | _: TypeMember | _: TypeParam | _: Ident | _: This | _: New | _: Literal | _: SelfDef |
-          _: WildcardPattern | _: TypeIdent =>
-        Nil
+      case _: ImportIdent | _: Ident | _: This | _: Literal | _: WildcardPattern | _: TypeIdent => Nil
     }
 
     def walkTree[R](op: Tree => R)(reduce: (R, R) => R, default: => R): R = {
