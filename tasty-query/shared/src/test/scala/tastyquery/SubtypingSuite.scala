@@ -959,6 +959,8 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val Function1Class = ctx.findTopLevelClass("scala.Function1")
     def fun1Type(argType: Type, resultType: Type): Type =
       AppliedType(Function1Class.typeRef, argType :: resultType :: Nil)
+    def fun1IntTo(resultType: Type): Type =
+      fun1Type(defn.IntType, resultType)
 
     def makeTToTTypeLambda() = TypeLambda(typeName("T") :: Nil)(
       _ => List(defn.NothingAnyBounds),
@@ -966,12 +968,40 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     )
     val tToTTypeLambda = makeTToTTypeLambda()
 
-    val fromTasty = findTypesFromTASTyNamed(typeName("TToTType"))
+    val tToTTypeFromTasty = findTypesFromTASTyNamed(typeName("TToTType"))
 
-    type TToTType = [T] => T => T
+    type TToTType = [T] =>> T => T
 
-    assertEquiv(tToTTypeLambda, makeTToTTypeLambda()).withRef[TToTType, TToTType]
-    assertEquiv(tToTTypeLambda, fromTasty)
+    assertEquiv(tToTTypeLambda, makeTToTTypeLambda())
+    assertEquiv(tToTTypeLambda, tToTTypeFromTasty)
+
+    assertEquiv(AppliedType(tToTTypeLambda, defn.IntType :: Nil), fun1IntTo(defn.IntType))
+      .withRef[TToTType[Int], Int => Int]
+    assertStrictSubtype(AppliedType(tToTTypeLambda, defn.IntType :: Nil), fun1IntTo(defn.AnyValType))
+      .withRef[TToTType[Int], Int => AnyVal]
+    assertStrictSubtype(fun1Type(defn.AnyValType, defn.IntType), AppliedType(tToTTypeLambda, defn.AnyValType :: Nil))
+      .withRef[AnyVal => Int, TToTType[AnyVal]]
+    assertNeitherSubtype(AppliedType(tToTTypeLambda, defn.IntType :: Nil), fun1IntTo(defn.StringType))
+      .withRef[TToTType[Int], Int => String]
+
+    val appliedTypeLambda = AppliedType(
+      TypeLambda(typeName("T") :: Nil)(_ => List(defn.NothingAnyBounds), _ => defn.IntType),
+      defn.StringType :: Nil
+    )
+    val appliedTypeLambdaFromTasty = findTypesFromTASTyNamed("appliedTypeLambda")
+    type AppliedTypeLambda = ([X] =>> Int)[String]
+
+    assertEquiv(appliedTypeLambda, appliedTypeLambdaFromTasty).withRef[AppliedTypeLambda, ([X] =>> Int)[String]]
+    assertStrictSubtype(ConstantType(Constant(0)), appliedTypeLambda).withRef[0, AppliedTypeLambda]
+    assertStrictSubtype(ConstantType(Constant(0)), appliedTypeLambdaFromTasty).withRef[0, AppliedTypeLambda]
+    assertNeitherSubtype(ConstantType(Constant(false)), appliedTypeLambda).withRef[false, AppliedTypeLambda]
+    assertNeitherSubtype(ConstantType(Constant(false)), appliedTypeLambdaFromTasty).withRef[false, AppliedTypeLambda]
+
+    val appliedTypeLambda2FromTasty = findTypesFromTASTyNamed("appliedTypeLambda2")
+    type AppliedTypeLambda2 = (([X] =>> [Y <: Int] =>> Boolean)[Any][0])
+
+    assertStrictSubtype(ConstantType(Constant(false)), appliedTypeLambda2FromTasty).withRef[false, AppliedTypeLambda2]
+    assertNeitherSubtype(ConstantType(Constant(0)), appliedTypeLambda2FromTasty).withRef[0, AppliedTypeLambda2]
   }
 
   testWithContext("higher-kinded-types") {
