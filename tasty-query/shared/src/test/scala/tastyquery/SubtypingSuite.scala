@@ -8,7 +8,7 @@ import scala.collection.mutable
 import scala.collection.immutable.{List as IList, Seq as ISeq}
 import scala.util.NotGiven
 
-import scala.Predef.String as PString
+import scala.Predef.{String as PString, locally}
 
 import tastyquery.Annotations.*
 import tastyquery.Constants.*
@@ -1378,6 +1378,83 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(defn.StringType, defn.FromJavaObjectType)
 
     assertEquiv(defn.ArrayTypeOf(defn.AnyType), defn.ArrayTypeOf(defn.FromJavaObjectType))
+  }
+
+  testWithContext("opaque-type-aliases-transparency") {
+    import subtyping.TypesFromTASTy.{instance1, instance2}
+
+    val TypesFromTASTyClass = ctx.findTopLevelClass("subtyping.TypesFromTASTy")
+    val TypesFromTASTyModuleClass = ctx.findTopLevelModuleClass("subtyping.TypesFromTASTy")
+
+    val thisRef = TypesFromTASTyClass.thisType
+    val instance1Ref = TypesFromTASTyModuleClass.findDecl(termName("instance1")).staticRef
+    val instance2Ref = TypesFromTASTyModuleClass.findDecl(termName("instance2")).staticRef
+
+    val objThisRef = TypesFromTASTyModuleClass.thisType
+    val objRef = TypesFromTASTyModuleClass.moduleValue.get.staticRef
+
+    // InstanceOpaque
+    locally {
+      val sym = TypesFromTASTyClass.findDecl(typeName("InstanceOpaque"))
+
+      assertEquiv(thisRef.select(sym), thisRef.select(sym))
+      assertEquiv(thisRef.select(sym), defn.IntType)
+      assertNeitherSubtype(thisRef.select(sym), defn.StringType)
+
+      assertEquiv(instance1Ref.select(sym), instance1Ref.select(sym))
+      assertNeitherSubtype(instance1Ref.select(sym), thisRef.select(sym))
+      assertNeitherSubtype(instance1Ref.select(sym), defn.IntType).withRef[instance1.InstanceOpaque, Int]
+      assertNeitherSubtype(instance1Ref.select(sym), instance2Ref.select(sym))
+        .withRef[instance1.InstanceOpaque, instance2.InstanceOpaque]
+
+      assertStrictSubtype(thisRef.select(sym), defn.AnyValType)
+      assertStrictSubtype(instance1Ref.select(sym), defn.AnyValType).withRef[instance1.InstanceOpaque, AnyVal]
+
+      assertStrictSubtype(thisRef.select(termName("instanceOpaqueVal")), thisRef.select(sym))
+      assertStrictSubtype(thisRef.select(termName("instanceOpaqueVal")), defn.IntType)
+      assertStrictSubtype(instance1Ref.select(termName("instanceOpaqueVal")), instance1Ref.select(sym))
+      assertNeitherSubtype(instance1Ref.select(termName("instanceOpaqueVal")), defn.IntType)
+
+      val makeMethodSym = TypesFromTASTyClass.findNonOverloadedDecl(termName("makeInstanceOpaque"))
+      val methodDef = makeMethodSym.tree.get.asInstanceOf[DefDef]
+      val body = methodDef.rhs.get
+
+      (body.tpe: @unchecked) match
+        case tpe: TermRef =>
+          assert(tpe.prefix == NoPrefix)
+          assertEquiv(tpe.symbol.declaredType, defn.IntType)
+
+      val methodType = makeMethodSym.declaredType.asInstanceOf[MethodType]
+      assertStrictSubtype(body.tpe, methodType.resultType)
+    }
+
+    // Opaque in object
+    locally {
+      val sym = TypesFromTASTyModuleClass.findDecl(typeName("Opaque"))
+
+      assertEquiv(objThisRef.select(sym), objThisRef.select(sym))
+      assertEquiv(objThisRef.select(sym), defn.IntType)
+      assertNeitherSubtype(objThisRef.select(sym), defn.StringType)
+
+      assertEquiv(objRef.select(sym), objRef.select(sym))
+      assertEquiv(objRef.select(sym), objThisRef.select(sym)) // because obj must be the same as obj.this
+      assertNeitherSubtype(objRef.select(sym), defn.IntType)
+
+      assertStrictSubtype(objThisRef.select(sym), defn.AnyValType)
+      assertStrictSubtype(objRef.select(sym), defn.AnyValType)
+
+      val makeMethodSym = TypesFromTASTyModuleClass.findNonOverloadedDecl(termName("makeOpaque"))
+      val methodDef = makeMethodSym.tree.get.asInstanceOf[DefDef]
+      val body = methodDef.rhs.get
+
+      (body.tpe: @unchecked) match
+        case tpe: TermRef =>
+          assert(tpe.prefix == NoPrefix)
+          assertEquiv(tpe.symbol.declaredType, defn.IntType)
+
+      val methodType = makeMethodSym.declaredType.asInstanceOf[MethodType]
+      assertStrictSubtype(body.tpe, methodType.resultType)
+    }
   }
 
 end SubtypingSuite
