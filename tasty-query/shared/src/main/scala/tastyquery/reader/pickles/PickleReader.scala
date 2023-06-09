@@ -248,18 +248,21 @@ private[pickles] class PickleReader {
         val tpe = readSymType()
         val typeParams = atNoCache(infoRef)(readTypeParams())
         if isRefinementClass(cls) then return cls // by-pass further assignments, including Flags
+        val scala2ParentTypes = tpe match
+          case TempPolyType(tparams, restpe: TempClassInfoType) =>
+            assert(tparams.corresponds(typeParams)(_ eq _)) // should reuse the class type params
+            restpe.parentTypes
+          case tpe: TempClassInfoType => tpe.parentTypes
+          case tpe =>
+            throw AssertionError(s"unexpected type $tpe for $cls, owner is $owner")
         val parentTypes =
           if cls.owner == defn.scalaPackage && tname == tpnme.AnyVal then
             // Patch the superclasses of AnyVal to contain Matchable
-            defn.AnyType :: defn.MatchableType :: Nil
-          else
-            tpe match
-              case TempPolyType(tparams, restpe: TempClassInfoType) =>
-                assert(tparams.corresponds(typeParams)(_ eq _)) // should reuse the class type params
-                restpe.parentTypes
-              case tpe: TempClassInfoType => tpe.parentTypes
-              case tpe =>
-                throw AssertionError(s"unexpected type $tpe for $cls, owner is $owner")
+            scala2ParentTypes :+ defn.MatchableType
+          else if cls.owner == defn.scalaPackage && isTupleClassName(tname) then
+            // Patch the superclass of TupleN classes to inherit from *:
+            defn.GenericTupleTypeOf(typeParams.map(_.typeRef)) :: scala2ParentTypes.tail
+          else scala2ParentTypes
         val givenSelfType = if atEnd then None else Some(readTypeRef())
         cls.withParentsDirect(parentTypes)
         cls.withTypeParams(typeParams)
@@ -815,5 +818,15 @@ private[reader] object PickleReader {
 
   /** Temporary type for classinfos, will be decomposed on completion of the class */
   private[tastyquery] case class TempClassInfoType(parentTypes: List[Type]) extends CustomTransientGroundType
+
+  private def isTupleClassName(name: TypeName): Boolean =
+    name.toTermName match
+      case SimpleName(str) =>
+        str.startsWith("Tuple")
+          && str.length() > 5
+          && str.iterator.drop(5).forall(c => c >= '0' && c <= '9')
+      case _ =>
+        false
+  end isTupleClassName
 
 }

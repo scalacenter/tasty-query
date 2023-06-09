@@ -1457,4 +1457,31 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     }
   }
 
+  testWithContext("generic-tuples") {
+    def TupleNType(elementTypes: List[Type]): Type =
+      defn.scalaPackage.packageRef.select(typeName("Tuple" + elementTypes.size)).appliedTo(elementTypes)
+
+    assertStrictSubtype(defn.EmptyTupleType, defn.TupleType)
+    assertNeitherSubtype(defn.EmptyTupleType, defn.NonEmptyTupleType)
+
+    assertStrictSubtype(defn.TupleConsTypeOf(defn.IntType, defn.EmptyTupleType), defn.NonEmptyTupleType)
+    assertStrictSubtype(defn.TupleConsTypeOf(defn.IntType, defn.EmptyTupleType), defn.TupleType)
+    assertNeitherSubtype(defn.TupleConsTypeOf(defn.IntType, defn.EmptyTupleType), defn.EmptyTupleType)
+
+    assertStrictSubtype(TupleNType(List(defn.IntType, defn.StringType)), defn.NonEmptyTupleType)
+
+    assertEquiv(
+      TupleNType(List(defn.IntType, defn.StringType)),
+      defn.GenericTupleTypeOf(List(defn.IntType, defn.StringType))
+    )
+    assertStrictSubtype(
+      TupleNType(List(defn.IntType, defn.StringType)),
+      defn.GenericTupleTypeOf(List(defn.AnyValType, defn.StringType))
+    )
+    assertStrictSubtype(
+      defn.GenericTupleTypeOf(List(defn.IntType, defn.StringType)),
+      TupleNType(List(defn.AnyValType, defn.StringType))
+    )
+  }
+
 end SubtypingSuite
