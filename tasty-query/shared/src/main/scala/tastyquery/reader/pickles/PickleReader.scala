@@ -260,7 +260,13 @@ private[pickles] class PickleReader {
         cls.withGivenSelfType(givenSelfType)
         cls
       case VALsym =>
-        val sym = TermSymbol.create(name.toTermName, owner)
+        // Discard `$extension` methods, as they should not be seen from a Scala 3 point of view
+        val forceNotDeclaration = name1 match
+          case SimpleName(str) => flags.is(Method) && str.endsWith("$extension")
+          case _               => false
+        val sym =
+          if forceNotDeclaration then TermSymbol.createNotDeclaration(name.toTermName, owner)
+          else TermSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles
         val tpe = readSymType()
         val unwrappedTpe = translateTempPoly(tpe, flags.is(Method))

@@ -937,6 +937,18 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(mt.resultType.isRef(defn.BooleanClass), clue(mt.resultType))
   }
 
+  testWithContext("unmangle-scala-2-names") {
+    // `$extension` methods pickled by Scala 2 are not visible from a Scala 3 point of view
+    val ArrayOpsModClass = ctx.findTopLevelModuleClass("scala.collection.ArrayOps")
+    assert(clue(ArrayOpsModClass.getAllOverloadedDecls(termName("partition$extension"))).isEmpty)
+    for decl <- ArrayOpsModClass.declarations do assert(!clue(decl.name).toString().endsWith("$extension"))
+
+    // Consistency check: Scala 3 does not emit `$extension` methods either
+    val ValueClassModClass = ctx.findTopLevelModuleClass("simple_trees.ValueClass")
+    assert(clue(ValueClassModClass.getAllOverloadedDecls(termName("myLength$extension"))).isEmpty)
+    for decl <- ValueClassModClass.declarations do assert(!clue(decl.name).toString().endsWith("$extension"))
+  }
+
   testWithContext("select-field-from-tasty-in-other-package:dependency-from-class-file") {
     val BoxedConstantsClass = ctx.findTopLevelClass("crosspackagetasty.BoxedConstants")
     val ConstantsClass = ctx.findTopLevelClass("simple_trees.Constants")

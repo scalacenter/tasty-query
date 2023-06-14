@@ -465,6 +465,9 @@ object Symbols {
   object TermSymbol:
     private[tastyquery] def create(name: TermName, owner: Symbol): TermSymbol =
       owner.addDeclIfDeclaringSym(TermSymbol(name, owner))
+
+    private[tastyquery] def createNotDeclaration(name: TermName, owner: Symbol): TermSymbol =
+      TermSymbol(name, owner)
   end TermSymbol
 
   sealed abstract class TypeSymbol protected (val name: TypeName, owner: Symbol) extends TermOrTypeSymbol(owner):
