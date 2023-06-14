@@ -159,7 +159,12 @@ private[pickles] class PickleReader {
     // symbols that were pickled with Pickler.writeSymInfo
     val nameref = pkl.readNat()
     val name0 = at(nameref)(readName())
-    val name1 = name0.decode
+
+    val name1 = name0.decode match
+      case SimpleName(MangledDefaultGetterNameRegex(underlyingStr, indexStr)) =>
+        DefaultGetterName(termName(underlyingStr), indexStr.toInt - 1)
+      case decoded =>
+        decoded
 
     assert(entries(storeInEntriesAt) == null, entries(storeInEntriesAt))
     val owner = readMaybeExternalSymbolRef() match
@@ -730,6 +735,8 @@ private[pickles] class PickleReader {
 }
 
 private[reader] object PickleReader {
+
+  private val MangledDefaultGetterNameRegex = "^(.+)\\$default\\$([0-9]+)$".r
 
   def pkl(using pkl: PklStream): pkl.type = pkl
   def index[I <: PickleReader#Index & Singleton](using index: I): index.type = index

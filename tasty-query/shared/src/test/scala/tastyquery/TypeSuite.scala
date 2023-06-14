@@ -967,6 +967,23 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         throw AssertionError(s"unexpected type $tpe")
   }
 
+  testWithContext("scala-2-default-params") {
+    val DefaultParamsClass = ctx.findTopLevelClass("simple_trees.DefaultParams")
+    assert(clue(DefaultParamsClass.getNonOverloadedDecl(DefaultGetterName(termName("foo"), 0))).isEmpty)
+    DefaultParamsClass.findNonOverloadedDecl(DefaultGetterName(termName("foo"), 1))
+    DefaultParamsClass.findNonOverloadedDecl(DefaultGetterName(termName("foo"), 2))
+    assert(clue(DefaultParamsClass.getNonOverloadedDecl(DefaultGetterName(termName("foo"), 3))).isEmpty)
+
+    val IteratorClass = ctx.findTopLevelClass("scala.collection.Iterator")
+    assert(clue(IteratorClass.getNonOverloadedDecl(DefaultGetterName(termName("indexWhere"), 0))).isEmpty)
+    IteratorClass.findNonOverloadedDecl(DefaultGetterName(termName("indexWhere"), 1))
+    assert(clue(IteratorClass.getNonOverloadedDecl(DefaultGetterName(termName("indexWhere"), 2))).isEmpty)
+
+    val ArrayDequeModClass = ctx.findTopLevelModuleClass("scala.collection.mutable.ArrayDeque")
+    ArrayDequeModClass.findNonOverloadedDecl(DefaultGetterName(nme.Constructor, 0))
+    assert(clue(ArrayDequeModClass.getNonOverloadedDecl(DefaultGetterName(nme.Constructor, 1))).isEmpty)
+  }
+
   testWithContext("select-field-from-tasty-in-other-package:dependency-from-class-file") {
     val BoxedConstantsClass = ctx.findTopLevelClass("crosspackagetasty.BoxedConstants")
     val ConstantsClass = ctx.findTopLevelClass("simple_trees.Constants")
