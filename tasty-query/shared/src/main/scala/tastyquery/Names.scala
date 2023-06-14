@@ -277,7 +277,7 @@ object Names {
       extends NumberedName(underlying, num) {
     override def tag: Int = NameTags.DEFAULTGETTER
 
-    override def toString: String = s"$underlying$$default$num"
+    override def toString: String = s"$underlying$$default$$${num + 1}"
 
     override def toDebugString: String = s"${underlying.toDebugString}[default $num]"
   }
