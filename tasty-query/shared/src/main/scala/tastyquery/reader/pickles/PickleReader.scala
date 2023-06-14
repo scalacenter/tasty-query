@@ -519,7 +519,16 @@ private[pickles] class PickleReader {
         else if (args.nonEmpty) tycon.safeAppliedTo(EtaExpandIfHK(sym.typeParams, args.map(translateTempPoly)))
         else if (sym.typeParams.nonEmpty) tycon.EtaExpand(sym.typeParams)
         else tycon*/
+        def isByNameParamClass(tpe: Type): Boolean = tpe match
+          case tpe: TypeRef if tpe.name == tpnme.scala2ByName =>
+            tpe.prefix match
+              case prefix: PackageRef => prefix.symbol == defn.scalaPackage
+              case _                  => false
+          case _ =>
+            false
+        end isByNameParamClass
         if args.isEmpty then tycon
+        else if isByNameParamClass(tycon) then ByNameType(args.head)
         else AppliedType(tycon, args)
       case TYPEBOUNDStpe =>
         val lo = readTypeRef()

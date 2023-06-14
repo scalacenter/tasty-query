@@ -124,6 +124,7 @@ object Names {
     private[tastyquery] val internalRepeatedAnnot: TypeName = typeName("Repeated")
 
     private[tastyquery] val scala2LocalChild: TypeName = typeName("<local child>")
+    private[tastyquery] val scala2ByName: TypeName = typeName("<byname>")
   }
 
   /** Create a type name from a string */

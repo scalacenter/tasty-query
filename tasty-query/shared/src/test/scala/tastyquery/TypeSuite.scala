@@ -949,6 +949,24 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     for decl <- ValueClassModClass.declarations do assert(!clue(decl.name).toString().endsWith("$extension"))
   }
 
+  testWithContext("scala-2-by-name-params") {
+    val OptionClass = ctx.findTopLevelClass("scala.Option")
+
+    val getOrElseSym = OptionClass.findNonOverloadedDecl(termName("getOrElse"))
+
+    getOrElseSym.declaredType match
+      case pt: PolyType =>
+        assert(clue(pt.paramNames).sizeIs == 1)
+        pt.resultType match
+          case mt: MethodType =>
+            assert(clue(mt.paramNames).sizeIs == 1)
+            assert(clue(mt.paramTypes.head).isByName(_ eq pt.paramRefs.head))
+          case _ =>
+            throw AssertionError(s"unexpected type $pt")
+      case tpe =>
+        throw AssertionError(s"unexpected type $tpe")
+  }
+
   testWithContext("select-field-from-tasty-in-other-package:dependency-from-class-file") {
     val BoxedConstantsClass = ctx.findTopLevelClass("crosspackagetasty.BoxedConstants")
     val ConstantsClass = ctx.findTopLevelClass("simple_trees.Constants")
