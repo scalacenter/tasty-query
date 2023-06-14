@@ -237,7 +237,8 @@ private[pickles] class PickleReader {
         val tname = name.toTypeName
         val cls =
           if tname == tpnme.RefinedClassMagic then ClassSymbol.createRefinedClassSymbol(owner, Scala2Defined)
-          else ClassSymbol.create(name.toTypeName, owner)
+          else if tname == tpnme.scala2LocalChild then ClassSymbol.createNotDeclaration(tname, owner)
+          else ClassSymbol.create(tname, owner)
         storeResultInEntries(cls)
         val tpe = readSymType()
         val typeParams = atNoCache(infoRef)(readTypeParams())
@@ -286,6 +287,25 @@ private[pickles] class PickleReader {
     sym.setAnnotations(Nil) // TODO Read Scala 2 annotations
     sym
   }
+
+  def readChildren()(using Context, PklStream, Entries, Index): Unit =
+    val tag = pkl.readByte()
+    assert(tag == CHILDREN)
+    val end = pkl.readEnd()
+    val target = readLocalSymbolRef().asClass
+    val children: List[Symbol | Scala2ExternalSymRef] =
+      pkl.until(
+        end,
+        () =>
+          readMaybeExternalSymbolRef() match
+            case sym: ClassSymbol if sym.name == tpnme.scala2LocalChild => target
+            case sym: Symbol                                            => sym
+            case external: ExternalSymbolRef                            => external.toScala2ExternalSymRef
+            case _: NoExternalSymbolRef =>
+              throw errorBadSignature(s"illegal NoSymbol as sealed child of $target")
+      )
+    target.setScala2SealedChildren(children)
+  end readChildren
 
   private def readPickleFlags(isType: Boolean)(using PklStream): PickleFlagSet =
     PickleFlagSet(pkl.readLongNat(), isType)
@@ -364,6 +384,10 @@ private[pickles] class PickleReader {
       val result = readNameRef() == nme.RefinementClass
       result
     }
+
+  def isChildrenEntry(i: Int)(using PklStream, Entries, Index): Boolean =
+    val tag = pkl.bytes(index(i))
+    tag == CHILDREN
 
   protected def isRefinementClass(sym: Symbol)(using Context): Boolean =
     sym.name == tpnme.RefinedClassMagic
@@ -748,7 +772,7 @@ private[reader] object PickleReader {
     def toNamedType(pre: Prefix)(using Context): NamedType =
       NamedType(pre, toScala2ExternalSymRef)
 
-    private def toScala2ExternalSymRef: Scala2ExternalSymRef =
+    def toScala2ExternalSymRef: Scala2ExternalSymRef =
       owner match
         case owner: Symbol =>
           Scala2ExternalSymRef(owner, name :: Nil)

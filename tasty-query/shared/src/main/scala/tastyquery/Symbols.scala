@@ -714,6 +714,8 @@ object Symbols {
     type DefiningTreeType = ClassDef
     type DeclType = TermOrTypeSymbol
 
+    private type SealedChild = ClassSymbol | TermSymbol
+
     // Reference fields (checked in doCheckCompleted)
     private var myTypeParams: List[ClassTypeParamSymbol] | Null = null
     private var myParentsInit: (() => List[Type]) | Null = null
@@ -722,6 +724,7 @@ object Symbols {
 
     // Optional reference fields
     private var mySpecialErasure: Option[() => ErasedTypeRef.ClassRef] = None
+    private var myScala2SealedChildren: Option[List[Symbol | Scala2ExternalSymRef]] = None
 
     // DeclaringSymbol-related fields
     private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[TermOrTypeSymbol]] =
@@ -732,6 +735,7 @@ object Symbols {
     private var myAppliedRef: Type | Null = null
     private var mySelfType: Type | Null = null
     private var myLinearization: List[ClassSymbol] | Null = null
+    private var mySealedChildren: List[SealedChild] | Null = null
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
@@ -1229,7 +1233,20 @@ object Symbols {
         computed
     end thisType
 
-    private var mySealedChildren: List[ClassSymbol | TermSymbol] | Null = null
+    /** Directly sets the sealed children of this class.
+      *
+      * This is only used by the Scala 2 unpickler.
+      */
+    private[tastyquery] def setScala2SealedChildren(children: List[Symbol | Scala2ExternalSymRef])(
+      using Context
+    ): Unit =
+      if !this.is(Scala2Defined) then
+        throw IllegalArgumentException(s"Illegal $this.setScala2SealedChildren($children) for non-Scala 2 class")
+      if myScala2SealedChildren.isDefined then
+        throw IllegalStateException(s"Scala 2 sealed children were already set for $this")
+      if mySealedChildren != null then throw IllegalStateException(s"Sealed children were already computed for $this")
+      myScala2SealedChildren = Some(children)
+    end setScala2SealedChildren
 
     /** The direct children of a sealed class (including enums).
       *
@@ -1247,22 +1264,38 @@ object Symbols {
       val local = mySealedChildren
       if local != null then local
       else
-        val computed: List[ClassSymbol | TermSymbol] =
+        val computed: List[SealedChild] =
           if !is(Sealed) then Nil
           else computeSealedChildren()
         mySealedChildren = computed
         computed
     end sealedChildren
 
-    private def computeSealedChildren()(using Context): List[ClassSymbol | TermSymbol] =
-      defn.internalChildAnnotClass match
+    private def computeSealedChildren()(using Context): List[SealedChild] =
+      myScala2SealedChildren match
+        case Some(scala2Children) =>
+          scala2Children.map(extractSealedChildFromScala2(_))
         case None =>
-          Nil
-        case Some(annotClass) =>
-          getAnnotations(annotClass).map(extractSealedChildFromChildAnnot(_))
+          defn.internalChildAnnotClass match
+            case None =>
+              Nil
+            case Some(annotClass) =>
+              getAnnotations(annotClass).map(extractSealedChildFromChildAnnot(_))
     end computeSealedChildren
 
-    private def extractSealedChildFromChildAnnot(annot: Annotation)(using Context): ClassSymbol | TermSymbol =
+    private def extractSealedChildFromScala2(scala2Child: Symbol | Scala2ExternalSymRef)(using Context): SealedChild =
+      val sym = scala2Child match
+        case sym: Symbol                    => sym
+        case external: Scala2ExternalSymRef => NamedType.resolveScala2ExternalRef(external)
+
+      sym match
+        case sym: ClassSymbol                  => sym
+        case sym: TermSymbol if sym.is(Module) => sym
+        case sym =>
+          throw InvalidProgramStructureException(s"Unexpected symbol $sym for a sealed child of $this")
+    end extractSealedChildFromScala2
+
+    private def extractSealedChildFromChildAnnot(annot: Annotation)(using Context): SealedChild =
       annot.tree.tpe match
         case tpe: AppliedType =>
           tpe.args match
@@ -1280,6 +1313,9 @@ object Symbols {
   object ClassSymbol:
     private[tastyquery] def create(name: TypeName, owner: Symbol): ClassSymbol =
       owner.addDeclIfDeclaringSym(ClassSymbol(name, owner))
+
+    private[tastyquery] def createNotDeclaration(name: TypeName, owner: Symbol): ClassSymbol =
+      ClassSymbol(name, owner)
 
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, flags: FlagSet, span: Span)(
       using Context

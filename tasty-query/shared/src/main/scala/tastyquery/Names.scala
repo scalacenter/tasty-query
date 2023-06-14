@@ -122,6 +122,8 @@ object Names {
     val scala2PackageObjectClass: TypeName = termName("package").withObjectSuffix.toTypeName
 
     private[tastyquery] val internalRepeatedAnnot: TypeName = typeName("Repeated")
+
+    private[tastyquery] val scala2LocalChild: TypeName = typeName("<local child>")
   }
 
   /** Create a type name from a string */

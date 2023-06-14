@@ -1076,6 +1076,16 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     assert(SealedClass.isAllOf(Sealed, butNotAnyOf = Enum))
     assert(clue(SealedClass.sealedChildren) == List(ClassCaseClass, ObjectCaseTerm))
+
+    val EquivClass = ctx.findTopLevelClass("scala.=:=")
+    assert(clue(EquivClass.sealedChildren) == List(EquivClass))
+
+    assert(clue(EquivClass.getDecl(tpnme.scala2LocalChild)).isEmpty)
+
+    val ListClass = ctx.findTopLevelClass("scala.collection.immutable.List")
+    val ConsClass = ctx.findTopLevelClass("scala.collection.immutable.::")
+    val NilModule = ctx.findStaticTerm("scala.collection.immutable.Nil")
+    assert(clue(ListClass.sealedChildren).toSet == Set(ConsClass, NilModule))
   }
 
   testWithContext("enum-children") {
