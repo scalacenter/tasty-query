@@ -259,6 +259,9 @@ object Types {
           case None        => None
       case tpe: TypeProxy =>
         tpe.superType.classSymbol
+      case tpe: TypeLambda =>
+        // apparently we need this :(
+        tpe.resultType.classSymbol
       case _ =>
         None
 

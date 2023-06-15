@@ -109,7 +109,7 @@ object Annotations:
   private def computeAnnotSymbol(tree: TermTree)(using Context): ClassSymbol =
     val tpt = findNewAnnotTypeTree(tree)
     tpt.toType.classSymbol.getOrElse {
-      throw InvalidProgramStructureException(s"Illegal annotation class type $tpt in $tree")
+      throw InvalidProgramStructureException(s"Illegal annotation class type ${tpt.toType} in $tree")
     }
   end computeAnnotSymbol
 
