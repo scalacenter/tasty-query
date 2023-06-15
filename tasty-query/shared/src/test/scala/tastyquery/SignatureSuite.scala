@@ -117,7 +117,7 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     val RefinedTypeTree = ctx.findTopLevelClass("simple_trees.RefinedTypeTree")
 
     val andType = RefinedTypeTree.findNonOverloadedDecl(name"andType")
-    intercept[UnsupportedOperationException](andType.signedName)
+    assertSigned(andType, "():simple_trees.RefinedTypeTree.AndTypeB")
   }
 
   testWithContext("array types") {
