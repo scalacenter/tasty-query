@@ -122,6 +122,9 @@ object Names {
     val scala2PackageObjectClass: TypeName = termName("package").withObjectSuffix.toTypeName
 
     private[tastyquery] val internalRepeatedAnnot: TypeName = typeName("Repeated")
+
+    private[tastyquery] val scala2LocalChild: TypeName = typeName("<local child>")
+    private[tastyquery] val scala2ByName: TypeName = typeName("<byname>")
   }
 
   /** Create a type name from a string */
@@ -274,7 +277,7 @@ object Names {
       extends NumberedName(underlying, num) {
     override def tag: Int = NameTags.DEFAULTGETTER
 
-    override def toString: String = s"$underlying$$default$num"
+    override def toString: String = s"$underlying$$default$$${num + 1}"
 
     override def toDebugString: String = s"${underlying.toDebugString}[default $num]"
   }

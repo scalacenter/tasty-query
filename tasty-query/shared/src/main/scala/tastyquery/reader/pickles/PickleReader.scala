@@ -159,7 +159,12 @@ private[pickles] class PickleReader {
     // symbols that were pickled with Pickler.writeSymInfo
     val nameref = pkl.readNat()
     val name0 = at(nameref)(readName())
-    val name1 = name0.decode
+
+    val name1 = name0.decode match
+      case SimpleName(MangledDefaultGetterNameRegex(underlyingStr, indexStr)) =>
+        DefaultGetterName(termName(underlyingStr), indexStr.toInt - 1)
+      case decoded =>
+        decoded
 
     assert(entries(storeInEntriesAt) == null, entries(storeInEntriesAt))
     val owner = readMaybeExternalSymbolRef() match
@@ -237,7 +242,8 @@ private[pickles] class PickleReader {
         val tname = name.toTypeName
         val cls =
           if tname == tpnme.RefinedClassMagic then ClassSymbol.createRefinedClassSymbol(owner, Scala2Defined)
-          else ClassSymbol.create(name.toTypeName, owner)
+          else if tname == tpnme.scala2LocalChild then ClassSymbol.createNotDeclaration(tname, owner)
+          else ClassSymbol.create(tname, owner)
         storeResultInEntries(cls)
         val tpe = readSymType()
         val typeParams = atNoCache(infoRef)(readTypeParams())
@@ -260,7 +266,13 @@ private[pickles] class PickleReader {
         cls.withGivenSelfType(givenSelfType)
         cls
       case VALsym =>
-        val sym = TermSymbol.create(name.toTermName, owner)
+        // Discard `$extension` methods, as they should not be seen from a Scala 3 point of view
+        val forceNotDeclaration = name1 match
+          case SimpleName(str) => flags.is(Method) && str.endsWith("$extension")
+          case _               => false
+        val sym =
+          if forceNotDeclaration then TermSymbol.createNotDeclaration(name.toTermName, owner)
+          else TermSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles
         val tpe = readSymType()
         val unwrappedTpe = translateTempPoly(tpe, flags.is(Method))
@@ -280,6 +292,25 @@ private[pickles] class PickleReader {
     sym.setAnnotations(Nil) // TODO Read Scala 2 annotations
     sym
   }
+
+  def readChildren()(using Context, PklStream, Entries, Index): Unit =
+    val tag = pkl.readByte()
+    assert(tag == CHILDREN)
+    val end = pkl.readEnd()
+    val target = readLocalSymbolRef().asClass
+    val children: List[Symbol | Scala2ExternalSymRef] =
+      pkl.until(
+        end,
+        () =>
+          readMaybeExternalSymbolRef() match
+            case sym: ClassSymbol if sym.name == tpnme.scala2LocalChild => target
+            case sym: Symbol                                            => sym
+            case external: ExternalSymbolRef                            => external.toScala2ExternalSymRef
+            case _: NoExternalSymbolRef =>
+              throw errorBadSignature(s"illegal NoSymbol as sealed child of $target")
+      )
+    target.setScala2SealedChildren(children)
+  end readChildren
 
   private def readPickleFlags(isType: Boolean)(using PklStream): PickleFlagSet =
     PickleFlagSet(pkl.readLongNat(), isType)
@@ -358,6 +389,10 @@ private[pickles] class PickleReader {
       val result = readNameRef() == nme.RefinementClass
       result
     }
+
+  def isChildrenEntry(i: Int)(using PklStream, Entries, Index): Boolean =
+    val tag = pkl.bytes(index(i))
+    tag == CHILDREN
 
   protected def isRefinementClass(sym: Symbol)(using Context): Boolean =
     sym.name == tpnme.RefinedClassMagic
@@ -489,7 +524,16 @@ private[pickles] class PickleReader {
         else if (args.nonEmpty) tycon.safeAppliedTo(EtaExpandIfHK(sym.typeParams, args.map(translateTempPoly)))
         else if (sym.typeParams.nonEmpty) tycon.EtaExpand(sym.typeParams)
         else tycon*/
+        def isByNameParamClass(tpe: Type): Boolean = tpe match
+          case tpe: TypeRef if tpe.name == tpnme.scala2ByName =>
+            tpe.prefix match
+              case prefix: PackageRef => prefix.symbol == defn.scalaPackage
+              case _                  => false
+          case _ =>
+            false
+        end isByNameParamClass
         if args.isEmpty then tycon
+        else if isByNameParamClass(tycon) then ByNameType(args.head)
         else AppliedType(tycon, args)
       case TYPEBOUNDStpe =>
         val lo = readTypeRef()
@@ -692,6 +736,8 @@ private[pickles] class PickleReader {
 
 private[reader] object PickleReader {
 
+  private val MangledDefaultGetterNameRegex = "^(.+)\\$default\\$([0-9]+)$".r
+
   def pkl(using pkl: PklStream): pkl.type = pkl
   def index[I <: PickleReader#Index & Singleton](using index: I): index.type = index
   def entries[E <: PickleReader#Entries & Singleton](using entries: E): entries.type = entries
@@ -742,7 +788,7 @@ private[reader] object PickleReader {
     def toNamedType(pre: Prefix)(using Context): NamedType =
       NamedType(pre, toScala2ExternalSymRef)
 
-    private def toScala2ExternalSymRef: Scala2ExternalSymRef =
+    def toScala2ExternalSymRef: Scala2ExternalSymRef =
       owner match
         case owner: Symbol =>
           Scala2ExternalSymRef(owner, name :: Nil)

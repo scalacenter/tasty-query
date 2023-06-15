@@ -16,25 +16,18 @@ private[reader] object Unpickler {
         if (reader.missingSymbolEntry(i)) {
           pkl.unsafeFork(offset) {
             reader.readMaybeExternalSymbolAt(i)
-            //   sym.infoOrCompleter match {
-            //     case info: ClassUnpickler => info.init()
-            //     case _                    =>
-            //   }
           }
         }
       }
+
       // read children last, fix for SI-3951
       index.loopWithIndices { (offset, i) =>
         if (reader.missingEntry(i)) {
-          // if (isSymbolAnnotationEntry(i)) {
-          //   data.unsafeFork(reader.index(i)) {
-          //     readSymbolAnnotation()
-          //   }
-          // } else if (isChildrenEntry(i)) {
-          //   data.unsafeFork(index(i)) {
-          //     readChildren()
-          //   }
-          // }
+          if (reader.isChildrenEntry(i)) {
+            pkl.unsafeFork(offset) {
+              reader.readChildren()
+            }
+          }
         }
       }
 
