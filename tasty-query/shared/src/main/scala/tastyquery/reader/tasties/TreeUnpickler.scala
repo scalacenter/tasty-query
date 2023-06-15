@@ -611,8 +611,10 @@ private[tasties] class TreeUnpickler private (
       }
     cls.withParentsDelayed { () =>
       parents.map {
-        case parent: Apply    => parent.tpe
-        case parent: Block    => parent.tpe
+        case parent: TermTree =>
+          Apply.computeAppliedNewType(parent).getOrElse {
+            throw InvalidProgramStructureException(s"Unexpected super call $parent in class $cls")
+          }
         case parent: TypeTree => parent.toType
       }
     }

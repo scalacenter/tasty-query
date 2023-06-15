@@ -229,8 +229,8 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
   testWithContext("consistent-exception-in-parents-issue-168", "inheritance.crosstasty.Child") {
     val ChildClass = ctx.findStaticClass("inheritance.crosstasty.Child")
-    intercept[MemberNotFoundException](ChildClass.parents)
-    intercept[MemberNotFoundException](ChildClass.parents) // it's the same exception the second time
+    intercept[MemberNotFoundException](ChildClass.parentClasses)
+    intercept[MemberNotFoundException](ChildClass.parentClasses) // it's the same exception the second time
   }
 
   testWithContext(
