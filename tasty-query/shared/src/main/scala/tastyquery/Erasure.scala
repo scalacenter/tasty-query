@@ -101,7 +101,10 @@ private[tastyquery] object Erasure:
       case tpe: OrType =>
         erasedLub(preErase(tpe.first), preErase(tpe.second))
       case tpe: AndType =>
-        throw UnsupportedOperationException(s"Cannot erase $tpe")
+        summon[SourceLanguage] match
+          case SourceLanguage.Java   => preErase(tpe.first)
+          case SourceLanguage.Scala2 => preErase(Scala2Erasure.eraseAndType(tpe))
+          case SourceLanguage.Scala3 => erasedGlb(preErase(tpe.first), preErase(tpe.second))
       case tpe: RecType =>
         preErase(tpe.parent)
       case _: SingletonType | _: ByNameType | _: AnnotatedType | _: RefinedType =>
@@ -119,12 +122,10 @@ private[tastyquery] object Erasure:
 
     typeRef match
       case ClassRef(cls) =>
-        if cls == defn.AnyValClass then ClassRef(defn.ObjectClass)
-        else if cls.isDerivedValueClass then valueClass(cls)
-        else cls.specialErasure.fold(typeRef)(f => f())
+        if cls.isDerivedValueClass then valueClass(cls)
+        else cls.erasure
       case ArrayTypeRef(ClassRef(cls), dimensions) =>
-        if cls == defn.AnyValClass then ArrayTypeRef(ClassRef(defn.ObjectClass), dimensions)
-        else cls.specialErasure.fold(typeRef)(f => ArrayTypeRef(f(), dimensions))
+        ArrayTypeRef(cls.erasure, dimensions)
   end finishErase
 
   /** The erased least upper bound of two erased types is computed as follows.
@@ -198,4 +199,74 @@ private[tastyquery] object Erasure:
       // Pick the last minimum to prioritize classes over traits
       minimums.lastOption.getOrElse(defn.ObjectClass)
   end erasedClassRefLub
+
+  /** The erased greatest lower bound of two erased type picks one of the two argument types.
+    *
+    * This operation has the following the properties:
+    * - Associativity and commutativity, because this method acts as the minimum
+    *   of the total order induced by `compareErasedGlb`.
+    */
+  private def erasedGlb(tp1: ErasedTypeRef, tp2: ErasedTypeRef)(using Context): ErasedTypeRef =
+    if compareErasedGlb(tp1, tp2) <= 0 then tp1
+    else tp2
+
+  /** A comparison function that induces a total order on erased types,
+    * where `A <= B` implies that the erasure of `A & B` should be A.
+    *
+    * This order respects the following properties:
+    *
+    * - ErasedValueTypes <= non-ErasedValueTypes
+    * - arrays <= non-arrays
+    * - primitives <= non-primitives
+    * - real classes <= traits
+    * - subtypes <= supertypes
+    *
+    * Since this isn't enough to order to unrelated classes, we use
+    * lexicographic ordering of the class symbol full name as a tie-breaker.
+    * This ensure that `A <= B && B <= A` iff `A =:= B`.
+    *
+    * @see erasedGlb
+    */
+  private def compareErasedGlb(tp1: ErasedTypeRef, tp2: ErasedTypeRef)(using Context): Int =
+    def compareClasses(cls1: ClassSymbol, cls2: ClassSymbol): Int =
+      if cls1.isSubclass(cls2) then -1
+      else if cls2.isSubclass(cls1) then 1
+      else cls1.fullName.toString.compareTo(cls2.fullName.toString)
+    end compareClasses
+
+    (tp1, tp2) match
+      case _ if tp1 == tp2 =>
+        // fast path
+        0
+
+      case (ClassRef(cls1), _) if cls1.isDerivedValueClass =>
+        tp2 match
+          case ClassRef(cls2) if cls2.isDerivedValueClass =>
+            compareClasses(cls1, cls2)
+          case _ =>
+            -1
+      case (_, ClassRef(cls2)) if cls2.isDerivedValueClass =>
+        1
+
+      case (tp1: ArrayTypeRef, tp2: ArrayTypeRef) =>
+        compareErasedGlb(tp1.elemType, tp2.elemType)
+      case (_: ArrayTypeRef, _) =>
+        -1
+      case (_, _: ArrayTypeRef) =>
+        1
+
+      case (ClassRef(cls1), ClassRef(cls2)) =>
+        val isPrimitive1 = defn.isPrimitiveValueClass(cls1)
+        val isPrimitive2 = defn.isPrimitiveValueClass(cls2)
+        if isPrimitive1 && isPrimitive2 then compareClasses(cls1, cls2)
+        else if isPrimitive1 then -1
+        else if isPrimitive2 then 1
+        else
+          val isRealClass1 = !cls1.is(Trait)
+          val isRealClass2 = !cls2.is(Trait)
+          if isRealClass1 && isRealClass2 then compareClasses(cls1, cls2)
+          else if isRealClass1 then -1
+          else if isRealClass2 then 1
+          else compareClasses(cls1, cls2)
+  end compareErasedGlb
 end Erasure

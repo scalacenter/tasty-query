@@ -137,6 +137,11 @@ object Types {
 
     def erase(tpe: Type, language: SourceLanguage)(using Context): ErasedTypeRef =
       Erasure.erase(tpe, language)
+
+    extension (typeRef: ArrayTypeRef)
+      def elemType: ErasedTypeRef =
+        if typeRef.dimensions == 1 then typeRef.base
+        else ArrayTypeRef(typeRef.base, typeRef.dimensions - 1)
   end ErasedTypeRef
 
   private[tastyquery] enum ResolveMemberResult:
@@ -259,6 +264,9 @@ object Types {
           case None        => None
       case tpe: TypeProxy =>
         tpe.superType.classSymbol
+      case tpe: TypeLambda =>
+        // apparently we need this :(
+        tpe.resultType.classSymbol
       case _ =>
         None
 

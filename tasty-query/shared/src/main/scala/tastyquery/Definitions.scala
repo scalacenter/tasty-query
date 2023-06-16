@@ -366,6 +366,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   lazy val StringClass = javaLangPackage.requiredClass("String")
 
+  lazy val ProductClass = scalaPackage.requiredClass("Product")
+
   private[tastyquery] lazy val targetNameAnnotClass = scalaAnnotationPackage.optionalClass("targetName")
 
   private[tastyquery] lazy val internalChildAnnotClass = scalaAnnotationInternalPackage.optionalClass("Child")

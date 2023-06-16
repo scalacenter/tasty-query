@@ -114,6 +114,12 @@ object Names {
     val Class: TypeName = typeName("Class")
     val Object: TypeName = typeName("Object")
 
+    val Product: TypeName = typeName("Product")
+    val Tuple: TypeName = typeName("Tuple")
+    val NonEmptyTuple: TypeName = typeName("NonEmptyTuple")
+    val TupleCons: TypeName = typeName("*:")
+    val EmptyTuple: TypeName = typeName("EmptyTuple")
+
     val RefinedClassMagic: TypeName = typeName("<refinement>")
     val ByNameParamClassMagic: TypeName = typeName("<byname>")
     val RepeatedParamClassMagic: TypeName = typeName("<repeated>")

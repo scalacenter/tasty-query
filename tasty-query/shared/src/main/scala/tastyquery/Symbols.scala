@@ -735,6 +735,7 @@ object Symbols {
     private var myAppliedRef: Type | Null = null
     private var mySelfType: Type | Null = null
     private var myLinearization: List[ClassSymbol] | Null = null
+    private var myErasure: ErasedTypeRef.ClassRef | Null = null
     private var mySealedChildren: List[SealedChild] | Null = null
 
     protected override def doCheckCompleted(): Unit =
@@ -747,7 +748,7 @@ object Symbols {
       parents.nonEmpty && parents.head.classSymbol.exists(_ == defn.AnyValClass)
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
-      isValueClass && !defn.isPrimitiveValueClass(this)
+      isValueClass && this != defn.AnyValClass && !defn.isPrimitiveValueClass(this)
 
     /** Get the companion class of this class, if it exists:
       * - for `class C` => `object class C[$]`
@@ -898,11 +899,33 @@ object Symbols {
 
     private[tastyquery] final def withSpecialErasure(specialErasure: () => ErasedTypeRef.ClassRef): this.type =
       if mySpecialErasure.isDefined then throw IllegalStateException(s"reassignment of the special erasure of $this")
+      if myErasure != null then throw IllegalStateException(s"the erasure of $this was already computed")
       mySpecialErasure = Some(specialErasure)
       this
 
-    private[tastyquery] final def specialErasure(using Context): Option[() => ErasedTypeRef.ClassRef] =
-      mySpecialErasure
+    /** The erasure of this class; nonsensical for `scala.Array`. */
+    private[tastyquery] final def erasure(using Context): ErasedTypeRef.ClassRef =
+      val local = myErasure
+      if local != null then local
+      else
+        val computed = computeErasure()
+        myErasure = computed
+        computed
+    end erasure
+
+    private def computeErasure()(using Context): ErasedTypeRef.ClassRef =
+      mySpecialErasure match
+        case Some(special) =>
+          special()
+        case None =>
+          if owner == defn.scalaPackage then
+            // The classes with special erasures that are loaded from Scala 2 pickles or .tasty files
+            name match
+              case tpnme.AnyVal | tpnme.TupleCons    => defn.ObjectClass.erasure
+              case tpnme.Tuple | tpnme.NonEmptyTuple => defn.ProductClass.erasure
+              case _                                 => ErasedTypeRef.ClassRef(this)
+          else ErasedTypeRef.ClassRef(this)
+    end computeErasure
 
     // DeclaringSymbol implementation
 

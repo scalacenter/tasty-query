@@ -2636,4 +2636,35 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     assert(clue(prefix.lookupMember(termName("nonExistentTerm"))).isEmpty)
   }
+
+  testWithContext("scala-2-type-lambda-in-args") {
+    val IsMapClass = ctx.findTopLevelClass("scala.collection.generic.IsMap")
+
+    val IterableClass = ctx.findTopLevelClass("scala.collection.Iterable")
+    val Tuple2Class = ctx.findTopLevelClass("scala.Tuple2")
+
+    val applySym = IsMapClass.findNonOverloadedDecl(termName("apply"))
+    applySym.declaredType match
+      case mt: MethodType =>
+        assert(clue(mt).paramNames.sizeIs == 1)
+        mt.resultType match
+          case resultApplied: AppliedType =>
+            assert(resultApplied.args.sizeIs == 4, clues(mt))
+            resultApplied.args(2) match
+              case tl: TypeLambda =>
+                assert(clue(tl).paramNames.sizeIs == 2)
+                val refs = tl.paramRefs
+                assert(
+                  clue(tl).resultType.isApplied(
+                    _.isRef(IterableClass),
+                    List(_.isApplied(_.isRef(Tuple2Class), List(_ eq refs(0), _ eq refs(1))))
+                  )
+                )
+              case _ =>
+                fail("unexpected type for 'apply'", clues(mt))
+          case _ =>
+            fail("unexpected type for 'apply'", clues(mt))
+      case mt =>
+        fail("unexpected type for 'apply'", clues(mt))
+  }
 }

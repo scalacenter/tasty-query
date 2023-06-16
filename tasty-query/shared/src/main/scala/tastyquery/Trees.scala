@@ -328,6 +328,7 @@ object Trees {
 
   /** fun(args) */
   final case class Apply(fun: TermTree, args: List[TermTree])(span: Span) extends TermTree(span):
+    import Apply.*
 
     private def resolveMethodType(funTpe: Type, args: List[Type])(using Context): Type =
       funTpe.widen match
@@ -343,14 +344,23 @@ object Trees {
       // if it is, then the result type is the type of new.
       original match
         case partial: MethodicType => partial // Nothing to do here, it is partially applied.
-        case _                     => patchNewType(fun, Nil, original)
+        case _                     => computeAppliedNewType(fun).getOrElse(original)
     end calculateType
 
-    /** Possibly patch the type of a fully-applied `New` node.
+    override final def withSpan(span: Span): Apply = Apply(fun, args)(span)
+  end Apply
+
+  object Apply:
+    /** Compute the type of a fully-applied `New` node, if it is indeed one.
       *
       * When the receiver of a constructor application is a `New` node, the
       * result type must be the (applied) class type of the `New` node, instead
       * of the result type of the constructor method (which is `Unit`).
+      *
+      * In addition, when computing the `parents` of a class symbol, we must
+      * find the parents but we want to avoid actually resolving constructor
+      * references, since that is expensive (and, when faced with incorrect
+      * TASTy, breaking everything).
       *
       * We would like to say that we should always use the `tpe` of the `New`
       * node. However, that is not always the case. In *some* situations,
@@ -374,23 +384,28 @@ object Trees {
       *     <init>(x$2, x$1)
       *   }
       */
-    @tailrec
-    private def patchNewType(tree: TermTree, targssTail: List[List[TypeTree]], original: Type)(using Context): Type =
-      tree match
-        case Apply(fn, _)         => patchNewType(fn, targssTail, original)
-        case TypeApply(fn, targs) => patchNewType(fn, targs :: targssTail, original)
-        case Block(stats, expr)   => patchNewType(expr, targssTail, original)
+    private[tastyquery] def computeAppliedNewType(tree: TermTree)(using Context): Option[Type] =
+      computeAppliedNewType(tree, Nil)
 
-        case Select(newObj @ New(_), SignedName(nme.Constructor, _, _)) =>
-          targssTail.foldLeft(newObj.tpe) { (newTpe, targs) =>
+    @tailrec
+    private def computeAppliedNewType(tree: TermTree, targssTail: List[List[TypeTree]])(using Context): Option[Type] =
+      tree match
+        case Apply(fn, _)         => computeAppliedNewType(fn, targssTail)
+        case TypeApply(fn, targs) => computeAppliedNewType(fn, targs :: targssTail)
+        case Block(stats, expr)   => computeAppliedNewType(expr, targssTail)
+
+        case Select(New(tpt), SignedName(nme.Constructor, _, _)) =>
+          val result = targssTail.foldLeft(tpt.toType) { (newTpe, targs) =>
             if targs.nonEmpty && newTpe.typeParams.nonEmpty then newTpe.appliedTo(targs.map(_.toType))
             else newTpe
           }
+          Some(result)
 
-        case _ => original
-    end patchNewType
+        case _ =>
+          None
+    end computeAppliedNewType
 
-    override final def withSpan(span: Span): Apply = Apply(fun, args)(span)
+  end Apply
 
   /** fun[args] */
   final case class TypeApply(fun: TermTree, args: List[TypeTree])(span: Span) extends TermTree(span) {

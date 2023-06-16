@@ -534,7 +534,7 @@ private[pickles] class PickleReader {
         end isByNameParamClass
         if args.isEmpty then tycon
         else if isByNameParamClass(tycon) then ByNameType(args.head)
-        else AppliedType(tycon, args)
+        else AppliedType(tycon, args.map(translateTempPoly(_, isMethod = false)))
       case TYPEBOUNDStpe =>
         val lo = readTypeRef()
         val hi = readTypeRef()

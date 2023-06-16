@@ -117,7 +117,7 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     val RefinedTypeTree = ctx.findTopLevelClass("simple_trees.RefinedTypeTree")
 
     val andType = RefinedTypeTree.findNonOverloadedDecl(name"andType")
-    intercept[UnsupportedOperationException](andType.signedName)
+    assertSigned(andType, "():simple_trees.RefinedTypeTree.AndTypeB")
   }
 
   testWithContext("array types") {
@@ -340,6 +340,22 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
     val arrayOfBoundReducibleSig = MatchType.findNonOverloadedDecl(termName("arrayOfBoundReducibleSig"))
     assertSigned(arrayOfBoundReducibleSig, "(1,scala.Int):scala.Some[]")
+  }
+
+  testWithContext("tuples") {
+    val TuplesClass = ctx.findTopLevelClass("simple_trees.Tuples")
+
+    val takeTupleSig = TuplesClass.findNonOverloadedDecl(termName("takeTuple"))
+    assertSigned(takeTupleSig, "(scala.Product):scala.Unit")
+
+    val takeNonEmptyTupleSig = TuplesClass.findNonOverloadedDecl(termName("takeNonEmptyTuple"))
+    assertSigned(takeNonEmptyTupleSig, "(scala.Product):scala.Unit")
+
+    val takeStarColonSig = TuplesClass.findNonOverloadedDecl(termName("takeStarColon"))
+    assertSigned(takeStarColonSig, "(java.lang.Object):scala.Unit")
+
+    val takeEmptyTupleSig = TuplesClass.findNonOverloadedDecl(termName("takeEmptyTuple"))
+    assertSigned(takeEmptyTupleSig, "(scala.Tuple$package.EmptyTuple):scala.Unit")
   }
 
 end SignatureSuite
