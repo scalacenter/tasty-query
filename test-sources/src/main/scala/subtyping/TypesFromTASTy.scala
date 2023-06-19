@@ -70,12 +70,22 @@ class TypesFromTASTy:
     case OldStyleEnum.Parametric[Int] => Double
     case OldStyleEnum.Singleton2.type => String
     case OldStyleEnum.Parametric[t]   => t
+
+  opaque type InstanceOpaque <: AnyVal = Int
+
+  val instanceOpaqueVal: InstanceOpaque = 5
+
+  def makeInstanceOpaque(x: Int): InstanceOpaque = x
 end TypesFromTASTy
 
 object TypesFromTASTy:
   final class Inv[A]
 
   final class Consumer[-A]
+
+  opaque type Opaque <: AnyVal = Int
+
+  def makeOpaque(x: Int): Opaque = x
 
   opaque type InvariantOpaque[A] = A
 
@@ -92,4 +102,7 @@ object TypesFromTASTy:
     case object Singleton2 extends OldStyleEnum[Nothing]
     case class Parametric[+T](x: T) extends OldStyleEnum[T]
   end OldStyleEnum
+
+  val instance1: TypesFromTASTy = new TypesFromTASTy()
+  val instance2: TypesFromTASTy = new TypesFromTASTy()
 end TypesFromTASTy

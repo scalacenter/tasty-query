@@ -508,7 +508,23 @@ object Symbols {
                 case None                           => default
             case NoPrefix =>
               throw InvalidProgramStructureException(s"invalid NoPrefix for class type parameter $this")
-        case _ =>
+
+        case sym: TypeMemberSymbol =>
+          sym.typeDef match
+            case TypeMemberDefinition.OpaqueTypeAlias(_, alias) =>
+              /* When selecting an opaque type alias on its owner's this type,
+               * it is transparent.
+               */
+              prefix match
+                case prefix: ThisType if prefix.cls == sym.owner =>
+                  // By definition, asSeenFrom would be a no-op in this case
+                  TypeAlias(alias)
+                case _ =>
+                  default
+            case _ =>
+              default
+
+        case sym: LocalTypeParamSymbol =>
           default
     end boundsAsSeenFrom
 
