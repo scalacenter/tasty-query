@@ -429,7 +429,7 @@ object Types {
               case None        => tp
       case tp: AppliedType =>
         val tycon1 = tp.tycon.dealias1(keepOpaques)
-        if (tycon1 ne tp.tycon) tp.superType.dealias1(keepOpaques)
+        if (tycon1 ne tp.tycon) || tycon1.isInstanceOf[TypeLambda] then tp.superType.dealias1(keepOpaques)
         else this
       case tp: AnnotatedType =>
         tp.typ.dealias1(keepOpaques)
@@ -1260,7 +1260,7 @@ object Types {
 
     override def superType(using Context): Type =
       tycon match
-        //case tycon: HKTypeLambda => defn.AnyType
+        case tycon: TypeLambda  => tycon.appliedTo(args)
         case TypeRef.OfClass(_) => tycon
         case tycon: TypeProxy   => tycon.superType.applyIfParameterized(args)
         case _                  => defn.AnyType

@@ -308,7 +308,9 @@ private[tastyquery] object Subtyping:
         isMatchingApply(tp1)
 
       case _ =>
-        false
+        val dealiased = tp2.dealias
+        if dealiased ne tp2 then isSubtype(tp1, dealiased)
+        else false
   end compareAppliedType2
 
   private def isSubArgs(tp1: Type, args1: List[Type], args2: List[Type], tparams: List[TypeConstructorParam])(

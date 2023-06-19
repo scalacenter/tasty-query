@@ -14,6 +14,10 @@ class TypesFromTASTy:
 
   type TToTType[T] = T => T
 
+  val appliedTypeLambda: ([X] =>> Int)[String] = 0
+
+  val appliedTypeLambda2: (([X] =>> [Y <: Int] =>> Boolean)[Any][0]) = false
+
   val iarrayOfInt: IArray[Int] = IArray(1)
 
   val invariantOpaqueOfInt: InvariantOpaque[Int] = makeInvariantOpaque(5)
