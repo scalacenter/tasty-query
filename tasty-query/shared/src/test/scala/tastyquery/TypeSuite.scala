@@ -858,6 +858,32 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(defn.NothingClass.parentClasses) == List(defn.AnyClass))
   }
 
+  testWithContext("parents-of-tuple-classes") {
+    val SerializableClass = ctx.findTopLevelClass("java.io.Serializable")
+    val MirrorSingletonClass = ctx.findStaticClass("scala.deriving.Mirror.Singleton")
+    val TupleClass = ctx.findTopLevelClass("scala.Tuple")
+    val NonEmptyTupleClass = ctx.findTopLevelClass("scala.NonEmptyTuple")
+    val TConsClass = ctx.findTopLevelClass("scala.*:")
+    val EmptyTupleClass = ctx.findStaticModuleClass("scala.Tuple$package.EmptyTuple")
+    val Tuple2Class = ctx.findTopLevelClass("scala.Tuple2")
+    val ProductClass = ctx.findTopLevelClass("scala.Product")
+    val Product2Class = ctx.findTopLevelClass("scala.Product2")
+
+    assert(clue(TupleClass.parentClasses) == List(defn.ObjectClass, ProductClass))
+    assert(
+      clue(EmptyTupleClass.parentClasses) == List(
+        defn.ObjectClass,
+        TupleClass,
+        ProductClass,
+        SerializableClass,
+        MirrorSingletonClass
+      )
+    )
+    assert(clue(NonEmptyTupleClass.parentClasses) == List(defn.ObjectClass, TupleClass))
+    assert(clue(TConsClass.parentClasses) == List(defn.ObjectClass, NonEmptyTupleClass))
+    assert(clue(Tuple2Class.parentClasses) == List(TConsClass, Product2Class, ProductClass, SerializableClass))
+  }
+
   testWithContext("java-class-signatures-[RecClass]") {
     val RecClass = ctx.findTopLevelClass("javadefined.RecClass")
 

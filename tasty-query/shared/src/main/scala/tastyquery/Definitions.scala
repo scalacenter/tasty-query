@@ -70,6 +70,19 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   val ThrowableType: TypeRef = TypeRef(javaLangPackage.packageRef, typeName("Throwable"))
 
+  val TupleType: TypeRef = TypeRef(scalaPackage.packageRef, tpnme.Tuple)
+
+  val EmptyTupleType: TermRef =
+    TermRef(TermRef(scalaPackage.packageRef, termName("Tuple$package")), nme.EmptyTuple)
+
+  val NonEmptyTupleType: TypeRef = TypeRef(scalaPackage.packageRef, tpnme.NonEmptyTuple)
+
+  val TupleConsTypeUnapplied: TypeRef = TypeRef(scalaPackage.packageRef, tpnme.TupleCons)
+  def TupleConsTypeOf(head: Type, tail: Type): AppliedType = AppliedType(TupleConsTypeUnapplied, List(head, tail))
+
+  def GenericTupleTypeOf(elementTypes: List[Type]): Type =
+    elementTypes.foldRight[Type](EmptyTupleType)(TupleConsTypeOf(_, _))
+
   // Magic symbols that are not found on the classpath, but rather created by hand
 
   private def createSpecialClass(name: TypeName, parents: List[Type], flags: FlagSet): ClassSymbol =
@@ -378,6 +391,11 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     sym == IntClass || sym == LongClass || sym == FloatClass || sym == DoubleClass ||
       sym == BooleanClass || sym == ByteClass || sym == ShortClass || sym == CharClass ||
       sym == UnitClass
+
+  private lazy val TupleNClasses = (1 to 22).map(n => scalaPackage.requiredClass(s"Tuple$n")).toSet
+
+  def isTupleNClass(sym: ClassSymbol): Boolean =
+    sym.owner == scalaPackage && TupleNClasses.contains(sym)
 
   lazy val uninitializedMethod: Option[TermSymbol] =
     scalaCompiletimePackage.getDecl(moduleClassName("package$package")).flatMap { packageObjectClass =>

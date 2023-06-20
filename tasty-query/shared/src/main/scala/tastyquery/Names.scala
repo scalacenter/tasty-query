@@ -72,6 +72,8 @@ object Names {
     val javaPackageName: SimpleName = termName("java")
     val langPackageName: SimpleName = termName("lang")
 
+    val EmptyTuple: SimpleName = termName("EmptyTuple")
+
     val m_== : SimpleName = termName("==")
     val m_!= : SimpleName = termName("!=")
     val m_## : SimpleName = termName("##")
@@ -118,6 +120,8 @@ object Names {
     val Tuple: TypeName = typeName("Tuple")
     val NonEmptyTuple: TypeName = typeName("NonEmptyTuple")
     val TupleCons: TypeName = typeName("*:")
+
+    @deprecated("you probably meant the term name `nme.EmptyTuple` instead", since = "0.8.3")
     val EmptyTuple: TypeName = typeName("EmptyTuple")
 
     val RefinedClassMagic: TypeName = typeName("<refinement>")
