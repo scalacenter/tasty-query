@@ -106,6 +106,9 @@ private[tastyquery] object Scala2Erasure:
       }
     case tpw: TypeProxy =>
       pseudoSymbol(tpw.underlying)
+    case tpw: TypeLambda =>
+      // in dotc, a TypeLambda is a TypeProxy whose underlying is Any, so we mimic this here
+      defn.AnyClass
     case tpw: OrType =>
       Erasure.erase(tpw, SourceLanguage.Scala2) match
         case ErasedTypeRef.ClassRef(cls)      => cls

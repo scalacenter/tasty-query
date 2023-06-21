@@ -2794,4 +2794,44 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case pt =>
         fail("unexpected type", clues(pt))
   }
+
+  testWithContext("scala-2-higher-kinded-type-param") {
+    val AccumulatorClass = ctx.findTopLevelClass("scala.jdk.Accumulator")
+    val MutableSeqClass = ctx.findTopLevelClass("scala.collection.mutable.Seq")
+
+    val typeParams = AccumulatorClass.typeParams
+    assert(clue(typeParams).map(_.name) == List(typeName("A"), typeName("CC"), typeName("C")))
+
+    val tpA = typeParams(0)
+    assert(clue(tpA.bounds).low.isNothing)
+    assert(clue(tpA.bounds).high.isAny)
+
+    val tpCC = typeParams(1)
+    assert(clue(tpCC.bounds).low.isNothing)
+    tpCC.bounds.high match
+      case tl: TypeLambda =>
+        assert(clue(tl.paramNames) == List(typeName("X")))
+        val paramRef = tl.paramRefs.head
+        assert(clue(tl.resultType).isApplied(_.isRef(MutableSeqClass), List(_ eq paramRef)))
+      case high =>
+        fail("unexpected upper bound for CC", clues(high))
+
+    val tpC = typeParams(2)
+    assert(clue(tpC.bounds).low.isNothing)
+    clue(tpC.bounds).high match
+      case high: AppliedType =>
+        assert(clue(high).tycon.isRef(MutableSeqClass))
+        high.args.head match
+          case typeArg: TypeRef =>
+            assert(clue(typeArg.optSymbol) == Some(tpA))
+            typeArg.prefix match
+              case prefix: ThisType =>
+                assert(clue(prefix).cls == AccumulatorClass)
+              case _ =>
+                fail("unexpected upper bound for C", clues(high))
+          case high =>
+            fail("unexpected upper bound for C", clues(high))
+      case high =>
+        fail("unexpected upper bound for C", clues(high))
+  }
 }

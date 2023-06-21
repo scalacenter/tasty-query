@@ -487,10 +487,13 @@ object Types {
 
     /** Is this type exactly Nothing (no vars, aliases, refinements etc allowed)? */
     private[tastyquery] final def isExactlyNothing(using Context): Boolean = this match
-      case tp: TypeRef =>
-        tp.name == tpnme.Nothing && tp.isSpecificClass(defn.NothingClass)
+      case tp: TypeRef if tp.name == tpnme.Nothing =>
+        tp.prefix.match
+          case prefix: PackageRef => prefix.symbol == defn.scalaPackage
+          case _                  => false
       case _ =>
         false
+    end isExactlyNothing
 
     /** Is this type considered as "FromJavaObject" for the purposes of subtyping?
       *

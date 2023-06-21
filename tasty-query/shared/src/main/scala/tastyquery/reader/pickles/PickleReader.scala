@@ -243,20 +243,16 @@ private[pickles] class PickleReader {
             else LocalTypeParamSymbol.create(name1, owner)
           else TypeMemberSymbol.create(name1, owner)
         storeResultInEntries(sym)
-        val tpe0 = readSymType()
-        val tpe = translateTempPoly(tpe0, isMethod = false)
+        val tpe = readSymType()
+        val bounds = translateTempPolyForTypeMember(tpe)
         sym match
           case sym: TypeMemberSymbol =>
-            sym.withDefinition(tpe match
-              case tpe: WildcardTypeBounds => TypeMemberDefinition.AbstractType(tpe.bounds)
-              case _                       => TypeMemberDefinition.TypeAlias(tpe)
+            sym.withDefinition(bounds match
+              case bounds: RealTypeBounds => TypeMemberDefinition.AbstractType(bounds)
+              case TypeAlias(alias)       => TypeMemberDefinition.TypeAlias(alias)
             )
           case sym: TypeParamSymbol =>
-            tpe match
-              case tpe: WildcardTypeBounds => sym.setBounds(tpe.bounds)
-              case tpe: TypeLambda         => sym.setBounds(TypeAlias(tpe)) // TODO Higher-kinded type parameters
-              case _ =>
-                throw AssertionError(s"unexpected type $tpe for $sym, owner is $owner")
+            sym.setBounds(bounds)
         sym
       case CLASSsym =>
         val tname = name.toTypeName
@@ -298,7 +294,7 @@ private[pickles] class PickleReader {
           else TermSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles
         val tpe = readSymType()
-        val unwrappedTpe = translateTempPoly(tpe, flags.is(Method))
+        val unwrappedTpe = translateTempPolyForMethod(tpe)
         val ctorPatchedTpe =
           if flags.is(Method) && name == nme.Constructor then patchConstructorType(sym.owner.asClass, unwrappedTpe)
           else unwrappedTpe
@@ -585,7 +581,7 @@ private[pickles] class PickleReader {
         end isByNameParamClass
         if args.isEmpty then tycon
         else if isByNameParamClass(tycon) then ByNameType(args.head)
-        else AppliedType(tycon, args.map(translateTempPoly(_, isMethod = false)))
+        else AppliedType(tycon, args.map(translateTempPolyForTypeArg(_)))
       case TYPEBOUNDStpe =>
         val lo = readTypeRef()
         val hi = readTypeRef()
@@ -659,21 +655,46 @@ private[pickles] class PickleReader {
     } else Nil
   }
 
-  /** Convert temp poly type to poly type and leave other types alone. */
-  private def translateTempPoly(tp: Type, isMethod: Boolean)(using Context): Type = tp match
+  /** Convert temp poly type to TypeLambda and leave other types alone. */
+  private def translateTempPolyForTypeArg(tp: Type)(using Context): Type =
+    translateTempPolyForTypeMember(tp) match
+      case TypeAlias(alias)       => alias
+      case bounds: RealTypeBounds => WildcardTypeBounds(bounds)
+  end translateTempPolyForTypeArg
+
+  /** Convert temp poly type to TypeLambda and leave other types alone. */
+  private def translateTempPolyForTypeMember(tp: Type)(using Context): TypeBounds = tp match
     case tp: WildcardTypeBounds =>
-      WildcardTypeBounds(
-        RealTypeBounds(translateTempPoly(tp.bounds.low, isMethod), translateTempPoly(tp.bounds.high, isMethod))
-      )
+      def rec(bound: Type): Type =
+        translateTempPolyForTypeMember(bound).asInstanceOf[TypeAlias].alias
+      RealTypeBounds(rec(tp.bounds.low), rec(tp.bounds.high))
+
     case TempPolyType(tparams, restpe) =>
-      // This check used to read `owner.isTerm` but that wasn't always correct,
-      // I'm not sure `owner.is(Method)` is 100% correct either but it seems to
-      // work better. See the commit message where this change was introduced
-      // for more information.
-      val localTParams = tparams.asInstanceOf[List[LocalTypeParamSymbol]] // no class type params in Poly/Lambda Types
-      val factory = if isMethod then PolyType else TypeLambda
-      factory.fromParams(localTParams, restpe)
-    case tp => tp
+      val localTParams = tparams.asInstanceOf[List[LocalTypeParamSymbol]] // no class type params in type lambdas
+      restpe match
+        case restpe: WildcardTypeBounds =>
+          val low =
+            if restpe.bounds.low.isExactlyNothing then restpe.bounds.low
+            else TypeLambda.fromParams(localTParams, restpe.bounds.low)
+          val high = TypeLambda.fromParams(localTParams, restpe.bounds.high)
+          RealTypeBounds(low, high)
+        case restpe: Type =>
+          val alias = TypeLambda.fromParams(localTParams, restpe)
+          TypeAlias(alias)
+
+    case tp: Type =>
+      TypeAlias(tp)
+  end translateTempPolyForTypeMember
+
+  /** Convert temp poly type to PolyType and leave other types alone. */
+  private def translateTempPolyForMethod(tp: Type)(using Context): Type = tp match
+    case TempPolyType(tparams, restpe) =>
+      val localTParams = tparams.asInstanceOf[List[LocalTypeParamSymbol]] // no class type params in methods
+      PolyType.fromParams(localTParams, restpe)
+
+    case tp =>
+      tp
+  end translateTempPolyForMethod
 
   private def noSuchTypeTag(tag: Int, end: Int): Nothing =
     errorBadSignature("bad type tag: " + tag)
