@@ -105,6 +105,22 @@ private[pickles] class PickleReader {
   def readMaybeExternalSymbolRef()(using Context, PklStream, Entries, Index): MaybeExternalSymbol =
     readMaybeExternalSymbolAt(pkl.readNat())
 
+  def ensureReadAllLocalDeclsOfRefinement(ownerIndex: Int)(using Context, PklStream, Entries, Index): Unit =
+    index.loopWithIndices { (offset, i) =>
+      val idx = index(i)
+      val tag = pkl.bytes(idx).toInt
+      if tag >= firstSymTag && tag <= lastSymTag then
+        val include = pkl.unsafeFork(idx) {
+          pkl.readByte() // tag
+          pkl.readNat() // length
+          pkl.readNat() // name
+          val ownerRef = pkl.readNat()
+          ownerRef == ownerIndex
+        }
+        if include then readLocalSymbolAt(i).asInstanceOf[TermOrTypeSymbol]
+    }
+  end ensureReadAllLocalDeclsOfRefinement
+
   def readMaybeExternalSymbolAt(i: Int)(using Context, PklStream, Entries, Index): MaybeExternalSymbol =
     // Similar to at(), but sometimes readMaybeExternalSymbol stores the result itself in entries
     val tOpt = entries(i).asInstanceOf[MaybeExternalSymbol | Null]
@@ -547,19 +563,24 @@ private[pickles] class PickleReader {
         // TODO? createNullableTypeBounds(lo, hi)
         WildcardTypeBounds(RealTypeBounds(lo, hi))
       case REFINEDtpe =>
-        /*val clazz = readSymbolRef().asClass
-        val decls = symScope(clazz)
-        symScopes(clazz) = EmptyScope // prevent further additions
+        val clazzIndex = pkl.readNat()
+        val clazz = readLocalSymbolAt(clazzIndex).asClass
         val parents = pkl.until(end, () => readTypeRef())
         val parent = parents.reduceLeft(AndType(_, _))
-        if (decls.isEmpty) parent
-        else {
-          def subst(info: Type, rt: RecType) = info.substThis(clazz.asClass, rt.recThis)
-          def addRefinement(tp: Type, sym: Symbol) = RefinedType(tp, sym.name, sym.info)
-          val refined = decls.toList.foldLeft(parent)(addRefinement)
-          RecType.closeOver(rt => refined.substThis(clazz, rt.recThis))
-        }*/
-        defn.AnyType
+        ensureReadAllLocalDeclsOfRefinement(clazzIndex)
+        val decls = clazz.declarations
+        if decls.isEmpty then parent
+        else
+          val refined = decls.toList.foldLeft(parent) { (parent, sym) =>
+            sym match
+              case sym: TypeMemberSymbol =>
+                TypeRefinement(parent, sym.name, sym.bounds)
+              case sym: TermSymbol =>
+                TermRefinement(parent, !sym.isAnyOf(Method | Mutable), sym.name, sym.declaredType)
+              case _: TypeParamSymbol | _: ClassSymbol =>
+                errorBadSignature(s"invalid symbol in refinement class: $sym of type ${sym.getClass()}")
+          }
+          RecType.fromRefinedClassDecls(refined, clazz)
       case CLASSINFOtpe =>
         val clazz = readLocalSymbolRef()
         TempClassInfoType(pkl.until(end, () => readTypeRef()))

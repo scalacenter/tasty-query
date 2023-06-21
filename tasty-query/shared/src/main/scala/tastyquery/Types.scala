@@ -1853,6 +1853,12 @@ object Types {
   object RecType:
     def apply(parentExp: RecType => Type): RecType =
       new RecType(parentExp) // TODO? Perform normalization like dotc?
+
+    private[tastyquery] def fromRefinedClassDecls(tpe: Type, refinedCls: ClassSymbol)(using Context): Type =
+      val recType = RecType(rt => Substituters.substRefinementThis(tpe, refinedCls, rt.recThis))
+      if recType.parent eq tpe then tpe
+      else recType
+    end fromRefinedClassDecls
   end RecType
 
   final class RecThis(binder: RecType) extends BoundType with SingletonType:

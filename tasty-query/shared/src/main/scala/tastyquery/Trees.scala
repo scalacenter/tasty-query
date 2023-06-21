@@ -709,10 +709,7 @@ object Trees {
       }
 
       if refined eq base then base
-      else
-        val recType = RecType(rt => Substituters.substRefinementThis(refined, refinedCls, rt.recThis))
-        if recType.parent eq refined then refined
-        else recType
+      else RecType.fromRefinedClassDecls(refined, refinedCls)
     end calculateType
 
     private def makeRefinedBounds(name: TypeName, rhs: TypeDefinitionTree)(using Context): TypeBounds =
