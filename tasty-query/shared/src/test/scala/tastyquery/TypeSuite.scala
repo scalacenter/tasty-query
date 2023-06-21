@@ -2760,4 +2760,38 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case pt =>
         fail("unexpected type", clues(pt))
   }
+
+  testWithContext("scala-2-class-constructor-types") {
+    val SomeClass = ctx.findTopLevelClass("scala.Some")
+    val ctor = SomeClass.findNonOverloadedDecl(nme.Constructor)
+    ctor.declaredType match
+      case pt: PolyType =>
+        assert(clue(pt).paramNames == List(typeName("A")))
+        val typeParamRef = pt.paramRefs.head
+        pt.resultType match
+          case mt: MethodType =>
+            assert(clue(mt).paramNames == List(termName("value")))
+            assert(clue(mt).paramTypes.head eq typeParamRef)
+            assert(clue(mt).resultType.isRef(defn.UnitClass))
+          case _ =>
+            fail("unexpected type", clues(pt))
+      case pt =>
+        fail("unexpected type", clues(pt))
+  }
+
+  testWithContext("scala-2-trait-constructor-types") {
+    val MapClass = ctx.findTopLevelClass("scala.collection.immutable.Map")
+    val ctor = MapClass.findNonOverloadedDecl(nme.Constructor)
+    ctor.declaredType match
+      case pt: PolyType =>
+        assert(clue(pt).paramNames == List(typeName("K"), typeName("V")))
+        pt.resultType match
+          case mt: MethodType =>
+            assert(clue(mt).paramNames == Nil)
+            assert(clue(mt).resultType.isRef(defn.UnitClass))
+          case _ =>
+            fail("unexpected type", clues(pt))
+      case pt =>
+        fail("unexpected type", clues(pt))
+  }
 }

@@ -8,6 +8,7 @@ import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
+import tastyquery.Substituters
 import tastyquery.Symbols.*
 import tastyquery.Types.*
 
@@ -215,7 +216,7 @@ private[pickles] class PickleReader {
     val flags = pickleFlagsToFlags(pickleFlags)
     val name =
       if pickleFlags.isType && flags.is(Module) then name1.toTermName.withObjectSuffix.toTypeName
-      else if flags.is(Method) && name1 == Scala2Constructor then nme.Constructor
+      else if flags.is(Method) && (name1 == Scala2Constructor || name1 == Scala2TraitConstructor) then nme.Constructor
       else name1
 
     val (privateWithin, infoRef) = {
@@ -267,6 +268,7 @@ private[pickles] class PickleReader {
         val tpe = readSymType()
         val typeParams = atNoCache(infoRef)(readTypeParams())
         if isRefinementClass(cls) then return cls // by-pass further assignments, including Flags
+        cls.withTypeParams(typeParams)
         val scala2ParentTypes = tpe match
           case TempPolyType(tparams, restpe: TempClassInfoType) =>
             assert(tparams.corresponds(typeParams)(_ eq _)) // should reuse the class type params
@@ -284,7 +286,6 @@ private[pickles] class PickleReader {
           else scala2ParentTypes
         val givenSelfType = if atEnd then None else Some(readTypeRef())
         cls.withParentsDirect(parentTypes)
-        cls.withTypeParams(typeParams)
         cls.withGivenSelfType(givenSelfType)
         cls
       case VALsym =>
@@ -298,7 +299,10 @@ private[pickles] class PickleReader {
         storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles
         val tpe = readSymType()
         val unwrappedTpe = translateTempPoly(tpe, flags.is(Method))
-        sym.withDeclaredType(unwrappedTpe)
+        val ctorPatchedTpe =
+          if flags.is(Method) && name == nme.Constructor then patchConstructorType(sym.owner.asClass, unwrappedTpe)
+          else unwrappedTpe
+        sym.withDeclaredType(ctorPatchedTpe)
       case MODULEsym =>
         val sym = TermSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym)
@@ -314,6 +318,31 @@ private[pickles] class PickleReader {
     sym.setAnnotations(Nil) // TODO Read Scala 2 annotations
     sym
   }
+
+  private def patchConstructorType(cls: ClassSymbol, tpe: Type)(using Context): Type =
+    def resultToUnit(tpe: Type): Type =
+      tpe match
+        case tpe: PolyType =>
+          tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypeBounds, resultToUnit(tpe.resultType))
+        case tpe: MethodType =>
+          tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypes, resultToUnit(tpe.resultType))
+        case _ =>
+          defn.UnitType
+
+    val tpe1 = resultToUnit(tpe)
+
+    val typeParams = cls.typeParams
+    if typeParams.isEmpty then tpe1
+    else
+      /* Make a PolyType with the same type parameters as the class, and
+       * subsitute references to them of the form `C.this.T` by the
+       * corresponding `paramRefs` of the `PolyType`.
+       */
+      PolyType(typeParams.map(_.name))(
+        pt => typeParams.map(p => Substituters.substLocalThisClassTypeParams(p.bounds, typeParams, pt.paramRefs)),
+        pt => Substituters.substLocalThisClassTypeParams(tpe1, typeParams, pt.paramRefs)
+      )
+  end patchConstructorType
 
   def readChildren()(using Context, PklStream, Entries, Index): Unit =
     val tag = pkl.readByte()
@@ -836,6 +865,7 @@ private[reader] object PickleReader {
   type MaybeExternalSymbol = Symbol | ExternalSymbolRef | NoExternalSymbolRef
 
   private val Scala2Constructor: SimpleName = termName("this")
+  private val Scala2TraitConstructor: SimpleName = termName("$init$")
 
   private[tastyquery] case class TempPolyType(paramSyms: List[TypeParamSymbol], resType: Type)
       extends CustomTransientGroundType
