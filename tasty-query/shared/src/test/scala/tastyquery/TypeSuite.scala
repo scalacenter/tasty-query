@@ -2693,4 +2693,21 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case mt =>
         fail("unexpected type for 'apply'", clues(mt))
   }
+
+  testWithContext("no-scala-2-problematic-getClass") {
+    val primitiveClasses = List(
+      defn.UnitClass,
+      defn.BooleanClass,
+      defn.CharClass,
+      defn.ByteClass,
+      defn.ShortClass,
+      defn.IntClass,
+      defn.LongClass,
+      defn.FloatClass,
+      defn.DoubleClass
+    )
+
+    for primitiveClass <- primitiveClasses do
+      assert(clue(clue(primitiveClass).getAllOverloadedDecls(nme.m_getClass)).isEmpty)
+  }
 }
