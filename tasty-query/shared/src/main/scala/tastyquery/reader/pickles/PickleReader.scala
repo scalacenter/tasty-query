@@ -184,6 +184,9 @@ private[pickles] class PickleReader {
       case external =>
         errorBadSignature(s"expected local symbol reference but found $external")
 
+    if name1 == nme.m_getClass && owner.owner == defn.scalaPackage && HasProblematicGetClass.contains(owner.name) then
+      return NoExternalSymbolRef.instance
+
     /* In some situations, notably involving EXISTENTIALtpe, reading the
      * reference to the owner may re-try to read this very symbol. In that
      * case, the entries(storeInEntriesAt) will have been filled while reading
@@ -259,7 +262,7 @@ private[pickles] class PickleReader {
           if cls.owner == defn.scalaPackage && tname == tpnme.AnyVal then
             // Patch the superclasses of AnyVal to contain Matchable
             scala2ParentTypes :+ defn.MatchableType
-          else if cls.owner == defn.scalaPackage && isTupleClassName(tname) then
+          else if cls.owner == defn.scalaPackage && isTupleClassName(tname) && defn.hasGenericTuples then
             // Patch the superclass of TupleN classes to inherit from *:
             defn.GenericTupleTypeOf(typeParams.map(_.typeRef)) :: scala2ParentTypes.tail
           else scala2ParentTypes
@@ -828,5 +831,17 @@ private[reader] object PickleReader {
       case _ =>
         false
   end isTupleClassName
+
+  private val HasProblematicGetClass: Set[Name] = Set(
+    tpnme.Unit,
+    tpnme.Boolean,
+    tpnme.Char,
+    tpnme.Byte,
+    tpnme.Short,
+    tpnme.Int,
+    tpnme.Long,
+    tpnme.Float,
+    tpnme.Double
+  )
 
 }
