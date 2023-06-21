@@ -294,7 +294,7 @@ private[tastyquery] object Subtyping:
         else
           tycon2.optSymbol match
             case Some(cls2: ClassSymbol) =>
-              (defn.isTupleNClass(cls2) && isSubtype(tp1, defn.GenericTupleTypeOf(tp2.args)))
+              (defn.hasGenericTuples && defn.isTupleNClass(cls2) && isSubtype(tp1, defn.GenericTupleTypeOf(tp2.args)))
                 || level3WithBaseType(tp1, tp2, cls2)
             case Some(sym2: TypeMemberSymbol) if sym2.isTypeAlias =>
               isSubtype(tp1, tp2.superType)
