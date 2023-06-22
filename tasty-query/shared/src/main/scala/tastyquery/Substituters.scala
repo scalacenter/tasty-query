@@ -25,6 +25,14 @@ private[tastyquery] object Substituters:
     if from.isEmpty then tp
     else new SubstLocalParamsMap(from, to).apply(tp)
 
+  def substLocalThisClassTypeParams(
+    tp: TypeMappable,
+    from: List[ClassTypeParamSymbol],
+    to: List[Type]
+  ): tp.ThisTypeMappableType =
+    if from.isEmpty then tp
+    else new SubstLocalThisClassTypeParamsMap(from, to).apply(tp)
+
   def substRefinementThis(tp: TypeMappable, from: ClassSymbol, to: RecThis)(using Context): tp.ThisTypeMappableType =
     new SubstRefinementThisMap(from, to).apply(tp)
 
@@ -127,6 +135,38 @@ private[tastyquery] object Substituters:
         case _ =>
           mapOver(tp)
   end SubstLocalParamsMap
+
+  private final class SubstLocalThisClassTypeParamsMap(from: List[ClassTypeParamSymbol], to: List[Type])
+      extends TypeMap:
+    def apply(tp: Type): Type =
+      tp match
+        case tp: NamedType =>
+          tp.prefix match
+            case NoPrefix =>
+              tp
+            case prefix: ThisType if tp.isSomeClassTypeParamRef =>
+              /* In theory, we should check that `prefix.cls` is indeed the
+               * owner of the class type params we want to substitute.
+               * However, we are not allowed to do that, since that would
+               * require resolving arbitrary `TypeRef`s. Fortunately, by
+               * construction, we know that for any `C.this.T` where `T` is a
+               * class type parameter, `C` is necessarily the owner of `T`.
+               * Therefore, we can get away without looking at `prefix.cls`.
+               */
+              var fs = from
+              var ts = to
+              while fs.nonEmpty && ts.nonEmpty do
+                if tp.isClassTypeParamRef(fs.head) then return ts.head
+                fs = fs.tail
+                ts = ts.tail
+              tp.derivedSelect(this(prefix))
+            case prefix: Type =>
+              tp.derivedSelect(this(prefix))
+        case _: ThisType | _: BoundType =>
+          tp
+        case _ =>
+          mapOver(tp)
+  end SubstLocalThisClassTypeParamsMap
 
   private final class SubstRefinementThisMap(from: ClassSymbol, to: RecThis) extends TypeMap:
     def apply(tp: Type): Type =

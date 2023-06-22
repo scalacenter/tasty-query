@@ -487,10 +487,13 @@ object Types {
 
     /** Is this type exactly Nothing (no vars, aliases, refinements etc allowed)? */
     private[tastyquery] final def isExactlyNothing(using Context): Boolean = this match
-      case tp: TypeRef =>
-        tp.name == tpnme.Nothing && tp.isSpecificClass(defn.NothingClass)
+      case tp: TypeRef if tp.name == tpnme.Nothing =>
+        tp.prefix.match
+          case prefix: PackageRef => prefix.symbol == defn.scalaPackage
+          case _                  => false
       case _ =>
         false
+    end isExactlyNothing
 
     /** Is this type considered as "FromJavaObject" for the purposes of subtyping?
       *
@@ -1853,6 +1856,12 @@ object Types {
   object RecType:
     def apply(parentExp: RecType => Type): RecType =
       new RecType(parentExp) // TODO? Perform normalization like dotc?
+
+    private[tastyquery] def fromRefinedClassDecls(tpe: Type, refinedCls: ClassSymbol)(using Context): Type =
+      val recType = RecType(rt => Substituters.substRefinementThis(tpe, refinedCls, rt.recThis))
+      if recType.parent eq tpe then tpe
+      else recType
+    end fromRefinedClassDecls
   end RecType
 
   final class RecThis(binder: RecType) extends BoundType with SingletonType:

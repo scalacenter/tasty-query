@@ -2693,4 +2693,145 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case mt =>
         fail("unexpected type for 'apply'", clues(mt))
   }
+
+  testWithContext("no-scala-2-problematic-getClass") {
+    val primitiveClasses = List(
+      defn.UnitClass,
+      defn.BooleanClass,
+      defn.CharClass,
+      defn.ByteClass,
+      defn.ShortClass,
+      defn.IntClass,
+      defn.LongClass,
+      defn.FloatClass,
+      defn.DoubleClass
+    )
+
+    for primitiveClass <- primitiveClasses do
+      assert(clue(clue(primitiveClass).getAllOverloadedDecls(nme.m_getClass)).isEmpty)
+  }
+
+  testWithContext("scala-2-refined-types") {
+    val ScalaRunTimeClass = ctx.findTopLevelModuleClass("scala.runtime.ScalaRunTime")
+    val dropSym = ScalaRunTimeClass.findNonOverloadedDecl(termName("drop"))
+    dropSym.declaredType match
+      case pt: PolyType if pt.paramNames.sizeIs == 1 =>
+        val typeParamRef = pt.paramRefs.head
+        pt.resultType match
+          case mt1: MethodType if mt1.paramNames.sizeIs == 2 =>
+            assert(clue(mt1.paramTypes(0)) eq clue(typeParamRef))
+            mt1.resultType match
+              case mt2: MethodType if mt2.paramNames.sizeIs == 1 =>
+                mt2.paramTypes(0) match
+                  case refinement: TypeRefinement =>
+                    assert(clue(refinement).parent.isApplied(_ => true, List(_ eq typeParamRef)))
+                    assert(clue(refinement).refinedName == typeName("C"))
+                    assert(clue(refinement).refinedBounds.low.isNothing)
+                    assert(clue(refinement).refinedBounds.high eq clue(typeParamRef))
+                  case _ =>
+                    fail("unexpected type", clues(pt))
+              case _ =>
+                fail("unexpected type", clues(pt))
+          case _ =>
+            fail("unexpected type", clues(pt))
+      case pt =>
+        fail("unexpected type", clues(pt))
+  }
+
+  testWithContext("scala-2-with-types") {
+    val WrappedStringClass = ctx.findTopLevelClass("scala.collection.immutable.WrappedString")
+    val StepperClass = ctx.findTopLevelClass("scala.collection.Stepper")
+    val EfficientSplitClass = ctx.findStaticClass("scala.collection.Stepper.EfficientSplit")
+
+    val stepperSym = WrappedStringClass.findNonOverloadedDecl(termName("stepper"))
+    stepperSym.declaredType match
+      case pt: PolyType if pt.paramNames.sizeIs == 1 =>
+        val typeParamRef = pt.paramRefs.head
+        pt.resultType match
+          case mt: MethodType if mt.paramNames.sizeIs == 1 =>
+            mt.resultType match
+              case resultType: AndType =>
+                assert(clue(resultType).first eq typeParamRef)
+                assert(clue(resultType).second.isRef(EfficientSplitClass))
+              case _ =>
+                fail("unexpected type", clues(pt))
+          case _ =>
+            fail("unexpected type", clues(pt))
+      case pt =>
+        fail("unexpected type", clues(pt))
+  }
+
+  testWithContext("scala-2-class-constructor-types") {
+    val SomeClass = ctx.findTopLevelClass("scala.Some")
+    val ctor = SomeClass.findNonOverloadedDecl(nme.Constructor)
+    ctor.declaredType match
+      case pt: PolyType =>
+        assert(clue(pt).paramNames == List(typeName("A")))
+        val typeParamRef = pt.paramRefs.head
+        pt.resultType match
+          case mt: MethodType =>
+            assert(clue(mt).paramNames == List(termName("value")))
+            assert(clue(mt).paramTypes.head eq typeParamRef)
+            assert(clue(mt).resultType.isRef(defn.UnitClass))
+          case _ =>
+            fail("unexpected type", clues(pt))
+      case pt =>
+        fail("unexpected type", clues(pt))
+  }
+
+  testWithContext("scala-2-trait-constructor-types") {
+    val MapClass = ctx.findTopLevelClass("scala.collection.immutable.Map")
+    val ctor = MapClass.findNonOverloadedDecl(nme.Constructor)
+    ctor.declaredType match
+      case pt: PolyType =>
+        assert(clue(pt).paramNames == List(typeName("K"), typeName("V")))
+        pt.resultType match
+          case mt: MethodType =>
+            assert(clue(mt).paramNames == Nil)
+            assert(clue(mt).resultType.isRef(defn.UnitClass))
+          case _ =>
+            fail("unexpected type", clues(pt))
+      case pt =>
+        fail("unexpected type", clues(pt))
+  }
+
+  testWithContext("scala-2-higher-kinded-type-param") {
+    val AccumulatorClass = ctx.findTopLevelClass("scala.jdk.Accumulator")
+    val MutableSeqClass = ctx.findTopLevelClass("scala.collection.mutable.Seq")
+
+    val typeParams = AccumulatorClass.typeParams
+    assert(clue(typeParams).map(_.name) == List(typeName("A"), typeName("CC"), typeName("C")))
+
+    val tpA = typeParams(0)
+    assert(clue(tpA.bounds).low.isNothing)
+    assert(clue(tpA.bounds).high.isAny)
+
+    val tpCC = typeParams(1)
+    assert(clue(tpCC.bounds).low.isNothing)
+    tpCC.bounds.high match
+      case tl: TypeLambda =>
+        assert(clue(tl.paramNames) == List(typeName("X")))
+        val paramRef = tl.paramRefs.head
+        assert(clue(tl.resultType).isApplied(_.isRef(MutableSeqClass), List(_ eq paramRef)))
+      case high =>
+        fail("unexpected upper bound for CC", clues(high))
+
+    val tpC = typeParams(2)
+    assert(clue(tpC.bounds).low.isNothing)
+    clue(tpC.bounds).high match
+      case high: AppliedType =>
+        assert(clue(high).tycon.isRef(MutableSeqClass))
+        high.args.head match
+          case typeArg: TypeRef =>
+            assert(clue(typeArg.optSymbol) == Some(tpA))
+            typeArg.prefix match
+              case prefix: ThisType =>
+                assert(clue(prefix).cls == AccumulatorClass)
+              case _ =>
+                fail("unexpected upper bound for C", clues(high))
+          case high =>
+            fail("unexpected upper bound for C", clues(high))
+      case high =>
+        fail("unexpected upper bound for C", clues(high))
+  }
 }
