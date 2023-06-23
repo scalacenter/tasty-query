@@ -181,7 +181,7 @@ private[tastyquery] object Printers:
         print("]")
         print(tpe.resultType)
 
-      case tpe: WildcardTypeBounds =>
+      case tpe: WildcardTypeArg =>
         print("?")
         print(tpe.bounds)
 

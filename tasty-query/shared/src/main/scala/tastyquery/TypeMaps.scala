@@ -39,8 +39,8 @@ private[tastyquery] object TypeMaps {
       tp.derivedTypeRefinement(parent, tp.refinedName, refinedBounds)
     protected def derivedTermRefinement(tp: TermRefinement, parent: Type, refinedType: TypeOrMethodic): Type =
       tp.derivedTermRefinement(parent, tp.refinedName, refinedType)
-    protected def derivedWildcardTypeBounds(tp: WildcardTypeBounds, bounds: TypeBounds): WildcardTypeBounds =
-      tp.derivedWildcardTypeBounds(bounds)
+    protected def derivedWildcardTypeArg(tp: WildcardTypeArg, bounds: TypeBounds): WildcardTypeArg =
+      tp.derivedWildcardTypeArg(bounds)
     protected def derivedAppliedType(tp: AppliedType, tycon: Type, args: List[TypeOrWildcard]): Type =
       tp.derivedAppliedType(tycon, args)
     protected def derivedAndType(tp: AndType, tp1: Type, tp2: Type): Type =
@@ -81,12 +81,12 @@ private[tastyquery] object TypeMaps {
 
     final def mapOver(tp: TypeMappable): tp.ThisTypeMappableType =
       val result: TypeMappable = tp match
-        case tp: Type               => mapOver(tp): tp.ThisTypeMappableType
-        case tp: TypeBounds         => mapOver(tp): tp.ThisTypeMappableType
-        case tp: LambdaType         => mapOverLambda(tp): tp.ThisTypeMappableType
-        case tp: WildcardTypeBounds => derivedWildcardTypeBounds(tp, this(tp.bounds)): tp.ThisTypeMappableType
-        case tp @ NoPrefix          => tp: tp.ThisTypeMappableType
-        case tp: PackageRef         => tp: tp.ThisTypeMappableType
+        case tp: Type            => mapOver(tp): tp.ThisTypeMappableType
+        case tp: TypeBounds      => mapOver(tp): tp.ThisTypeMappableType
+        case tp: LambdaType      => mapOverLambda(tp): tp.ThisTypeMappableType
+        case tp: WildcardTypeArg => derivedWildcardTypeArg(tp, this(tp.bounds)): tp.ThisTypeMappableType
+        case tp @ NoPrefix       => tp: tp.ThisTypeMappableType
+        case tp: PackageRef      => tp: tp.ThisTypeMappableType
 
       result.asInstanceOf[tp.ThisTypeMappableType]
     end mapOver
@@ -170,8 +170,8 @@ private[tastyquery] object TypeMaps {
       args match
         case arg :: otherArgs if tparams.nonEmpty =>
           val arg1 = arg match
-            case arg: WildcardTypeBounds => this(arg)
-            case arg: Type               => atVariance(variance * tparams.head.variance.sign)(this(arg))
+            case arg: WildcardTypeArg => this(arg)
+            case arg: Type            => atVariance(variance * tparams.head.variance.sign)(this(arg))
           val otherArgs1 = mapArgs(otherArgs, tparams.tail)
           if ((arg1 eq arg) && (otherArgs1 eq otherArgs)) args
           else arg1 :: otherArgs1
@@ -218,7 +218,7 @@ private[tastyquery] object TypeMaps {
     }
 
     protected def rangeToBounds(tp: TypeOrWildcard): TypeOrWildcard = tp match {
-      case Range(lo, hi) => WildcardTypeBounds(RealTypeBounds(lo, hi))
+      case Range(lo, hi) => WildcardTypeArg(RealTypeBounds(lo, hi))
       case _             => tp
     }
 
@@ -278,8 +278,8 @@ private[tastyquery] object TypeMaps {
                 expandBounds(argSym.bounds)
               case _ =>
                 reapply(arg)
-          case arg: WildcardTypeBounds => expandBounds(arg.bounds)
-          case arg: Type               => reapply(arg)
+          case arg: WildcardTypeArg => expandBounds(arg.bounds)
+          case arg: Type            => reapply(arg)
         })
 
     /** Derived selection.
@@ -347,16 +347,16 @@ private[tastyquery] object TypeMaps {
           case _ => tp.derivedTypeAlias(alias)
         }
 
-    override protected def derivedWildcardTypeBounds(tp: WildcardTypeBounds, bounds: TypeBounds): WildcardTypeBounds =
+    override protected def derivedWildcardTypeArg(tp: WildcardTypeArg, bounds: TypeBounds): WildcardTypeArg =
       if bounds eq tp.bounds then tp
       else if isRange(bounds.low) || isRange(bounds.high) then
-        if variance > 0 then WildcardTypeBounds(RealTypeBounds(lower(bounds.low), upper(bounds.high)))
+        if variance > 0 then WildcardTypeArg(RealTypeBounds(lower(bounds.low), upper(bounds.high)))
         else
           // TODO This makes no sense to me; one day we'll have to find a principled solution here
-          WildcardTypeBounds(
+          WildcardTypeArg(
             RealTypeBounds(range(upper(bounds.low), lower(bounds.high)), range(lower(bounds.low), upper(bounds.high)))
           )
-      else tp.derivedWildcardTypeBounds(bounds)
+      else tp.derivedWildcardTypeArg(bounds)
 
     /*override protected def derivedSuperType(tp: SuperType, thistp: Type, supertp: Type): Type =
       if (isRange(thistp) || isRange(supertp)) emptyRange

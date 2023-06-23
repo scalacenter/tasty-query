@@ -948,13 +948,13 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   }
 
   testWithContext("wildcard-type-bounds") {
-    val seqOfWildcardProduct = mutableSeqOf(WildcardTypeBounds(RealTypeBounds(defn.NothingType, ProductClass.typeRef)))
-    val seqOfWildcardList = mutableSeqOf(WildcardTypeBounds(RealTypeBounds(defn.NothingType, listOf(defn.AnyType))))
-    val seqOfWildcardOption = mutableSeqOf(WildcardTypeBounds(RealTypeBounds(defn.NothingType, optionOf(defn.AnyType))))
+    val seqOfWildcardProduct = mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, ProductClass.typeRef)))
+    val seqOfWildcardList = mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, listOf(defn.AnyType))))
+    val seqOfWildcardOption = mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, optionOf(defn.AnyType))))
 
     assertEquiv(
       seqOfWildcardProduct,
-      mutableSeqOf(WildcardTypeBounds(RealTypeBounds(defn.NothingType, ProductClass.typeRef)))
+      mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, ProductClass.typeRef)))
     ).withRef[mutable.Seq[? <: Product], mutable.Seq[? <: Product]]
 
     assertNeitherSubtype(seqOfWildcardProduct, seqOfWildcardList)
@@ -1155,7 +1155,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertEquiv(matchTypePoly2ListInt, defn.IntType).withRef[MatchTypePoly2[List[Int]], Int]
 
     val matchTypePoly2ListWildcard =
-      matchTypePoly2.appliedTo(listOf(WildcardTypeBounds.NothingAny)).asInstanceOf[MatchType]
+      matchTypePoly2.appliedTo(listOf(WildcardTypeArg.NothingAny)).asInstanceOf[MatchType]
     assert(clue(matchTypePoly2ListWildcard.reduced).isDefined)
     assertEquiv(matchTypePoly2ListWildcard.reduced.get, defn.AnyType).withRef[MatchTypePoly2[List[?]], Any]
     assertEquiv(matchTypePoly2ListWildcard, defn.AnyType).withRef[MatchTypePoly2[List[?]], Any]
@@ -1172,7 +1172,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertEquiv(matchTypePoly2InvInt, defn.IntType).withRef[MatchTypePoly2[Inv[Int]], Int]
 
     val matchTypePoly2InvWildcard =
-      matchTypePoly2.appliedTo(invRef.appliedTo(WildcardTypeBounds.NothingAny)).asInstanceOf[MatchType]
+      matchTypePoly2.appliedTo(invRef.appliedTo(WildcardTypeArg.NothingAny)).asInstanceOf[MatchType]
     assert(clue(matchTypePoly2InvWildcard.reduced).isEmpty)
 
     val matchTypePoly2ConsumerInt =
@@ -1182,7 +1182,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertEquiv(matchTypePoly2ConsumerInt, defn.IntType).withRef[MatchTypePoly2[Consumer[Int]], Int]
 
     val matchTypePoly2ConsumerWildcard =
-      matchTypePoly2.appliedTo(consumerRef.appliedTo(WildcardTypeBounds.NothingAny)).asInstanceOf[MatchType]
+      matchTypePoly2.appliedTo(consumerRef.appliedTo(WildcardTypeArg.NothingAny)).asInstanceOf[MatchType]
     assert(clue(matchTypePoly2ConsumerWildcard.reduced).isDefined)
     assertEquiv(matchTypePoly2ConsumerWildcard.reduced.get, defn.NothingType)
       .withRef[MatchTypePoly2[Consumer[?]], Nothing]

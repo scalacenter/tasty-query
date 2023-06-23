@@ -98,11 +98,8 @@ class PrintersTest extends UnrestrictedUnpicklingSuite:
       "(scala.Product { def foo()scala.Int })"
     )
 
-    testShowBasic(defn.ArrayTypeOf(WildcardTypeBounds(defn.NothingAnyBounds)), "scala.Array[?]")
-    testShowBasic(
-      defn.ArrayTypeOf(WildcardTypeBounds(NullAnyRefBounds)),
-      "scala.Array[? >: scala.Null <: scala.AnyRef]"
-    )
+    testShowBasic(defn.ArrayTypeOf(WildcardTypeArg(defn.NothingAnyBounds)), "scala.Array[?]")
+    testShowBasic(defn.ArrayTypeOf(WildcardTypeArg(NullAnyRefBounds)), "scala.Array[? >: scala.Null <: scala.AnyRef]")
 
     testShowBasic(
       PolyType(List(typeName("A")))(
