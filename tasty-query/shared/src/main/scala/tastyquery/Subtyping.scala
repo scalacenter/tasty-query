@@ -365,7 +365,7 @@ private[tastyquery] object Subtyping:
             tp2.refinedBounds.contains(tp1.select(cls))
           case ResolveMemberResult.TypeMember(symbols, bounds) =>
             tp2.refinedBounds.contains(bounds)
-          case ResolveMemberResult.TermMember(symbols, tpe) =>
+          case ResolveMemberResult.TermMember(symbols, tpe, isStable) =>
             throw AssertionError(s"found term member for $tp2 in $tp1")
 
       case tp2: TermRefinement =>
@@ -373,8 +373,8 @@ private[tastyquery] object Subtyping:
           tp1.resolveMember(tp2.refinedName, tp1) match
             case ResolveMemberResult.NotFound =>
               false
-            case ResolveMemberResult.TermMember(_, tpe) =>
-              tpe.isSubTypeOrMethodic(tp2.refinedType)
+            case ResolveMemberResult.TermMember(_, tpe, isStable) =>
+              tpe.isSubTypeOrMethodic(tp2.refinedType) && (isStable || !tp2.isStable)
             case _: ResolveMemberResult.ClassMember | _: ResolveMemberResult.TypeMember =>
               throw AssertionError(s"found type member for $tp2 in $tp1")
         else

@@ -327,8 +327,8 @@ private[tastyquery] object TypeMatching:
       .from(1)
       .map { index =>
         tycon.resolveMember(termName("_" + index), tycon) match
-          case ResolveMemberResult.TermMember(_, declaredType: Type) => Some(declaredType)
-          case _                                                     => None
+          case ResolveMemberResult.TermMember(_, declaredType: Type, _) => Some(declaredType)
+          case _                                                        => None
       }
       .takeWhile(_.isDefined)
       .map(_.get)

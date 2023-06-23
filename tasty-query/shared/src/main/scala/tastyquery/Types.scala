@@ -167,7 +167,7 @@ object Types {
 
   private[tastyquery] enum ResolveMemberResult:
     case NotFound
-    case TermMember(symbols: List[TermSymbol], tpe: TypeOrMethodic)
+    case TermMember(symbols: List[TermSymbol], tpe: TypeOrMethodic, isStable: Boolean)
     case ClassMember(cls: ClassSymbol)
     case TypeMember(symbols: List[TypeSymbolWithBounds], bounds: TypeBounds)
   end ResolveMemberResult
@@ -187,10 +187,14 @@ object Types {
           left
 
         // Both cases are term members
-        case (ResolveMemberResult.TermMember(leftSyms, leftTpe), ResolveMemberResult.TermMember(rightSyms, rightTpe)) =>
+        case (
+              ResolveMemberResult.TermMember(leftSyms, leftTpe, leftIsStable),
+              ResolveMemberResult.TermMember(rightSyms, rightTpe, rightIsStable)
+            ) =>
           val syms = mergeSyms(leftSyms, rightSyms)
           val tpe = mergeTermMemberTypes(leftTpe, rightTpe)
-          ResolveMemberResult.TermMember(syms, tpe)
+          val isStable = leftIsStable || rightIsStable
+          ResolveMemberResult.TermMember(syms, tpe, isStable)
 
         // When either side is a Class, take it
         case (left: ResolveMemberResult.ClassMember, _) =>
@@ -746,9 +750,8 @@ object Types {
     * single non-null value (they might contain null in addition).
     */
   sealed trait SingletonType extends TypeProxy:
-    private[tastyquery] final def isStable(using Context): Boolean = this match
-      case tp: TermRef => tp.symbol.isStableMember
-      case _           => true
+    // overridden and made public in TermRef
+    private[tastyquery] def isStable(using Context): Boolean = true
   end SingletonType
 
   // ----- Type Proxies -------------------------------------------------
@@ -891,6 +894,7 @@ object Types {
     // Cache fields
     private var mySymbol: TermSymbol | Null = null
     private var myUnderlying: TypeOrMethodic | Null = null
+    private var myIsStable: Boolean = false // only meaningful once mySymbol is non-null
     private var mySignature: Signature | Null = null
 
     private def this(prefix: NonEmptyPrefix, resolved: ResolveMemberResult.TermMember) =
@@ -905,30 +909,37 @@ object Types {
       s"TermRef($prefix, $myDesignator)"
 
     final def symbol(using Context): TermSymbol =
+      ensureResolved()
+      mySymbol.nn
+
+    private def ensureResolved()(using Context): Unit =
       if mySymbol == null then resolve()
-      mySymbol.asInstanceOf[TermSymbol]
 
     private def resolve()(using Context): Unit =
-      def storeResolved(sym: TermSymbol, tpe: TypeOrMethodic): Unit =
+      def storeResolved(sym: TermSymbol, tpe: TypeOrMethodic, isStable: Boolean): Unit =
         mySymbol = sym
         myDesignator = sym
         myUnderlying = tpe
+        myIsStable = isStable
+
+      def storeSymbol(sym: TermSymbol): Unit =
+        storeResolved(sym, sym.declaredTypeAsSeenFrom(prefix), sym.isStableMember)
 
       designator match
         case sym: TermSymbol =>
-          storeResolved(sym, sym.declaredTypeAsSeenFrom(prefix))
+          storeSymbol(sym)
         case lookupIn: LookupIn =>
           val sym = TermRef.resolveLookupIn(lookupIn)
-          storeResolved(sym, sym.declaredTypeAsSeenFrom(prefix))
+          storeSymbol(sym)
         case externalRef: Scala2ExternalSymRef =>
           val sym = NamedType.resolveScala2ExternalRef(externalRef).asTerm
-          storeResolved(sym, sym.declaredTypeAsSeenFrom(prefix))
+          storeSymbol(sym)
         case name: TermName =>
           prefix match
             case prefix: NonEmptyPrefix =>
               prefix.resolveMember(name) match
-                case ResolveMemberResult.TermMember(symbols, tpe) if symbols.nonEmpty =>
-                  storeResolved(symbols.head, tpe)
+                case ResolveMemberResult.TermMember(symbols, tpe, isStable) if symbols.nonEmpty =>
+                  storeResolved(symbols.head, tpe, isStable)
                 case _ =>
                   throw MemberNotFoundException(prefix, name)
             case NoPrefix =>
@@ -939,7 +950,7 @@ object Types {
       Some(symbol)
 
     def underlyingOrMethodic(using Context): TypeOrMethodic =
-      if myUnderlying == null then resolve()
+      ensureResolved()
       myUnderlying.asInstanceOf[TypeOrMethodic]
 
     override def underlying(using ctx: Context): Type =
@@ -953,6 +964,10 @@ object Types {
         mySignature = computed
         computed
     end signature
+
+    final override def isStable(using Context): Boolean =
+      ensureResolved()
+      myIsStable
 
     private[tastyquery] override def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       underlyingOrMethodic match
@@ -1043,7 +1058,11 @@ object Types {
     private[tastyquery] final def resolveMember(name: Name)(using Context): ResolveMemberResult =
       def makeResult(sym: TermOrTypeSymbol, prefixForAsSeenFrom: Prefix): ResolveMemberResult = sym match
         case sym: TermSymbol =>
-          ResolveMemberResult.TermMember(sym :: Nil, sym.declaredTypeAsSeenFrom(prefixForAsSeenFrom))
+          ResolveMemberResult.TermMember(
+            sym :: Nil,
+            sym.declaredTypeAsSeenFrom(prefixForAsSeenFrom),
+            sym.isStableMember
+          )
         case sym: ClassSymbol =>
           ResolveMemberResult.ClassMember(sym)
         case sym: TypeSymbolWithBounds =>
@@ -1891,20 +1910,20 @@ object Types {
           if name != refinedName then parentMember
           else
             parentMember match
-              case ResolveMemberResult.TermMember(symbols, tpe: Type) =>
-                ResolveMemberResult.TermMember(symbols, tpe & refinedType)
+              case ResolveMemberResult.TermMember(symbols, tpe: Type, isStable) =>
+                ResolveMemberResult.TermMember(symbols, tpe & refinedType, this.isStable || isStable)
               case _ =>
-                ResolveMemberResult.TermMember(Nil, refinedType)
+                ResolveMemberResult.TermMember(Nil, refinedType, this.isStable)
         case refinedType: MethodicType =>
           name match
             case SignedName(simpleName, sig, _) if simpleName == refinedName && sig.paramsCorrespond(signedName.sig) =>
               val parentMember = parent.resolveMatchingMember(signedName, pre, refinedType.isSubTypeOrMethodic(_))
               parentMember match
-                case ResolveMemberResult.TermMember(symbols, _) =>
+                case ResolveMemberResult.TermMember(symbols, _, isStable) =>
                   // We can disregard the type coming from parent because we selected for `refinedType.isSubtype(_)`
-                  ResolveMemberResult.TermMember(symbols, refinedType)
+                  ResolveMemberResult.TermMember(symbols, refinedType, this.isStable || isStable)
                 case _ =>
-                  ResolveMemberResult.TermMember(Nil, refinedType)
+                  ResolveMemberResult.TermMember(Nil, refinedType, this.isStable)
             case _ =>
               parent.resolveMember(name, pre)
     end resolveMember
@@ -1919,11 +1938,11 @@ object Types {
         else
           val parentMember = parent.resolveMatchingMember(signedName, pre, refinedType.isSubTypeOrMethodic(_))
           parentMember match
-            case ResolveMemberResult.TermMember(symbols, _) =>
+            case ResolveMemberResult.TermMember(symbols, _, isStable) =>
               // We can disregard the type coming from parent because we selected for `refinedType.isSubtype(_)`
-              ResolveMemberResult.TermMember(symbols, refinedType)
+              ResolveMemberResult.TermMember(symbols, refinedType, this.isStable || isStable)
             case _ =>
-              ResolveMemberResult.TermMember(Nil, refinedType)
+              ResolveMemberResult.TermMember(Nil, refinedType, this.isStable)
       else parent.resolveMatchingMember(name, pre, typePredicate)
     end resolveMatchingMember
 
