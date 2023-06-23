@@ -25,35 +25,23 @@ private[tastyquery] object TypeMaps {
     }
   end VariantTraversal
 
-  abstract class TypeMap extends VariantTraversal with (Type => Type) {
+  abstract class TypeMap extends VariantTraversal {
     thisMap =>
 
     final def apply(tp: TypeMappable): tp.ThisTypeMappableType =
-      // Unfortunately, GADT reasoning is not smart enough to refine the type of `tp`
-      tp match
-        case tp2: Type =>
-          val result: tp2.ThisTypeMappableType = apply(tp2)
-          result.asInstanceOf[tp.ThisTypeMappableType]
-        case tp2: TypeBounds =>
-          val result: tp2.ThisTypeMappableType = apply(tp2)
-          result.asInstanceOf[tp.ThisTypeMappableType]
-        case NoPrefix =>
-          tp.asInstanceOf[tp.ThisTypeMappableType]
+      transform(tp).asInstanceOf[tp.ThisTypeMappableType]
 
-    def apply(tp: Type): Type
-
-    def apply(bounds: TypeBounds): TypeBounds =
-      mapOver(bounds)
+    protected def transform(tp: TypeMappable): TypeMappable
 
     protected def derivedSelect(tp: NamedType, pre: Type): Type =
       tp.derivedSelect(pre)
     protected def derivedTypeRefinement(tp: TypeRefinement, parent: Type, refinedBounds: TypeBounds): Type =
       tp.derivedTypeRefinement(parent, tp.refinedName, refinedBounds)
-    protected def derivedTermRefinement(tp: TermRefinement, parent: Type, refinedType: Type): Type =
+    protected def derivedTermRefinement(tp: TermRefinement, parent: Type, refinedType: TypeOrMethodic): Type =
       tp.derivedTermRefinement(parent, tp.refinedName, refinedType)
-    protected def derivedWildcardTypeBounds(tp: WildcardTypeBounds, bounds: TypeBounds): Type =
+    protected def derivedWildcardTypeBounds(tp: WildcardTypeBounds, bounds: TypeBounds): WildcardTypeBounds =
       tp.derivedWildcardTypeBounds(bounds)
-    protected def derivedAppliedType(tp: AppliedType, tycon: Type, args: List[Type]): Type =
+    protected def derivedAppliedType(tp: AppliedType, tycon: Type, args: List[TypeOrWildcard]): Type =
       tp.derivedAppliedType(tycon, args)
     protected def derivedAndType(tp: AndType, tp1: Type, tp2: Type): Type =
       tp.derivedAndType(tp1, tp2)
@@ -65,7 +53,7 @@ private[tastyquery] object TypeMaps {
       tp.derivedMatchType(bound, scrutinee, cases)
     protected def derivedByNameType(tp: ByNameType, restpe: Type): Type =
       tp.derivedByNameType(restpe)
-    protected def derivedLambdaType(tp: LambdaType, formals: List[tp.PInfo], restpe: Type): Type =
+    protected def derivedLambdaType(tp: LambdaType, formals: List[tp.PInfo], restpe: tp.ResultType): tp.This =
       tp.derivedLambdaType(tp.paramNames, formals, restpe)
 
     protected def derivedTypeAlias(tp: TypeAlias, alias: Type): TypeBounds =
@@ -73,13 +61,13 @@ private[tastyquery] object TypeMaps {
     protected def derivedTypeBounds(bounds: TypeBounds, low: Type, high: Type): TypeBounds =
       bounds.derivedTypeBounds(low, high)
 
-    protected def mapOverLambda(tp: LambdaType): Type =
+    protected def mapOverLambda(tp: LambdaType): tp.This =
       val restpe = tp.resultType
       val saved = variance
       variance = -variance
       val ptypes1 = tp.paramInfos.mapConserve(pi => apply(pi)).asInstanceOf[List[tp.PInfo]]
       variance = saved
-      derivedLambdaType(tp, ptypes1, this(restpe))
+      derivedLambdaType(tp, ptypes1, this(restpe).asInstanceOf[tp.ResultType])
 
     protected def mapOverMatchTypeCase(caze: MatchTypeCase): MatchTypeCase =
       caze.derivedMatchTypeCase(
@@ -89,7 +77,19 @@ private[tastyquery] object TypeMaps {
       )
     end mapOverMatchTypeCase
 
-    def isRange(tp: Type): Boolean = tp.isInstanceOf[Range]
+    def isRange(tp: TypeOrWildcard): Boolean = tp.isInstanceOf[Range]
+
+    final def mapOver(tp: TypeMappable): tp.ThisTypeMappableType =
+      val result: TypeMappable = tp match
+        case tp: Type               => mapOver(tp): tp.ThisTypeMappableType
+        case tp: TypeBounds         => mapOver(tp): tp.ThisTypeMappableType
+        case tp: LambdaType         => mapOverLambda(tp): tp.ThisTypeMappableType
+        case tp: WildcardTypeBounds => derivedWildcardTypeBounds(tp, this(tp.bounds)): tp.ThisTypeMappableType
+        case tp @ NoPrefix          => tp: tp.ThisTypeMappableType
+        case tp: PackageRef         => tp: tp.ThisTypeMappableType
+
+      result.asInstanceOf[tp.ThisTypeMappableType]
+    end mapOver
 
     /** Map this function over given type */
     def mapOver(tp: Type): Type =
@@ -102,20 +102,17 @@ private[tastyquery] object TypeMaps {
           // if `p <: q` then `p.A <: q.A`, and well-formedness requires that `A` is a member
           // of `p`'s upper bound.
           tp.prefix match
-            case NoPrefix =>
+            case NoPrefix | _: PackageRef =>
               tp
             case prefix: Type =>
               val prefix1 = atVariance(variance max 0)(this(prefix))
               derivedSelect(tp, prefix1)
 
         case tp: AppliedType =>
-          tp.map(this)
+          tp.map(this(_), this(_))
 
-        case tp: LambdaType =>
+        case tp: TypeLambda =>
           mapOverLambda(tp)
-
-        case tp: WildcardTypeBounds =>
-          derivedWildcardTypeBounds(tp, this(tp.bounds))
 
         case tp: ByNameType =>
           derivedByNameType(tp, this(tp.resultType))
@@ -163,28 +160,24 @@ private[tastyquery] object TypeMaps {
           val high1 = this(bounds.high)
           derivedTypeBounds(bounds, low1, high1)
     end mapOver
-
-    //def mapOver(syms: List[Symbol]): List[Symbol] = mapSymbols(syms, treeTypeMap)
-
-    def andThen(f: Type => Type): TypeMap = new TypeMap {
-      def apply(tp: Type): Type = f(thisMap(tp))
-    }
   }
 
   abstract class NormalizingTypeMap(using Context) extends TypeMap:
     override protected def derivedSelect(tp: NamedType, pre: Type): Type =
       tp.normalizedDerivedSelect(pre)
 
-    protected def mapArgs(args: List[Type], tparams: List[TypeConstructorParam]): List[Type] = args match
-      case arg :: otherArgs if tparams.nonEmpty =>
-        val arg1 = arg match
-          case arg: WildcardTypeBounds => this(arg)
-          case arg                     => atVariance(variance * tparams.head.variance.sign)(this(arg))
-        val otherArgs1 = mapArgs(otherArgs, tparams.tail)
-        if ((arg1 eq arg) && (otherArgs1 eq otherArgs)) args
-        else arg1 :: otherArgs1
-      case nil =>
-        nil
+    protected def mapArgs(args: List[TypeOrWildcard], tparams: List[TypeConstructorParam]): List[TypeOrWildcard] =
+      args match
+        case arg :: otherArgs if tparams.nonEmpty =>
+          val arg1 = arg match
+            case arg: WildcardTypeBounds => this(arg)
+            case arg: Type               => atVariance(variance * tparams.head.variance.sign)(this(arg))
+          val otherArgs1 = mapArgs(otherArgs, tparams.tail)
+          if ((arg1 eq arg) && (otherArgs1 eq otherArgs)) args
+          else arg1 :: otherArgs1
+        case nil =>
+          nil
+    end mapArgs
 
     /** Map this function over given type */
     override def mapOver(tp: Type): Type =
@@ -224,7 +217,7 @@ private[tastyquery] object TypeMaps {
       case _         => tp
     }
 
-    protected def rangeToBounds(tp: Type): Type = tp match {
+    protected def rangeToBounds(tp: TypeOrWildcard): TypeOrWildcard = tp match {
       case Range(lo, hi) => WildcardTypeBounds(RealTypeBounds(lo, hi))
       case _             => tp
     }
@@ -286,7 +279,7 @@ private[tastyquery] object TypeMaps {
               case _ =>
                 reapply(arg)
           case arg: WildcardTypeBounds => expandBounds(arg.bounds)
-          case arg                     => reapply(arg)
+          case arg: Type               => reapply(arg)
         })
 
     /** Derived selection.
@@ -301,13 +294,19 @@ private[tastyquery] object TypeMaps {
               case Some(sym: ClassTypeParamSymbol) => expandParam(sym, preHi)
               case _                               => tryWiden(tp, preHi)
             forwarded.getOrElse {
-              range(super.derivedSelect(tp, preLo).lowerBound, super.derivedSelect(tp, preHi).upperBound)
+              /* TODO? We used to have `.lowerBound` and `.upperBound` on the
+               * results of `super.derivedSelect`, coming from dotc. However
+               * `super.derivedSelect` now statically returns a `Type`, so it
+               * cannot be a wildcard. Maybe we need to reintroduce this in the
+               * future.
+               */
+              range(super.derivedSelect(tp, preLo), super.derivedSelect(tp, preHi))
             }
           case _ =>
-            super.derivedSelect(tp, pre) match {
-              case tp: WildcardTypeBounds => range(tp.bounds.low, tp.bounds.high)
-              case tp                     => tp
-            }
+            /* TODO? Similar to the above. We used to translate a wildcard
+             * received from `super.derivedSelect` into a `range`.
+             */
+            super.derivedSelect(tp, pre)
         }
 
     /*override protected def derivedRefinedType(tp: RefinedType, parent: Type, info: Type): Type =
@@ -348,14 +347,14 @@ private[tastyquery] object TypeMaps {
           case _ => tp.derivedTypeAlias(alias)
         }
 
-    override protected def derivedWildcardTypeBounds(tp: WildcardTypeBounds, bounds: TypeBounds): Type =
+    override protected def derivedWildcardTypeBounds(tp: WildcardTypeBounds, bounds: TypeBounds): WildcardTypeBounds =
       if bounds eq tp.bounds then tp
       else if isRange(bounds.low) || isRange(bounds.high) then
         if variance > 0 then WildcardTypeBounds(RealTypeBounds(lower(bounds.low), upper(bounds.high)))
         else
-          range(
-            WildcardTypeBounds(RealTypeBounds(upper(bounds.low), lower(bounds.high))),
-            WildcardTypeBounds(RealTypeBounds(lower(bounds.low), upper(bounds.high)))
+          // TODO This makes no sense to me; one day we'll have to find a principled solution here
+          WildcardTypeBounds(
+            RealTypeBounds(range(upper(bounds.low), lower(bounds.high)), range(lower(bounds.low), upper(bounds.high)))
           )
       else tp.derivedWildcardTypeBounds(bounds)
 
@@ -363,7 +362,7 @@ private[tastyquery] object TypeMaps {
       if (isRange(thistp) || isRange(supertp)) emptyRange
       else tp.derivedSuperType(thistp, supertp)*/
 
-    override protected def derivedAppliedType(tp: AppliedType, tycon: Type, args: List[Type]): Type =
+    override protected def derivedAppliedType(tp: AppliedType, tycon: Type, args: List[TypeOrWildcard]): Type =
       tycon match {
         case Range(tyconLo, tyconHi) =>
           range(derivedAppliedType(tp, tyconLo, args), derivedAppliedType(tp, tyconHi, args))
@@ -386,7 +385,7 @@ private[tastyquery] object TypeMaps {
             // Fail for non-variant argument ranges (see use-site else branch below).
             // If successful, the L-arguments are in loBut, the H-arguments in hiBuf.
             // @return  operation succeeded for all arguments.
-            def distributeArgs(args: List[Type], tparams: List[TypeConstructorParam]): Boolean = args match {
+            def distributeArgs(args: List[TypeOrWildcard], tparams: List[TypeConstructorParam]): Boolean = args match {
               case Range(lo, hi) :: args1 =>
                 val v = tparams.head.variance.sign
                 if (v == 0) false
@@ -396,9 +395,10 @@ private[tastyquery] object TypeMaps {
                   distributeArgs(args1, tparams.tail)
                 }
               case arg :: args1 =>
-                loBuf += arg; hiBuf += arg
+                loBuf += arg.lowIfWildcard
+                hiBuf += arg.highIfWildcard
                 distributeArgs(args1, tparams.tail)
-              case nil =>
+              case Nil =>
                 true
             }
             if (distributeArgs(args, tp.tyconTypeParams))
@@ -410,7 +410,7 @@ private[tastyquery] object TypeMaps {
           else tp.derivedAppliedType(tycon, args)
       }
 
-    private def isRangeOfNonTermTypes(tp: Type): Boolean = tp match
+    private def isRangeOfNonTermTypes(tp: TypeOrWildcard): Boolean = tp match
       case Range(lo, hi) => !lo.isInstanceOf[TermType] || !hi.isInstanceOf[TermType]
       case _             => false
 

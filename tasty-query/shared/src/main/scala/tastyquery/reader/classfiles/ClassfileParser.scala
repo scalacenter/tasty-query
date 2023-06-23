@@ -56,11 +56,11 @@ private[reader] object ClassfileParser {
       ctx.findPackageFromRoot(FullyQualifiedName(parts)).packageRef
 
     private def lookup(binaryName: SimpleName, isStatic: Boolean)(using Context, InnerClasses): NamedType =
-      if isStatic then staticrefs.getOrElseUpdate(binaryName, computeRef(binaryName, isStatic = true).asTerm)
-      else refs.getOrElseUpdate(binaryName, computeRef(binaryName, isStatic = false).asType)
+      if isStatic then staticrefs.getOrElseUpdate(binaryName, computeRef(binaryName, isStatic = true).asTermRef)
+      else refs.getOrElseUpdate(binaryName, computeRef(binaryName, isStatic = false).asTypeRef)
 
     def resolve(binaryName: SimpleName)(using Context, InnerClasses): TypeRef =
-      lookup(binaryName, isStatic = false).asType
+      lookup(binaryName, isStatic = false).asTypeRef
 
   end Resolver
 
@@ -208,7 +208,7 @@ private[reader] object ClassfileParser {
         pool.utf8(cls.nameIdx)
       val parents = classSig match
         case SigOrSupers.Sig(sig) =>
-          JavaSignatures.parseSignature(cls, sig, allRegisteredSymbols) match
+          JavaSignatures.parseSignature(cls, sig, allRegisteredSymbols).requireType match
             case mix: AndType => mix.parts
             case sup          => sup :: Nil
         case SigOrSupers.Supers =>
@@ -250,7 +250,7 @@ private[reader] object ClassfileParser {
     innerClasses.declarations
   }
 
-  private def patchForVarargs(sym: TermSymbol, tpe: Type)(using Context): Type =
+  private def patchForVarargs(sym: TermSymbol, tpe: TypeOrMethodic)(using Context): MethodicType =
     tpe match
       case tpe: MethodType if tpe.paramNames.sizeIs >= 1 =>
         val patchedLast = tpe.paramTypes.last match
@@ -271,7 +271,7 @@ private[reader] object ClassfileParser {
     * is not otherwise guaranteed to work in all situations.
     */
   private object ArrayTypeExtractor:
-    def unapply(tpe: AppliedType)(using Context): Option[Type] =
+    def unapply(tpe: AppliedType)(using Context): Option[TypeOrWildcard] =
       tpe.tycon match
         case tycon: TypeRef if tycon.name == tpnme.Array && tpe.args.sizeIs == 1 =>
           tycon.prefix match

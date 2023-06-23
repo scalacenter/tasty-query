@@ -174,7 +174,7 @@ object Symbols {
       case cls: ClassSymbol => cls.is(Module) && cls.owner.isStaticOwner
       case _                => false
 
-    private[Symbols] final def staticOwnerPrefix(using Context): Type = this match
+    private[Symbols] final def staticOwnerPrefix(using Context): NonEmptyPrefix = this match
       case pkg: PackageSymbol =>
         pkg.packageRef
       case cls: ClassSymbol if cls.is(Module) =>
@@ -351,7 +351,7 @@ object Symbols {
     type DefiningTreeType = ValOrDefDef | Bind
 
     // Reference fields (checked in doCheckCompleted)
-    private var myDeclaredType: Type | Null = null
+    private var myDeclaredType: TypeOrMethodic | Null = null
 
     // Cache fields
     private var mySignature: Signature | Null = null
@@ -363,12 +363,12 @@ object Symbols {
       super.doCheckCompleted()
       if myDeclaredType == null then failNotCompleted("declaredType was not initialized")
 
-    private[tastyquery] final def withDeclaredType(tpe: Type): this.type =
+    private[tastyquery] final def withDeclaredType(tpe: TypeOrMethodic): this.type =
       if myDeclaredType != null then throw new IllegalStateException(s"reassignment of declared type to $this")
       myDeclaredType = tpe
       this
 
-    def declaredType(using Context): Type =
+    def declaredType(using Context): TypeOrMethodic =
       val local = myDeclaredType
       if local != null then local
       else throw new IllegalStateException(s"$this was not assigned a declared type")
@@ -377,14 +377,14 @@ object Symbols {
       * - for `object val C` => `object class C[$]`
       */
     final def moduleClass(using Context): Option[ClassSymbol] =
-      if is(Module) then declaredType.classSymbol
+      if is(Module) then declaredType.requireType.classSymbol
       else None
 
     final def staticRef(using Context): TermRef =
       require(isStatic, s"Cannot construct a staticRef for non-static symbol $this")
       TermRef(owner.staticOwnerPrefix, this)
 
-    private[tastyquery] final def declaredTypeAsSeenFrom(prefix: Prefix)(using Context): Type =
+    private[tastyquery] final def declaredTypeAsSeenFrom(prefix: Prefix)(using Context): TypeOrMethodic =
       declaredType.asSeenFrom(prefix, owner)
 
     private def isConstructor: Boolean =
@@ -442,7 +442,7 @@ object Symbols {
     end signedName
 
     final def paramRefss(using Context): List[Either[List[TermParamRef], List[TypeParamRef]]] =
-      def paramssOfType(tp: Type): List[Either[List[TermParamRef], List[TypeParamRef]]] = tp match
+      def paramssOfType(tp: TypeOrMethodic): List[Either[List[TermParamRef], List[TypeParamRef]]] = tp match
         case mt: PolyType   => Right(mt.paramRefs) :: paramssOfType(mt.resultType)
         case mt: MethodType => Left(mt.paramRefs) :: paramssOfType(mt.resultType)
         case _              => Nil
@@ -504,10 +504,10 @@ object Symbols {
             case prefix: Type =>
               sym.argForParam(prefix, widenAbstract = true) match
                 case Some(wild: WildcardTypeBounds) => wild.bounds
-                case Some(alias)                    => TypeAlias(alias)
+                case Some(alias: Type)              => TypeAlias(alias)
                 case None                           => default
-            case NoPrefix =>
-              throw InvalidProgramStructureException(s"invalid NoPrefix for class type parameter $this")
+            case NoPrefix | _: PackageRef =>
+              throw InvalidProgramStructureException(s"invalid prefix $prefix for class type parameter $this")
 
         case sym: TypeMemberSymbol =>
           sym.typeDef match
@@ -574,12 +574,14 @@ object Symbols {
 
     /** The argument corresponding to this class type parameter as seen from prefix `pre`.
       *
-      * Can produce a TypeBounds type if `widenAbstract` is true,
+      * Can produce a WildcardTypeBounds type if `widenAbstract` is true,
       * or prefix is an & or | type and parameter is non-variant.
       * Otherwise, a typebounds argument is dropped and the original type parameter
       * reference is returned.
       */
-    private[tastyquery] final def argForParam(pre: Type, widenAbstract: Boolean = false)(using Context): Option[Type] =
+    private[tastyquery] final def argForParam(pre: Type, widenAbstract: Boolean = false)(
+      using Context
+    ): Option[TypeOrWildcard] =
       val cls = this.owner
       val base = pre.baseType(cls)
       base match {
@@ -607,12 +609,15 @@ object Symbols {
               tp1
             case (Some(tp1), Some(tp2)) =>
               val variance = this.variance.sign
-              val result: Type =
-                if tp1.isInstanceOf[WildcardTypeBounds] || tp2.isInstanceOf[WildcardTypeBounds] || variance == 0 then
+              val result: TypeOrWildcard = (tp1, tp2) match
+                case (tp1: Type, tp2: Type) if variance != 0 =>
+                  if variance > 0 then tp1 & tp2
+                  else tp1 | tp2
+                case _ =>
                   // Compute based on bounds, instead of returning the original reference
-                  def toBounds(tp: Type): TypeBounds = tp match
+                  def toBounds(tp: TypeOrWildcard): TypeBounds = tp match
                     case tp: WildcardTypeBounds => tp.bounds
-                    case _                      => TypeAlias(tp)
+                    case tp: Type               => TypeAlias(tp)
                   val bounds1 = toBounds(tp1)
                   val bounds2 = toBounds(tp2)
                   val mergedBounds =
@@ -621,8 +626,6 @@ object Symbols {
                   mergedBounds match
                     case TypeAlias(alias)  => alias // can happen for variance == 0 if tp1 =:= tp2
                     case _: RealTypeBounds => WildcardTypeBounds(mergedBounds)
-                else if variance > 0 then tp1 & tp2
-                else tp1 | tp2
               end result
               Some(result)
           end match
@@ -1178,15 +1181,14 @@ object Symbols {
         // TODO Handle OrType
         None
 
-      case _: TypeLambda | _: PackageRef =>
+      case _: TypeLambda =>
         None
 
-      case _: MethodicType | _: CustomTransientGroundType =>
-        // Kind of nonsensical; keep an explicit list for exhaustivity checking
+      case _: CustomTransientGroundType =>
         None
     end baseTypeOf
 
-    private[tastyquery] final def findMember(pre: Type, name: Name)(using Context): Option[TermOrTypeSymbol] =
+    private[tastyquery] final def findMember(pre: NonEmptyPrefix, name: Name)(using Context): Option[TermOrTypeSymbol] =
       def lookup(lin: List[ClassSymbol]): Option[TermOrTypeSymbol] = lin match
         case parentCls :: linRest =>
           parentCls.getDecl(name) match
@@ -1210,7 +1212,7 @@ object Symbols {
           else lookup(linearization.tail)
     end findMember
 
-    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+    private[tastyquery] def resolveMember(name: Name, pre: NonEmptyPrefix)(using Context): ResolveMemberResult =
       findMember(pre, name) match
         case Some(sym: TermSymbol) =>
           ResolveMemberResult.TermMember(sym :: Nil, sym.declaredTypeAsSeenFrom(pre))
@@ -1222,9 +1224,11 @@ object Symbols {
           ResolveMemberResult.NotFound
     end resolveMember
 
-    private[tastyquery] def resolveMatchingMember(name: SignedName, pre: Type, typePredicate: Type => Boolean)(
-      using Context
-    ): ResolveMemberResult =
+    private[tastyquery] def resolveMatchingMember(
+      name: SignedName,
+      pre: NonEmptyPrefix,
+      typePredicate: TypeOrMethodic => Boolean
+    )(using Context): ResolveMemberResult =
       def lookup(lin: List[ClassSymbol]): ResolveMemberResult = lin match
         case parentCls :: linRest =>
           var overloadsRest = parentCls.getAllOverloadedDecls(name.underlying)

@@ -71,7 +71,7 @@ private[pickles] class PickleReader {
         res
       else
         // Sometimes, Types get recomputed; I don't know why. We return the existing one.
-        assert((existingEntry eq res) || res.isInstanceOf[Type], s"$res != $existingEntry")
+        assert((existingEntry eq res) || res.isInstanceOf[TypeOrWildcard], s"$res != $existingEntry")
         existingEntry
     } else tOpt.asInstanceOf[T] // temp hack for expression evaluator
   }
@@ -228,8 +228,8 @@ private[pickles] class PickleReader {
       }
     }
 
-    def readSymType(): Type =
-      try at(infoRef)(readType())
+    def readSymType(): TypeMappable =
+      try at(infoRef)(readTypeMappable())
       catch
         case t: Throwable =>
           throw new Scala2PickleFormatException(s"error while unpickling the type of $owner.$name", t)
@@ -244,7 +244,9 @@ private[pickles] class PickleReader {
           else TypeMemberSymbol.create(name1, owner)
         storeResultInEntries(sym)
         val tpe = readSymType()
-        val bounds = translateTempPolyForTypeMember(tpe)
+        val bounds = tpe match
+          case tpe: TypeOrWildcard => translateTempPolyForTypeMember(tpe)
+          case _ => throw Scala2PickleFormatException(s"Type or type bounds expected for $sym gut found $tpe")
         sym match
           case sym: TypeMemberSymbol =>
             sym.withDefinition(bounds match
@@ -271,7 +273,7 @@ private[pickles] class PickleReader {
             restpe.parentTypes
           case tpe: TempClassInfoType => tpe.parentTypes
           case tpe =>
-            throw AssertionError(s"unexpected type $tpe for $cls, owner is $owner")
+            throw Scala2PickleFormatException(s"unexpected type $tpe for $cls, owner is $owner")
         val parentTypes =
           if cls.owner == defn.scalaPackage && tname == tpnme.AnyVal then
             // Patch the superclasses of AnyVal to contain Matchable
@@ -280,7 +282,7 @@ private[pickles] class PickleReader {
             // Patch the superclass of TupleN classes to inherit from *:
             defn.GenericTupleTypeOf(typeParams.map(_.typeRef)) :: scala2ParentTypes.tail
           else scala2ParentTypes
-        val givenSelfType = if atEnd then None else Some(readTypeRef())
+        val givenSelfType = if atEnd then None else Some(readTrueTypeRef())
         cls.withParentsDirect(parentTypes)
         cls.withGivenSelfType(givenSelfType)
         cls
@@ -294,7 +296,16 @@ private[pickles] class PickleReader {
           else TermSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles
         val tpe = readSymType()
-        val unwrappedTpe = translateTempPolyForMethod(tpe)
+        val unwrappedTpe: TypeOrMethodic =
+          if flags.is(Method) then
+            tpe match
+              case tpe: TypeOrMethodic => translateTempPolyForMethod(tpe)
+              case _ => throw Scala2PickleFormatException(s"Type or methodic type expected for $sym but found $tpe")
+          else
+            tpe match
+              case tpe: Type => tpe
+              case _         => throw Scala2PickleFormatException(s"Type expected for $sym but found $tpe")
+        end unwrappedTpe
         val ctorPatchedTpe =
           if flags.is(Method) && name == nme.Constructor then patchConstructorType(sym.owner.asClass, unwrappedTpe)
           else unwrappedTpe
@@ -315,14 +326,14 @@ private[pickles] class PickleReader {
     sym
   }
 
-  private def patchConstructorType(cls: ClassSymbol, tpe: Type)(using Context): Type =
-    def resultToUnit(tpe: Type): Type =
+  private def patchConstructorType(cls: ClassSymbol, tpe: TypeOrMethodic)(using Context): TypeOrMethodic =
+    def resultToUnit(tpe: TypeOrMethodic): TypeOrMethodic =
       tpe match
         case tpe: PolyType =>
           tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypeBounds, resultToUnit(tpe.resultType))
         case tpe: MethodType =>
           tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypes, resultToUnit(tpe.resultType))
-        case _ =>
+        case _: Type =>
           defn.UnitType
 
     val tpe1 = resultToUnit(tpe)
@@ -449,31 +460,36 @@ private[pickles] class PickleReader {
     (firstSymTag <= tag && tag <= lastExtSymTag)
   }
 
-  /** Read type ref, mapping a TypeRef to a package to the package's ThisType
-    *  Package references should be TermRefs or ThisTypes but it was observed that
-    *  nsc sometimes pickles them as TypeRefs instead.
-    */
   private def readPrefixRef()(using Context, PklStream, Entries, Index): Prefix =
-    at(pkl.readNat())(readTypeOrPrefix()) match
-      //case pre: TypeRef if pre.symbol.is(Package) => pre.symbol.thisType
-      case pre => pre
-  end readPrefixRef
+    readTypeMappableRef() match
+      case tpe: Prefix => tpe
+      case tpe         => errorBadSignature(s"expected a prefix but got $tpe")
 
-  private def readTypeRef()(using Context, PklStream, Entries, Index): Type =
-    at(pkl.readNat())(readType())
-
-  /** Read a type
-    *
-    *  @param forceProperType is used to ease the transition to NullaryMethodTypes (commentmarker: NMT_TRANSITION)
-    *        the flag say that a type of kind * is expected, so that PolyType(tps, restpe) can be disambiguated to PolyType(tps, NullaryMethodType(restpe))
-    *        (if restpe is not a ClassInfoType, a MethodType or a NullaryMethodType, which leaves TypeRef/SingletonType -- the latter would make the polytype a type constructor)
-    */
-  private def readType()(using Context, PklStream, Entries, Index): Type =
-    readTypeOrPrefix() match
+  private def readTrueTypeRef()(using Context, PklStream, Entries, Index): Type =
+    readTypeMappableRef() match
       case tpe: Type => tpe
-      case NoPrefix  => errorBadSignature("unexpected NoPrefix")
+      case tpe       => errorBadSignature(s"expected a type but got $tpe")
 
-  private def readTypeOrPrefix()(using Context, PklStream, Entries, Index): Prefix = {
+  /** Read a type */
+  private def readTrueType()(using Context, PklStream, Entries, Index): Type =
+    readTypeMappable() match
+      case tpe: Type => tpe
+      case tpe       => errorBadSignature(s"expected a type but got $tpe")
+
+  private def readTypeOrWildcardRef()(using Context, PklStream, Entries, Index): TypeOrWildcard =
+    readTypeMappableRef() match
+      case tpe: TypeOrWildcard => tpe
+      case tpe                 => errorBadSignature(s"expected a type argument but got $tpe")
+
+  private def readTypeOrMethodicRef()(using Context, PklStream, Entries, Index): TypeOrMethodic =
+    readTypeMappableRef() match
+      case tpe: TypeOrMethodic => tpe
+      case tpe                 => errorBadSignature(s"expected a type or methodic type but got $tpe")
+
+  private def readTypeMappableRef()(using Context, PklStream, Entries, Index): TypeMappable =
+    at(pkl.readNat())(readTypeMappable())
+
+  private def readTypeMappable()(using Context, PklStream, Entries, Index): TypeMappable = {
     def select(pre: Prefix, sym: TermOrTypeSymbol): Type =
       // structural members need to be selected by name, their symbols are only
       // valid in the synthetic refinement class that defines them.
@@ -518,10 +534,10 @@ private[pickles] class PickleReader {
           case external: ExternalSymbolRef => external.toNamedType(pre)
           case _: NoExternalSymbolRef      => throw Scala2PickleFormatException("SINGLEtpe references NoSymbol")
       case SUPERtpe =>
-        val thistpe = readTypeRef() match
+        val thistpe = readTrueTypeRef() match
           case thistpe: ThisType => thistpe
           case thistpe           => throw Scala2PickleFormatException(s"Unexpected this type for SuperType: $thistpe")
-        val supertpe = readTypeRef()
+        val supertpe = readTrueTypeRef()
         SuperType(thistpe, Some(supertpe))
       case CONSTANTtpe =>
         readConstantRef() match
@@ -560,7 +576,7 @@ private[pickles] class PickleReader {
           case sym: TermOrTypeSymbol       => select(prefix, sym)
           case external: ExternalSymbolRef => external.toNamedType(prefix)
           case _: NoExternalSymbolRef      => throw Scala2PickleFormatException("TYPEREFtpe references NoSymbol")
-        val args = pkl.until(end, () => readTypeRef())
+        val args = pkl.until(end, () => readTypeOrWildcardRef())
         /*if (sym == defn.ByNameParamClass2x) ByNameType(args.head)
         else if (ctx.settings.scalajs.value && args.length == 2 &&
             sym.owner == JSDefinitions.jsdefn.ScalaJSJSPackageClass && sym == JSDefinitions.jsdefn.PseudoUnionClass) {
@@ -580,17 +596,19 @@ private[pickles] class PickleReader {
             false
         end isByNameParamClass
         if args.isEmpty then tycon
-        else if isByNameParamClass(tycon) then ByNameType(args.head)
-        else AppliedType(tycon, args.map(translateTempPolyForTypeArg(_)))
+        else
+          val tyconType = tycon.requireType
+          if isByNameParamClass(tyconType) then ByNameType(args.head.requireType)
+          else AppliedType(tyconType, args.map(translateTempPolyForTypeArg(_)))
       case TYPEBOUNDStpe =>
-        val lo = readTypeRef()
-        val hi = readTypeRef()
+        val lo = readTrueTypeRef()
+        val hi = readTrueTypeRef()
         // TODO? createNullableTypeBounds(lo, hi)
         WildcardTypeBounds(RealTypeBounds(lo, hi))
       case REFINEDtpe =>
         val clazzIndex = pkl.readNat()
         val clazz = readLocalSymbolAt(clazzIndex).asClass
-        val parents = pkl.until(end, () => readTypeRef())
+        val parents = pkl.until(end, () => readTrueTypeRef())
         val parent = parents.reduceLeft(AndType(_, _))
         ensureReadAllLocalDeclsOfRefinement(clazzIndex)
         val decls = clazz.declarations
@@ -608,9 +626,9 @@ private[pickles] class PickleReader {
           RecType.fromRefinedClassDecls(refined, clazz)
       case CLASSINFOtpe =>
         val clazz = readLocalSymbolRef()
-        TempClassInfoType(pkl.until(end, () => readTypeRef()))
+        TempClassInfoType(pkl.until(end, () => readTrueTypeRef()))
       case METHODtpe | IMPLICITMETHODtpe =>
-        val restpe = readTypeRef()
+        val restpe = readTypeOrMethodicRef()
         val params = pkl.until(end, () => readLocalSymbolRef().asTerm)
         val maker = MethodType
         /*val maker = MethodType.companion(
@@ -627,18 +645,18 @@ private[pickles] class PickleReader {
       case POLYtpe =>
         // create PolyType
         //   - PT => register at index
-        val restpe = readTypeRef()
+        val restpe = readTypeMappableRef()
         val typeParams = pkl.until(end, () => readLocalSymbolRef().asInstanceOf[TypeParamSymbol])
         if typeParams.nonEmpty then TempPolyType(typeParams, restpe)
         else restpe
       case EXISTENTIALtpe =>
-        val restpe = readTypeRef()
+        val restpe = readTrueTypeRef()
         // TODO Should these be LocalTypeParamSymbols?
         val boundSyms = pkl.until(end, () => readLocalSymbolRef().asInstanceOf[TypeMemberSymbol])
         elimExistentials(boundSyms, restpe)
       case ANNOTATEDtpe =>
         // TODO AnnotatedType.make(readTypeRef(), pkl.until(end, () => readAnnotationRef()))
-        val underlying = readTypeRef()
+        val underlying = readTrueTypeRef()
         // ignore until `end` (annotations)
         underlying
       case _ =>
@@ -656,14 +674,14 @@ private[pickles] class PickleReader {
   }
 
   /** Convert temp poly type to TypeLambda and leave other types alone. */
-  private def translateTempPolyForTypeArg(tp: Type)(using Context): Type =
+  private def translateTempPolyForTypeArg(tp: TypeOrWildcard)(using Context): TypeOrWildcard =
     translateTempPolyForTypeMember(tp) match
       case TypeAlias(alias)       => alias
       case bounds: RealTypeBounds => WildcardTypeBounds(bounds)
   end translateTempPolyForTypeArg
 
   /** Convert temp poly type to TypeLambda and leave other types alone. */
-  private def translateTempPolyForTypeMember(tp: Type)(using Context): TypeBounds = tp match
+  private def translateTempPolyForTypeMember(tp: TypeOrWildcard)(using Context): TypeBounds = tp match
     case tp: WildcardTypeBounds =>
       def rec(bound: Type): Type =
         translateTempPolyForTypeMember(bound).asInstanceOf[TypeAlias].alias
@@ -681,16 +699,22 @@ private[pickles] class PickleReader {
         case restpe: Type =>
           val alias = TypeLambda.fromParams(localTParams, restpe)
           TypeAlias(alias)
+        case _ =>
+          throw Scala2PickleFormatException(s"Invalid result type of type lambda: $restpe")
 
     case tp: Type =>
       TypeAlias(tp)
   end translateTempPolyForTypeMember
 
   /** Convert temp poly type to PolyType and leave other types alone. */
-  private def translateTempPolyForMethod(tp: Type)(using Context): Type = tp match
+  private def translateTempPolyForMethod(tp: TypeOrMethodic)(using Context): TypeOrMethodic = tp match
     case TempPolyType(tparams, restpe) =>
       val localTParams = tparams.asInstanceOf[List[LocalTypeParamSymbol]] // no class type params in methods
-      PolyType.fromParams(localTParams, restpe)
+      restpe match
+        case restpe: TypeOrMethodic =>
+          PolyType.fromParams(localTParams, restpe)
+        case _ =>
+          throw Scala2PickleFormatException(s"Invalid type for method: $tp")
 
     case tp =>
       tp
@@ -721,7 +745,7 @@ private[pickles] class PickleReader {
       case LITERALdouble  => Constant(longBitsToDouble(pkl.readLong(len)))
       case LITERALstring  => Constant(readNameRef().toString)
       case LITERALnull    => Constant(null)
-      case LITERALclass   => Constant(readTypeRef())
+      case LITERALclass   => Constant(readTrueTypeRef())
       case LITERALenum =>
         readMaybeExternalSymbolRef() match
           case sym: TermSymbol             => TermRef(NoPrefix, sym)
@@ -766,7 +790,7 @@ private[pickles] class PickleReader {
 
     /*def removeSingleton(tp: Type): Type =
       if (tp isRef defn.SingletonClass) defn.AnyType else tp*/
-    def mapArg(arg: Type) = arg match {
+    def mapArg(arg: TypeOrWildcard): TypeOrWildcard = arg match {
       case arg: TypeRef =>
         boundSymOf(arg) match
           case Some(sym) => WildcardTypeBounds(sym.bounds)
@@ -888,7 +912,7 @@ private[reader] object PickleReader {
   private val Scala2Constructor: SimpleName = termName("this")
   private val Scala2TraitConstructor: SimpleName = termName("$init$")
 
-  private[tastyquery] case class TempPolyType(paramSyms: List[TypeParamSymbol], resType: Type)
+  private[tastyquery] case class TempPolyType(paramSyms: List[TypeParamSymbol], resType: TypeMappable)
       extends CustomTransientGroundType
 
   /** Temporary type for classinfos, will be decomposed on completion of the class */

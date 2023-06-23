@@ -119,7 +119,7 @@ private[tastyquery] object Scala2Erasure:
       )
   end pseudoSymbol
 
-  private def widenDealias(tp: Type)(using Context): Type =
+  private def widenDealias(tp: TypeOrMethodic)(using Context): TypeOrMethodic =
     val tp1 = tp.widen.dealias
     if tp1 eq tp then tp
     else widenDealias(tp1)
@@ -249,7 +249,7 @@ private[tastyquery] object Scala2Erasure:
   private def intersectionDominator(parents: List[Type])(using Context): Type =
     val psyms = parents.map(pseudoSymbol)
     if psyms.contains(defn.ArrayClass) then
-      defn.ArrayTypeOf(intersectionDominator(parents.collect { case ArrayTypeOfExtractor(arg) => arg }))
+      defn.ArrayTypeOf(intersectionDominator(parents.collect { case ArrayTypeOfExtractor(arg) => arg.highIfWildcard }))
     else
       def isUnshadowed(psym: PseudoSymbol): Boolean =
         !(psyms.exists(qsym => !psym.sameSymbol(qsym) && qsym.isNonBottomSubClass(psym)))
@@ -262,7 +262,7 @@ private[tastyquery] object Scala2Erasure:
   end intersectionDominator
 
   private object ArrayTypeOfExtractor:
-    def unapply(tp: Type)(using Context): Option[Type] = tp match
+    def unapply(tp: Type)(using Context): Option[TypeOrWildcard] = tp match
       case tp: AppliedType if tp.tycon.classSymbol.contains(defn.ArrayClass) =>
         Some(tp.args.head)
       case _ =>

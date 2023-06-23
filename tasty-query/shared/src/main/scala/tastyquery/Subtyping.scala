@@ -15,6 +15,49 @@ private[tastyquery] object Subtyping:
     // `eq` is semantically important for identity-based types such as `TypeParamRef`
     (tp1 eq tp2) || level1(tp1, tp2)
 
+  def isSubTypeOrMethodic(tp1: TypeOrMethodic, tp2: TypeOrMethodic)(using Context): Boolean = tp2 match
+    case tp2: MethodType =>
+      tp1 match
+        case tp1: MethodType =>
+          TypeOps.matchingMethodParams(tp1, tp2)
+            && isSubTypeOrMethodic(tp1.resultType, Substituters.substBinders(tp2.resultType, tp2, tp1))
+        case _ =>
+          false
+
+    case tp2: PolyType =>
+      tp1 match
+        case tp1: PolyType =>
+          TypeOps.matchingPolyParams(tp1, tp2)
+            && isSubTypeOrMethodic(tp1.resultType, Substituters.substBinders(tp2.resultType, tp2, tp1))
+        case _ =>
+          false
+
+    case tp2: Type =>
+      tp1 match
+        case tp1: Type =>
+          isSubtype(tp1, tp2)
+        case _ =>
+          false
+  end isSubTypeOrMethodic
+
+  def isSubTypeArg(arg1: TypeOrWildcard, arg2: TypeOrWildcard, varianceSign: Int)(using Context): Boolean =
+    varianceSign match
+      case 1 =>
+        isSubtype(arg1.highIfWildcard, arg2.highIfWildcard)
+
+      case -1 =>
+        isSubtype(arg2.lowIfWildcard, arg1.lowIfWildcard)
+
+      case 0 =>
+        arg2 match
+          case arg2: WildcardTypeBounds =>
+            arg2.bounds.contains(arg1)
+          case arg2: Type =>
+            arg1 match
+              case arg1: Type            => isSameType(arg1, arg2)
+              case _: WildcardTypeBounds => false
+  end isSubTypeArg
+
   private def level1(tp1: Type, tp2: Type)(using Context): Boolean = tp2 match
     case tp2: TypeRef if tp2.isFromJavaObject =>
       isSubtype(tp1, defn.AnyType)
@@ -88,11 +131,11 @@ private[tastyquery] object Subtyping:
         // If we get here, both are terms, and terms always have symbols
         val sym1Term = sym1.get.asTerm
         val sym2Term = sym2.get.asTerm
-        if sym1Term.needsSignature then sym2Term.needsSignature && tp1.asTerm.signature == tp2.asTerm.signature
+        if sym1Term.needsSignature then sym2Term.needsSignature && tp1.asTermRef.signature == tp2.asTermRef.signature
         else !sym2Term.needsSignature
 
       def areBothClasses: Boolean =
-        tp1.isType && tp1.asType.isClass && tp2.asType.isClass
+        tp1.isType && tp1.asTypeRef.isClass && tp2.asTypeRef.isClass
 
       val trueBecauseOverriddenMembers =
         tp1.name == tp2.name
@@ -175,22 +218,6 @@ private[tastyquery] object Subtyping:
           val etaExpandSuccess = tparams1.nonEmpty && isSubtype(etaExpand(tp1, tparams1), tp2)
           etaExpandSuccess || level4(tp1, tp2)
 
-    case tp2: MethodType =>
-      tp1 match
-        case tp1: MethodType =>
-          TypeOps.matchingMethodParams(tp1, tp2)
-            && isSubtype(tp1.resultType, Substituters.substBinders(tp2.resultType, tp2, tp1))
-        case _ =>
-          false
-
-    case tp2: PolyType =>
-      tp1 match
-        case tp1: PolyType =>
-          TypeOps.matchingPolyParams(tp1, tp2)
-            && isSubtype(tp1.resultType, Substituters.substBinders(tp2.resultType, tp2, tp1))
-        case _ =>
-          false
-
     case tp2: RefinedType =>
       (isSubtype(tp1, tp2.parent) && hasMatchingRefinedMember(tp1, tp2))
         || level4(tp1, tp2)
@@ -199,11 +226,9 @@ private[tastyquery] object Subtyping:
       tp1.dealias match
         case tp1: RecType =>
           isSubtype(tp1.parent, tp2.expand(tp1.recThis))
-        case tp1: ValueType =>
+        case tp1 =>
           val tp1stable = ensureStableSingleton(tp1)
           isSubtype(fixRecs(tp1stable, tp1stable), tp2.expand(tp1stable))
-        case _ =>
-          false
 
     case tp2: OrType =>
       isSubtype(tp1, tp2.first) || isSubtype(tp1, tp2.second)
@@ -313,36 +338,17 @@ private[tastyquery] object Subtyping:
         else false
   end compareAppliedType2
 
-  private def isSubArgs(tp1: Type, args1: List[Type], args2: List[Type], tparams: List[TypeConstructorParam])(
-    using Context
-  ): Boolean =
-    def isSubArg(arg1: Type, arg2: Type, tparam: TypeConstructorParam): Boolean =
-      tparam.variance.sign match
-        case 1 =>
-          def highIfWildcard(tp: Type): Type = tp match
-            case tp: WildcardTypeBounds => tp.bounds.high
-            case _                      => tp
-          isSubtype(highIfWildcard(arg1), highIfWildcard(arg2))
-
-        case -1 =>
-          def lowIfWildcard(tp: Type): Type = tp match
-            case tp: WildcardTypeBounds => tp.bounds.low
-            case _                      => tp
-          isSubtype(lowIfWildcard(arg2), lowIfWildcard(arg1))
-
-        case 0 =>
-          arg2 match
-            case arg2: WildcardTypeBounds =>
-              arg2.bounds.contains(arg1)
-            case _ =>
-              !arg1.isInstanceOf[WildcardTypeBounds] && isSameType(arg1, arg2)
-    end isSubArg
-
+  private def isSubArgs(
+    tp1: Type,
+    args1: List[TypeOrWildcard],
+    args2: List[TypeOrWildcard],
+    tparams: List[TypeConstructorParam]
+  )(using Context): Boolean =
     if args1.sizeCompare(args2) != 0 || args2.sizeCompare(tparams) != 0 then
       throw InvalidProgramStructureException(s"argument count mismatch: isSubArgs($args1, $args2, $tparams)")
 
     args1.lazyZip(args2).lazyZip(tparams).forall { (arg1, arg2, tparam) =>
-      isSubArg(arg1, arg2, tparam)
+      isSubTypeArg(arg1, arg2, tparam.variance.sign)
     }
   end isSubArgs
 
@@ -368,11 +374,11 @@ private[tastyquery] object Subtyping:
             case ResolveMemberResult.NotFound =>
               false
             case ResolveMemberResult.TermMember(_, tpe) =>
-              tpe.isSubtype(tp2.refinedType)
+              tpe.isSubTypeOrMethodic(tp2.refinedType)
             case _: ResolveMemberResult.ClassMember | _: ResolveMemberResult.TypeMember =>
               throw AssertionError(s"found type member for $tp2 in $tp1")
         else
-          tp1.resolveMatchingMember(tp2.signedName, tp1, _.isSubtype(tp2.refinedType)) match
+          tp1.resolveMatchingMember(tp2.signedName, tp1, _.isSubTypeOrMethodic(tp2.refinedType)) match
             case ResolveMemberResult.NotFound =>
               false
             case _: ResolveMemberResult.TermMember =>
@@ -381,7 +387,7 @@ private[tastyquery] object Subtyping:
               throw AssertionError(s"found type member for $tp2 in $tp1")
   end hasMatchingRefinedMember
 
-  private def ensureStableSingleton(tp: ValueType)(using Context): SingletonType = tp match
+  private def ensureStableSingleton(tp: Type)(using Context): SingletonType = tp match
     case tp: SingletonType if tp.isStable => tp
     case _                                => SkolemType(tp)
 
@@ -502,7 +508,9 @@ private[tastyquery] object Subtyping:
       false
     case tp: TermRef =>
       // Weird spec thing: x.type represents {x, null} when the underlying type of x is nullable :(
-      isNullable(tp.underlying)
+      tp.underlyingOrMethodic match
+        case underlying: Type => isNullable(underlying)
+        case _: MethodicType  => false
     case tp: AppliedType =>
       isNullable(tp.tycon)
     case tp: RefinedType =>
@@ -524,20 +532,19 @@ private[tastyquery] object Subtyping:
       case NoPrefix =>
         pre2 eq NoPrefix
       case pre1: PackageRef =>
-        // fast path for prefixes
         pre2 match
-          case pre2: PackageRef => pre1.symbol == pre2.symbol
-          case _                => false
+          case pre2: PackageRef   => pre1.symbol == pre2.symbol
+          case NoPrefix | _: Type => false
       case pre1: Type =>
         pre2 match
-          case pre2: Type => isSubtype(pre1, pre2)
-          case NoPrefix   => false
+          case pre2: Type               => isSubtype(pre1, pre2)
+          case NoPrefix | _: PackageRef => false
   end isSubprefix
 
   private def isBottom(tp: Type)(using Context): Boolean =
     isTypeRefOf(tp.widen, defn.NothingClass)
 
-  private def isTypeRefOf(tp: Type, cls: ClassSymbol)(using Context): Boolean = tp match
+  private def isTypeRefOf(tp: TypeOrMethodic, cls: ClassSymbol)(using Context): Boolean = tp match
     case tp: TypeRef => tp.isSpecificClass(cls)
     case _           => false
 end Subtyping

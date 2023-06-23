@@ -99,7 +99,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       def unapply(tpe: Types.PackageRef): Some[FullyQualifiedName] = Some(tpe.fullyQualifiedName)
 
     object AppliedType:
-      def unapply(tpe: Types.AppliedType): (Type, List[Type]) = (tpe.tycon, tpe.args)
+      def unapply(tpe: Types.AppliedType): (Type, List[TypeOrWildcard]) = (tpe.tycon, tpe.args)
 
     object ThisType:
       def unapply(tpe: Types.ThisType): Some[TypeRef] = Some(tpe.tref)
@@ -130,7 +130,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
         (tpe.parent, tpe.refinedName, tpe.refinedBounds)
 
     object TermRefinement:
-      def unapply(tpe: Types.TermRefinement): (Type, Name, Type) =
+      def unapply(tpe: Types.TermRefinement): (Type, Name, TypeOrMethodic) =
         (tpe.parent, tpe.refinedName, tpe.refinedType)
 
     object WildcardTypeBounds:
@@ -143,11 +143,11 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       def unapply(tpe: Types.MatchTypeCase): (List[Type], Type, Type) = (tpe.paramRefs, tpe.pattern, tpe.result)
 
     object PolyType:
-      def unapply(tpe: Types.PolyType): (List[(TypeName, TypeBounds)], Type) =
+      def unapply(tpe: Types.PolyType): (List[(TypeName, TypeBounds)], TypeOrMethodic) =
         (tpe.paramNames.zip(tpe.paramTypeBounds), tpe.resultType)
 
     object MethodType:
-      def unapply(tpe: Types.MethodType): (List[(TermName, Type)], Type) =
+      def unapply(tpe: Types.MethodType): (List[(TermName, Type)], TypeOrMethodic) =
         (tpe.paramNames.zip(tpe.paramTypes), tpe.resultType)
 
     object TypeLambda:

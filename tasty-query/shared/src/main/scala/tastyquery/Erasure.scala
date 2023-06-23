@@ -41,7 +41,7 @@ private[tastyquery] object Erasure:
         case typeRef =>
           typeRef.arrayOf()
 
-    def arrayOf(tpe: Type): ErasedTypeRef = tpe match
+    def arrayOf(tpe: TypeOrWildcard): ErasedTypeRef = tpe match
       case tpe: AppliedType =>
         tpe.tycon match
           case TypeRef.OfClass(cls) =>
@@ -63,9 +63,8 @@ private[tastyquery] object Erasure:
           case _ =>
             arrayOfBounds(tpe.bounds)
       case tpe: TypeParamRef       => arrayOfBounds(tpe.bounds)
+      case tpe: Type               => preErase(tpe).arrayOf()
       case tpe: WildcardTypeBounds => arrayOfBounds(tpe.bounds)
-      case _ =>
-        preErase(tpe).arrayOf()
     end arrayOf
 
     tpe.widen match
@@ -92,8 +91,6 @@ private[tastyquery] object Erasure:
             preErase(tpe.underlying)
       case tpe: TypeParamRef =>
         preErase(tpe.bounds.high)
-      case tpe: WildcardTypeBounds =>
-        preErase(tpe.bounds.high)
       case tpe: MatchType =>
         tpe.reduced match
           case Some(reduced) => preErase(reduced)
@@ -109,7 +106,7 @@ private[tastyquery] object Erasure:
         preErase(tpe.parent)
       case _: SingletonType | _: ByNameType | _: AnnotatedType | _: RefinedType =>
         throw AssertionError(s"Unexpected widened type $tpe")
-      case _: MethodicType | _: TypeLambda | _: PackageRef | _: CustomTransientGroundType =>
+      case _: MethodicType | _: TypeLambda | _: CustomTransientGroundType =>
         throw IllegalArgumentException(s"Unexpected type in erasure: $tpe")
   end preErase
 

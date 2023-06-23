@@ -17,7 +17,18 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def isListOf(tests: (T => Boolean)*)(using Context): Boolean =
       elems.corresponds(tests)((t, test) => test(t))
 
-  extension (tpe: Type)
+  extension (tpe: TypeMappable)
+    def isType(pred: Type => Boolean)(using Context): Boolean = tpe match
+      case tpe: Type => pred(tpe)
+      case _         => false
+
+    def isWildcard(using Context): Boolean =
+      isBounded(_.isNothing, _.isAny)
+
+    def isBounded(lo: Type => Boolean, hi: Type => Boolean)(using Context): Boolean = tpe match
+      case tpe: WildcardTypeBounds => lo(tpe.bounds.low) && hi(tpe.bounds.high)
+      case _                       => false
+
     def isTypeRefOf(cls: ClassSymbol)(using Context): Boolean = tpe match
       case TypeRef.OfClass(tpeCls) => tpeCls == cls
       case _                       => false
@@ -38,31 +49,34 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     def isNothing(using Context): Boolean = tpe.isRef(defn.NothingClass)
 
-    def isWildcard(using Context): Boolean =
-      isBounded(_.isNothing, _.isAny)
-
-    def isBounded(lo: Type => Boolean, hi: Type => Boolean)(using Context): Boolean = tpe match
-      case tpe: WildcardTypeBounds => lo(tpe.bounds.low) && hi(tpe.bounds.high)
-      case _                       => false
-
     def isIntersectionOf(tpes: (Type => Boolean)*)(using Context): Boolean =
-      def parts(tpe: Type): List[Type] = tpe match
-        case tpe: AndType => tpe.parts
-        case tpe: Type    => tpe :: Nil
-      parts(tpe.widen).isListOf(tpes*)
+      tpe match
+        case tpe: Type =>
+          def parts(tpe: Type): List[Type] = tpe match
+            case tpe: AndType => tpe.parts
+            case tpe: Type    => tpe :: Nil
+          parts(tpe).isListOf(tpes*)
+        case _ =>
+          false
+    end isIntersectionOf
 
-    def isApplied(cls: Type => Boolean, argRefs: Seq[Type => Boolean])(using Context): Boolean =
-      tpe.widen match
-        case app: AppliedType if cls(app.tycon) =>
-          app.args.corresponds(argRefs)((arg, argRef) => argRef(arg))
-        case _ => false
+    def isApplied(cls: Type => Boolean, argRefs: Seq[TypeOrWildcard => Boolean])(using Context): Boolean =
+      tpe match
+        case tpe: TermType =>
+          tpe.widen match
+            case app: AppliedType if cls(app.tycon) =>
+              app.args.corresponds(argRefs)((arg, argRef) => argRef(arg))
+            case _ => false
+        case _ =>
+          false
+    end isApplied
 
     def isByName(arg: Type => Boolean)(using Context): Boolean =
       tpe match
         case tpe: ByNameType => arg(tpe.resultType)
         case _               => false
 
-    def isArrayOf(arg: Type => Boolean)(using Context): Boolean =
+    def isArrayOf(arg: TypeOrWildcard => Boolean)(using Context): Boolean =
       isApplied(_.isTypeRefOf(defn.ArrayClass), Seq(arg))
 
     def isConstant(constant: Constant)(using Context): Boolean = tpe match
@@ -71,7 +85,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   end extension
 
   testWithContext("hierarchy-partitions") {
-    /* These no-op matches test that the set of all possible `Type`s is
+    /* These no-op matches test that the set of all possible `TypeMappable`s is
      * partitioned into certain sets of sub-classes and sub-traits.
      */
 
@@ -79,15 +93,29 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case _: GroundType => 1
       case _: TypeProxy  => 2
 
-    def termAndNonTerm(tp: Type): Int = tp match
-      case _: TermType                  => 1
-      case _: WildcardTypeBounds        => 2
-      case _: CustomTransientGroundType => 3
+    def termTypes(tp: TermType): Int = tp match
+      case _: TypeOrMethodic => 1
+      case _: PackageRef     => 2
 
-    def valueAndMethodic(tp: TermType): Int = tp match
-      case _: ValueType    => 1
+    def typeOrMethodic(tp: TypeOrMethodic): Int = tp match
+      case _: Type         => 1
       case _: MethodicType => 2
-      case _: PackageRef   => 3
+
+    def methodicType(tp: MethodicType): Int = tp match
+      case _: MethodType => 1
+      case _: PolyType   => 2
+
+    def typeOrWildcard(tp: TypeOrWildcard): Int = tp match
+      case _: Type               => 1
+      case _: WildcardTypeBounds => 2
+
+    def prefix(tp: Prefix): Int = tp match
+      case NoPrefix          => 1
+      case _: NonEmptyPrefix => 2
+
+    def nonEmptyPrefix(tp: NonEmptyPrefix): Int = tp match
+      case _: Type       => 1
+      case _: PackageRef => 2
 
     // Nothing to do
     ()
@@ -668,8 +696,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def testDef(name: TermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
       op(BagOfGenJavaDefinitionsClass.findNonOverloadedDecl(name))
 
-    extension (tpe: Type)
-      def isGenJavaClassOf(arg: Type => Boolean)(using Context): Boolean =
+    extension (tpe: TypeMappable)
+      def isGenJavaClassOf(arg: TypeOrWildcard => Boolean)(using Context): Boolean =
         tpe.isApplied(_.isRef(GenericJavaClass), List(arg))
 
     testDef(name"x") { x =>
@@ -831,10 +859,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val InferredFromJavaObjectClass = ctx.findTopLevelClass("javacompat.InferredFromJavaObject")
 
     val atTopLevel = InferredFromJavaObjectClass.findDecl(termName("atTopLevel"))
-    assert(clue(atTopLevel.declaredType).isFromJavaObject)
+    assert(clue(atTopLevel.declaredType).isType(_.isFromJavaObject))
 
     val inArray = InferredFromJavaObjectClass.findDecl(termName("inArray"))
-    assert(clue(inArray.declaredType).isArrayOf(_.isFromJavaObject))
+    assert(clue(inArray.declaredType).isArrayOf(_.isType(_.isFromJavaObject)))
   }
 
   testWithContext("java-class-parents") {
@@ -953,7 +981,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val Some(DefDef(_, _, _, Some(Apply(canEqualSelection, _)), _)) = fooSym.tree: @unchecked
 
     val underlyingType = canEqualSelection.tpe match
-      case termRef: TermRef => termRef.underlying
+      case termRef: TermRef => termRef.underlyingOrMethodic
       case tpe              => fail("expected TermRef", clues(tpe))
 
     val mt = underlyingType.asInstanceOf[MethodType]
@@ -1323,14 +1351,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def getDefOf(name: String): DefDef =
       VarargFunctionClass.findNonOverloadedDecl(termName(name)).tree.get.asInstanceOf[DefDef]
 
-    def extractParamAndResultType(mt: Type): (Type, Type) = mt match
+    def extractParamAndResultType(mt: TermType): (Type, TypeOrMethodic) = mt match
       case mt: MethodType if mt.paramNames.sizeIs == 1 =>
         (mt.paramTypes.head, mt.resultType)
       case _ =>
         fail(s"unexpected method type", clues(mt))
     end extractParamAndResultType
 
-    def extractFormalTypedActualParamTypes(apply: TermTree): (Type, Type, Type) = apply match
+    def extractFormalTypedActualParamTypes(apply: TermTree): (Type, TermType, TermType) = apply match
       case Apply(fun, List(typed @ Typed(arg, _))) =>
         val (formal, _) = extractParamAndResultType(fun.tpe.widen)
         (formal, typed.tpe, arg.tpe)
@@ -1338,10 +1366,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         fail("unexpected body", clues(apply))
     end extractFormalTypedActualParamTypes
 
-    def assertSeqOfInt(tpe: Type): Unit =
+    def assertSeqOfInt(tpe: TypeMappable): Unit =
       assert(clue(tpe).isApplied(t => t.isRef(defn.SeqClass) || t.isRef(scalaSeq), List(_.isRef(defn.IntClass))))
 
-    def assertAnnotatedSeqOfInt(tpe: Type): Unit = tpe match
+    def assertAnnotatedSeqOfInt(tpe: TypeMappable): Unit = tpe match
       case tpe: AnnotatedType =>
         assertSeqOfInt(tpe.typ)
         assert(clue(tpe.annotation.symbol) == defn.internalRepeatedAnnotClass.get)
@@ -1349,7 +1377,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         fail("unexpected parameter type", clues(tpe))
     end assertAnnotatedSeqOfInt
 
-    def assertRepeatedOfInt(tpe: Type): Unit =
+    def assertRepeatedOfInt(tpe: TypeMappable): Unit =
       assert(clue(tpe).isApplied(_.isRef(defn.RepeatedParamClass), List(_.isRef(defn.IntClass))))
 
     locally {
@@ -2209,7 +2237,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(qualifier.tpe).isInstanceOf[TermRef])
     assert(clue(qualifier.tpe.asInstanceOf[TermRef].underlying).isInstanceOf[TermRefinement])
 
-    val optMember = qualifier.tpe.lookupMember(signedName)
+    val optMember = qualifier.tpe.requireType.lookupMember(signedName)
     assert(optMember.isDefined)
 
     val AClass = RefinedTypeTreeClass.findMember(typeName("A")).asClass
@@ -2309,22 +2337,26 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def isAnyMethod(sym: Symbol, name: SimpleName): Boolean =
       sym.owner == defn.AnyClass && sym.name == name
 
-    def testApply(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): Unit =
+    def testApply(testMethodName: String, targetMethodName: SimpleName, expectedType: TermType => Boolean): Unit =
       val rhs @ Apply(fun: Select, _) = rhsOf(testMethodName): @unchecked
       assert(isAnyMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
       assert(expectedType(clue(rhs.tpe)), testMethodName)
 
-    def testDirect(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): Unit =
+    def testDirect(testMethodName: String, targetMethodName: SimpleName, expectedType: TermType => Boolean): Unit =
       val fun @ (_: Select) = rhsOf(testMethodName): @unchecked
       assert(isAnyMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
       assert(expectedType(clue(fun.tpe.widen)), testMethodName)
 
-    def testTypeApply(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): Unit =
+    def testTypeApply(testMethodName: String, targetMethodName: SimpleName, expectedType: TermType => Boolean): Unit =
       val rhs @ TypeApply(fun: Select, _) = rhsOf(testMethodName): @unchecked
       assert(isAnyMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
       assert(expectedType(clue(rhs.tpe)), testMethodName)
 
-    def testApplyTypeApply(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): Unit =
+    def testApplyTypeApply(
+      testMethodName: String,
+      targetMethodName: SimpleName,
+      expectedType: TermType => Boolean
+    ): Unit =
       val rhs @ Apply(TypeApply(fun: Select, _), _) = rhsOf(testMethodName): @unchecked
       assert(isAnyMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
       assert(expectedType(clue(rhs.tpe)), testMethodName)
@@ -2381,7 +2413,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def isStringMethod(sym: Symbol, name: SimpleName): Boolean =
       sym.owner == StringClass && sym.name == name
 
-    def testApply(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): Unit =
+    def testApply(testMethodName: String, targetMethodName: SimpleName, expectedType: TermType => Boolean): Unit =
       val rhs @ Apply(fun: Select, _) = rhsOf(testMethodName): @unchecked
       assert(isStringMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
       assert(expectedType(clue(rhs.tpe)), testMethodName)
@@ -2398,7 +2430,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def isObjectMethod(sym: Symbol, name: SimpleName): Boolean =
       sym.owner == defn.ObjectClass && sym.name == name
 
-    def testApply(testMethodName: String, targetMethodName: SimpleName, expectedType: Type => Boolean): TermSymbol =
+    def testApply(testMethodName: String, targetMethodName: SimpleName, expectedType: TermType => Boolean): TermSymbol =
       val rhs @ Apply(fun: Select, _) = rhsOf(testMethodName): @unchecked
       assert(isObjectMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
       assert(expectedType(clue(rhs.tpe)), testMethodName)
@@ -2408,7 +2440,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def testApplyTypeApply(
       testMethodName: String,
       targetMethodName: SimpleName,
-      expectedType: Type => Boolean
+      expectedType: TermType => Boolean
     ): TermSymbol =
       val rhs @ Apply(TypeApply(fun: Select, _), _) = rhsOf(testMethodName): @unchecked
       assert(isObjectMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
@@ -2424,7 +2456,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     testApply("testNotifyAll", termName("notifyAll"), _.isRef(defn.UnitClass))
     testApply("testWait", termName("wait"), _.isRef(defn.UnitClass))
 
-    testApply("testClone", termName("clone"), _.isFromJavaObject)
+    testApply("testClone", termName("clone"), _.isType(_.isFromJavaObject))
 
     /* Check that the symbols we found are also the ones of `defn.Object_x`.
      * Wheck do this *after* having performed the rest of the tests, because we want to

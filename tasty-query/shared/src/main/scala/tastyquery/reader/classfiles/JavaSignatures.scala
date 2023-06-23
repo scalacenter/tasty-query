@@ -23,7 +23,7 @@ private[classfiles] object JavaSignatures:
     using Context,
     InnerClasses,
     Resolver
-  ): Type =
+  ): TypeOrMethodic =
     var offset = 0
     var end = signature.length
     val isClass = member.isClass
@@ -171,7 +171,7 @@ private[classfiles] object JavaSignatures:
       else None
     end classTypeSignature
 
-    def typeArgument(env: JavaSignature): Type =
+    def typeArgument(env: JavaSignature): TypeOrWildcard =
       if available >= 1 then
         (peek: @switch) match
           case '*' =>
@@ -190,7 +190,7 @@ private[classfiles] object JavaSignatures:
             referenceType(env)
       else abort
 
-    def typeArgumentsRest(env: JavaSignature): List[Type] =
+    def typeArgumentsRest(env: JavaSignature): List[TypeOrWildcard] =
       readUntil('>', typeArgument(env))
 
     def typeParameter(env: JavaSignature): TypeBounds =
@@ -240,8 +240,8 @@ private[classfiles] object JavaSignatures:
     def termParamsRest(env: JavaSignature): List[Type] =
       readUntil(')', javaTypeSignature(env))
 
-    def methodSignature: Type =
-      def methodRest(env: JavaSignature): Type =
+    def methodSignature: MethodicType =
+      def methodRest(env: JavaSignature): MethodType =
         if consume('(') then // must have '(', ')', and return type
           val params = termParamsRest(env)
           val ret = result(env)
