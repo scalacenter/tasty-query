@@ -1215,7 +1215,7 @@ object Symbols {
     private[tastyquery] def resolveMember(name: Name, pre: NonEmptyPrefix)(using Context): ResolveMemberResult =
       findMember(pre, name) match
         case Some(sym: TermSymbol) =>
-          ResolveMemberResult.TermMember(sym :: Nil, sym.declaredTypeAsSeenFrom(pre))
+          ResolveMemberResult.TermMember(sym :: Nil, sym.declaredTypeAsSeenFrom(pre), sym.isStableMember)
         case Some(sym: ClassSymbol) =>
           ResolveMemberResult.ClassMember(sym)
         case Some(sym: TypeSymbolWithBounds) =>
@@ -1240,7 +1240,7 @@ object Symbols {
                 && name.sig.paramsCorrespond(decl.signature)
             if matches then
               val tpe = decl.declaredTypeAsSeenFrom(pre)
-              if typePredicate(tpe) then return ResolveMemberResult.TermMember(decl :: Nil, tpe)
+              if typePredicate(tpe) then return ResolveMemberResult.TermMember(decl :: Nil, tpe, decl.isStableMember)
             end if
             overloadsRest = overloadsRest.tail
           end while

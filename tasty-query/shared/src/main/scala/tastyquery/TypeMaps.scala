@@ -252,7 +252,7 @@ private[tastyquery] object TypeMaps {
               // If H#T = ? >: S <: U, then for any x in L..H, S <: x.T <: U,
               // hence we can replace with S..U under all variances
               Some(expandBounds(bounds))
-        case ResolveMemberResult.TermMember(symbols, tpe) =>
+        case ResolveMemberResult.TermMember(symbols, tpe, isStable) =>
           tpe.dealias match
             case tpe: SingletonType =>
               // if H#x: y.type, then for any x in L..H, x.type =:= y.type,

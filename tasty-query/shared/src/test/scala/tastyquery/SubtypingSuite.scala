@@ -716,8 +716,8 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       val polyHigh = TypeLambda(List(typeName("X")), List(defn.NothingAnyBounds), high)
       TypeRefinement(SimplePathsClass.appliedRef, typeName(name), RealTypeBounds(polyLow, polyHigh))
 
-    def refineTerm(name: String, tpe: TypeOrMethodic): Type =
-      TermRefinement(SimplePathsClass.appliedRef, isStable = false, termName(name), tpe)
+    def refineTerm(name: String, tpe: TypeOrMethodic, isStable: Boolean = false): Type =
+      TermRefinement(SimplePathsClass.appliedRef, isStable, termName(name), tpe)
 
     // type refinement - exists in class
 
@@ -793,6 +793,35 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       .withRef[ConcreteSimplePathsChild, SimplePaths { def abstractTerm: List[Any] }]
     assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("abstractTerm", listOf(defn.BooleanType)))
       .withRef[ConcreteSimplePathsChild, SimplePaths { def abstractTerm: List[Boolean] }]
+
+    assertEquiv(
+      refineTerm("abstractTerm", defn.StringType, isStable = true),
+      refineTerm("abstractTerm", defn.StringType, isStable = true)
+    )
+      .withRef[SimplePaths { val abstractTerm: String }, SimplePaths { val abstractTerm: String }]
+    assertStrictSubtype(refineTerm("abstractTerm", defn.StringType, isStable = true), SimplePathsClass.appliedRef)
+      .withRef[SimplePaths { val abstractTerm: String }, SimplePaths]
+
+    // no withRef on the following because dotc does not take stability into account, apparently
+    assertStrictSubtype(
+      refineTerm("abstractTerm", defn.StringType, isStable = true),
+      refineTerm("abstractTerm", defn.StringType)
+    )
+    assertNeitherSubtype(
+      refineTerm("abstractTerm", defn.AnyType, isStable = true),
+      refineTerm("abstractTerm", defn.StringType)
+    )
+
+    assert(
+      clue(
+        SkolemType(refineTerm("abstractTerm", defn.StringType, isStable = true)).select(termName("abstractTerm"))
+      ).isStable
+    )
+    assert(
+      !clue(
+        SkolemType(refineTerm("abstractTerm", defn.StringType, isStable = false)).select(termName("abstractTerm"))
+      ).isStable
+    )
 
     val refinedSomeMethodType =
       refineTerm("someMethod", MethodType(List(termName("x")), List(defn.IntType), defn.IntType))
