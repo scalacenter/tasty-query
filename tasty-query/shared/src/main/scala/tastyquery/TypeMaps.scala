@@ -170,8 +170,13 @@ private[tastyquery] object TypeMaps {
       args match
         case arg :: otherArgs if tparams.nonEmpty =>
           val arg1 = arg match
-            case arg: WildcardTypeArg => this(arg)
-            case arg: Type            => atVariance(variance * tparams.head.variance.sign)(this(arg))
+            case arg: WildcardTypeArg =>
+              this(arg)
+            case arg: Type =>
+              /* `arg: TypeOrWildcard` allows the Type to be mapped to a WildcardTypeArg in this context.
+               * Without it, we get a CCE that `WildcardTypeArg` cannot be cast to `Type`.
+               */
+              atVariance(variance * tparams.head.variance.sign)(this(arg: TypeOrWildcard))
           val otherArgs1 = mapArgs(otherArgs, tparams.tail)
           if ((arg1 eq arg) && (otherArgs1 eq otherArgs)) args
           else arg1 :: otherArgs1
