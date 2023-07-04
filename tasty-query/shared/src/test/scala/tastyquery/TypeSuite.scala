@@ -2866,4 +2866,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case high =>
         fail("unexpected upper bound for C", clues(high))
   }
+
+  testWithContext("scala-2-existentially-bound-syms-are-not-decls") {
+    val DefaultSerializableClass = ctx.findTopLevelClass("scala.collection.generic.DefaultSerializable")
+
+    assert(clue(DefaultSerializableClass.getDecl(typeName("_$1"))).isEmpty)
+
+    assert(!clue(DefaultSerializableClass.declarations).exists { decl =>
+      decl.name.toString().contains("$")
+    })
+  }
 }

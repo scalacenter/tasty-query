@@ -241,6 +241,7 @@ private[pickles] class PickleReader {
           if pickleFlags.isParam then
             if owner.isClass then ClassTypeParamSymbol.create(name1, owner.asClass)
             else LocalTypeParamSymbol.create(name1, owner)
+          else if pickleFlags.isExistential then TypeMemberSymbol.createNotDeclaration(name1, owner)
           else TypeMemberSymbol.create(name1, owner)
         storeResultInEntries(sym)
         val tpe = readSymType()
@@ -292,7 +293,8 @@ private[pickles] class PickleReader {
           case SimpleName(str) => flags.is(Method) && str.endsWith("$extension")
           case _               => false
         val sym =
-          if forceNotDeclaration then TermSymbol.createNotDeclaration(name.toTermName, owner)
+          if pickleFlags.isExistential || forceNotDeclaration then
+            TermSymbol.createNotDeclaration(name.toTermName, owner)
           else TermSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles
         val tpe = readSymType()

@@ -709,6 +709,9 @@ object Symbols {
   object TypeMemberSymbol:
     private[tastyquery] def create(name: TypeName, owner: Symbol): TypeMemberSymbol =
       owner.addDeclIfDeclaringSym(TypeMemberSymbol(name, owner))
+
+    private[tastyquery] def createNotDeclaration(name: TypeName, owner: Symbol): TypeMemberSymbol =
+      TypeMemberSymbol(name, owner)
   end TypeMemberSymbol
 
   enum TypeMemberDefinition:
