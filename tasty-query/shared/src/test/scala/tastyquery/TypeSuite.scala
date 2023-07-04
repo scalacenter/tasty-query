@@ -1462,16 +1462,23 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val optBaseType = origType.baseType(IterableOpsClass) // this used to cause an infinite recursion
     assert(optBaseType.isDefined)
 
-    val baseTypeParts = optBaseType.get match
-      case baseType: AndType => baseType.parts
-      case baseType          => baseType :: Nil
+    extension (tpe: TypeOrWildcard)
+      def andParts: List[Type] = tpe match
+        case tpe: AndType       => tpe.parts
+        case tpe: Type          => tpe :: Nil
+        case _: WildcardTypeArg => Nil
 
-    assert(clue(baseTypeParts).exists { tp =>
-      tp.isApplied(
+    // sc.IterableOps[scala.Int, (... & sci.List), sci.List[scala.Int]]
+    assert(
+      optBaseType.get.isApplied(
         _.isRef(IterableOpsClass),
-        List(_.isRef(defn.IntClass), _.isRef(ListClass), _.isApplied(_.isRef(ListClass), List(_.isRef(defn.IntClass))))
+        List(
+          _.isRef(defn.IntClass),
+          _.andParts.exists(_.isRef(ListClass)),
+          _.isApplied(_.isRef(ListClass), List(_.isRef(defn.IntClass)))
+        )
       )
-    })
+    )
 
     // Here is the original trigger: computing the type of the body of ForExpressions.test1
     locally {
@@ -1494,7 +1501,24 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val selfParamType = methodType.paramTypes.head
 
     val baseTypeOpt = selfParamType.baseType(IterableOpsClass) // used to crash with CCE
-    assert(baseTypeOpt.isDefined)
+    assert(baseTypeOpt.isDefined, clues(selfParamType))
+
+    // scala.collection.IterableOps[scala.Tuple2[K, V], (scala.collection.Iterable & IterableCC), ?]
+    baseTypeOpt.get match
+      case baseType: AppliedType =>
+        baseType.tycon match
+          case TypeRef.OfClass(cls) =>
+            assert(clue(cls) == IterableOpsClass)
+          case _ =>
+            fail("unexpected baseType", clues(baseType))
+        baseType.args match
+          case List(tuple2: AppliedType, iterableAndIterableCC: AndType, wild: WildcardTypeArg) =>
+            () // OK
+          case _ =>
+            fail("unexpected baseType", clues(baseType))
+      case baseType =>
+        fail("unexpected baseType", clues(baseType))
+    end match
   }
 
   testWithContext("scala.collection.:+") {
