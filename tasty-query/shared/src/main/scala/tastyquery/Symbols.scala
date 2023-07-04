@@ -1350,8 +1350,8 @@ object Symbols {
           tpe.args match
             case TypeRef.OfClass(childCls) :: Nil =>
               childCls
-            case (childRef: TermRef) :: Nil if childRef.symbol.isAnyOf(Module | Enum) =>
-              childRef.symbol
+            case (childRef: TermRef) :: Nil if childRef.optSymbol.exists(_.isAnyOf(Module | Enum)) =>
+              childRef.optSymbol.get
             case _ =>
               throw InvalidProgramStructureException(s"Unexpected type $tpe for $annot")
         case tpe =>

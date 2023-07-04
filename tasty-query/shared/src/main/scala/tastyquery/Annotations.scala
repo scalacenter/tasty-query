@@ -136,7 +136,7 @@ object Annotations:
     @tailrec
     def loop(tree: TermTree): TermSymbol = tree match
       case Apply(fun, _)              => loop(fun)
-      case tree @ Select(New(tpt), _) => tree.tpe.asInstanceOf[TermRef].symbol
+      case tree @ Select(New(tpt), _) => tree.tpe.asInstanceOf[TermRef].optSymbol.get
       case TypeApply(fun, _)          => loop(fun)
       case Block(_, expr)             => loop(expr)
       case _                          => invalid()

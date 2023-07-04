@@ -319,7 +319,7 @@ object Types {
           None
         case resolved: ResolveMemberResult.TermMember =>
           if resolved.symbols.isEmpty then None
-          else Some(TermRef.fromResolved(this, resolved))
+          else Some(TermRef.fromResolved(this, name.asInstanceOf[TermName], resolved))
         case resolved: ResolveMemberResult.ClassMember =>
           Some(TypeRef.fromResolved(this, resolved))
         case resolved: ResolveMemberResult.TypeMember =>
@@ -892,13 +892,15 @@ object Types {
     protected type ThisDesignatorType = TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
 
     // Cache fields
-    private var mySymbol: TermSymbol | Null = null
+    private var myOptSymbol: Option[TermSymbol] | Null = null
     private var myUnderlying: TypeOrMethodic | Null = null
-    private var myIsStable: Boolean = false // only meaningful once mySymbol is non-null
+    private var myIsStable: Boolean = false // only meaningful once myOptSymbol is non-null
 
-    private def this(prefix: NonEmptyPrefix, resolved: ResolveMemberResult.TermMember) =
-      this(prefix, resolved.symbols.head)
-      mySymbol = resolved.symbols.head
+    private def this(prefix: NonEmptyPrefix, name: TermName, resolved: ResolveMemberResult.TermMember) =
+      this(prefix, name)
+      val optSymbol = resolved.symbols.headOption
+      myOptSymbol = optSymbol
+      if optSymbol.isDefined then myDesignator = optSymbol.get
       myUnderlying = resolved.tpe
     end this
 
@@ -907,22 +909,22 @@ object Types {
     override def toString(): String =
       s"TermRef($prefix, $myDesignator)"
 
-    final def symbol(using Context): TermSymbol =
+    final def optSymbol(using Context): Option[TermSymbol] =
       ensureResolved()
-      mySymbol.nn
+      myOptSymbol.nn
 
     private def ensureResolved()(using Context): Unit =
-      if mySymbol == null then resolve()
+      if myOptSymbol == null then resolve()
 
     private def resolve()(using Context): Unit =
-      def storeResolved(sym: TermSymbol, tpe: TypeOrMethodic, isStable: Boolean): Unit =
-        mySymbol = sym
-        myDesignator = sym
+      def storeResolved(sym: Option[TermSymbol], tpe: TypeOrMethodic, isStable: Boolean): Unit =
+        myOptSymbol = sym
+        if sym.isDefined then myDesignator = sym.get
         myUnderlying = tpe
         myIsStable = isStable
 
       def storeSymbol(sym: TermSymbol): Unit =
-        storeResolved(sym, sym.declaredTypeAsSeenFrom(prefix), sym.isStableMember)
+        storeResolved(Some(sym), sym.declaredTypeAsSeenFrom(prefix), sym.isStableMember)
 
       designator match
         case sym: TermSymbol =>
@@ -937,16 +939,13 @@ object Types {
           prefix match
             case prefix: NonEmptyPrefix =>
               prefix.resolveMember(name) match
-                case ResolveMemberResult.TermMember(symbols, tpe, isStable) if symbols.nonEmpty =>
-                  storeResolved(symbols.head, tpe, isStable)
+                case ResolveMemberResult.TermMember(symbols, tpe, isStable) =>
+                  storeResolved(symbols.headOption, tpe, isStable)
                 case _ =>
                   throw MemberNotFoundException(prefix, name)
             case NoPrefix =>
               throw new AssertionError(s"found reference by name $name without a prefix")
     end resolve
-
-    final def optSymbol(using Context): Option[TermSymbol] =
-      Some(symbol)
 
     def underlyingOrMethodic(using Context): TypeOrMethodic =
       ensureResolved()
@@ -1009,8 +1008,12 @@ object Types {
     private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): TermRef =
       new TermRef(prefix, external)
 
-    private[Types] def fromResolved(prefix: NonEmptyPrefix, resolved: ResolveMemberResult.TermMember): TermRef =
-      new TermRef(prefix, resolved)
+    private[Types] def fromResolved(
+      prefix: NonEmptyPrefix,
+      name: TermName,
+      resolved: ResolveMemberResult.TermMember
+    ): TermRef =
+      new TermRef(prefix, name, resolved)
 
     private[tastyquery] def resolveLookupIn(designator: LookupIn)(using Context): TermSymbol =
       val cls = designator.ownerRef.classSymbol.getOrElse {

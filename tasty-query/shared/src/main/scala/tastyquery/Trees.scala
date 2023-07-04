@@ -265,8 +265,12 @@ object Trees {
     protected final def calculateType(using Context): TermType = tpe
 
     def symbol(using Context): TermSymbol | PackageSymbol = tpe match
-      case termRef: TermRef       => termRef.symbol
+      case termRef: TermRef =>
+        termRef.optSymbol.getOrElse {
+          throw InvalidProgramStructureException(s"$this with type $tpe does not have a symbol")
+        }
       case packageRef: PackageRef => packageRef.symbol
+    end symbol
 
     override final def withSpan(span: Span): Ident = Ident(name)(tpe)(span)
   end Ident
@@ -289,9 +293,13 @@ object Trees {
         case None           => NamedType.possibleSelFromPackage(prefix, name)
 
     def symbol(using Context): TermSymbol | PackageSymbol = tpe match
-      case termRef: TermRef       => termRef.symbol
+      case termRef: TermRef =>
+        termRef.optSymbol.getOrElse {
+          throw InvalidProgramStructureException(s"$this with type $tpe does not have a symbol")
+        }
       case packageRef: PackageRef => packageRef.symbol
       case tpe                    => throw AssertionError(s"unexpected type $tpe in Select node")
+    end symbol
 
     override def withSpan(span: Span): Select = Select(qualifier, name)(selectOwner)(span)
   end Select

@@ -217,13 +217,16 @@ private[tastyquery] object TypeMatching:
     */
   private def provablyDisjoint(tp1: Type, tp2: Type)(using Context): Boolean =
     def isEnumValue(ref: TermRef): Boolean =
-      ref.symbol.isAllOf(Case | Enum) // TODO butNot = JavaDefined
+      ref.optSymbol.exists(_.isAllOf(Case | Enum)) // TODO butNot = JavaDefined
 
     def isEnumValueOrModule(ref: TermRef): Boolean =
-      isEnumValue(ref) || ref.symbol.is(Module) || (ref.underlying match {
-        case tp: TermRef => isEnumValueOrModule(tp)
-        case _           => false
-      })
+      if ref.optSymbol.isEmpty then false
+      else
+        isEnumValue(ref) || ref.optSymbol.get.is(Module) || (ref.underlying match {
+          case tp: TermRef => isEnumValueOrModule(tp)
+          case _           => false
+        })
+    end isEnumValueOrModule
 
     (tp1.dealias, tp2.dealias) match
       case _ if tp1.isFromJavaObject =>
@@ -291,7 +294,7 @@ private[tastyquery] object TypeMatching:
         }
 
       case (tp1: TermRef, tp2: TermRef) if isEnumValueOrModule(tp1) && isEnumValueOrModule(tp2) =>
-        tp1.symbol != tp2.symbol
+        tp1.optSymbol.get != tp2.optSymbol.get
       case (tp1: TermRef, tp2: TypeRef) if isEnumValue(tp1) =>
         !tp1.isSubtype(tp2)
       case (tp1: TypeRef, tp2: TermRef) if isEnumValue(tp2) =>

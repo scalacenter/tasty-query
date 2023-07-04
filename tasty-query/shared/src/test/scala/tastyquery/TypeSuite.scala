@@ -38,7 +38,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case _            => false
 
     def isRef(sym: TermSymbol)(using Context): Boolean = tpe match
-      case tpe: TermRef => tpe.symbol == sym
+      case tpe: TermRef => tpe.optSymbol.contains(sym)
       case _            => false
 
     def isOfClass(cls: ClassSymbol)(using Context): Boolean = tpe match
@@ -186,7 +186,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
           case app @ Apply(fooRef @ Select(_, SignedName(SimpleName("foo"), _, _)), _) =>
             callCount += 1
             assert(app.tpe.isRef(defn.UnitClass), clue(app))
-            val fooSym = fooRef.tpe.asInstanceOf[TermRef].symbol
+            val fooSym = fooRef.tpe.asInstanceOf[TermRef].optSymbol.get
             val mt = fooSym.declaredType.asInstanceOf[MethodType]
             assert(clue(mt.resultType).isRef(defn.UnitClass))
             assert(checkParamType(clue(mt.paramTypes.head)))
@@ -240,7 +240,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       tree match
         case fooRef @ Select(_, SimpleName("foo")) =>
           callCount += 1
-          val fooSym = fooRef.tpe.asInstanceOf[TermRef].symbol
+          val fooSym = fooRef.tpe.asInstanceOf[TermRef].optSymbol.get
           assert(clue(fooSym.paramRefss).isEmpty)
         case _ => ()
     }
@@ -339,7 +339,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       tree match {
         case tree @ Ident(SimpleName("BitSet")) =>
           bitSetIdentCount += 1
-          val sym = tree.tpe.asInstanceOf[TermRef].symbol
+          val sym = tree.tpe.asInstanceOf[TermRef].optSymbol.get
           assert(sym.name == name"BitSet", clue(sym.name.toDebugString))
           ()
         case _ =>
@@ -944,7 +944,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val (getXRef: TermRef) = getXSelection.tpe: @unchecked
 
-    assert(clue(getXRef.symbol) == getX)
+    assert(clue(getXRef.optSymbol) == Some(getX))
   }
 
   testWithContext("select-field-from-java-class") {
@@ -958,7 +958,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val (xRef: TermRef) = xSelection.tpe: @unchecked
 
-    assert(clue(xRef.symbol) == x)
+    assert(clue(xRef.optSymbol) == Some(x))
   }
 
   testWithContext("basic-scala-2-stdlib-class-dependency") {
@@ -1049,7 +1049,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val (unitValRef: TermRef) = unitValSelection.tpe: @unchecked
 
-    assert(clue(unitValRef.symbol) == unitVal)
+    assert(clue(unitValRef.optSymbol) == Some(unitVal))
   }
 
   testWithContext("select-method-from-java-class-same-package-as-tasty") {
@@ -1068,7 +1068,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val (getXRef: TermRef) = getXSelection.tpe: @unchecked
 
-    assert(clue(getXRef.symbol) == getX)
+    assert(clue(getXRef.optSymbol) == Some(getX))
   }
 
   testWithContext("select-field-from-generic-class") {
@@ -1418,7 +1418,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val Apply(fun, args) = body: @unchecked
 
     val termRef = fun.tpe.asInstanceOf[TermRef]
-    val sym = termRef.symbol
+    val sym = termRef.optSymbol.get
     assert(clue(sym).name == nme.m_apply)
     assert(clue(sym.owner) == SpecificIterableFactoryClass)
 
@@ -2151,7 +2151,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         }
         val selectTpe = selectNode.tpe.asInstanceOf[TermRef]
         assert(clue(selectTpe.name) == clue(fName), fStr)
-        val selectSym = selectTpe.symbol
+        val selectSym = selectTpe.optSymbol.get
 
         val expectedOwner = if fStr == "z" then ChildClass else ParentClass
         assert(clue(selectSym.owner) == clue(expectedOwner), fStr)
@@ -2255,7 +2255,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val AClass = RefinedTypeTreeClass.findMember(typeName("A")).asClass
     val AmSym = AClass.findNonOverloadedDecl(termName("m"))
 
-    assert(clue(optMember.get.symbol) == AmSym)
+    assert(clue(optMember.get.optSymbol) == Some(AmSym))
     assert(clue(fooBody.tpe).isRef(defn.IntClass))
   }
 
@@ -2538,7 +2538,6 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
       locally {
         val select @ (_: Select) = rhsOf(s"callBareSuper$gTestSuffix"): @unchecked
-        select.symbol
         assert(clue(select.symbol) == clue(gInParent))
       }
 
@@ -2702,7 +2701,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val termMemberSignedName = termMemberSym.signedName
 
     val termMemberRef = prefix.lookupMember(termMemberSignedName).get
-    assert(termMemberRef.symbol == termMemberSym)
+    assert(termMemberRef.optSymbol == Some(termMemberSym))
 
     assert(clue(prefix.lookupMember(termName("nonExistentTerm"))).isEmpty)
   }
