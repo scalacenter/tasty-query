@@ -1485,6 +1485,18 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
   }
 
+  testWithContext("baseType-can-substitute-wildcard-type-arg-for-type") {
+    val IterableOpsClass = ctx.findTopLevelClass("scala.collection.IterableOps")
+    val WithFilterClass = ctx.findStaticClass("scala.collection.MapOps.WithFilter")
+
+    val ctorSym = WithFilterClass.findNonOverloadedDecl(nme.Constructor)
+    val methodType = ctorSym.declaredType.asInstanceOf[PolyType].resultType.asInstanceOf[MethodType]
+    val selfParamType = methodType.paramTypes.head
+
+    val baseTypeOpt = selfParamType.baseType(IterableOpsClass) // used to crash with CCE
+    assert(baseTypeOpt.isDefined)
+  }
+
   testWithContext("scala.collection.:+") {
     // type parameter C <: SeqOps[A, CC, C]
     ctx.findStaticModuleClass("scala.collection.package.:+")
