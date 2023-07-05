@@ -490,7 +490,7 @@ object Symbols {
   sealed abstract class TypeSymbolWithBounds protected (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner):
     type DefiningTreeType <: TypeMember | TypeParam | TypeTreeBind
 
-    def bounds(using Context): TypeBounds
+    def bounds: TypeBounds
 
     private[tastyquery] final def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
       def default: TypeBounds =
@@ -545,10 +545,7 @@ object Symbols {
       myBounds = bounds
       this
 
-    final def bounds(using Context): TypeBounds =
-      boundsDirect
-
-    private[tastyquery] final def boundsDirect: TypeBounds =
+    final def bounds: TypeBounds =
       val local = myBounds
       if local == null then throw IllegalStateException(s"$this was not assigned type bounds")
       else local
@@ -671,18 +668,18 @@ object Symbols {
       myDefinition = definition
       this
 
-    final def typeDef(using Context): TypeMemberDefinition =
+    final def typeDef: TypeMemberDefinition =
       val local = myDefinition
       if local == null then throw IllegalStateException("$this was not assigned a definition")
       else local
 
-    final def aliasedType(using Context): Type =
+    final def aliasedType: Type =
       typeDef.asInstanceOf[TypeMemberDefinition.TypeAlias].alias
 
     private[tastyquery] def aliasedTypeAsSeenFrom(pre: Prefix)(using Context): Type =
       aliasedType.asSeenFrom(pre, owner)
 
-    final def bounds(using Context): TypeBounds = typeDef match
+    final def bounds: TypeBounds = typeDef match
       case TypeMemberDefinition.TypeAlias(alias)           => TypeAlias(alias)
       case TypeMemberDefinition.AbstractType(bounds)       => bounds
       case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds
