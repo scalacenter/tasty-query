@@ -3,7 +3,6 @@ package tastyquery
 import tastyquery.Annotations.*
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
-import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*

@@ -1,6 +1,6 @@
 package tastyquery
 
-object Flags:
+private[tastyquery] object Flags:
 
   opaque type FlagSet = Long
   opaque type Flag <: FlagSet = Long
@@ -96,3 +96,4 @@ object Flags:
 
   /** Module classes always have these flags set */
   val ModuleClassCreationFlags: FlagSet = Module | Final
+end Flags

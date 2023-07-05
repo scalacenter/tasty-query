@@ -9,8 +9,7 @@ import munit.{Location, TestOptions}
 import tastyquery.Annotations.*
 import tastyquery.Contexts.*
 import tastyquery.Constants.{ClazzTag, Constant, IntTag, NullTag}
-import tastyquery.Flags
-import tastyquery.Flags.*
+import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
@@ -695,7 +694,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
     val classDefMatch: StructureCheck = {
       case ClassDef(TypeName(SuffixedName(NameTags.OBJECTCLASS, SimpleName("ScalaObject"))), _, symbol)
-          if symbol.flags.is(Module) =>
+          if symbol.isModuleClass =>
     }
     assert(containsSubtree(classDefMatch)(clue(tree)))
   }
@@ -786,7 +785,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Int")))),
             Some(Literal(Constant(1))),
             symbol
-          ) if symbol.tree.contains(defTree) && symbol.flags.is(Mutable) && !symbol.flags.isAnyOf(Method | Accessor) =>
+          ) if symbol.tree.contains(defTree) && symbol.kind == TermSymbolKind.Var && !symbol.isSetter =>
     }
     val setterMatch: StructureCheck = {
       case DefDef(
@@ -795,7 +794,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("Unit")))),
             Some(Literal(Constant(()))),
             symbol
-          ) if symbol.flags.isAllOf(Accessor | Method | Mutable) =>
+          ) if symbol.kind == TermSymbolKind.Def && symbol.isSetter =>
     }
     assert(containsSubtree(valDefMatch)(clue(tree)))
     assert(containsSubtree(setterMatch)(clue(tree)))
@@ -1317,9 +1316,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             classSymbol
           )
           if classSymbol.tree.contains(defTree)
-            && firstTypeParamSymbol.is(Flags.TypeParameter)
-            && !firstTypeParamSymbol.isAllOf(ClassTypeParam)
-            && secondTypeParamSymbol.isAllOf(ClassTypeParam)
+            && firstTypeParamSymbol.isInstanceOf[LocalTypeParamSymbol]
+            && secondTypeParamSymbol.isInstanceOf[ClassTypeParamSymbol]
             && firstTypeParamSymbol.tree.contains(firstTypeParamTree)
             && secondTypeParamSymbol.tree.contains(secondTypeParamTree) =>
     }
@@ -2321,7 +2319,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   testUnpickle("uninitialized-var", "simple_trees.Uninitialized") { tree =>
     val wildcardRHSCheck: StructureCheck = {
       case ValDef(SimpleName("wildcardRHS"), TypeIdent(TypeName(SimpleName("Int"))), Some(Ident(nme.Wildcard)), sym)
-          if !sym.is(Abstract) =>
+          if !sym.isAbstract =>
     }
     assert(containsSubtree(wildcardRHSCheck)(clue(tree)))
 
@@ -2331,7 +2329,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeIdent(TypeName(SimpleName("Product"))),
             Some(Select(_, SimpleName("uninitialized"))),
             sym
-          ) if !sym.is(Abstract) =>
+          ) if !sym.isAbstract =>
     }
     assert(containsSubtree(uninitializedRHSCheck)(clue(tree)))
 
@@ -2341,13 +2339,13 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeIdent(TypeName(SimpleName("String"))),
             Some(Ident(SimpleName("uninitialized"))),
             sym
-          ) if !sym.is(Abstract) =>
+          ) if !sym.isAbstract =>
     }
     assert(containsSubtree(renamedUninitializedRHSCheck)(clue(tree)))
 
     // Confidence check
     val abstractVarCheck: StructureCheck = {
-      case ValDef(SimpleName("abstractVar"), TypeIdent(TypeName(SimpleName("Int"))), None, sym) if sym.is(Abstract) =>
+      case ValDef(SimpleName("abstractVar"), TypeIdent(TypeName(SimpleName("Int"))), None, sym) if sym.isAbstract =>
     }
     assert(containsSubtree(abstractVarCheck)(clue(tree)))
   }
