@@ -75,7 +75,7 @@ object Symbols {
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
     private var myTree: Option[DefiningTreeType] = None
-    private var myPrivateWithin: Option[Symbol] = None
+    private var myPrivateWithin: Option[DeclaringSymbol] = None
     private var myAnnotations: List[Annotation] | Null = null
 
     /** Checks that this `Symbol` has been completely initialized.
@@ -106,7 +106,7 @@ object Symbols {
     final def tree(using Context): Option[DefiningTreeType] =
       myTree
 
-    private[tastyquery] final def withFlags(flags: FlagSet, privateWithin: Option[Symbol]): this.type =
+    private[tastyquery] final def withFlags(flags: FlagSet, privateWithin: Option[DeclaringSymbol]): this.type =
       if isFlagsInitialized then throw IllegalStateException(s"reassignment of flags to $this")
       else
         isFlagsInitialized = true
@@ -125,7 +125,7 @@ object Symbols {
       if local != null then local
       else throw IllegalStateException(s"annotations of $this have not been initialized")
 
-    final def privateWithin: Option[Symbol] =
+    final def privateWithin: Option[DeclaringSymbol] =
       if isFlagsInitialized then myPrivateWithin
       else throw IllegalStateException(s"flags of $this have not been initialized")
 

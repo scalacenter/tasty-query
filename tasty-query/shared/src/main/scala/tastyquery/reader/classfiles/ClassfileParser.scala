@@ -152,7 +152,7 @@ private[reader] object ClassfileParser {
     val cls = ClassSymbol.create(name.toTypeName, classOwner)
     allRegisteredSymbols += cls
 
-    def privateWithin(access: AccessFlags): Option[Symbol] =
+    def privateWithin(access: AccessFlags): Option[PackageSymbol] =
       if access.isPackagePrivate then Some(pkg) else None
 
     val clsFlags = structure.access.toFlags | JavaDefined

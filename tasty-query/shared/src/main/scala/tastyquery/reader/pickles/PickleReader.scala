@@ -223,7 +223,9 @@ private[pickles] class PickleReader {
       val ref = pkl.readNat()
       if (!isSymbolRef(ref)) (None, ref)
       else {
-        val pw = readLocalSymbolAt(ref)
+        val pw = readLocalSymbolAt(ref) match
+          case pw: DeclaringSymbol => pw
+          case pw                  => errorBadSignature(s"invalid privateWithin $pw for $owner.$name")
         (Some(pw), pkl.readNat())
       }
     }

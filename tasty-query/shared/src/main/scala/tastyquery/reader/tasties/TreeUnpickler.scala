@@ -253,9 +253,9 @@ private[tasties] class TreeUnpickler private (
     sym.withFlags(normalizedFlags, privateWithin)
 
   /** Read modifiers into a set of flags and a privateWithin boundary symbol. */
-  private def readModifiers(end: Addr): (FlagSet, Option[Symbol]) =
+  private def readModifiers(end: Addr): (FlagSet, Option[DeclaringSymbol]) =
     var flags: FlagSet = EmptyFlagSet
-    var privateWithin: Option[Symbol] = None
+    var privateWithin: Option[DeclaringSymbol] = None
     def addFlag(flag: FlagSet): Unit =
       flags |= flag
       reader.readByte()
@@ -322,7 +322,7 @@ private[tasties] class TreeUnpickler private (
     (flags, privateWithin)
   end readModifiers
 
-  private def readWithin: Symbol =
+  private def readWithin: DeclaringSymbol =
     readTypeMappable() match
       case TypeRef.OfClass(cls) => cls
       case pkgRef: PackageRef   => pkgRef.symbol
