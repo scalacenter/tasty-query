@@ -161,6 +161,8 @@ private[tastyquery] object Printers:
 
       case tpe: MethodType =>
         print("(")
+        if tpe.isContextual then print("using ")
+        else if tpe.isImplicit then print("implicit ")
         var first = true
         for (argName, argType) <- tpe.paramNames.lazyZip(tpe.paramTypes) do
           if first then first = false

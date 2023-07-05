@@ -2888,4 +2888,45 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       decl.name.toString().contains("$")
     })
   }
+
+  testWithContext("method-type-modifiers") {
+    val IterableOnceOpsClass = ctx.findTopLevelClass("scala.collection.IterableOnceOps")
+    val ListClass = ctx.findTopLevelClass("scala.collection.immutable.List")
+    val UsingGivenClass = ctx.findTopLevelClass("simple_trees.UsingGiven")
+
+    def testMethod(cls: ClassSymbol, name: String, expectContextual: Boolean, expectImplicit: Boolean): Unit =
+      val sym = cls.findNonOverloadedDecl(termName(name))
+      val methodType = sym.declaredType match
+        case pt: PolyType => pt.resultType.asInstanceOf[MethodType]
+        case mt           => mt.asInstanceOf[MethodType]
+      assert(clue(methodType).isContextual == clue(expectContextual), clues(name))
+      assert(clue(methodType).isImplicit == clue(expectImplicit), clues(name))
+      assert(clue(methodType).isImplicitOrContextual == clue(expectContextual || expectImplicit), clues(name))
+    end testMethod
+
+    // Scala 3 methods
+
+    testMethod(UsingGivenClass, "useNormal", expectContextual = false, expectImplicit = false)
+    testMethod(UsingGivenClass, "useGiven", expectContextual = true, expectImplicit = false)
+    testMethod(UsingGivenClass, "useImplicit", expectContextual = false, expectImplicit = true)
+
+    // Scala 2 methods
+
+    testMethod(ListClass, "exists", expectContextual = false, expectImplicit = false)
+    testMethod(IterableOnceOpsClass, "sum", expectContextual = false, expectImplicit = true)
+
+    // Term refinements
+
+    def testRefinement(cls: ClassSymbol, name: String, expectContextual: Boolean, expectImplicit: Boolean): Unit =
+      val sym = cls.findDecl(termName(name))
+      val methodType = sym.declaredType.asInstanceOf[TermRefinement].refinedType.asInstanceOf[MethodType]
+      assert(clue(methodType).isContextual == clue(expectContextual), clues(name))
+      assert(clue(methodType).isImplicit == clue(expectImplicit), clues(name))
+      assert(clue(methodType).isImplicitOrContextual == clue(expectContextual || expectImplicit), clues(name))
+    end testRefinement
+
+    testRefinement(UsingGivenClass, "refinementWithNormal", expectContextual = false, expectImplicit = false)
+    testRefinement(UsingGivenClass, "refinementWithUsing", expectContextual = true, expectImplicit = false)
+    testRefinement(UsingGivenClass, "refinementWithImplicit", expectContextual = false, expectImplicit = true)
+  }
 }
