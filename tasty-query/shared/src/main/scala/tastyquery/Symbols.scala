@@ -527,10 +527,6 @@ object Symbols {
         case sym: LocalTypeParamSymbol =>
           default
     end boundsAsSeenFrom
-
-    def lowerBound(using Context): Type
-
-    def upperBound(using Context): Type
   end TypeSymbolWithBounds
 
   sealed abstract class TypeParamSymbol protected (name: TypeName, owner: Symbol)
@@ -556,10 +552,6 @@ object Symbols {
       val local = myBounds
       if local == null then throw IllegalStateException(s"$this was not assigned type bounds")
       else local
-
-    final def lowerBound(using Context): Type = bounds.low
-
-    final def upperBound(using Context): Type = bounds.high
   end TypeParamSymbol
 
   final class ClassTypeParamSymbol private (name: TypeName, override val owner: ClassSymbol)
@@ -694,16 +686,6 @@ object Symbols {
       case TypeMemberDefinition.TypeAlias(alias)           => TypeAlias(alias)
       case TypeMemberDefinition.AbstractType(bounds)       => bounds
       case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds
-
-    final def lowerBound(using Context): Type = typeDef match
-      case TypeMemberDefinition.TypeAlias(alias)           => alias
-      case TypeMemberDefinition.AbstractType(bounds)       => bounds.low
-      case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds.low
-
-    final def upperBound(using Context): Type = typeDef match
-      case TypeMemberDefinition.TypeAlias(alias)           => alias
-      case TypeMemberDefinition.AbstractType(bounds)       => bounds.high
-      case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds.high
   end TypeMemberSymbol
 
   object TypeMemberSymbol:

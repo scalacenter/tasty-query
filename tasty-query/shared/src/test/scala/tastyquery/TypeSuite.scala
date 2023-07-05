@@ -851,8 +851,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(GenericJavaClass.typeParams).sizeIs == 1)
     val tparam = GenericJavaClass.typeParams.head
 
-    assert(clue(tparam.lowerBound).isNothing)
-    assert(clue(tparam.upperBound).isFromJavaObject)
+    assert(clue(tparam.bounds.low).isNothing)
+    assert(clue(tparam.bounds.high).isFromJavaObject)
   }
 
   testWithContext("inferred-from-java-object") {
