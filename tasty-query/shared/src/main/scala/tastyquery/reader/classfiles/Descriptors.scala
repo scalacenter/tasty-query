@@ -33,7 +33,7 @@ private[classfiles] object Descriptors:
     // TODO: once we support inner classes, decide if we merge with parseSignature
     var offset = 0
     var end = desc.length
-    val isMethod = member.flags.is(Flags.Method)
+    val isMethod = member.isTerm && member.asTerm.isMethod
 
     def available = end - offset
 

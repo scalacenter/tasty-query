@@ -7,6 +7,7 @@ import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
+import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Substituters
 import tastyquery.Symbols.*
@@ -22,8 +23,8 @@ private[pickles] class PickleReader {
   opaque type Index = IArray[Int]
 
   final class Structure(using val myEntries: Entries, val myIndex: Index):
-    def allRegisteredSymbols: Iterator[Symbol] =
-      myEntries.iterator.collect { case sym: Symbol =>
+    def allRegisteredSymbols: Iterator[TermOrTypeSymbol] =
+      myEntries.iterator.collect { case sym: TermOrTypeSymbol =>
         sym
       }
   end Structure
@@ -623,7 +624,7 @@ private[pickles] class PickleReader {
               case sym: TypeMemberSymbol =>
                 TypeRefinement(parent, sym.name, sym.bounds)
               case sym: TermSymbol =>
-                TermRefinement(parent, !sym.isAnyOf(Method | Mutable), sym.name, sym.declaredType)
+                TermRefinement(parent, sym.kind == TermSymbolKind.Val, sym.name, sym.declaredType)
               case _: TypeParamSymbol | _: ClassSymbol =>
                 errorBadSignature(s"invalid symbol in refinement class: $sym of type ${sym.getClass()}")
           }

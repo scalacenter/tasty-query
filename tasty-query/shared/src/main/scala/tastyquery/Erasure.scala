@@ -189,7 +189,7 @@ private[tastyquery] object Erasure:
       // linearization of a class always contains the linearization of its
       // direct superclass as a suffix"; it's enough to consider every
       // candidate up to the first class.
-      val candidates = takeUpTo(cls2superclasses)(!_.is(Trait))
+      val candidates = takeUpTo(cls2superclasses)(!_.isTrait)
 
       // Candidates such that "no other common superclass or trait derives from S"
       // TODO Also, drop `PairClass` since it is not valid after erasue
@@ -263,8 +263,8 @@ private[tastyquery] object Erasure:
         else if isPrimitive1 then -1
         else if isPrimitive2 then 1
         else
-          val isRealClass1 = !cls1.is(Trait)
-          val isRealClass2 = !cls2.is(Trait)
+          val isRealClass1 = !cls1.isTrait
+          val isRealClass2 = !cls2.isTrait
           if isRealClass1 && isRealClass2 then compareClasses(cls1, cls2)
           else if isRealClass1 then -1
           else if isRealClass2 then 1

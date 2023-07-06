@@ -437,7 +437,7 @@ private[tasties] class TreeUnpickler private (
         definingTree(classSymbol, ClassDef(name, template, classSymbol)(spn))
       } else {
         val symbol = caches.getSymbol[TypeMemberSymbol](start)
-        val isOpaque = symbol.is(Opaque)
+        val isOpaque = symbol.isOpaqueTypeAlias
         val typeDefTree = readTypeDefinition(forOpaque = isOpaque)
         val typeDef = makeTypeMemberDefinition(typeDefTree)
         if isOpaque != typeDef.isInstanceOf[TypeMemberDefinition.OpaqueTypeAlias] then
@@ -702,13 +702,13 @@ private[tasties] class TreeUnpickler private (
       case (tparams @ Right(_)) :: paramListsTail =>
         tparams :: normalizeCtorParamClauses(paramListsTail)
 
-      case Left(vparam1 :: _) :: _ if vparam1.symbol.is(Implicit) =>
+      case Left(vparam1 :: _) :: _ if vparam1.symbol.isImplicit =>
         // Found a leading `implicit` param lists -> add `()` in front
         Left(Nil) :: paramLists
 
       case _ =>
         val anyNonUsingTermClause = paramLists.exists {
-          case Left(vparams)  => vparams.isEmpty || !vparams.head.symbol.is(Given)
+          case Left(vparams)  => vparams.isEmpty || !vparams.head.symbol.isGivenOrUsing
           case Right(tparams) => false
         }
         if anyNonUsingTermClause then paramLists

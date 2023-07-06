@@ -5,6 +5,7 @@ import scala.annotation.tailrec
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
+import tastyquery.Modifiers.*
 import tastyquery.Names.termName
 import tastyquery.Symbols.*
 import tastyquery.Types.*
@@ -217,10 +218,10 @@ private[tastyquery] object TypeMatching:
     */
   private def provablyDisjoint(tp1: Type, tp2: Type)(using Context): Boolean =
     def isEnumValue(ref: TermRef): Boolean =
-      ref.symbol.isAllOf(Case | Enum) // TODO butNot = JavaDefined
+      ref.symbol.isEnumCase // TODO? Exclude Java enums here?
 
     def isEnumValueOrModule(ref: TermRef): Boolean =
-      isEnumValue(ref) || ref.symbol.is(Module) || (ref.underlying match {
+      isEnumValue(ref) || ref.symbol.isModuleVal || (ref.underlying match {
         case tp: TermRef => isEnumValueOrModule(tp)
         case _           => false
       })
@@ -239,10 +240,10 @@ private[tastyquery] object TypeMatching:
         if cls1.isSubclass(cls2) || cls2.isSubclass(cls1) then
           // One of them is a subclass of the other -> not disjoint
           false
-        else if cls1.is(Final) || cls2.is(Final) then
+        else if cls1.openLevel == OpenLevel.Final || cls2.openLevel == OpenLevel.Final then
           // One of them is final and they are unrelated -> disjoint (property 2)
           true
-        else if !cls1.is(Trait) && !cls2.is(Trait) then
+        else if !cls1.isTrait && !cls2.isTrait then
           // They are both non-trait classes and unrelated -> disjoint (property 1)
           true
         else

@@ -9,6 +9,7 @@ import tastyquery.Exceptions.*
 import tastyquery.Flags
 import tastyquery.Flags.*
 import tastyquery.Names.*
+import tastyquery.SourceLanguage
 import tastyquery.Symbols.*
 import tastyquery.Types.*
 
@@ -239,13 +240,16 @@ private[reader] object ClassfileParser {
         case SigOrDesc.Desc(desc) => Descriptors.parseDescriptor(sym, desc)
         case SigOrDesc.Sig(sig)   => JavaSignatures.parseSignature(sym, sig, allRegisteredSymbols)
       val adaptedType =
-        if sym.is(Method) && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
+        if sym.isMethod && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
         else parsedType
       sym.withDeclaredType(adaptedType)
 
     for sym <- allRegisteredSymbols do
       sym.checkCompleted()
-      assert(sym.flags.is(JavaDefined), s"$sym of ${sym.getClass()}")
+      assert(
+        !sym.isPackage && sym.asInstanceOf[TermOrTypeSymbol].sourceLanguage == SourceLanguage.Java,
+        s"$sym of ${sym.getClass()}"
+      )
 
     innerClasses.declarations
   }
