@@ -248,7 +248,10 @@ object Types {
     * See [[Type.typeParams]].
     */
   trait TypeConstructorParam private[tastyquery] ():
-    /** The variance of the type parameter. */
+    /** The declared variance of the type parameter, as found in the source. */
+    def declaredVariance: Variance
+
+    /** The actual variance of the type parameter, which may be computed from its body. */
     def variance(using Context): Variance
 
     /** The name of the type parameter. */
@@ -1816,6 +1819,9 @@ object Types {
     def paramNum: Int
 
   private[tastyquery] final class TypeLambdaParam(val typeLambda: TypeLambda, num: Int) extends TypeConstructorParam:
+    def declaredVariance: Variance =
+      Variance.Invariant // by construction
+
     def variance(using Context): Variance =
       Variance.Invariant // TODO Set structured variances
 

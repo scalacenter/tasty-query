@@ -256,9 +256,7 @@ private[tastyquery] object Printers:
       print("@<annot>") // TODO Improve this
 
     def print(tparam: TypeConstructorParam): Unit =
-      tparam match
-        case tparam: TypeLambdaParam      =>
-        case tparam: ClassTypeParamSymbol => print(Variance.fromFlags(tparam.flags))
+      print(tparam.declaredVariance)
       print(tparam.name)
       tparam match
         case tparam: TypeLambdaParam      => print(tparam.bounds)

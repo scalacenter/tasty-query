@@ -556,8 +556,11 @@ object Symbols {
       with TypeConstructorParam:
     type DefiningTreeType = TypeParam
 
-    def variance(using Context): Variance =
+    def declaredVariance: Variance =
       Variance.fromFlags(flags)
+
+    def variance(using Context): Variance =
+      declaredVariance
 
     final def typeRef(using Context): TypeRef = TypeRef(ThisType(owner.typeRef), this)
 
