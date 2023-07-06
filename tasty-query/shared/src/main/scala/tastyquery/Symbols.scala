@@ -14,7 +14,6 @@ import tastyquery.Signatures.*
 import tastyquery.Spans.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
-import tastyquery.Variances.*
 
 import tastyquery.reader.Loaders.Loader
 
@@ -673,7 +672,9 @@ object Symbols {
     type DefiningTreeType = TypeParam
 
     def declaredVariance: Variance =
-      Variance.fromFlags(flags)
+      if flags.is(Covariant) then Variance.Covariant
+      else if flags.is(Contravariant) then Variance.Contravariant
+      else Variance.Invariant
 
     def variance(using Context): Variance =
       declaredVariance

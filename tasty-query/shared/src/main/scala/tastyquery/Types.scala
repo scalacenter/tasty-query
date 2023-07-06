@@ -12,11 +12,11 @@ import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
+import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Signatures.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
-import tastyquery.Variances.*
 
 /** Types in the Scala type system.
   *
