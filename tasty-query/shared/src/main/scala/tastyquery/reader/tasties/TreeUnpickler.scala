@@ -1178,8 +1178,12 @@ private[tasties] class TreeUnpickler private (
     case POLYtype =>
       readLambdaType(_ => PolyType, name => name.toTypeName, _.readTypeBounds, _.readTypeOrMethodic())
     case METHODtype =>
-      // TODO Record the `mods` somehow (given, implicit, erased)
-      readLambdaType(_ => MethodType, name => name, _.readTrueType(), _.readTypeOrMethodic())
+      val companionOp: FlagSet => MethodTypeCompanion = { flags =>
+        if flags.is(Implicit) then ImplicitMethodType
+        else if flags.is(Given) then ContextualMethodType
+        else MethodType
+      }
+      readLambdaType(companionOp, name => name, _.readTrueType(), _.readTypeOrMethodic())
     case TYPELAMBDAtype =>
       readLambdaType(_ => TypeLambda, _.toTypeName, _.readTypeBounds, _.readTrueType())
     case PARAMtype =>

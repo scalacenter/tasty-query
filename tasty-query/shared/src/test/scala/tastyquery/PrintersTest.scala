@@ -97,6 +97,33 @@ class PrintersTest extends UnrestrictedUnpicklingSuite:
       TermRefinement(ProductType, isStable = false, termName("foo"), MethodType(Nil, Nil, defn.IntType)),
       "(scala.Product { def foo()scala.Int })"
     )
+    testShowBasic(
+      TermRefinement(
+        ProductType,
+        isStable = false,
+        termName("foo"),
+        MethodType(List(termName("x")), List(defn.IntType), defn.IntType)
+      ),
+      "(scala.Product { def foo(x: scala.Int)scala.Int })"
+    )
+    testShowBasic(
+      TermRefinement(
+        ProductType,
+        isStable = false,
+        termName("foo"),
+        ImplicitMethodType(List(termName("x")), List(defn.IntType), defn.IntType)
+      ),
+      "(scala.Product { def foo(implicit x: scala.Int)scala.Int })"
+    )
+    testShowBasic(
+      TermRefinement(
+        ProductType,
+        isStable = false,
+        termName("foo"),
+        ContextualMethodType(List(termName("x")), List(defn.IntType), defn.IntType)
+      ),
+      "(scala.Product { def foo(using x: scala.Int)scala.Int })"
+    )
 
     testShowBasic(defn.ArrayTypeOf(WildcardTypeArg(defn.NothingAnyBounds)), "scala.Array[?]")
     testShowBasic(defn.ArrayTypeOf(WildcardTypeArg(NullAnyRefBounds)), "scala.Array[? >: scala.Null <: scala.AnyRef]")

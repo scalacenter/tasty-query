@@ -1543,7 +1543,7 @@ object Types {
       Substituters.substLocalParams(bounds, tparams, paramRefs)
   end TypeLambdaType
 
-  final class MethodType(val paramNames: List[TermName])(
+  final class MethodType private[Types] (val companion: MethodTypeCompanion, val paramNames: List[TermName])(
     @constructorOnly paramTypesExp: MethodType => List[Type],
     @constructorOnly resultTypeExp: MethodType => TypeOrMethodic
   ) extends MethodicType
@@ -1556,6 +1556,15 @@ object Types {
     private val myRes: TypeOrMethodic = resultTypeExp(this: @unchecked)
     initialized = true
 
+    /** Does this method type have an `implicit` modifier? */
+    def isImplicit: Boolean = companion eq ImplicitMethodType
+
+    /** Does this method type have a `using` modifier? */
+    def isContextual: Boolean = companion eq ContextualMethodType
+
+    /** Does this method type have an `implicit` or `using` modifier? */
+    def isImplicitOrContextual: Boolean = companion ne MethodType
+
     def paramTypes: List[Type] =
       if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
       myParamTypes.nn
@@ -1563,8 +1572,6 @@ object Types {
     def resultType: TypeOrMethodic =
       if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
       myRes.nn
-
-    def companion: LambdaTypeCompanion[TermName, Type, TypeOrMethodic, MethodType] = MethodType
 
     private[tastyquery] def isResultDependent(using Context): Boolean =
       // TODO This should be made more efficient; we only need to traverse the type, not transform it
@@ -1597,16 +1604,20 @@ object Types {
       throw new AssertionError(s"Cannot find member in $this")
 
     override def toString: String =
-      if !initialized then s"MethodType($paramNames)(<evaluating>...)"
-      else s"MethodType($paramNames)($paramTypes, $resultType)"
+      val stringPrefix = companion.stringPrefix
+      if !initialized then s"$stringPrefix($paramNames)(<evaluating>...)"
+      else s"$stringPrefix($paramNames)($paramTypes, $resultType)"
   end MethodType
 
-  object MethodType extends LambdaTypeCompanion[TermName, Type, TypeOrMethodic, MethodType]:
+  sealed abstract class MethodTypeCompanion(private[Types] val stringPrefix: String)
+      extends LambdaTypeCompanion[TermName, Type, TypeOrMethodic, MethodType]:
     def apply(
       paramNames: List[TermName]
     )(paramInfosExp: MethodType => List[Type], resultTypeExp: MethodType => TypeOrMethodic): MethodType =
-      new MethodType(paramNames)(paramInfosExp, resultTypeExp)
+      new MethodType(this, paramNames)(paramInfosExp, resultTypeExp)
+  end MethodTypeCompanion
 
+  object MethodType extends MethodTypeCompanion("MethodType"):
     /** Produce method type from parameter symbols, with special mappings for repeated
       *  and inline parameters:
       *   - replace @repeated annotations on Seq or Array types by <repeated> types
@@ -1638,11 +1649,20 @@ object Types {
         paramType
       }
 
-      MethodType(params.map(_.name.toTermName))(
+      val companion: MethodTypeCompanion =
+        if params.headOption.exists(_.is(Implicit)) then ImplicitMethodType
+        else if params.headOption.exists(_.is(Given)) then ContextualMethodType
+        else MethodType
+
+      companion(params.map(_.name.toTermName))(
         tl => params.map(p => tl.integrate(params, paramInfo(p))),
         tl => tl.integrate(params, resultType).asInstanceOf[TypeOrMethodic]
       )
     }
+  end MethodType
+
+  object ImplicitMethodType extends MethodTypeCompanion("ImplicitMethodType")
+  object ContextualMethodType extends MethodTypeCompanion("ContextualMethodType")
 
   final class PolyType private (val paramNames: List[TypeName])(
     @constructorOnly paramTypeBoundsExp: PolyType => List[TypeBounds],
