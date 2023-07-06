@@ -30,17 +30,25 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     scalaPackage.getPackageDeclOrCreate(termName("compiletime"))
   private val scalaCollectionImmutablePackage =
     scalaCollectionPackage.getPackageDeclOrCreate(termName("immutable"))
+  private val scalaRuntimePackage =
+    scalaPackage.getPackageDeclOrCreate(termName("runtime"))
+
+  // Special types
+
+  val AnyKindType: AnyKindType = new AnyKindType()
+  val NothingType: NothingType = new NothingType()
 
   // Cached TypeRef's for core types
 
-  val AnyKindType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("AnyKind"))
+  val SyntacticAnyKindType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("AnyKind"))
+  val SyntacticNothingType: TypeRef = TypeRef(scalaPackage.packageRef, tpnme.Nothing)
+
   val AnyType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Any"))
   val MatchableType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Matchable"))
   val AnyRefType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("AnyRef"))
   val AnyValType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("AnyVal"))
 
   val NullType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Null"))
-  val NothingType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Nothing"))
 
   val ObjectType: TypeRef = TypeRef(javaLangPackage.packageRef, typeName("Object"))
 
@@ -111,9 +119,6 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     sym
   end createSpecialMethod
 
-  val AnyKindClass = createSpecialClass(typeName("AnyKind"), Nil, Abstract | Final)
-    .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
-
   val AnyClass = createSpecialClass(typeName("Any"), Nil, Abstract)
     .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
 
@@ -123,9 +128,26 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val NullClass =
     createSpecialClass(typeName("Null"), AnyClass.typeRef :: MatchableClass.typeRef :: Nil, Abstract | Final)
 
-  val NothingClass = createSpecialClass(typeName("Nothing"), AnyClass.typeRef :: Nil, Abstract | Final)
+  val NothingAnyBounds = RealTypeBounds(SyntacticNothingType, AnyClass.typeRef)
 
-  val NothingAnyBounds = RealTypeBounds(NothingClass.typeRef, AnyClass.typeRef)
+  private def createSpecialTypeAlias(
+    name: TypeName,
+    owner: DeclaringSymbol,
+    flags: FlagSet,
+    alias: Type
+  ): TypeMemberSymbol =
+    val sym = TypeMemberSymbol.create(name, owner)
+    sym.withFlags(flags, None)
+    sym.withDefinition(TypeMemberDefinition.TypeAlias(alias))
+    sym.setAnnotations(Nil)
+    sym.checkCompleted()
+    sym
+  end createSpecialTypeAlias
+
+  locally {
+    createSpecialTypeAlias(tpnme.Nothing, scalaPackage, EmptyFlagSet, NothingType)
+    createSpecialTypeAlias(typeName("AnyKind"), scalaPackage, EmptyFlagSet, AnyKindType)
+  }
 
   locally {
     val andOrParamNames = List(typeName("A"), typeName("B"))
@@ -156,18 +178,10 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     orTypeAlias.setAnnotations(Nil)
     orTypeAlias.checkCompleted()
 
-    val AnyRefAlias = TypeMemberSymbol.create(typeName("AnyRef"), scalaPackage)
-    AnyRefAlias.withFlags(EmptyFlagSet, None)
-    AnyRefAlias.withDefinition(TypeMemberDefinition.TypeAlias(ObjectType))
-    AnyRefAlias.setAnnotations(Nil)
-    AnyRefAlias.checkCompleted()
+    createSpecialTypeAlias(typeName("AnyRef"), scalaPackage, EmptyFlagSet, ObjectType)
 
     // See `case NOtpe` in `PickleReader.scala`
-    val scala2NoTypeAlias = TypeMemberSymbol.create(typeName("<notype>"), scalaPackage)
-    scala2NoTypeAlias.withFlags(Synthetic, None)
-    scala2NoTypeAlias.withDefinition(TypeMemberDefinition.TypeAlias(NothingType))
-    scala2NoTypeAlias.setAnnotations(Nil)
-    scala2NoTypeAlias.checkCompleted()
+    createSpecialTypeAlias(typeName("<notype>"), scalaPackage, Synthetic, NothingType)
   }
 
   /** A type alias of Object used to represent any reference to Object in a Java signature.
@@ -184,13 +198,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     * compiler's `Definitions.scala` file.
     */
   val FromJavaObjectAlias: TypeMemberSymbol =
-    val sym = TypeMemberSymbol.create(tpnme.FromJavaObjectAliasMagic, specialOpsPackage)
-    sym.withFlags(JavaDefined, None)
-    sym.withDefinition(TypeMemberDefinition.TypeAlias(ObjectType))
-    sym.setAnnotations(Nil)
-    sym.checkCompleted()
-    sym
-  end FromJavaObjectAlias
+    createSpecialTypeAlias(tpnme.FromJavaObjectAliasMagic, specialOpsPackage, JavaDefined, ObjectType)
 
   val FromJavaObjectType: TypeRef = TypeRef(specialOpsPackage.packageRef, FromJavaObjectAlias)
 
@@ -381,6 +389,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   lazy val StringClass = javaLangPackage.requiredClass("String")
 
   lazy val ProductClass = scalaPackage.requiredClass("Product")
+
+  lazy val ErasedNothingClass = scalaRuntimePackage.requiredClass("Nothing$")
 
   private[tastyquery] lazy val targetNameAnnotClass = scalaAnnotationPackage.optionalClass("targetName")
 

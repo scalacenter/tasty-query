@@ -477,6 +477,8 @@ object Types {
         case _: SingletonType | _: RefinedType | _: ByNameType | _: MatchType | _: RecType =>
           // These types are always proper types
           Nil
+        case _: NothingType | _: AnyKindType =>
+          Nil
         case _: OrType | _: AndType =>
           // Should these inherit their typeParams when they are mergeable? (dotc does not do it)
           Nil
@@ -628,14 +630,14 @@ object Types {
     /** Is self type bounded by a type lambda or AnyKind? */
     private[tastyquery] final def isLambdaSub(using Context): Boolean = this match
       case TypeRef.OfClass(cls) =>
-        cls == defn.AnyKindClass || cls.typeParams.nonEmpty
+        cls.typeParams.nonEmpty
       case self: TypeRef =>
         self.underlying.isLambdaSub
       case self: AppliedType =>
         self.tycon match
           case TypeRef.OfClass(_) => false
           case _                  => self.superType.isLambdaSub
-      case self: TypeLambda =>
+      case _: AnyKindType | _: TypeLambda =>
         true
       case _: SingletonType | _: RefinedType | _: RecType =>
         false
@@ -658,6 +660,30 @@ object Types {
     final def appliedTo(tpe: TypeOrWildcard)(using Context): Type =
       this.appliedTo(tpe :: Nil)
   end Type
+
+  final class NothingType extends GroundType:
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      ResolveMemberResult.NotFound
+
+    private[tastyquery] def resolveMatchingMember(
+      name: SignedName,
+      pre: Type,
+      typePredicate: TypeOrMethodic => Boolean
+    )(using Context): ResolveMemberResult =
+      ResolveMemberResult.NotFound
+  end NothingType
+
+  final class AnyKindType extends GroundType:
+    private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
+      ResolveMemberResult.NotFound
+
+    private[tastyquery] def resolveMatchingMember(
+      name: SignedName,
+      pre: Type,
+      typePredicate: TypeOrMethodic => Boolean
+    )(using Context): ResolveMemberResult =
+      ResolveMemberResult.NotFound
+  end AnyKindType
 
   // ----- Type categories ----------------------------------------------
 

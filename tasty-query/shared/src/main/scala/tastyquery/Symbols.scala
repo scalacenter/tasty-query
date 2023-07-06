@@ -1184,7 +1184,7 @@ object Symbols {
         // TODO Handle OrType
         None
 
-      case _: TypeLambda =>
+      case _: NothingType | _: AnyKindType | _: TypeLambda =>
         None
 
       case _: CustomTransientGroundType =>

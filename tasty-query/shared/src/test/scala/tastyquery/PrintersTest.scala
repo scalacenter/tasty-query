@@ -26,6 +26,11 @@ class PrintersTest extends UnrestrictedUnpicklingSuite:
     testShowBasic(NoPrefix, "ε") // U+03F5 Greek Small Letter Epsilon")
     testShowBasic(ctx.findPackage("scala.collection").packageRef, "scala.collection")
 
+    testShowBasic(defn.AnyKindType, "AnyKind")
+    testShowBasic(defn.NothingType, "Nothing")
+    testShowBasic(defn.SyntacticAnyKindType, "scala.AnyKind")
+    testShowBasic(defn.SyntacticNothingType, "scala.Nothing")
+
     testShowBasic(ctx.findTopLevelClass("scala.Product").staticRef, "scala.Product")
     testShowBasic(ctx.findTopLevelModuleClass("scala.None").staticRef, "scala.None$")
     testShowBasic(ctx.findStaticTerm("scala.None").staticRef, "scala.None.type")

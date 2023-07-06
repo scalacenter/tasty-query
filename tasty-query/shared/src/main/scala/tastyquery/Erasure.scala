@@ -104,6 +104,10 @@ private[tastyquery] object Erasure:
           case SourceLanguage.Scala3 => erasedGlb(preErase(tpe.first), preErase(tpe.second))
       case tpe: RecType =>
         preErase(tpe.parent)
+      case _: NothingType =>
+        defn.ErasedNothingClass.erasure
+      case _: AnyKindType =>
+        defn.ObjectClass.erasure
       case _: SingletonType | _: ByNameType | _: AnnotatedType | _: RefinedType =>
         throw AssertionError(s"Unexpected widened type $tpe")
       case _: MethodicType | _: TypeLambda | _: CustomTransientGroundType =>
@@ -152,16 +156,16 @@ private[tastyquery] object Erasure:
         else if defn.isPrimitiveValueClass(base1) || defn.isPrimitiveValueClass(base2) then erasedObject
         else ArrayTypeRef(ClassRef(erasedClassRefLub(base1, base2)), dims1)
       case (ClassRef(cls1), tp2: ArrayTypeRef) =>
-        if cls1 == defn.NothingClass || cls1 == defn.NullClass then tp2
+        if cls1 == defn.ErasedNothingClass || cls1 == defn.NullClass then tp2
         else erasedObject
       case (tp1: ArrayTypeRef, ClassRef(cls2)) =>
-        if cls2 == defn.NothingClass || cls2 == defn.NullClass then tp1
+        if cls2 == defn.ErasedNothingClass || cls2 == defn.NullClass then tp1
         else erasedObject
   end erasedLub
 
   private def erasedClassRefLub(cls1: ClassSymbol, cls2: ClassSymbol)(using Context): ClassSymbol =
-    if cls1 == defn.NothingClass then cls2
-    else if cls2 == defn.NothingClass then cls1
+    if cls1 == defn.ErasedNothingClass then cls2
+    else if cls2 == defn.ErasedNothingClass then cls1
     else if cls1 == defn.NullClass then
       if cls2.isSubclass(defn.ObjectClass) then cls2
       else defn.AnyClass

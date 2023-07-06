@@ -62,6 +62,10 @@ private[tastyquery] object Printers:
       case tpe: PackageRef =>
         print(tpe.fullyQualifiedName.toString())
 
+      case tpe: NothingType =>
+        print("Nothing")
+      case tpe: AnyKindType =>
+        print("AnyKind")
       case tpe @ (_: TermRef | _: TermParamRef | _: ThisType | _: SuperType | _: RecThis) =>
         printPrefix(tpe)
         print("type")
