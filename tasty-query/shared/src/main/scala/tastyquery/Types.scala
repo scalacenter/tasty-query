@@ -921,7 +921,6 @@ object Types {
     private var mySymbol: TermSymbol | Null = null
     private var myUnderlying: TypeOrMethodic | Null = null
     private var myIsStable: Boolean = false // only meaningful once mySymbol is non-null
-    private var mySignature: Signature | Null = null
 
     private def this(prefix: NonEmptyPrefix, resolved: ResolveMemberResult.TermMember) =
       this(prefix, resolved.symbols.head)
@@ -981,15 +980,6 @@ object Types {
 
     override def underlying(using ctx: Context): Type =
       underlyingOrMethodic.requireType
-
-    private[tastyquery] final def signature(using Context): Signature =
-      val local = mySignature
-      if local != null then local
-      else
-        val computed = symbol.signature
-        mySignature = computed
-        computed
-    end signature
 
     final override def isStable(using Context): Boolean =
       ensureResolved()

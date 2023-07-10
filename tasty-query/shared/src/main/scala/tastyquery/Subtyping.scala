@@ -129,13 +129,14 @@ private[tastyquery] object Subtyping:
        * relationship if they are defined in different classes of the same hierarchy.
        */
 
-      def sameTermSignature: Boolean =
-        // TODO? dotc does this but in my (sjrd) opinion, this should be !sym1.needsSignature && !sym2.needsSignature
-        // If we get here, both are terms, and terms always have symbols
-        val sym1Term = sym1.get.asTerm
-        val sym2Term = sym2.get.asTerm
-        if sym1Term.needsSignature then sym2Term.needsSignature && tp1.asTermRef.signature == tp2.asTermRef.signature
-        else !sym2Term.needsSignature
+      def areBothNonMethodic: Boolean =
+        /* dotc fully compares signatures instead of doing this, which in theory
+         * allows methodic term refs to be subtypes. We validated in
+         *   https://github.com/lampepfl/dotty/pull/18045
+         * that it breaks nothing to restrict subtyping to non-methodic term refs.
+         */
+        def isTermRefMethodic(tp: NamedType) = tp.asTermRef.underlyingOrMethodic.isInstanceOf[MethodicType]
+        tp1.isType || (!isTermRefMethodic(tp1) && !isTermRefMethodic(tp2))
 
       def areBothClasses: Boolean =
         tp1.isType && tp1.asTypeRef.isClass && tp2.asTypeRef.isClass
@@ -143,7 +144,7 @@ private[tastyquery] object Subtyping:
       val trueBecauseOverriddenMembers =
         tp1.name == tp2.name
           && isSubprefix(tp1.prefix, tp2.prefix)
-          && (tp1.isType || sameTermSignature)
+          && areBothNonMethodic
           && !areBothClasses // classes can shadow each other without being subtypes
 
       trueBecauseOverriddenMembers || level2(tp1, tp2)
@@ -170,7 +171,7 @@ private[tastyquery] object Subtyping:
     case tp1: ThisType =>
       val cls1 = tp1.cls
       tp2 match {
-        case tp2: TermRef if cls1.is(Module) && isTypeRefOf(tp2.symbol.declaredType, cls1) =>
+        case tp2: TermRef if cls1.is(Module) && isTypeRefOf(tp2.underlying, cls1) =>
           (cls1.isStatic || isSubprefix(cls1.typeRef.prefix, tp2.prefix))
             || level3(tp1, tp2)
         case _ =>
@@ -443,7 +444,7 @@ private[tastyquery] object Subtyping:
       def comparePaths: Boolean =
         tp2 match
           case tp2: TermRef =>
-            tp2.symbol.declaredTypeAsSeenFrom(tp2.prefix).dealias match
+            tp2.underlying.dealias match
               case tp2Singleton: SingletonType =>
                 isSubtype(tp1, tp2Singleton)
               case _ =>
