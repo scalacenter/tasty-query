@@ -8,12 +8,12 @@ import tastyquery.Annotations.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
+import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Signatures.*
 import tastyquery.Spans.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
-import tastyquery.Variances.*
 
 import tastyquery.reader.Loaders.Loader
 
@@ -75,7 +75,7 @@ object Symbols {
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
     private var myTree: Option[DefiningTreeType] = None
-    private var myPrivateWithin: Option[Symbol] = None
+    private var myPrivateWithin: Option[DeclaringSymbol] = None
     private var myAnnotations: List[Annotation] | Null = null
 
     /** Checks that this `Symbol` has been completely initialized.
@@ -106,7 +106,7 @@ object Symbols {
     final def tree(using Context): Option[DefiningTreeType] =
       myTree
 
-    private[tastyquery] final def withFlags(flags: FlagSet, privateWithin: Option[Symbol]): this.type =
+    private[tastyquery] final def withFlags(flags: FlagSet, privateWithin: Option[DeclaringSymbol]): this.type =
       if isFlagsInitialized then throw IllegalStateException(s"reassignment of flags to $this")
       else
         isFlagsInitialized = true
@@ -125,25 +125,13 @@ object Symbols {
       if local != null then local
       else throw IllegalStateException(s"annotations of $this have not been initialized")
 
-    final def privateWithin: Option[Symbol] =
+    protected final def privateWithin: Option[DeclaringSymbol] =
       if isFlagsInitialized then myPrivateWithin
       else throw IllegalStateException(s"flags of $this have not been initialized")
 
-    final def flags: FlagSet =
+    protected final def flags: FlagSet =
       if isFlagsInitialized then myFlags
       else throw IllegalStateException(s"flags of $this have not been initialized")
-
-    final def is(flag: Flag): Boolean =
-      flags.is(flag)
-
-    final def isAllOf(testFlags: FlagSet): Boolean =
-      flags.isAllOf(testFlags)
-
-    final def isAnyOf(testFlags: FlagSet): Boolean =
-      flags.isAnyOf(testFlags)
-
-    final def isAllOf(testFlags: FlagSet, butNotAnyOf: FlagSet): Boolean =
-      flags.isAllOf(testFlags, butNotAnyOf = butNotAnyOf)
 
     final def enclosingDecl: DeclaringSymbol = owner match {
       case owner: DeclaringSymbol => owner
@@ -171,13 +159,13 @@ object Symbols {
     @tailrec
     private def isStaticOwner: Boolean = this match
       case _: PackageSymbol => true
-      case cls: ClassSymbol => cls.is(Module) && cls.owner.isStaticOwner
+      case cls: ClassSymbol => cls.isModuleClass && cls.owner.isStaticOwner
       case _                => false
 
     private[Symbols] final def staticOwnerPrefix(using Context): NonEmptyPrefix = this match
       case pkg: PackageSymbol =>
         pkg.packageRef
-      case cls: ClassSymbol if cls.is(Module) =>
+      case cls: ClassSymbol if cls.isModuleClass =>
         cls.owner.staticOwnerPrefix.select(cls.moduleValue.get)
       case _ =>
         throw AssertionError(s"Cannot construct static owner prefix for non-static-owner symbol $this")
@@ -223,7 +211,7 @@ object Symbols {
       val kind = this match
         case _: PackageSymbol => "package "
         case _: ClassSymbol   => if name.toTypeName.wrapsObjectName then "object class " else "class "
-        case _                => if isFlagsInitialized && is(Module) then "object " else ""
+        case _                => if isFlagsInitialized && flags.is(Module) then "object " else ""
       s"symbol[$kind$ownerPrefix$name]"
     }
     def toDebugString = toString
@@ -240,6 +228,62 @@ object Symbols {
       else if flags.is(Scala2Defined) then SourceLanguage.Scala2
       else SourceLanguage.Scala3
 
+    /** Is this symbol private?
+      *
+      * A symbol is said *private* if it either `private` without scope or
+      * `private[this]`.
+      *
+      * Private members obey different rules than other members in a number of
+      * situations. In particular, they are not inherited and therefore do not
+      * participate in overriding relationships.
+      *
+      * @return
+      *   `true` iff `visibility == Visibility.Private || visibility == Visibility.PrivateThis`
+      */
+    final def isPrivate: Boolean = flags.is(Private)
+
+    /** Is this symbol public?
+      *
+      * @return `true` iff `visibility == Visibility.Public`
+      */
+    final def isPublic: Boolean =
+      !flags.isAnyOf(Private | Protected | Local) && privateWithin.isEmpty
+
+    private[Symbols] final def isPrivateThis: Boolean =
+      flags.isAllOf(Private | Local)
+
+    /** The declared visibility of this symbol. */
+    final def visibility: Visibility =
+      if flags.is(Private) then
+        if flags.is(Local) then Visibility.PrivateThis
+        else Visibility.Private
+      else if flags.is(Protected) then
+        if flags.is(Local) then Visibility.ProtectedThis
+        else
+          privateWithin match
+            case None        => Visibility.Protected
+            case Some(scope) => Visibility.ScopedProtected(scope)
+      else
+        privateWithin match
+          case None        => Visibility.Public
+          case Some(scope) => Visibility.ScopedPrivate(scope)
+    end visibility
+
+    /** Is this symbol a final member, in the sense that it cannot be overridden?
+      *
+      * Classes are always final members, since Scala 3 does not allow to
+      * override (shadow) inner classes.
+      *
+      * Other symbols are final members iff they have the `final` modifier.
+      */
+    final def isFinalMember: Boolean = isClass || flags.is(Final)
+
+    /** Is this symbol generated by the compiler? */
+    final def isSynthetic: Boolean = flags.is(Synthetic)
+
+    /** Does this symbol have the `infix` modifier? */
+    final def isInfix: Boolean = flags.is(Infix)
+
     // Overriding relationships
 
     /** The non-private symbol whose name and type matches the type of this symbol in the given class.
@@ -252,9 +296,9 @@ object Symbols {
     private final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[Symbol] =
       this match
         case self: TypeSymbol =>
-          inClass.getDecl(self.name).filterNot(_.is(Private))
+          inClass.getDecl(self.name).filterNot(_.isPrivate)
         case self: TermSymbol =>
-          val candidates = inClass.getAllOverloadedDecls(self.name).filterNot(_.is(Private))
+          val candidates = inClass.getAllOverloadedDecls(self.name).filterNot(_.isPrivate)
           if candidates.isEmpty then None
           else
             val site = siteClass.thisType
@@ -271,7 +315,7 @@ object Symbols {
 
     /** If false, this class member cannot possibly participate in an override, either as overrider or overridee. */
     private final def memberCanMatchInheritedSymbols(using Context): Boolean =
-      !isConstructor && !is(Private)
+      !isConstructor && !isPrivate
 
     private final def isConstructor(using Context): Boolean =
       name == nme.Constructor
@@ -373,11 +417,84 @@ object Symbols {
       if local != null then local
       else throw new IllegalStateException(s"$this was not assigned a declared type")
 
+    /** Is this symbol a module val, i.e., the term of an `object`?
+      *
+      * @return true iff `kind == TermSymbolKind.Module`
+      */
+    final def isModuleVal: Boolean = flags.is(Module)
+
+    /** Is this symbol a method, i.e., a `def`?
+      *
+      * @return true iff `kind == TermSymbolKind.Method`
+      */
+    final def isMethod: Boolean = flags.is(Method)
+
+    /** The kind of term definition (`val`, `lazy val`, `var`, `def` or `object`).
+      *
+      * Parameters and bindings declared with none of these keywords are
+      * considered `val`s.
+      */
+    final def kind: TermSymbolKind =
+      if flags.is(Module) then TermSymbolKind.Module
+      else if flags.is(Method) then TermSymbolKind.Def
+      else if flags.is(Mutable) then TermSymbolKind.Var
+      else if flags.is(Lazy) then TermSymbolKind.LazyVal
+      else TermSymbolKind.Val
+
+    /** Is this term definition abstract?
+      *
+      * Note that this is false for `abstract override` members.
+      */
+    final def isAbstract: Boolean = flags.is(Abstract)
+
+    /** Is this term definition `abstract override`? */
+    final def isAbstractOverride: Boolean = flags.is(AbsOverride)
+
+    /** Is this symbol the setter of a `var`? */
+    final def isSetter: Boolean = flags.isAllOf(Accessor | Method | Mutable)
+
+    /** Is this symbol a case class field accessor? */
+    final def isCaseClassAccessor: Boolean = flags.is(CaseAccessor)
+
+    /** Is this symbol an accessor for a constructor parameter?
+      *
+      * Parameters of primary constructors almost always lead to two symbols:
+      * the parameter itself, which is local to the constructor, and a
+      * "param accessor", which is a field of the class. The param accessor is
+      * private if the parameter is not introduced with `val` or `var`.
+      * Otherwise, its visibility is that specified for the `val` or `var`.
+      */
+    final def isParamAccessor: Boolean = flags.is(ParamAccessor)
+
+    /** Is this symbol a value `case` of an `enum`? */
+    final def isEnumCase: Boolean = flags.isAllOf(Case | Enum)
+
+    /** Is this an `extension` method? */
+    final def isExtensionMethod: Boolean = flags.is(Extension)
+
+    /** Is this symbol `given` or `using`? */
+    final def isGivenOrUsing: Boolean = flags.is(Given)
+
+    /** Is this symbol `implicit`? */
+    final def isImplicit: Boolean = flags.is(Implicit)
+
+    /** Is this symbol `inline`? */
+    final def isInline: Boolean = flags.is(Inline)
+
+    /** Is this symbol `transparent inline`? */
+    final def isTransparentInline: Boolean = flags.isAllOf(Inline | Transparent)
+
+    /** Is this symbol a macro? */
+    final def isMacro: Boolean = flags.is(Macro)
+
+    /** Is this symbol an exporter generated by an `export` statement? */
+    final def isExport: Boolean = flags.is(Exported)
+
     /** Get the module class of this module value definition, if it exists:
       * - for `object val C` => `object class C[$]`
       */
     final def moduleClass(using Context): Option[ClassSymbol] =
-      if is(Module) then declaredType.requireType.classSymbol
+      if isModuleVal then declaredType.requireType.classSymbol
       else None
 
     final def staticRef(using Context): TermRef =
@@ -388,7 +505,7 @@ object Symbols {
       declaredType.asSeenFrom(prefix, owner)
 
     private def isConstructor: Boolean =
-      owner.isClass && is(Method) && name == nme.Constructor
+      owner.isClass && isMethod && name == nme.Constructor
 
     private[tastyquery] final def needsSignature(using Context): Boolean =
       declaredType.isInstanceOf[MethodicType]
@@ -459,7 +576,7 @@ object Symbols {
       * A stable member is one that is known to be idempotent.
       */
     final def isStableMember(using Context): Boolean =
-      !isAnyOf(Method | Mutable) && !declaredType.isInstanceOf[ByNameType]
+      !flags.isAnyOf(Method | Mutable) && !declaredType.isInstanceOf[ByNameType]
   end TermSymbol
 
   object TermSymbol:
@@ -478,9 +595,7 @@ object Symbols {
       case sym: TypeMemberSymbol => sym.typeDef.isInstanceOf[TypeMemberDefinition.TypeAlias]
       case _                     => false
 
-    final def isOpaqueTypeAlias(using Context): Boolean = this match
-      case sym: TypeMemberSymbol => sym.typeDef.isInstanceOf[TypeMemberDefinition.OpaqueTypeAlias]
-      case _                     => false
+    final def isOpaqueTypeAlias(using Context): Boolean = flags.is(Opaque)
 
     final def staticRef(using Context): TypeRef =
       require(isStatic, s"Cannot construct a staticRef for non-static symbol $this")
@@ -556,8 +671,13 @@ object Symbols {
       with TypeConstructorParam:
     type DefiningTreeType = TypeParam
 
+    def declaredVariance: Variance =
+      if flags.is(Covariant) then Variance.Covariant
+      else if flags.is(Contravariant) then Variance.Contravariant
+      else Variance.Invariant
+
     def variance(using Context): Variance =
-      Variance.fromFlags(flags)
+      declaredVariance
 
     final def typeRef(using Context): TypeRef = TypeRef(ThisType(owner.typeRef), this)
 
@@ -748,6 +868,35 @@ object Symbols {
       if myParents == null && myParentsInit == null then failNotCompleted("parents not initialized")
       if myGivenSelfType == null then failNotCompleted("givenSelfType not initialized")
 
+    /** The open level of this class (open, closed, sealed or final). */
+    final def openLevel: OpenLevel =
+      if flags.is(Final) then OpenLevel.Final
+      else if flags.is(Sealed) then OpenLevel.Sealed
+      else if flags.is(Open) then OpenLevel.Open
+      else OpenLevel.Closed
+    end openLevel
+
+    /** Is this class a `trait`? */
+    final def isTrait: Boolean = flags.is(Trait)
+
+    /** Is this class an `enum`? */
+    final def isEnum: Boolean = flags.is(Enum)
+
+    /** Is this class abstract?
+      *
+      * This is true for `trait`s and `abstract class`es.
+      */
+    final def isAbstract: Boolean = flags.isAnyOf(Abstract | Trait)
+
+    /** Is this the hidden class of an `object`? */
+    final def isModuleClass: Boolean = flags.is(Module)
+
+    /** Is this class a `case class`? */
+    final def isCaseClass: Boolean = flags.is(Case)
+
+    /** Is this a class a `transparent trait`? */
+    final def isTransparentTrait: Boolean = flags.isAllOf(Trait | Transparent)
+
     private[tastyquery] def isValueClass(using Context): Boolean =
       parents.nonEmpty && parents.head.classSymbol.exists(_ == defn.AnyValClass)
 
@@ -769,7 +918,7 @@ object Symbols {
       * - for `object class C[$]` => `object val C`
       */
     final def moduleValue(using Context): Option[TermSymbol] = owner match
-      case scope: DeclaringSymbol if this.is(Module) => // `this` is a `ClassSymbol`
+      case scope: DeclaringSymbol if this.isModuleClass =>
         scope.getDecl(this.name.sourceObjectName).collect { case sym: TermSymbol =>
           sym
         }
@@ -878,7 +1027,7 @@ object Symbols {
           case None =>
             appliedRef
           case Some(givenSelf) =>
-            if is(Module) then givenSelf
+            if isModuleClass then givenSelf
             else AndType(givenSelf, appliedRef)
         mySelfType = computed
         computed
@@ -1245,7 +1394,7 @@ object Symbols {
       def lookup(lin: List[ClassSymbol]): Option[TermOrTypeSymbol] = lin match
         case parentCls :: linRest =>
           parentCls.getDecl(name) match
-            case Some(sym) if !sym.is(Private) =>
+            case Some(sym) if !sym.isPrivate =>
               Some(sym)
             case _ =>
               lookup(linRest)
@@ -1258,7 +1407,7 @@ object Symbols {
         case _                                => false
 
       getDecl(name) match
-        case some @ Some(sym) if !sym.is(Local) || isOwnThis =>
+        case some @ Some(sym) if !sym.isPrivateThis || isOwnThis =>
           some
         case _ =>
           if name == nme.Constructor then None
@@ -1288,7 +1437,7 @@ object Symbols {
           while overloadsRest.nonEmpty do
             val decl = overloadsRest.head
             val matches =
-              !decl.isAnyOf(Private | Protected | Local)
+              decl.isPublic
                 && decl.needsSignature
                 && name.sig.paramsCorrespond(decl.signature)
             if matches then
@@ -1339,7 +1488,7 @@ object Symbols {
     private[tastyquery] def setScala2SealedChildren(children: List[Symbol | Scala2ExternalSymRef])(
       using Context
     ): Unit =
-      if !this.is(Scala2Defined) then
+      if !flags.is(Scala2Defined) then
         throw IllegalArgumentException(s"Illegal $this.setScala2SealedChildren($children) for non-Scala 2 class")
       if myScala2SealedChildren.isDefined then
         throw IllegalStateException(s"Scala 2 sealed children were already set for $this")
@@ -1364,7 +1513,7 @@ object Symbols {
       if local != null then local
       else
         val computed: List[SealedChild] =
-          if !is(Sealed) then Nil
+          if !flags.is(Sealed) then Nil
           else computeSealedChildren()
         mySealedChildren = computed
         computed
@@ -1388,8 +1537,8 @@ object Symbols {
         case external: Scala2ExternalSymRef => NamedType.resolveScala2ExternalRef(external)
 
       sym match
-        case sym: ClassSymbol                  => sym
-        case sym: TermSymbol if sym.is(Module) => sym
+        case sym: ClassSymbol                   => sym
+        case sym: TermSymbol if sym.isModuleVal => sym
         case sym =>
           throw InvalidProgramStructureException(s"Unexpected symbol $sym for a sealed child of $this")
     end extractSealedChildFromScala2
@@ -1400,7 +1549,7 @@ object Symbols {
           tpe.args match
             case TypeRef.OfClass(childCls) :: Nil =>
               childCls
-            case (childRef: TermRef) :: Nil if childRef.symbol.isAnyOf(Module | Enum) =>
+            case (childRef: TermRef) :: Nil if childRef.symbol.isModuleVal || childRef.symbol.isEnumCase =>
               childRef.symbol
             case _ =>
               throw InvalidProgramStructureException(s"Unexpected type $tpe for $annot")

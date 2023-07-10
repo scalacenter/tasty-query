@@ -4,6 +4,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
+import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Signatures.*
 import tastyquery.Symbols.*
@@ -244,5 +245,36 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     ctx.findTopLevelModuleClass("simple_trees.ClassAndPackageObjectSameName$package")
 
     intercept[MemberNotFoundException](ctx.findTopLevelModuleClass("simple_trees.ClassAndPackageObjectSameName"))
+  }
+
+  testWithContext("visibility", "simple_trees.AccessModifiers", "simple_trees.AccessModifiers$") {
+    val simpleTreesPkg = ctx.findPackage("simple_trees")
+    val AccessModifiersClass = ctx.findTopLevelClass("simple_trees.AccessModifiers")
+
+    def testVisibility(name: String, expected: Visibility)(using munit.Location): Unit =
+      val sym = AccessModifiersClass.findDecl(termName(name))
+      assert(clue(clue(sym).visibility) == clue(expected))
+
+    testVisibility("localParam", Visibility.PrivateThis)
+
+    testVisibility("privateThisParam", Visibility.PrivateThis)
+    testVisibility("privateParam", Visibility.Private) // not inferred private[this] !
+    testVisibility("accessedPrivateParam", Visibility.Private)
+    testVisibility("scopedPrivateParam", Visibility.ScopedPrivate(simpleTreesPkg))
+    testVisibility("protectedThisParam", Visibility.ProtectedThis)
+    testVisibility("protectedParam", Visibility.Protected)
+    testVisibility("accessedProtectedParam", Visibility.Protected)
+    testVisibility("scopedProtectedParam", Visibility.ScopedProtected(simpleTreesPkg))
+    testVisibility("publicParam", Visibility.Public)
+
+    testVisibility("privateThisField", Visibility.PrivateThis)
+    testVisibility("privateField", Visibility.PrivateThis) // inferred private[this] !
+    testVisibility("accessedPrivateField", Visibility.Private)
+    testVisibility("scopedPrivateField", Visibility.ScopedPrivate(simpleTreesPkg))
+    testVisibility("protectedThisField", Visibility.ProtectedThis)
+    testVisibility("protectedField", Visibility.Protected)
+    testVisibility("accessedProtectedField", Visibility.Protected)
+    testVisibility("scopedProtectedField", Visibility.ScopedProtected(simpleTreesPkg))
+    testVisibility("publicField", Visibility.Public)
   }
 }

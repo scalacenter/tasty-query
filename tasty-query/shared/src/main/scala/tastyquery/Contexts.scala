@@ -136,7 +136,7 @@ object Contexts {
 
     def findStaticModuleClass(fullyQualifiedName: String): ClassSymbol =
       findStaticTerm(fullyQualifiedName) match
-        case sym if sym.is(Module) =>
+        case sym if sym.isModuleVal =>
           sym.moduleClass.get
         case sym =>
           throw InvalidProgramStructureException(s"expected module symbol but got $sym")
@@ -178,7 +178,7 @@ object Contexts {
             owner.getDecl(name) match
               case Some(pkg: PackageSymbol) =>
                 loop(pkg, rest)
-              case Some(moduleSymbol: TermSymbol) if moduleSymbol.is(Module) =>
+              case Some(moduleSymbol: TermSymbol) if moduleSymbol.isModuleVal =>
                 loop(moduleSymbol.moduleClass.get, rest)
               case Some(sym) =>
                 throw InvalidProgramStructureException(s"$sym is not a static owner")

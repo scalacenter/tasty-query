@@ -93,7 +93,7 @@ private[tastyquery] object Subtyping:
       tp1 match
         case tp1: ThisType =>
           tp1.cls == cls2
-        case tp1: TypeRef if cls2.is(Module) && tp1.isSpecificClass(cls2) =>
+        case tp1: TypeRef if cls2.isModuleClass && tp1.isSpecificClass(cls2) =>
           (cls2.isStatic || isSubprefix(tp1.prefix, cls2.typeRef.prefix))
             || level2(tp1, tp2)
         case _ =>
@@ -171,7 +171,7 @@ private[tastyquery] object Subtyping:
     case tp1: ThisType =>
       val cls1 = tp1.cls
       tp2 match {
-        case tp2: TermRef if cls1.is(Module) && isTypeRefOf(tp2.underlying, cls1) =>
+        case tp2: TermRef if cls1.isModuleClass && isTypeRefOf(tp2.underlying, cls1) =>
           (cls1.isStatic || isSubprefix(cls1.typeRef.prefix, tp2.prefix))
             || level3(tp1, tp2)
         case _ =>
@@ -507,7 +507,7 @@ private[tastyquery] object Subtyping:
 
   private def isNullable(tp: Type)(using Context): Boolean = tp match
     case TypeRef.OfClass(cls) =>
-      !cls.isValueClass && !cls.is(Module)
+      !cls.isValueClass && !cls.isModuleClass
     case tp: TypeRef =>
       false
     case tp: TermRef =>

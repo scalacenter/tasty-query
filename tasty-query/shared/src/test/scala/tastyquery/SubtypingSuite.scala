@@ -13,7 +13,7 @@ import scala.Predef.{String as PString, locally}
 import tastyquery.Annotations.*
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
-import tastyquery.Flags.*
+import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
@@ -1351,7 +1351,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
 
     for
       case (decl: TermSymbol) <- TypeRefInClass.declarations
-      if decl.is(Method) && decl.name != nme.Constructor
+      if decl.kind == TermSymbolKind.Def && decl.name != nme.Constructor
     do
       val tree = decl.tree.get.asInstanceOf[DefDef].rhs.get
       assert(tree.tpe.requireType.isSubtype(finalResultType(decl.declaredType)))

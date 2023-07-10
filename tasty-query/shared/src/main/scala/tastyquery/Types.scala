@@ -12,11 +12,11 @@ import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
+import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Signatures.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
-import tastyquery.Variances.*
 
 /** Types in the Scala type system.
   *
@@ -248,7 +248,10 @@ object Types {
     * See [[Type.typeParams]].
     */
   trait TypeConstructorParam private[tastyquery] ():
-    /** The variance of the type parameter. */
+    /** The declared variance of the type parameter, as found in the source. */
+    def declaredVariance: Variance
+
+    /** The actual variance of the type parameter, which may be computed from its body. */
     def variance(using Context): Variance
 
     /** The name of the type parameter. */
@@ -1070,7 +1073,7 @@ object Types {
 
     protected final def normalizedDerivedSelectImpl(prefix: Type)(using Context): TermRef =
       designator match
-        case sym: TermSymbol if !sym.is(Private) =>
+        case sym: TermSymbol if !sym.isPrivate =>
           TermRef(prefix, sym.signedName)
         case desig =>
           withPrefix(prefix)
@@ -1312,7 +1315,7 @@ object Types {
           res
         case None | Some(_: WildcardTypeArg) =>
           designator match
-            case sym: TypeMemberSymbol if !sym.is(Private) =>
+            case sym: TypeMemberSymbol if !sym.isPrivate =>
               TypeRef(prefix, sym.name)
             case desig =>
               withPrefix(prefix)
@@ -1721,8 +1724,8 @@ object Types {
       }
 
       val companion: MethodTypeCompanion =
-        if params.headOption.exists(_.is(Implicit)) then ImplicitMethodType
-        else if params.headOption.exists(_.is(Given)) then ContextualMethodType
+        if params.headOption.exists(_.isImplicit) then ImplicitMethodType
+        else if params.headOption.exists(_.isGivenOrUsing) then ContextualMethodType
         else MethodType
 
       companion(params.map(_.name.toTermName))(
@@ -1816,6 +1819,9 @@ object Types {
     def paramNum: Int
 
   private[tastyquery] final class TypeLambdaParam(val typeLambda: TypeLambda, num: Int) extends TypeConstructorParam:
+    def declaredVariance: Variance =
+      Variance.Invariant // by construction
+
     def variance(using Context): Variance =
       Variance.Invariant // TODO Set structured variances
 

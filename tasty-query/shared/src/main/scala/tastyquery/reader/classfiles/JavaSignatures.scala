@@ -27,7 +27,7 @@ private[classfiles] object JavaSignatures:
     var offset = 0
     var end = signature.length
     val isClass = member.isClass
-    val isMethod = member.flags.is(Method)
+    val isMethod = member.isTerm && member.asTerm.isMethod
 
     lazy val someEmptyType = Some(defn.AnyType)
     lazy val emptyTypeBounds = defn.NothingAnyBounds

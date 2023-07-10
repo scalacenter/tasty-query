@@ -4,7 +4,7 @@ import scala.collection.mutable
 
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
-import tastyquery.Flags.*
+import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
@@ -521,9 +521,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val PkgPrivateModule = ctx.findTopLevelModuleClass("javadefined.PkgPrivate")
     val PkgPrivateModuleClass = ctx.findStaticTerm("javadefined.PkgPrivate")
 
-    def assertPrivateWithin(sym: Symbol, expected: Symbol)(using munit.Location) =
-      assert(!sym.isAnyOf(Flags.Private | Flags.Protected))
-      assert(sym.privateWithin == Some(expected))
+    def assertPrivateWithin(sym: TermOrTypeSymbol, expected: DeclaringSymbol)(using munit.Location) =
+      assert(!clue(sym.isPrivate) && clue(sym.visibility) == clue(Visibility.ScopedPrivate(expected)))
 
     assertPrivateWithin(PkgPrivateClass, javadefinedPackage)
     assertPrivateWithin(PkgPrivateModule, javadefinedPackage)
@@ -537,13 +536,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def testDef(name: TermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
       op(BagOfJavaDefinitionsClassMod.findNonOverloadedDecl(name))
 
-    def assertJavaPublic(sym: Symbol)(using munit.Location) =
-      assert(!sym.isAnyOf(Flags.Private | Flags.Protected))
-      assert(sym.privateWithin == None)
+    def assertJavaPublic(sym: TermOrTypeSymbol)(using munit.Location) =
+      assert(!clue(sym.isPrivate) && clue(sym.visibility) == clue(Visibility.Public))
 
-    def assertPrivateWithin(sym: Symbol, expected: Symbol)(using munit.Location) =
-      assert(!sym.isAnyOf(Flags.Private | Flags.Protected))
-      assert(sym.privateWithin == Some(expected))
+    def assertPrivateWithin(sym: TermOrTypeSymbol, expected: DeclaringSymbol)(using munit.Location) =
+      assert(!clue(sym.isPrivate) && clue(sym.visibility) == clue(Visibility.ScopedPrivate(expected)))
 
     testDef(name"STATIC_INT") { STATIC_INT =>
       assertJavaPublic(STATIC_INT)
@@ -570,13 +567,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val BagOfJavaDefinitionsClass = ctx.findTopLevelClass("javadefined.BagOfJavaDefinitions")
     val javadefinedPackage = ctx.findPackage("javadefined")
 
-    def assertJavaPublic(sym: Symbol)(using munit.Location) =
-      assert(!sym.isAnyOf(Flags.Private | Flags.Protected))
-      assert(sym.privateWithin == None)
+    def assertJavaPublic(sym: TermOrTypeSymbol)(using munit.Location) =
+      assert(!clue(sym.isPrivate) && clue(sym.visibility) == clue(Visibility.Public))
 
-    def assertPrivateWithin(sym: Symbol, expected: Symbol)(using munit.Location) =
-      assert(!sym.isAnyOf(Flags.Private | Flags.Protected))
-      assert(sym.privateWithin == Some(expected))
+    def assertPrivateWithin(sym: TermOrTypeSymbol, expected: DeclaringSymbol)(using munit.Location) =
+      assert(!clue(sym.isPrivate) && clue(sym.visibility) == clue(Visibility.ScopedPrivate(expected)))
 
     def testDef(name: TermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
       op(BagOfJavaDefinitionsClass.findNonOverloadedDecl(name))
@@ -587,16 +582,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
 
     testDef(name"protectedY") { protectedY =>
-      assert(protectedY.is(Flags.Protected))
-      assert(!protectedY.is(Flags.Private))
-      assert(protectedY.privateWithin == None)
+      assert(!protectedY.isPrivate)
+      assert(clue(protectedY.visibility) == Visibility.Protected)
       assert(protectedY.declaredType.isRef(defn.IntClass))
     }
 
     testDef(name"privateZ") { privateZ =>
-      assert(privateZ.is(Flags.Private))
-      assert(!privateZ.is(Flags.Protected))
-      assert(privateZ.privateWithin == None)
+      assert(privateZ.isPrivate)
+      assert(clue(privateZ.visibility) == Visibility.Private)
       assert(privateZ.declaredType.isRef(defn.IntClass))
     }
 
@@ -1162,7 +1155,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val ClassCaseClass = ctx.findStaticClass("simple_trees.SealedClass.ClassCase")
     val ObjectCaseTerm = ctx.findStaticTerm("simple_trees.SealedClass.ObjectCase")
 
-    assert(SealedClass.isAllOf(Sealed, butNotAnyOf = Enum))
+    assert(SealedClass.openLevel == OpenLevel.Sealed)
+    assert(!SealedClass.isEnum)
     assert(clue(SealedClass.sealedChildren) == List(ClassCaseClass, ObjectCaseTerm))
 
     val EquivClass = ctx.findTopLevelClass("scala.=:=")
@@ -1181,7 +1175,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val ClassCaseClass = ctx.findStaticClass("simple_trees.ScalaEnum.ClassCase")
     val ObjectCaseTerm = ctx.findStaticTerm("simple_trees.ScalaEnum.ObjectCase")
 
-    assert(ScalaEnumClass.isAllOf(Sealed | Enum))
+    assert(ScalaEnumClass.openLevel == OpenLevel.Sealed)
+    assert(ScalaEnumClass.isEnum)
     assert(clue(ScalaEnumClass.sealedChildren) == List(ClassCaseClass, ObjectCaseTerm))
   }
 
@@ -1256,9 +1251,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(sDecls).sizeIs == 2)
 
     val (sModule, sDef) =
-      if sDecls(0).is(Module) then (sDecls(0), sDecls(1))
+      if sDecls(0).kind == TermSymbolKind.Module then (sDecls(0), sDecls(1))
       else
-        assert(sDecls(1).is(Module))
+        assert(sDecls(1).kind == TermSymbolKind.Module)
         (sDecls(1), sDecls(0))
 
     assert(clue(sModule.asTerm.declaredType).isRef(sModuleClass))
@@ -2137,26 +2132,26 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val yInParent = ParentClass.findDecl(termName("y"))
     assert(clue(ParentClass.getDecl(termName("z"))).isEmpty)
 
-    assert(!clue(wInParent.flags).isAnyOf(Local | ParamAccessor | Private))
-    assert(clue(xInParent.flags).isAllOf(ParamAccessor, butNotAnyOf = Local | Private))
-    assert(!clue(yInParent.flags).isAnyOf(Local | ParamAccessor | Private))
+    assert(!clue(wInParent.isParamAccessor) && !clue(wInParent.isPrivate))
+    assert(clue(xInParent.isParamAccessor) && !clue(xInParent.isPrivate))
+    assert(!clue(yInParent.isParamAccessor) && !clue(yInParent.isPrivate))
 
     assert(clue(ChildClass.getDecl(termName("w"))).isEmpty)
     val xInChild = ChildClass.findDecl(termName("x"))
     val yInChild = ChildClass.findDecl(termName("y"))
     val zInChild = ChildClass.findDecl(termName("z"))
 
-    assert(clue(xInChild.flags).isAllOf(Local | ParamAccessor | Private))
-    assert(clue(yInChild.flags).isAllOf(Local | ParamAccessor | Private))
-    assert(clue(zInChild.flags).isAllOf(ParamAccessor, butNotAnyOf = Local | Private))
+    assert(clue(xInChild.isParamAccessor) && clue(xInChild.isPrivate))
+    assert(clue(yInChild.isParamAccessor) && clue(yInChild.isPrivate))
+    assert(clue(zInChild.isParamAccessor) && !clue(zInChild.isPrivate))
 
     assert(clue(InnerClass.getDecl(termName("w"))).isEmpty)
     assert(clue(InnerClass.getDecl(termName("x"))).isEmpty)
     val yInInner = InnerClass.findDecl(termName("y"))
     val zInInner = InnerClass.findDecl(termName("z"))
 
-    assert(clue(yInInner.flags).isAllOf(Local | ParamAccessor | Private))
-    assert(clue(zInInner.flags).isAllOf(Local | ParamAccessor | Private))
+    assert(clue(yInInner.isParamAccessor) && clue(yInInner.isPrivate))
+    assert(clue(zInInner.isParamAccessor) && clue(zInInner.isPrivate))
 
     // Test Select from outside the class
     for fStr <- List("w", "x", "y", "z") do
@@ -2180,9 +2175,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         assert(clue(selectSym.owner) == clue(expectedOwner), fStr)
 
         val expectedParamAccessor = fStr != "w" && fStr != "y"
-        assert(selectSym.is(ParamAccessor) == clue(expectedParamAccessor), fStr)
+        assert(selectSym.isParamAccessor == clue(expectedParamAccessor), fStr)
 
-        assert(!selectSym.is(Private), fStr)
+        assert(!selectSym.isPrivate, fStr)
       }
 
       // Ident from inside the class

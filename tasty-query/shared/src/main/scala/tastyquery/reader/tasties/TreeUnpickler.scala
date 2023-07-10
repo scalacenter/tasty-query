@@ -253,9 +253,9 @@ private[tasties] class TreeUnpickler private (
     sym.withFlags(normalizedFlags, privateWithin)
 
   /** Read modifiers into a set of flags and a privateWithin boundary symbol. */
-  private def readModifiers(end: Addr): (FlagSet, Option[Symbol]) =
+  private def readModifiers(end: Addr): (FlagSet, Option[DeclaringSymbol]) =
     var flags: FlagSet = EmptyFlagSet
-    var privateWithin: Option[Symbol] = None
+    var privateWithin: Option[DeclaringSymbol] = None
     def addFlag(flag: FlagSet): Unit =
       flags |= flag
       reader.readByte()
@@ -322,7 +322,7 @@ private[tasties] class TreeUnpickler private (
     (flags, privateWithin)
   end readModifiers
 
-  private def readWithin: Symbol =
+  private def readWithin: DeclaringSymbol =
     readTypeMappable() match
       case TypeRef.OfClass(cls) => cls
       case pkgRef: PackageRef   => pkgRef.symbol
@@ -437,7 +437,7 @@ private[tasties] class TreeUnpickler private (
         definingTree(classSymbol, ClassDef(name, template, classSymbol)(spn))
       } else {
         val symbol = caches.getSymbol[TypeMemberSymbol](start)
-        val isOpaque = symbol.is(Opaque)
+        val isOpaque = symbol.isOpaqueTypeAlias
         val typeDefTree = readTypeDefinition(forOpaque = isOpaque)
         val typeDef = makeTypeMemberDefinition(typeDefTree)
         if isOpaque != typeDef.isInstanceOf[TypeMemberDefinition.OpaqueTypeAlias] then
@@ -702,13 +702,13 @@ private[tasties] class TreeUnpickler private (
       case (tparams @ Right(_)) :: paramListsTail =>
         tparams :: normalizeCtorParamClauses(paramListsTail)
 
-      case Left(vparam1 :: _) :: _ if vparam1.symbol.is(Implicit) =>
+      case Left(vparam1 :: _) :: _ if vparam1.symbol.isImplicit =>
         // Found a leading `implicit` param lists -> add `()` in front
         Left(Nil) :: paramLists
 
       case _ =>
         val anyNonUsingTermClause = paramLists.exists {
-          case Left(vparams)  => vparams.isEmpty || !vparams.head.symbol.is(Given)
+          case Left(vparams)  => vparams.isEmpty || !vparams.head.symbol.isGivenOrUsing
           case Right(tparams) => false
         }
         if anyNonUsingTermClause then paramLists

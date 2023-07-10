@@ -5,12 +5,12 @@ import scala.annotation.tailrec
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
+import tastyquery.Modifiers.*
 import tastyquery.Names.termName
 import tastyquery.Symbols.*
 import tastyquery.Types.*
 import tastyquery.TypeMaps.*
 import tastyquery.Subtyping.{isSameType, isSubtype}
-import tastyquery.Variances.Variance
 
 private[tastyquery] object TypeMatching:
   private enum MatchResult:
@@ -87,10 +87,12 @@ private[tastyquery] object TypeMatching:
         val instantiation = scrutinee match
           case scrutinee: WildcardTypeArg =>
             val bounds = scrutinee.bounds
-            if variance.isCovariant then Some(bounds.high)
-            else if variance.isContravariant then Some(bounds.low)
-            else if bounds.low.isSameType(bounds.high) then Some(bounds.low)
-            else None
+            variance match
+              case Variance.Covariant     => Some(bounds.high)
+              case Variance.Contravariant => Some(bounds.low)
+              case Variance.Invariant =>
+                if bounds.low.isSameType(bounds.high) then Some(bounds.low)
+                else None
           case scrutinee: Type =>
             Some(scrutinee)
 
@@ -140,14 +142,14 @@ private[tastyquery] object TypeMatching:
         end tryMatchingApply
 
         pattern.tycon match
-          case _ if variance.isContravariant =>
+          case _ if variance == Variance.Contravariant =>
             /* See https://github.com/lampepfl/dotty/issues/17121
              * dotc does the wrong thing in this case, and it is not clear that
              * there *exists* a correct solution, so we always bail.
              */
             false
 
-          case _ if !variance.isCovariant && scrutinee.isInstanceOf[WildcardTypeArg] =>
+          case _ if variance == Variance.Invariant && scrutinee.isInstanceOf[WildcardTypeArg] =>
             false
 
           case patternTycon: TypeRef =>
@@ -217,10 +219,10 @@ private[tastyquery] object TypeMatching:
     */
   private def provablyDisjoint(tp1: Type, tp2: Type)(using Context): Boolean =
     def isEnumValue(ref: TermRef): Boolean =
-      ref.symbol.isAllOf(Case | Enum) // TODO butNot = JavaDefined
+      ref.symbol.isEnumCase // TODO? Exclude Java enums here?
 
     def isEnumValueOrModule(ref: TermRef): Boolean =
-      isEnumValue(ref) || ref.symbol.is(Module) || (ref.underlying match {
+      isEnumValue(ref) || ref.symbol.isModuleVal || (ref.underlying match {
         case tp: TermRef => isEnumValueOrModule(tp)
         case _           => false
       })
@@ -239,10 +241,10 @@ private[tastyquery] object TypeMatching:
         if cls1.isSubclass(cls2) || cls2.isSubclass(cls1) then
           // One of them is a subclass of the other -> not disjoint
           false
-        else if cls1.is(Final) || cls2.is(Final) then
+        else if cls1.openLevel == OpenLevel.Final || cls2.openLevel == OpenLevel.Final then
           // One of them is final and they are unrelated -> disjoint (property 2)
           true
-        else if !cls1.is(Trait) && !cls2.is(Trait) then
+        else if !cls1.isTrait && !cls2.isTrait then
           // They are both non-trait classes and unrelated -> disjoint (property 1)
           true
         else
@@ -284,10 +286,10 @@ private[tastyquery] object TypeMatching:
           fullyInstantiated(tp2)    // both `tp1` and `tp2` are fully instantiated.*/
 
         tp1.args.lazyZip(tp2.args).lazyZip(tycon1.typeParams).exists { (arg1, arg2, tparam) =>
-          val v = tparam.variance
-          if v.isCovariant then covariantDisjoint(arg1, arg2, tparam)
-          else if v.isContravariant then contravariantDisjoint(arg1, arg2, tparam)
-          else invariantDisjoint(arg1, arg2, tparam)
+          tparam.variance match
+            case Variance.Covariant     => covariantDisjoint(arg1, arg2, tparam)
+            case Variance.Contravariant => contravariantDisjoint(arg1, arg2, tparam)
+            case Variance.Invariant     => invariantDisjoint(arg1, arg2, tparam)
         }
 
       case (tp1: TermRef, tp2: TermRef) if isEnumValueOrModule(tp1) && isEnumValueOrModule(tp2) =>

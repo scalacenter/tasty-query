@@ -5,7 +5,7 @@ import PickleReader.{PklStream, index, pkl}
 import tastyquery.Contexts.Context
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
-import tastyquery.Symbols.Symbol
+import tastyquery.SourceLanguage
 
 private[reader] object Unpickler {
   def loadInfo(sigBytes: IArray[Byte])(using Context): Unit = {
@@ -34,7 +34,8 @@ private[reader] object Unpickler {
       // Check that all the Symbols we created have been completed
       for sym <- structure.allRegisteredSymbols do
         sym.checkCompleted()
-        assert(sym.isPackage || sym.flags.is(Scala2Defined), s"$sym of ${sym.getClass()}")
+        assert(sym.sourceLanguage == SourceLanguage.Scala2, s"$sym of ${sym.getClass()}")
+      end for
     }
 
     PklStream.read(sigBytes) {

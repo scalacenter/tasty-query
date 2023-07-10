@@ -9,12 +9,12 @@ import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
+import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Signatures.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
-import tastyquery.Variances.*
 
 private[tastyquery] object Printers:
   def withWriterToString(printingOp: Writer => Unit): String =
@@ -256,9 +256,7 @@ private[tastyquery] object Printers:
       print("@<annot>") // TODO Improve this
 
     def print(tparam: TypeConstructorParam): Unit =
-      tparam match
-        case tparam: TypeLambdaParam      =>
-        case tparam: ClassTypeParamSymbol => print(Variance.fromFlags(tparam.flags))
+      print(tparam.declaredVariance)
       print(tparam.name)
       tparam match
         case tparam: TypeLambdaParam      => print(tparam.bounds)
@@ -266,8 +264,10 @@ private[tastyquery] object Printers:
     end print
 
     def print(variance: Variance): Unit =
-      if variance.isCovariant then print("+")
-      else if variance.isContravariant then print("-")
+      variance match
+        case Variance.Invariant     => ()
+        case Variance.Covariant     => println("+")
+        case Variance.Contravariant => println("-")
 
     def print(i: Int): Unit =
       print(i.toString())

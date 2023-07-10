@@ -158,7 +158,7 @@ private[tastyquery] object Scala2Erasure:
 
     /** Is this a trait symbol? */
     private def isTrait: Boolean = psym match
-      case sym: ClassSymbol => sym.is(Trait)
+      case sym: ClassSymbol => sym.isTrait
       case _                => false
     end isTrait
 
