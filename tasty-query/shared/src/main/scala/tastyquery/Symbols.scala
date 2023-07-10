@@ -218,6 +218,8 @@ object Symbols {
   }
 
   sealed abstract class TermOrTypeSymbol(override val owner: Symbol) extends Symbol(owner):
+    type MatchingSymbolType >: this.type <: TermOrTypeSymbol
+
     /** The source language in which this symbol was defined.
       *
       * The source language of a symbol may have an influence on how it is
@@ -293,21 +295,7 @@ object Symbols {
       * @param siteClass
       *   The base class from which member types are computed
       */
-    private final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[Symbol] =
-      this match
-        case self: TypeSymbol =>
-          inClass.getDecl(self.name).filterNot(_.isPrivate)
-        case self: TermSymbol =>
-          val candidates = inClass.getAllOverloadedDecls(self.name).filterNot(_.isPrivate)
-          if candidates.isEmpty then None
-          else
-            val site = siteClass.thisType
-            val targetType = self.declaredTypeAsSeenFrom(site)
-            candidates.find { candidate =>
-              // TODO Also check targetName here
-              candidate.declaredTypeAsSeenFrom(site).matches(targetType)
-            }
-    end matchingDecl
+    protected def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[MatchingSymbolType]
 
     /** If false, this symbol cannot possibly participate in an override, either as overrider or overridee. */
     private final def canMatchInheritedSymbols(using Context): Boolean =
@@ -321,7 +309,7 @@ object Symbols {
       name == nme.Constructor
 
     /** The symbol, in class `inClass`, that is overridden by this symbol, if any. */
-    final def overriddenSymbol(inClass: ClassSymbol)(using Context): Option[Symbol] =
+    final def overriddenSymbol(inClass: ClassSymbol)(using Context): Option[MatchingSymbolType] =
       if inClass == owner then Some(this)
       else if canMatchInheritedSymbols then
         val ownerClass = owner.asClass
@@ -330,7 +318,7 @@ object Symbols {
       else None
 
     /** All symbols overridden by this symbol. */
-    final def allOverriddenSymbols(using Context): Iterator[Symbol] =
+    final def allOverriddenSymbols(using Context): Iterator[MatchingSymbolType] =
       if !canMatchInheritedSymbols then Iterator.empty
       else
         owner.asClass.linearization match
@@ -339,14 +327,14 @@ object Symbols {
     end allOverriddenSymbols
 
     /** The first symbol overridden by this symbol, if any. */
-    final def nextOverriddenSymbol(using Context): Option[Symbol] =
+    final def nextOverriddenSymbol(using Context): Option[MatchingSymbolType] =
       val overridden = allOverriddenSymbols
       if overridden.hasNext then Some(overridden.next())
       else None
     end nextOverriddenSymbol
 
     /** The symbol overriding this symbol in given subclass `inClass`, if any. */
-    final def overridingSymbol(inClass: ClassSymbol)(using Context): Option[Symbol] =
+    final def overridingSymbol(inClass: ClassSymbol)(using Context): Option[MatchingSymbolType] =
       if inClass == owner then Some(this)
       else if canMatchInheritedSymbols && inClass.isSubclass(owner.asClass) then
         matchingDecl(inClass, siteClass = inClass)
@@ -379,7 +367,7 @@ object Symbols {
       *   if `owner.isClass` is false, if `siteClass.isSubclass(owner.asClass)`
       *   is false, or if `siteClass.isSubclass(inClass)` is false
       */
-    final def matchingSymbol(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[Symbol] =
+    final def matchingSymbol(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[MatchingSymbolType] =
       require(owner.isClass, s"illegal matchingSymbol on local symbol $this")
       require(siteClass.isSubclass(owner.asClass), s"site class $siteClass must be a subclass of owner $owner")
       require(siteClass.isSubclass(inClass), s"site class $siteClass must be a subclass of target class $inClass")
@@ -393,6 +381,7 @@ object Symbols {
   final class TermSymbol private (val name: TermName, owner: Symbol) extends TermOrTypeSymbol(owner):
     type ThisNameType = TermName
     type DefiningTreeType = ValOrDefDef | Bind
+    type MatchingSymbolType = TermSymbol
 
     // Reference fields (checked in doCheckCompleted)
     private var myDeclaredType: TypeOrMethodic | Null = null
@@ -558,6 +547,18 @@ object Symbols {
         computed
     end signedName
 
+    protected final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[TermSymbol] =
+      val candidates = inClass.getAllOverloadedDecls(name).filterNot(_.isPrivate)
+      if candidates.isEmpty then None
+      else
+        val site = siteClass.thisType
+        val targetType = this.declaredTypeAsSeenFrom(site)
+        candidates.find { candidate =>
+          // TODO Also check targetName here
+          candidate.declaredTypeAsSeenFrom(site).matches(targetType)
+        }
+    end matchingDecl
+
     final def paramRefss(using Context): List[Either[List[TermParamRef], List[TypeParamRef]]] =
       def paramssOfType(tp: TypeOrMethodic): List[Either[List[TermParamRef], List[TypeParamRef]]] = tp match
         case mt: PolyType   => Right(mt.paramRefs) :: paramssOfType(mt.resultType)
@@ -590,6 +591,10 @@ object Symbols {
   sealed abstract class TypeSymbol protected (val name: TypeName, owner: Symbol) extends TermOrTypeSymbol(owner):
     type ThisNameType = TypeName
     type DefiningTreeType <: TypeDef | TypeTreeBind
+    type MatchingSymbolType = TypeSymbol
+
+    protected final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[TypeSymbol] =
+      inClass.getDecl(name).filterNot(_.isPrivate)
 
     final def isTypeAlias(using Context): Boolean = this match
       case sym: TypeMemberSymbol => sym.typeDef.isInstanceOf[TypeMemberDefinition.TypeAlias]
