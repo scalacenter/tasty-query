@@ -1112,7 +1112,15 @@ object Symbols {
     private[tastyquery] final def initParents: Boolean =
       myTypeParams != null
 
-    private val baseTypeForClassCache = mutable.AnyRefMap.empty[ClassSymbol, Option[Type]]
+    // Partial internal guarantee that we follow the right shape
+    private type BaseType = TypeRef | AppliedType
+
+    private def asBaseType(tpe: Type): BaseType = tpe match
+      case tpe: BaseType => tpe
+      case _             => throw AssertionError(s"baseType internally produced an invalid shape: $tpe")
+    end asBaseType
+
+    private val baseTypeForClassCache = mutable.AnyRefMap.empty[ClassSymbol, Option[BaseType]]
 
     /** Cached core lookup of `this.baseTypeOf(clsOwner.this.cls)`.
       *
@@ -1120,9 +1128,9 @@ object Symbols {
       * which are both `ClassSymbol`s, so there is a finite number of them,
       * and they have meaningful equality semantics.
       */
-    private def baseTypeForClass(cls: ClassSymbol)(using Context): Option[Type] =
-      def foldGlb(bt: Option[Type], ps: List[Type]): Option[Type] =
-        ps.foldLeft(bt)((bt, p) => AndType.combineGlb(bt, baseTypeOf(p)))
+    private def baseTypeForClass(cls: ClassSymbol)(using Context): Option[BaseType] =
+      def foldGlb(bt: Option[BaseType], ps: List[Type]): Option[BaseType] =
+        ps.foldLeft(bt)((bt, p) => baseTypeCombine(bt, baseTypeOf(p), meet = true))
 
       baseTypeForClassCache.getOrElseUpdate(
         cls,
@@ -1137,20 +1145,23 @@ object Symbols {
       *
       * Precondition: `tp.optSymbol == Some(tpCls)`.
       */
-    private def baseTypeOfClassTypeRef(tp: TypeRef, tpCls: ClassSymbol)(using Context): Option[Type] =
+    private def baseTypeOfClassTypeRef(tp: TypeRef, tpCls: ClassSymbol)(using Context): Option[BaseType] =
       def isOwnThis = tp.prefix match
         case prefix: ThisType   => prefix.cls == tpCls.owner
         case prefix: PackageRef => prefix.symbol == tpCls.owner
         case NoPrefix           => true
         case _                  => false
 
-      val baseTypeOnOwnThis = baseTypeForClass(tpCls)
-      if isOwnThis then baseTypeOnOwnThis
-      else baseTypeOnOwnThis.map(_.asSeenFrom(tp.prefix, tpCls.owner.asDeclaringSymbol))
+      val baseTypeOnOwnThisOpt = baseTypeForClass(tpCls)
+      if isOwnThis then baseTypeOnOwnThisOpt
+      else
+        baseTypeOnOwnThisOpt.map { (baseTypeOnOwnThis: BaseType) =>
+          asBaseType(baseTypeOnOwnThis.asSeenFrom(tp.prefix, tpCls.owner.asDeclaringSymbol))
+        }
     end baseTypeOfClassTypeRef
 
     /** Compute tp.baseType(this) */
-    private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Option[Type] = tp match
+    private[tastyquery] final def baseTypeOf(tp: Type)(using Context): Option[TypeRef | AppliedType] = tp match
       case tp @ TypeRef.OfClass(tpCls) =>
         if tpCls == this then Some(tp)
         else baseTypeOfClassTypeRef(tp, tpCls)
@@ -1160,8 +1171,10 @@ object Symbols {
           case tycon @ TypeRef.OfClass(tyconCls) =>
             if tyconCls == this then Some(tp)
             else
-              val baseTycon = baseTypeOfClassTypeRef(tycon, tyconCls)
-              baseTycon.map(_.substClassTypeParams(tyconCls.typeParams, tp.args))
+              val baseTyconOpt = baseTypeOfClassTypeRef(tycon, tyconCls)
+              baseTyconOpt.map { (baseTycon: BaseType) =>
+                asBaseType(baseTycon.substClassTypeParams(tyconCls.typeParams, tp.args))
+              }
           case tycon =>
             baseTypeOf(tp.superType)
 
@@ -1169,20 +1182,11 @@ object Symbols {
         baseTypeOf(tp.superType)
 
       case tp: AndType =>
-        val tp1 = tp.first
-        val tp2 = tp.second
         // TODO? Opt when this.isStatic && tp.derivesFrom(this) && this.typeParams.isEmpty then this.typeRef
-        val combined = AndType.combineGlb(baseTypeOf(tp1), baseTypeOf(tp2))
-        combined match
-          case Some(combined: AndType) if (combined.first eq tp1) && (combined.second eq tp2) =>
-            // Return `tp` itself to allow `Subtyping.level3WithBaseType` to cut off infinite recursions
-            Some(tp)
-          case _ =>
-            combined
+        baseTypeCombine(baseTypeOf(tp.first), baseTypeOf(tp.second), meet = true)
 
-      case _: OrType =>
-        // TODO Handle OrType
-        None
+      case tp: OrType =>
+        baseTypeCombine(baseTypeOf(tp.first), baseTypeOf(tp.second), meet = false)
 
       case _: NothingType | _: AnyKindType | _: TypeLambda =>
         None
@@ -1190,6 +1194,73 @@ object Symbols {
       case _: CustomTransientGroundType =>
         None
     end baseTypeOf
+
+    private def baseTypeCombine(baseType1: Option[BaseType], baseType2: Option[BaseType], meet: Boolean)(
+      using Context
+    ): Option[BaseType] =
+      (baseType1, baseType2) match
+        case (None, _) => if meet then baseType2 else None
+        case (_, None) => if meet then baseType1 else None
+
+        case (Some(tp1: TypeRef), Some(tp2: TypeRef)) =>
+          if baseTypeCheckUnapplied(tp1, tp2) then baseType1
+          else None
+
+        case (Some(tp1: AppliedType), Some(tp2: AppliedType)) =>
+          (tp1.tycon, tp2.tycon) match
+            case (tycon1: TypeRef, tycon2: TypeRef) if baseTypeCheckUnapplied(tycon1, tycon2) =>
+              baseTypeCombineArgs(tp1.args, tp2.args, typeParams, meet) match
+                case Some(args) =>
+                  if args eq tp1.args then baseType1
+                  else Some(AppliedType(tycon1, args))
+                case None =>
+                  None
+            case _ =>
+              None
+
+        case _ =>
+          None
+    end baseTypeCombine
+
+    private def baseTypeCheckUnapplied(tp1: TypeRef, tp2: TypeRef)(using Context): Boolean =
+      assert(tp1.optSymbol.contains(this) && tp2.optSymbol.contains(this))
+      (tp1.prefix, tp2.prefix) match
+        case (prefix1: Type, prefix2: Type) =>
+          prefix1.isSameType(prefix2)
+        case _ =>
+          // Since both TypeRef's point to this class, NoSymbol's and PackageRef's must be the same by construction
+          true
+    end baseTypeCheckUnapplied
+
+    private def baseTypeCombineArgs(
+      args1: List[TypeOrWildcard],
+      args2: List[TypeOrWildcard],
+      tparams: List[ClassTypeParamSymbol],
+      meet: Boolean
+    )(using Context): Option[List[TypeOrWildcard]] =
+      if tparams.isEmpty then Some(Nil)
+      else
+        val arg1 = args1.head
+        val arg2 = args2.head
+        val tparam = tparams.head
+        val combinedArg = tparam.variance.sign match
+          case 1 =>
+            if meet then arg1.intersect(arg2)
+            else arg1.union(arg2)
+          case -1 =>
+            if meet then arg1.union(arg2)
+            else arg1.intersect(arg2)
+          case 0 =>
+            if arg1.isSameTypeOrWildcard(arg2) then arg1
+            else return None
+        val combinedTail = baseTypeCombineArgs(args1.tail, args2.tail, tparams.tail, meet) match
+          case Some(combined) => combined
+          case None           => return None
+        val result =
+          if (combinedArg eq arg1) && (combinedTail eq args1.tail) then args1
+          else combinedArg :: combinedTail
+        Some(result)
+    end baseTypeCombineArgs
 
     private[tastyquery] final def findMember(pre: NonEmptyPrefix, name: Name)(using Context): Option[TermOrTypeSymbol] =
       def lookup(lin: List[ClassSymbol]): Option[TermOrTypeSymbol] = lin match

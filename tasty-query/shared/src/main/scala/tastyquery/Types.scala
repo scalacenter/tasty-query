@@ -347,6 +347,53 @@ object Types {
     def lowIfWildcard: Type = this match
       case self: Type            => self
       case self: WildcardTypeArg => self.bounds.low
+
+    private[tastyquery] final def intersect(that: TypeOrWildcard)(using Context): TypeOrWildcard = this match
+      case self: Type =>
+        that match
+          case that: Type =>
+            if self.isSubtype(that) then self
+            else if that.isSubtype(self) then that
+            else self & that
+          case that: WildcardTypeArg =>
+            if that.bounds.contains(self) then self
+            else that.derivedWildcardTypeArg(that.bounds.intersect(TypeAlias(self)))
+      case self: WildcardTypeArg =>
+        that match
+          case that: Type =>
+            if self.bounds.contains(that) then that
+            else self.derivedWildcardTypeArg(self.bounds.intersect(TypeAlias(that)))
+          case that: WildcardTypeArg =>
+            self.derivedWildcardTypeArg(self.bounds.intersect(that.bounds))
+    end intersect
+
+    private[tastyquery] final def union(that: TypeOrWildcard)(using Context): TypeOrWildcard = this match
+      case self: Type =>
+        that match
+          case that: Type =>
+            if that.isSubtype(self) then self
+            else if self.isSubtype(that) then that
+            else self | that
+          case that: WildcardTypeArg =>
+            that.derivedWildcardTypeArg(that.bounds.union(TypeAlias(self)))
+      case self: WildcardTypeArg =>
+        that match
+          case that: Type =>
+            self.derivedWildcardTypeArg(self.bounds.union(TypeAlias(that)))
+          case that: WildcardTypeArg =>
+            self.derivedWildcardTypeArg(self.bounds.union(that.bounds))
+    end union
+
+    private[tastyquery] def isSameTypeOrWildcard(that: TypeOrWildcard)(using Context): Boolean = this match
+      case self: Type =>
+        that match
+          case that: Type            => self.isSameType(that)
+          case that: WildcardTypeArg => false
+      case self: WildcardTypeArg =>
+        that match
+          case that: Type            => false
+          case that: WildcardTypeArg => self.bounds.isSameBounds(that.bounds)
+    end isSameTypeOrWildcard
   end TypeOrWildcard
 
   /** A marker trait for types that can be the type of a [[Trees.TermTree]].
@@ -570,10 +617,18 @@ object Types {
         None
     }
 
-    /** The basetype of this type with given class symbol.
+    /** The `baseType` of this type with given class symbol.
       *
-      * Returns `NoType` if this type does not have `base` in any of its base
+      * Returns `None` if this type does not have `base` in any of its base
       * types.
+      *
+      * If the result is `Some(bt)`, then `bt` is of the form
+      *
+      * - `TypeRef(p, base)` if `base` is monomorphic, or
+      * - `AppliedType(TypeRef(p, base), args)` otherwise, where `args.size == base.typeParams.size`.
+      *
+      * If `this` type is already of that shape, including with the correct `base`,
+      * then `this` is returned.
       */
     final def baseType(base: ClassSymbol)(using Context): Option[Type] =
       base.baseTypeOf(this)
@@ -2164,6 +2219,9 @@ object Types {
     final def contains(that: TypeBounds)(using Context): Boolean =
       this.low.isSubtype(that.low) && that.high.isSubtype(this.high)
 
+    final def isSameBounds(that: TypeBounds)(using Context): Boolean =
+      this.low.isSameType(that.low) && that.high.isSameType(this.high)
+
     final def intersect(that: TypeBounds)(using Context): TypeBounds =
       if this.contains(that) then that
       else if that.contains(this) then this
@@ -2304,10 +2362,5 @@ object Types {
       // TODO Avoid &'ing with Any
       if first eq second then first
       else AndType(first, second)
-
-    private[tastyquery] def combineGlb(bt1: Option[Type], bt2: Option[Type])(using Context): Option[Type] =
-      if bt1.isEmpty then bt2
-      else if bt2.isEmpty then bt1
-      else Some(bt1.get & bt2.get)
   }
 }
