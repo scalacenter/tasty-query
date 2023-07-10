@@ -255,7 +255,7 @@ object Types {
     def name: TypeName
 
     /** The bounds of the type parameter. */
-    def bounds(using Context): TypeBounds
+    def bounds: TypeBounds
   end TypeConstructorParam
 
   sealed abstract class TypeMappable:
@@ -1822,10 +1822,7 @@ object Types {
     def name: TypeName =
       typeLambda.paramNames(num)
 
-    def bounds(using Context): TypeBounds =
-      boundsDirect
-
-    private[tastyquery] def boundsDirect: TypeBounds =
+    def bounds: TypeBounds =
       typeLambda.paramTypeBounds(num)
   end TypeLambdaParam
 

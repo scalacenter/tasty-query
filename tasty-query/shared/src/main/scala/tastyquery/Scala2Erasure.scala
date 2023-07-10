@@ -189,7 +189,7 @@ private[tastyquery] object Scala2Erasure:
         */
       def goUpperBound(psym: TypeSymbol | StructuralRef): Boolean =
         psym match
-          case sym: TypeSymbolWithBounds => go(pseudoSymbol(sym.upperBound))
+          case sym: TypeSymbolWithBounds => go(pseudoSymbol(sym.bounds.high))
           case sym: ClassSymbol          => false
           case tp: StructuralRef         => go(pseudoSymbol(tp.bounds.high))
       end goUpperBound
