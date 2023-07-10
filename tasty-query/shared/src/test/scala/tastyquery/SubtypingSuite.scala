@@ -149,7 +149,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   }
 
   testWithContext("anykind") {
-    assertEquiv(defn.AnyKindType, defn.AnyKindClass.newTypeRef)
+    assertEquiv(defn.AnyKindType, defn.AnyKindType)
 
     assertStrictSubtype(defn.AnyType, defn.AnyKindType)
     assertStrictSubtype(defn.AnyRefType, defn.AnyKindType)
@@ -184,7 +184,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   }
 
   testWithContext("nothing") {
-    assertEquiv(defn.NothingType, defn.NothingClass.newTypeRef).withRef[Nothing, Nothing]
+    assertEquiv(defn.NothingType, defn.NothingType).withRef[Nothing, Nothing]
 
     assertStrictSubtype(defn.NothingType, defn.AnyType).withRef[Nothing, Any]
     assertStrictSubtype(defn.NothingType, defn.AnyRefType).withRef[Nothing, AnyRef]

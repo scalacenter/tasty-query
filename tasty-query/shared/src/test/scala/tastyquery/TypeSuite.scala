@@ -47,7 +47,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     def isAny(using Context): Boolean = tpe.isRef(defn.AnyClass)
 
-    def isNothing(using Context): Boolean = tpe.isRef(defn.NothingClass)
+    def isNothing(using Context): Boolean = tpe.isType(_.dealias.isInstanceOf[NothingType])
 
     def isIntersectionOf(tpes: (Type => Boolean)*)(using Context): Boolean =
       tpe match
@@ -883,7 +883,6 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(defn.ObjectClass.parentClasses) == List(defn.AnyClass, defn.MatchableClass))
     assert(clue(defn.AnyValClass.parentClasses) == List(defn.AnyClass, defn.MatchableClass))
     assert(clue(defn.NullClass.parentClasses) == List(defn.AnyClass, defn.MatchableClass))
-    assert(clue(defn.NothingClass.parentClasses) == List(defn.AnyClass))
   }
 
   testWithContext("parents-of-tuple-classes") {
@@ -2393,12 +2392,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     testApplyTypeApply(
       "testGetClassAny",
       nme.m_getClass,
-      _.isApplied(_.isRef(ClassClass), List(_.isBounded(_.isRef(defn.NothingClass), _.isRef(defn.AnyClass))))
+      _.isApplied(_.isRef(ClassClass), List(_.isBounded(_.isNothing, _.isRef(defn.AnyClass))))
     )
     testApplyTypeApply(
       "testGetClassProduct",
       nme.m_getClass,
-      _.isApplied(_.isRef(ClassClass), List(_.isBounded(_.isRef(defn.NothingClass), _.isRef(ProductClass))))
+      _.isApplied(_.isRef(ClassClass), List(_.isBounded(_.isNothing, _.isRef(ProductClass))))
     )
 
     /* `int.getClass()` should select the `Int.getClass(): Class[Int]` overload,
@@ -2411,7 +2410,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     testApplyTypeApply(
       "testGetClassInt",
       nme.m_getClass,
-      _.isApplied(_.isRef(ClassClass), List(_.isBounded(_.isRef(defn.NothingClass), _.isRef(defn.IntClass))))
+      _.isApplied(_.isRef(ClassClass), List(_.isBounded(_.isNothing, _.isRef(defn.IntClass))))
     )
   }
 

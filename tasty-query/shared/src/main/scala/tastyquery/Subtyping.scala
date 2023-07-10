@@ -59,6 +59,9 @@ private[tastyquery] object Subtyping:
   end isSubTypeArg
 
   private def level1(tp1: Type, tp2: Type)(using Context): Boolean = tp2 match
+    case tp2: AnyKindType =>
+      true
+
     case tp2: TypeRef if tp2.isFromJavaObject =>
       isSubtype(tp1, defn.AnyType)
 
@@ -147,14 +150,16 @@ private[tastyquery] object Subtyping:
   end level1NamedNamed
 
   private def level2(tp1: Type, tp2: Type)(using Context): Boolean = tp1 match
+    case tp1: NothingType =>
+      true
+
     case tp1: TypeRef =>
       tp1.optAliasedType match
         case Some(alias) =>
           isSubtype(alias, tp2)
             || level3(tp1, tp2)
         case _ =>
-          tp1.isSpecificClass(defn.NothingClass)
-            || isBottom(tp1)
+          isBottom(tp1)
             || level3(tp1, tp2)
       end match
 
@@ -190,8 +195,7 @@ private[tastyquery] object Subtyping:
   private def level3(tp1: Type, tp2: Type)(using Context): Boolean = tp2 match
     case TypeRef.OfClass(cls2) =>
       if cls2.typeParams.isEmpty then
-        if cls2 == defn.AnyKindClass then true
-        else if isBottom(tp1) then true
+        if isBottom(tp1) then true
         else if tp1.isLambdaSub then false // should be tp1.hasHigherKind, but the scalalib does not like that
         else if cls2 == defn.AnyClass then true
         else level3WithBaseType(tp1, tp2, cls2)
@@ -426,8 +430,7 @@ private[tastyquery] object Subtyping:
 
   private def level4(tp1: Type, tp2: Type)(using Context): Boolean = tp1 match
     case TypeRef.OfClass(cls1) =>
-      if cls1 == defn.NothingClass then true
-      else if cls1 == defn.NullClass then isNullable(tp2)
+      if cls1 == defn.NullClass then isNullable(tp2)
       else false
 
     case tp1: TypeRef =>
@@ -503,7 +506,7 @@ private[tastyquery] object Subtyping:
 
   private def isNullable(tp: Type)(using Context): Boolean = tp match
     case TypeRef.OfClass(cls) =>
-      !cls.isValueClass && !cls.is(Module) && cls != defn.NothingClass
+      !cls.isValueClass && !cls.is(Module)
     case tp: TypeRef =>
       false
     case tp: TermRef =>
@@ -542,7 +545,7 @@ private[tastyquery] object Subtyping:
   end isSubprefix
 
   private def isBottom(tp: Type)(using Context): Boolean =
-    isTypeRefOf(tp.widen, defn.NothingClass)
+    tp.widen.isInstanceOf[NothingType]
 
   private def isTypeRefOf(tp: TypeOrMethodic, cls: ClassSymbol)(using Context): Boolean = tp match
     case tp: TypeRef => tp.isSpecificClass(cls)
