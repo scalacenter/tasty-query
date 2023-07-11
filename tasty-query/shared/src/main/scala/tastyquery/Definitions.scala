@@ -122,13 +122,13 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val AnyClass = createSpecialClass(typeName("Any"), Nil, Abstract)
     .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
 
-  val MatchableClass = createSpecialClass(typeName("Matchable"), AnyClass.typeRef :: Nil, Trait)
+  val MatchableClass = createSpecialClass(typeName("Matchable"), AnyClass.topLevelRef :: Nil, Trait)
     .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
 
   val NullClass =
-    createSpecialClass(typeName("Null"), AnyClass.typeRef :: MatchableClass.typeRef :: Nil, Abstract | Final)
+    createSpecialClass(typeName("Null"), AnyClass.topLevelRef :: MatchableClass.topLevelRef :: Nil, Abstract | Final)
 
-  val NothingAnyBounds = RealTypeBounds(SyntacticNothingType, AnyClass.typeRef)
+  val NothingAnyBounds = RealTypeBounds(SyntacticNothingType, AnyClass.topLevelRef)
 
   private def createSpecialTypeAlias(
     name: TypeName,
@@ -344,8 +344,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     applyMethod.withFlags(Method | Abstract, None)
     applyMethod.withDeclaredType(
       MethodType(List.tabulate(n)(i => termName("x" + i)))(
-        mt => inputTypeParams.map(_.typeRef),
-        mt => resultTypeParam.typeRef
+        mt => inputTypeParams.map(_.localRef),
+        mt => resultTypeParam.localRef
       )
     )
     applyMethod.setAnnotations(Nil)

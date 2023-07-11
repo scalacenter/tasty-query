@@ -611,7 +611,8 @@ object Types {
       * - Inherited by all other type proxies.
       * - `None` for all other types.
       */
-    @tailrec final def normalizedPrefix(using Context): Option[Prefix] = this match {
+    @tailrec
+    private[tastyquery] final def normalizedPrefix(using Context): Option[Prefix] = this match {
       case tp: TypeRef =>
         tp.optAliasedType match
           case Some(alias) => alias.normalizedPrefix
@@ -764,7 +765,7 @@ object Types {
       * This is the same as `underlying`, except that for applied types,
       * it returns the upper bound of the constructor re-applied to the arguments.
       */
-    def superType(using Context): Type = underlying
+    private[tastyquery] def superType(using Context): Type = underlying
 
     private[tastyquery] final def superTypeNormalized(using Context): Type =
       superType // .normalized
@@ -779,7 +780,7 @@ object Types {
       * reduction depends on context and should not be cached (at least not without
       * the very specific cache invalidation condition for matchtypes).
       */
-    def translucentSuperType(using Context): Type = superType
+    private[tastyquery] def translucentSuperType(using Context): Type = superType
 
     private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       underlying.resolveMember(name, pre)
@@ -936,17 +937,17 @@ object Types {
           TermRef(prefix, name)
     end possibleSelFromPackage
 
-    def apply(prefix: Prefix, sym: TermOrTypeSymbol)(using Context): NamedType =
+    def apply(prefix: Prefix, sym: TermOrTypeSymbol): NamedType =
       sym match
         case sym: TypeSymbol => TypeRef(prefix, sym)
         case sym: TermSymbol => TermRef(prefix, sym)
 
-    def apply(prefix: NonEmptyPrefix, name: Name)(using Context): NamedType =
+    def apply(prefix: NonEmptyPrefix, name: Name): NamedType =
       name match
         case name: TypeName => TypeRef(prefix, name)
         case name: TermName => TermRef(prefix, name)
 
-    private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef)(using Context): NamedType =
+    private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): NamedType =
       external.name match
         case _: TypeName => TypeRef(prefix, external)
         case _: TermName => TermRef(prefix, external)
@@ -1040,7 +1041,7 @@ object Types {
       ensureResolved()
       myUnderlying.asInstanceOf[TypeOrMethodic]
 
-    override def underlying(using ctx: Context): Type =
+    override def underlying(using Context): Type =
       underlyingOrMethodic.requireType
 
     final override def isStable(using Context): Boolean =
@@ -1281,7 +1282,7 @@ object Types {
         case TypeAlias(alias) => Some(alias)
         case _                => None
 
-    override def translucentSuperType(using Context): Type = optSymbol match
+    private[tastyquery] override def translucentSuperType(using Context): Type = optSymbol match
       case Some(sym: TypeMemberSymbol) =>
         sym.typeDef match
           case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => alias
@@ -1396,7 +1397,7 @@ object Types {
   final class SuperType(val thistpe: ThisType, val explicitSupertpe: Option[Type]) extends TypeProxy with SingletonType:
     private var mySupertpe: Type | Null = explicitSupertpe.orNull
 
-    final def supertpe(using Context): Type =
+    private[tastyquery] final def supertpe(using Context): Type =
       val local = mySupertpe
       if local != null then local
       else
@@ -1407,7 +1408,7 @@ object Types {
 
     override def underlying(using Context): Type = supertpe
 
-    override def superType(using Context): Type =
+    private[tastyquery] override def superType(using Context): Type =
       val superCls = supertpe match
         case supertpe: TypeRef => supertpe.asClass
         case _                 => throw AssertionError(s"Cannot compute super class for $this")
@@ -1433,14 +1434,14 @@ object Types {
   final class AppliedType(val tycon: Type, val args: List[TypeOrWildcard]) extends TypeProxy {
     override def underlying(using Context): Type = tycon
 
-    override def superType(using Context): Type =
+    private[tastyquery] override def superType(using Context): Type =
       tycon match
         case tycon: TypeLambda  => tycon.appliedTo(args)
         case TypeRef.OfClass(_) => tycon
         case tycon: TypeProxy   => tycon.superType.applyIfParameterized(args)
         case _                  => defn.AnyType
 
-    override def translucentSuperType(using Context): Type = tycon match
+    private[tastyquery] override def translucentSuperType(using Context): Type = tycon match
       case tycon: TypeRef if tycon.optSymbol.exists(_.isOpaqueTypeAlias) =>
         tycon.translucentSuperType.applyIfParameterized(args)
       case _ =>
@@ -2283,8 +2284,6 @@ object Types {
 
   final class WildcardTypeArg(val bounds: TypeBounds) extends TypeMappable with TypeOrWildcard {
     private[tastyquery] type ThisTypeMappableType = WildcardTypeArg
-
-    def underlying(using Context): Type = bounds.high
 
     private[tastyquery] def derivedWildcardTypeArg(bounds: TypeBounds): WildcardTypeArg =
       if bounds eq this.bounds then this

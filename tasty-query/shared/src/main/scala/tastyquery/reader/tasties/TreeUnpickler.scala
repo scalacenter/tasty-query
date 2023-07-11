@@ -1232,12 +1232,12 @@ private[tasties] class TreeUnpickler private (
     case REFINEDtpt =>
       /* This is kind of a hack at the TASTy format level. A `Type` with tag
        * `REFINEDtpt` (but not a `TypeTree` with that tag!) is in fact the
-       * `cls.typeRef` of the refined class `cls` implicitly declared by that
+       * `cls.localRef` of the refined class `cls` implicitly declared by that
        * `REFINEDtpt`.
        */
       val start = reader.currentAddr
       skipTree()
-      caches.getSymbol[ClassSymbol](start).typeRef
+      caches.getSymbol[ClassSymbol](start).localRef
     case tag if (isConstantTag(tag)) =>
       ConstantType(readConstant)
     case tag =>

@@ -103,7 +103,7 @@ object Symbols {
       myTree = Some(t)
       this
 
-    final def tree(using Context): Option[DefiningTreeType] =
+    final def tree: Option[DefiningTreeType] =
       myTree
 
     private[tastyquery] final def withFlags(flags: FlagSet, privateWithin: Option[DeclaringSymbol]): this.type =
@@ -401,7 +401,7 @@ object Symbols {
       myDeclaredType = tpe
       this
 
-    def declaredType(using Context): TypeOrMethodic =
+    def declaredType: TypeOrMethodic =
       val local = myDeclaredType
       if local != null then local
       else throw new IllegalStateException(s"$this was not assigned a declared type")
@@ -496,7 +496,7 @@ object Symbols {
     private def isConstructor: Boolean =
       owner.isClass && isMethod && name == nme.Constructor
 
-    private[tastyquery] final def needsSignature(using Context): Boolean =
+    private[tastyquery] final def needsSignature: Boolean =
       declaredType.isInstanceOf[MethodicType]
 
     final def signature(using Context): Signature =
@@ -596,11 +596,15 @@ object Symbols {
     protected final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[TypeSymbol] =
       inClass.getDecl(name).filterNot(_.isPrivate)
 
-    final def isTypeAlias(using Context): Boolean = this match
+    final def isTypeAlias: Boolean = this match
       case sym: TypeMemberSymbol => sym.typeDef.isInstanceOf[TypeMemberDefinition.TypeAlias]
       case _                     => false
 
-    final def isOpaqueTypeAlias(using Context): Boolean = flags.is(Opaque)
+    final def isOpaqueTypeAlias: Boolean = flags.is(Opaque)
+
+    private[tastyquery] final def topLevelRef: TypeRef =
+      require(owner.isPackage, s"Cannot construct a topLevelRef for non-top-level symbol $this")
+      TypeRef(owner.asPackage.packageRef, this)
 
     final def staticRef(using Context): TypeRef =
       require(isStatic, s"Cannot construct a staticRef for non-static symbol $this")
@@ -684,7 +688,11 @@ object Symbols {
     def variance(using Context): Variance =
       declaredVariance
 
-    final def typeRef(using Context): TypeRef = TypeRef(ThisType(owner.typeRef), this)
+    @deprecated("use localRef instead", since = "0.9.0")
+    final def typeRef: TypeRef = localRef
+
+    /** A reference to this class type param that is valid within its declaring scope. */
+    final def localRef: TypeRef = TypeRef(owner.thisType, this)
 
     /** The argument corresponding to this class type parameter as seen from prefix `pre`.
       *
@@ -847,7 +855,7 @@ object Symbols {
 
     // Reference fields (checked in doCheckCompleted)
     private var myTypeParams: List[ClassTypeParamSymbol] | Null = null
-    private var myParentsInit: (() => List[Type]) | Null = null
+    private var myParentsInit: (() => Context ?=> List[Type]) | Null = null
     private var myParents: List[Type] | Null = null
     private var myGivenSelfType: Option[Type] | Null = null
 
@@ -968,7 +976,7 @@ object Symbols {
       myTypeParams = tparams
       this
 
-    final def typeParams(using Context): List[ClassTypeParamSymbol] =
+    final def typeParams: List[ClassTypeParamSymbol] =
       val local = myTypeParams
       if local == null then throw new IllegalStateException(s"type params not initialized for $this")
       else local
@@ -979,7 +987,7 @@ object Symbols {
       myParents = parents
       this
 
-    private[tastyquery] final def withParentsDelayed(parentsInit: () => List[Type]): this.type =
+    private[tastyquery] final def withParentsDelayed(parentsInit: () => Context ?=> List[Type]): this.type =
       if myParentsInit != null || myParents != null then
         throw IllegalStateException(s"reassignment of parents of $this")
       myParentsInit = parentsInit
@@ -1010,30 +1018,35 @@ object Symbols {
       myGivenSelfType = givenSelfType
       this
 
-    final def givenSelfType(using Context): Option[Type] =
+    final def givenSelfType: Option[Type] =
       val local = myGivenSelfType
       if local == null then throw new IllegalStateException(s"givenSelfType not initialized for $this")
       else local
 
-    final def appliedRef(using Context): Type =
+    @deprecated("use appliedRefInsideThis instead", since = "0.9.0")
+    final def appliedRef: Type = appliedRefInsideThis
+
+    final def appliedRefInsideThis: Type =
       val local = myAppliedRef
       if local != null then local
       else
-        val computed = typeRef.appliedTo(typeParams.map(_.typeRef))
+        val computed =
+          if typeParams.isEmpty then localRef
+          else AppliedType(localRef, typeParams.map(_.localRef))
         myAppliedRef = computed
         computed
-    end appliedRef
+    end appliedRefInsideThis
 
-    final def selfType(using Context): Type =
+    final def selfType: Type =
       val local = mySelfType
       if local != null then local
       else
         val computed = givenSelfType match
           case None =>
-            appliedRef
+            appliedRefInsideThis
           case Some(givenSelf) =>
             if isModuleClass then givenSelf
-            else AndType(givenSelf, appliedRef)
+            else AndType(givenSelf, appliedRefInsideThis)
         mySelfType = computed
         computed
     end selfType
@@ -1221,7 +1234,7 @@ object Symbols {
     // Member lookup, including inherited members
 
     final def getMember(name: Name)(using Context): Option[TermOrTypeSymbol] =
-      findMember(appliedRef, name)
+      findMember(appliedRefInsideThis, name)
 
     final def getMember(name: TermName)(using Context): Option[TermSymbol] =
       getMember(name: Name).map(_.asTerm)
@@ -1272,7 +1285,7 @@ object Symbols {
       baseTypeForClassCache.getOrElseUpdate(
         cls,
         if cls.isSubClass(this) then
-          if this.isStatic && this.typeParams.isEmpty then Some(this.typeRef)
+          if this.isStatic && this.typeParams.isEmpty then Some(this.localRef)
           else foldGlb(None, cls.parents)
         else None
       )
@@ -1464,28 +1477,30 @@ object Symbols {
       lookup(linearization)
     end resolveMatchingMember
 
-    private var myTypeRef: TypeRef | Null = null
+    private var myLocalRef: TypeRef | Null = null
 
-    private[tastyquery] final def typeRef(using Context): TypeRef =
-      val local = myTypeRef
+    /** A reference to this (unapplied) class type that is valid within its declaring scope. */
+    private[tastyquery] final def localRef: TypeRef =
+      val local = myLocalRef
       if local != null then local
       else
         val pre = owner match
           case owner: PackageSymbol => owner.packageRef
           case owner: ClassSymbol   => owner.thisType
           case _                    => NoPrefix
-        val typeRef = TypeRef(pre, this)
-        myTypeRef = typeRef
-        typeRef
+        val computed = TypeRef(pre, this)
+        myLocalRef = computed
+        computed
+    end localRef
 
     private var myThisType: ThisType | Null = null
 
     /** The `ThisType` for this class, as visible from inside this class. */
-    final def thisType(using Context): ThisType =
+    final def thisType: ThisType =
       val local = myThisType
       if local != null then local
       else
-        val computed = ThisType(typeRef)
+        val computed = ThisType(localRef)
         myThisType = computed
         computed
     end thisType
@@ -1610,7 +1625,7 @@ object Symbols {
     this.withFlags(EmptyFlagSet, None)
     this.setAnnotations(Nil)
 
-    private[tastyquery] def getPackageDeclOrCreate(name: SimpleName)(using Context): PackageSymbol =
+    private[tastyquery] def getPackageDeclOrCreate(name: SimpleName): PackageSymbol =
       getPackageDecl(name).getOrElse {
         assert(name != nme.EmptyPackageName, s"Trying to create a subpackage $name of $this")
         val pkg = PackageSymbol(name, this)
@@ -1631,7 +1646,7 @@ object Symbols {
       *   Performance guarantee: This method does not try to load non-package
       *   symbols from the classpath.
       */
-    final def getPackageDecl(name: SimpleName)(using Context): Option[PackageSymbol] =
+    final def getPackageDecl(name: SimpleName): Option[PackageSymbol] =
       /* All subpackages are created eagerly when initializing contexts,
        * so we can directly access myDeclarations here.
        */

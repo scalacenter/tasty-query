@@ -58,9 +58,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     StrictSubtypeResult
 
   extension (cls: ClassSymbol)
-    /** A `TypeRef` for the given `cls` that is not `eq` to anything existing. */
-    def newTypeRef(using Context): TypeRef =
-      TypeRef(cls.typeRef.prefix, cls)
+    /** A static ref for the given `cls` that is not `eq` to anything existing. */
+    def newStaticRef(using Context): TypeRef =
+      TypeRef(cls.staticRef.prefix, cls)
 
   def ProductClass(using Context): ClassSymbol =
     ctx.findTopLevelClass("scala.Product")
@@ -93,16 +93,16 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     defn.scalaPackage.packageRef
 
   def listOf(tpe: TypeOrWildcard)(using Context): Type =
-    ListClass.typeRef.appliedTo(tpe)
+    ListClass.staticRef.appliedTo(tpe)
 
   def optionOf(tpe: TypeOrWildcard)(using Context): Type =
-    OptionClass.typeRef.appliedTo(tpe)
+    OptionClass.staticRef.appliedTo(tpe)
 
   def genSeqOf(tpe: TypeOrWildcard)(using Context): Type =
-    ctx.findTopLevelClass("scala.collection.Seq").typeRef.appliedTo(tpe)
+    ctx.findTopLevelClass("scala.collection.Seq").staticRef.appliedTo(tpe)
 
   def mutableSeqOf(tpe: TypeOrWildcard)(using Context): Type =
-    ctx.findTopLevelClass("scala.collection.mutable.Seq").typeRef.appliedTo(tpe)
+    ctx.findTopLevelClass("scala.collection.mutable.Seq").staticRef.appliedTo(tpe)
 
   def iarrayOf(tpe: TypeOrWildcard)(using Context): Type =
     ctx.findStaticType("scala.IArray$package.IArray").staticRef.appliedTo(tpe)
@@ -125,16 +125,16 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     ctx.findTopLevelClass("subtyping.TypesFromTASTy").thisType.select(name)
 
   testWithContext("same-monomorphic-class") {
-    assertEquiv(defn.IntType, defn.IntClass.typeRef).withRef[Int, scala.Int]
-    assertEquiv(defn.IntType, defn.IntClass.newTypeRef)
-    assertNeitherSubtype(defn.IntType, defn.BooleanClass.typeRef)
-    assertNeitherSubtype(defn.IntType, defn.BooleanClass.newTypeRef)
+    assertEquiv(defn.IntType, defn.IntClass.staticRef).withRef[Int, scala.Int]
+    assertEquiv(defn.IntType, defn.IntClass.newStaticRef)
+    assertNeitherSubtype(defn.IntType, defn.BooleanClass.staticRef)
+    assertNeitherSubtype(defn.IntType, defn.BooleanClass.newStaticRef)
     assertNeitherSubtype(defn.IntType, defn.BooleanType).withRef[Int, Boolean]
     assertNeitherSubtype(defn.IntType, defn.ObjectType).withRef[Int, Object]
 
-    assertEquiv(ProductClass.typeRef, ProductClass.newTypeRef).withRef[Product, Product]
-    assertEquiv(MatchErrorClass.typeRef, MatchErrorClass.newTypeRef).withRef[MatchError, MatchError]
-    assertNeitherSubtype(ProductClass.typeRef, MatchErrorClass.typeRef).withRef[Product, MatchError]
+    assertEquiv(ProductClass.staticRef, ProductClass.newStaticRef).withRef[Product, Product]
+    assertEquiv(MatchErrorClass.staticRef, MatchErrorClass.newStaticRef).withRef[MatchError, MatchError]
+    assertNeitherSubtype(ProductClass.staticRef, MatchErrorClass.staticRef).withRef[Product, MatchError]
   }
 
   testWithContext("monomorphic-class-type-alias") {
@@ -160,14 +160,14 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(defn.SeqTypeOf(defn.IntType), defn.AnyKindType)
     assertStrictSubtype(defn.NullType, defn.AnyKindType)
     assertStrictSubtype(defn.NothingType, defn.AnyKindType)
-    assertStrictSubtype(PredefModuleClass.typeRef, defn.AnyKindType)
+    assertStrictSubtype(PredefModuleClass.staticRef, defn.AnyKindType)
 
     assertStrictSubtype(defn.UnappliedClassType, defn.AnyKindType)
     assertStrictSubtype(ctx.findStaticType("scala.IArray$package.IArray").staticRef, defn.AnyKindType)
   }
 
   testWithContext("any") {
-    assertEquiv(defn.AnyType, defn.AnyClass.newTypeRef).withRef[Any, Any]
+    assertEquiv(defn.AnyType, defn.AnyClass.newStaticRef).withRef[Any, Any]
 
     assertStrictSubtype(defn.AnyRefType, defn.AnyType).withRef[AnyRef, Any]
     assertStrictSubtype(defn.IntType, defn.AnyType).withRef[Int, Any]
@@ -177,7 +177,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(defn.SeqTypeOf(defn.IntType), defn.AnyType).withRef[ISeq[Int], Any]
     assertStrictSubtype(defn.NullType, defn.AnyType).withRef[Null, Any]
     assertStrictSubtype(defn.NothingType, defn.AnyType).withRef[Nothing, Any]
-    assertStrictSubtype(PredefModuleClass.typeRef, defn.AnyType)
+    assertStrictSubtype(PredefModuleClass.staticRef, defn.AnyType)
 
     assertNeitherSubtype(defn.UnappliedClassType, defn.AnyType)
     assertNeitherSubtype(ctx.findStaticType("scala.IArray$package.IArray").staticRef, defn.AnyType)
@@ -194,11 +194,11 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(defn.NothingType, defn.ArrayTypeOf(defn.IntType)).withRef[Nothing, Array[Int]]
     assertStrictSubtype(defn.NothingType, defn.SeqTypeOf(defn.IntType)).withRef[Nothing, ISeq[Int]]
     assertStrictSubtype(defn.NothingType, defn.NullType).withRef[Nothing, Null]
-    assertStrictSubtype(defn.NothingType, PredefModuleClass.typeRef)
+    assertStrictSubtype(defn.NothingType, PredefModuleClass.staticRef)
   }
 
   testWithContext("null") {
-    assertEquiv(defn.NullType, defn.NullClass.newTypeRef).withRef[Null, Null]
+    assertEquiv(defn.NullType, defn.NullClass.newStaticRef).withRef[Null, Null]
 
     assertStrictSubtype(defn.NullType, defn.AnyType).withRef[Null, Any]
 
@@ -210,7 +210,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(defn.NullType, defn.SeqTypeOf(defn.IntType))
 
     assertNeitherSubtype(defn.NullType, defn.IntType).withRef[Null, Int]
-    assertNeitherSubtype(defn.NullType, PredefModuleClass.typeRef)
+    assertNeitherSubtype(defn.NullType, PredefModuleClass.staticRef)
   }
 
   testWithContext("subclasses") {
@@ -224,7 +224,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
 
     assertStrictSubtype(defn.StringType, javaIOPrefix.select(tname"Serializable")).withRef[JString, JSerializable]
 
-    assertStrictSubtype(MatchErrorClass.typeRef, defn.ThrowableType).withRef[MatchError, JThrowable]
+    assertStrictSubtype(MatchErrorClass.staticRef, defn.ThrowableType).withRef[MatchError, JThrowable]
   }
 
   testWithContext("subclasses-with-type-aliases") {
@@ -239,7 +239,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(PredefPrefix.select(tname"String"), ScalaPackageObjectPrefix.select(tname"Serializable"))
       .withRef[PString, Serializable]
 
-    assertStrictSubtype(MatchErrorClass.typeRef, ScalaPackageObjectPrefix.select(tname"Throwable"))
+    assertStrictSubtype(MatchErrorClass.staticRef, ScalaPackageObjectPrefix.select(tname"Throwable"))
       .withRef[MatchError, Throwable]
   }
 
@@ -390,9 +390,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     // No withRef's in this test because we cannot write code that refers to the `this` of an external class
 
     val TypeMemberClass = ctx.findTopLevelClass("simple_trees.TypeMember")
-    val TypeMemberThis = ThisType(TypeMemberClass.typeRef)
+    val TypeMemberThis = ThisType(TypeMemberClass.staticRef)
 
-    assertStrictSubtype(TypeMemberThis, TypeMemberClass.typeRef)
+    assertStrictSubtype(TypeMemberThis, TypeMemberClass.staticRef)
     assertStrictSubtype(TypeMemberThis, defn.ObjectType)
 
     assertNeitherSubtype(TypeMemberThis, defn.StringType)
@@ -402,7 +402,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     // No withRef's in this test because we cannot write code that refers to the `this` of an external class
 
     val TypeMemberClass = ctx.findTopLevelClass("simple_trees.TypeMember")
-    val TypeMemberThis = ThisType(TypeMemberClass.typeRef)
+    val TypeMemberThis = ThisType(TypeMemberClass.staticRef)
 
     assertEquiv(TypeMemberThis.select(tname"TypeMember"), defn.IntType)
     assertEquiv(TypeMemberThis.select(tname"TypeMember"), TypeMemberThis.select(tname"TypeMember"))
@@ -412,7 +412,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertNeitherSubtype(TypeMemberThis.select(tname"AbstractType"), defn.ObjectType)
     assertNeitherSubtype(defn.NullType, TypeMemberThis.select(tname"AbstractType"))
 
-    assertStrictSubtype(TypeMemberThis.select(tname"AbstractWithBounds"), ProductClass.typeRef)
+    assertStrictSubtype(TypeMemberThis.select(tname"AbstractWithBounds"), ProductClass.staticRef)
     assertEquiv(TypeMemberThis.select(tname"AbstractWithBounds"), TypeMemberThis.select(tname"AbstractWithBounds"))
     assertStrictSubtype(defn.NullType, TypeMemberThis.select(tname"AbstractWithBounds"))
   }
@@ -421,7 +421,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     import simple_trees.TypeMember
 
     val TypeMemberClass = ctx.findTopLevelClass("simple_trees.TypeMember")
-    val TypeMemberRef = TypeMemberClass.typeRef
+    val TypeMemberRef = TypeMemberClass.staticRef
 
     assertEquiv(TypeMemberRef.select(tname"TypeMember"), defn.IntType).withRef[TypeMember#TypeMember, Int]
     assertEquiv(TypeMemberRef.select(tname"TypeMember"), TypeMemberRef.select(tname"TypeMember"))
@@ -436,7 +436,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       .withRef[Null, TypeMember#AbstractType]
 
     // Should have `.withRef[TypeMember#AbstractWithBounds, Product]` but it does not work, for some reason
-    assertStrictSubtype(TypeMemberRef.select(tname"AbstractWithBounds"), ProductClass.typeRef)
+    assertStrictSubtype(TypeMemberRef.select(tname"AbstractWithBounds"), ProductClass.staticRef)
 
     assertEquiv(TypeMemberRef.select(tname"AbstractWithBounds"), TypeMemberRef.select(tname"AbstractWithBounds"))
       .withRef[TypeMember#AbstractWithBounds, TypeMember#AbstractWithBounds]
@@ -465,10 +465,10 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val refz: OtherSimplePaths = new OtherSimplePaths
     val refxAlias: refx.type = refx
 
-    assertStrictSubtype(x, SimplePathsClass.typeRef)
-    assertStrictSubtype(y, SimplePathsClass.typeRef)
-    assertStrictSubtype(z, OtherSimplePathsClass.typeRef)
-    assertStrictSubtype(xAlias, SimplePathsClass.typeRef)
+    assertStrictSubtype(x, SimplePathsClass.staticRef)
+    assertStrictSubtype(y, SimplePathsClass.staticRef)
+    assertStrictSubtype(z, OtherSimplePathsClass.staticRef)
+    assertStrictSubtype(xAlias, SimplePathsClass.staticRef)
 
     // Weird spec stuff: Null <: x.type is true because the declared type U of x is such that Null <: U
     // No 'withRef' because this codebase uses explicit nulls; we would need an Any-typed or (T | Null)-typed reference
@@ -486,18 +486,20 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertNeitherSubtype(x.select(tname"AbstractType"), z.select(tname"AbstractType"))
       .withRef[refx.AbstractType, refz.AbstractType]
 
-    assertStrictSubtype(x.select(tname"AbstractTypeWithBounds"), AClass.typeRef).withRef[refx.AbstractTypeWithBounds, A]
-    assertStrictSubtype(CClass.typeRef, x.select(tname"AbstractTypeWithBounds")).withRef[C, refx.AbstractTypeWithBounds]
-    assertNeitherSubtype(x.select(tname"AbstractTypeWithBounds"), BClass.typeRef)
+    assertStrictSubtype(x.select(tname"AbstractTypeWithBounds"), AClass.staticRef)
+      .withRef[refx.AbstractTypeWithBounds, A]
+    assertStrictSubtype(CClass.staticRef, x.select(tname"AbstractTypeWithBounds"))
+      .withRef[C, refx.AbstractTypeWithBounds]
+    assertNeitherSubtype(x.select(tname"AbstractTypeWithBounds"), BClass.staticRef)
       .withRef[refx.AbstractTypeWithBounds, B]
 
     assertEquiv(x.select(tname"AliasOfAbstractTypeWithBounds"), x.select(tname"AliasOfAbstractTypeWithBounds"))
       .withRef[refx.AliasOfAbstractTypeWithBounds, refx.AliasOfAbstractTypeWithBounds]
-    assertStrictSubtype(x.select(tname"AliasOfAbstractTypeWithBounds"), AClass.typeRef)
+    assertStrictSubtype(x.select(tname"AliasOfAbstractTypeWithBounds"), AClass.staticRef)
       .withRef[refx.AliasOfAbstractTypeWithBounds, A]
-    assertStrictSubtype(CClass.typeRef, x.select(tname"AliasOfAbstractTypeWithBounds"))
+    assertStrictSubtype(CClass.staticRef, x.select(tname"AliasOfAbstractTypeWithBounds"))
       .withRef[C, refx.AliasOfAbstractTypeWithBounds]
-    assertNeitherSubtype(x.select(tname"AliasOfAbstractTypeWithBounds"), BClass.typeRef)
+    assertNeitherSubtype(x.select(tname"AliasOfAbstractTypeWithBounds"), BClass.staticRef)
       .withRef[refx.AliasOfAbstractTypeWithBounds, B]
 
     assertEquiv(x, xAlias)
@@ -542,10 +544,10 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val refz: ConcreteSimplePathsChild = new ConcreteSimplePathsChild
     val refyAlias: refy.type = refy
 
-    assertStrictSubtype(x, SimplePathsClass.typeRef)
-    assertStrictSubtype(y, ConcreteSimplePathsChildClass.typeRef)
-    assertStrictSubtype(z, ConcreteSimplePathsChildClass.typeRef)
-    assertStrictSubtype(yAlias, ConcreteSimplePathsChildClass.typeRef)
+    assertStrictSubtype(x, SimplePathsClass.staticRef)
+    assertStrictSubtype(y, ConcreteSimplePathsChildClass.staticRef)
+    assertStrictSubtype(z, ConcreteSimplePathsChildClass.staticRef)
+    assertStrictSubtype(yAlias, ConcreteSimplePathsChildClass.staticRef)
 
     assertEquiv(y.select(tname"AbstractType"), defn.StringType).withRef[refy.AbstractType, JString]
     assertEquiv(y.select(tname"AbstractType"), z.select(tname"AbstractType"))
@@ -559,17 +561,19 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertEquiv(y.select(tname"AliasOfAbstractType"), z.select(tname"AliasOfAbstractType"))
       .withRef[refy.AliasOfAbstractType, refz.AliasOfAbstractType]
 
-    assertEquiv(y.select(tname"AbstractTypeWithBounds"), BClass.typeRef).withRef[refy.AbstractTypeWithBounds, B]
-    assertStrictSubtype(y.select(tname"AbstractTypeWithBounds"), AClass.typeRef).withRef[refy.AbstractTypeWithBounds, A]
-    assertStrictSubtype(CClass.typeRef, y.select(tname"AbstractTypeWithBounds")).withRef[C, refy.AbstractTypeWithBounds]
+    assertEquiv(y.select(tname"AbstractTypeWithBounds"), BClass.staticRef).withRef[refy.AbstractTypeWithBounds, B]
+    assertStrictSubtype(y.select(tname"AbstractTypeWithBounds"), AClass.staticRef)
+      .withRef[refy.AbstractTypeWithBounds, A]
+    assertStrictSubtype(CClass.staticRef, y.select(tname"AbstractTypeWithBounds"))
+      .withRef[C, refy.AbstractTypeWithBounds]
 
-    assertEquiv(y.select(tname"AliasOfAbstractTypeWithBounds"), BClass.typeRef)
+    assertEquiv(y.select(tname"AliasOfAbstractTypeWithBounds"), BClass.staticRef)
       .withRef[refy.AliasOfAbstractTypeWithBounds, B]
     assertEquiv(y.select(tname"AliasOfAbstractTypeWithBounds"), y.select(tname"AliasOfAbstractTypeWithBounds"))
       .withRef[refy.AliasOfAbstractTypeWithBounds, refy.AliasOfAbstractTypeWithBounds]
-    assertStrictSubtype(y.select(tname"AliasOfAbstractTypeWithBounds"), AClass.typeRef)
+    assertStrictSubtype(y.select(tname"AliasOfAbstractTypeWithBounds"), AClass.staticRef)
       .withRef[refy.AliasOfAbstractTypeWithBounds, A]
-    assertStrictSubtype(CClass.typeRef, y.select(tname"AliasOfAbstractTypeWithBounds"))
+    assertStrictSubtype(CClass.staticRef, y.select(tname"AliasOfAbstractTypeWithBounds"))
       .withRef[C, refy.AliasOfAbstractTypeWithBounds]
 
     assertEquiv(y.select(tname"AliasOfAbstractTypeWithBounds"), z.select(tname"AliasOfAbstractTypeWithBounds"))
@@ -620,13 +624,13 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       type AbstractType = Int
     }
 
-    assertStrictSubtype(x, SimplePathsClass.typeRef)
-    assertStrictSubtype(y, ConcreteSimplePathsChildClass.typeRef)
-    assertStrictSubtype(yAsStringRefine, SimplePathsClass.typeRef)
-    assertStrictSubtype(zAsIntRefine, SimplePathsClass.typeRef)
+    assertStrictSubtype(x, SimplePathsClass.staticRef)
+    assertStrictSubtype(y, ConcreteSimplePathsChildClass.staticRef)
+    assertStrictSubtype(yAsStringRefine, SimplePathsClass.staticRef)
+    assertStrictSubtype(zAsIntRefine, SimplePathsClass.staticRef)
 
-    assertNeitherSubtype(yAsStringRefine, ConcreteSimplePathsChildClass.typeRef)
-    assertNeitherSubtype(zAsIntRefine, ConcreteSimplePathsChildClass.typeRef)
+    assertNeitherSubtype(yAsStringRefine, ConcreteSimplePathsChildClass.staticRef)
+    assertNeitherSubtype(zAsIntRefine, ConcreteSimplePathsChildClass.staticRef)
 
     assertNeitherSubtype(x.select(tname"AbstractType"), defn.StringType).withRef[refx.AbstractType, JString]
     assertEquiv(y.select(tname"AbstractType"), defn.StringType).withRef[refy.AbstractType, JString]
@@ -655,23 +659,23 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     )
       .withRef[refyAsStringRefine.AliasOfAbstractType, refzAsIntRefine.AliasOfAbstractType]
 
-    assertStrictSubtype(yAsStringRefine.select(tname"AbstractTypeWithBounds"), BClass.typeRef)
+    assertStrictSubtype(yAsStringRefine.select(tname"AbstractTypeWithBounds"), BClass.staticRef)
       .withRef[refyAsStringRefine.AbstractTypeWithBounds, B]
-    assertStrictSubtype(yAsStringRefine.select(tname"AbstractTypeWithBounds"), AClass.typeRef)
+    assertStrictSubtype(yAsStringRefine.select(tname"AbstractTypeWithBounds"), AClass.staticRef)
       .withRef[refyAsStringRefine.AbstractTypeWithBounds, A]
-    assertStrictSubtype(CClass.typeRef, yAsStringRefine.select(tname"AbstractTypeWithBounds"))
+    assertStrictSubtype(CClass.staticRef, yAsStringRefine.select(tname"AbstractTypeWithBounds"))
       .withRef[C, refyAsStringRefine.AbstractTypeWithBounds]
 
-    assertStrictSubtype(yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"), BClass.typeRef)
+    assertStrictSubtype(yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"), BClass.staticRef)
       .withRef[refyAsStringRefine.AliasOfAbstractTypeWithBounds, B]
     assertStrictSubtype(
       yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"),
       y.select(tname"AliasOfAbstractTypeWithBounds")
     )
       .withRef[refyAsStringRefine.AliasOfAbstractTypeWithBounds, refy.AliasOfAbstractTypeWithBounds]
-    assertStrictSubtype(yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"), AClass.typeRef)
+    assertStrictSubtype(yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"), AClass.staticRef)
       .withRef[refyAsStringRefine.AliasOfAbstractTypeWithBounds, A]
-    assertStrictSubtype(CClass.typeRef, yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"))
+    assertStrictSubtype(CClass.staticRef, yAsStringRefine.select(tname"AliasOfAbstractTypeWithBounds"))
       .withRef[C, refyAsStringRefine.AliasOfAbstractTypeWithBounds]
 
     assertNeitherSubtype(
@@ -689,7 +693,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val inner = ctx.findStaticTerm(s"$paths.NestedClasses.inner")
 
     assertNeitherSubtype(inner.declaredType.requireType, defn.IntType).withRef[NestedClasses.inner.type, Int]
-    assertStrictSubtype(inner.declaredType.requireType, ParentClass.typeRef)
+    assertStrictSubtype(inner.declaredType.requireType, ParentClass.staticRef)
       .withRef[NestedClasses.inner.type, NestedClasses.Parent]
   }
 
@@ -703,21 +707,21 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val ConcreteSimplePathsChildClass = ctx.findTopLevelClass("subtyping.paths.ConcreteSimplePathsChild")
     val CharSequenceClass = ctx.findTopLevelClass("java.lang.CharSequence")
 
-    val CharSequenceType = CharSequenceClass.appliedRef
+    val CharSequenceType = CharSequenceClass.staticRef
 
     def refineTypeAlias(name: String, alias: Type): Type =
-      TypeRefinement(SimplePathsClass.appliedRef, typeName(name), TypeAlias(alias))
+      TypeRefinement(SimplePathsClass.staticRef, typeName(name), TypeAlias(alias))
 
     def refineTypeBound(name: String, high: Type): Type =
-      TypeRefinement(SimplePathsClass.appliedRef, typeName(name), RealTypeBounds(defn.NothingType, high))
+      TypeRefinement(SimplePathsClass.staticRef, typeName(name), RealTypeBounds(defn.NothingType, high))
 
     def refinePolyTypeBound(name: String, high: Type): Type =
       val polyLow = TypeLambda(List(typeName("X")), List(defn.NothingAnyBounds), defn.NothingType)
       val polyHigh = TypeLambda(List(typeName("X")), List(defn.NothingAnyBounds), high)
-      TypeRefinement(SimplePathsClass.appliedRef, typeName(name), RealTypeBounds(polyLow, polyHigh))
+      TypeRefinement(SimplePathsClass.staticRef, typeName(name), RealTypeBounds(polyLow, polyHigh))
 
     def refineTerm(name: String, tpe: TypeOrMethodic, isStable: Boolean = false): Type =
-      TermRefinement(SimplePathsClass.appliedRef, isStable, termName(name), tpe)
+      TermRefinement(SimplePathsClass.staticRef, isStable, termName(name), tpe)
 
     // type refinement - exists in class
 
@@ -739,9 +743,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     )
       .withRef[SimplePaths { type AbstractType = String }, SimplePaths { type AbstractType <: CharSequence }]
 
-    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeAlias("AbstractType", defn.StringType))
+    assertStrictSubtype(ConcreteSimplePathsChildClass.staticRef, refineTypeAlias("AbstractType", defn.StringType))
       .withRef[ConcreteSimplePathsChild, SimplePaths { type AbstractType = String }]
-    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeAlias("AbstractType", defn.IntType))
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.staticRef, refineTypeAlias("AbstractType", defn.IntType))
       .withRef[ConcreteSimplePathsChild, SimplePaths { type AbstractType = Int }]
 
     // type refinement - does not exist in class
@@ -755,26 +759,26 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(refineTypeAlias("OtherType", defn.StringType), refineTypeBound("OtherType", CharSequenceType))
       .withRef[SimplePaths { type OtherType = String }, SimplePaths { type OtherType <: CharSequence }]
 
-    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeAlias("OtherType", defn.StringType))
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.staticRef, refineTypeAlias("OtherType", defn.StringType))
       .withRef[ConcreteSimplePathsChild, SimplePaths { type OtherType = String }]
-    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeAlias("OtherType", defn.IntType))
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.staticRef, refineTypeAlias("OtherType", defn.IntType))
       .withRef[ConcreteSimplePathsChild, SimplePaths { type OtherType = Int }]
 
     // type refinement - implemented by a class member
 
-    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeBound("InnerClassMono", AClass.appliedRef))
+    assertStrictSubtype(ConcreteSimplePathsChildClass.staticRef, refineTypeBound("InnerClassMono", AClass.staticRef))
       .withRef[ConcreteSimplePathsChild, SimplePaths { type InnerClassMono <: A }]
-    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTypeBound("InnerClassMono", BClass.appliedRef))
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.staticRef, refineTypeBound("InnerClassMono", BClass.staticRef))
       .withRef[ConcreteSimplePathsChild, SimplePaths { type InnerClassMono <: B }]
 
     assertStrictSubtype(
-      ConcreteSimplePathsChildClass.appliedRef,
-      refinePolyTypeBound("InnerClassPoly", AClass.appliedRef)
+      ConcreteSimplePathsChildClass.staticRef,
+      refinePolyTypeBound("InnerClassPoly", AClass.staticRef)
     )
       .withRef[ConcreteSimplePathsChild, SimplePaths { type InnerClassPoly[X] <: A }]
     assertNeitherSubtype(
-      ConcreteSimplePathsChildClass.appliedRef,
-      refinePolyTypeBound("InnerClassPoly", DClass.appliedRef)
+      ConcreteSimplePathsChildClass.staticRef,
+      refinePolyTypeBound("InnerClassPoly", DClass.staticRef)
     )
       .withRef[ConcreteSimplePathsChild, SimplePaths { type InnerClassPoly[X] <: D }]
 
@@ -787,11 +791,11 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(refineTerm("abstractTerm", defn.StringType), refineTerm("abstractTerm", CharSequenceType))
       .withRef[SimplePaths { def abstractTerm: String }, SimplePaths { def abstractTerm: CharSequence }]
 
-    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("abstractTerm", listOf(defn.IntType)))
+    assertStrictSubtype(ConcreteSimplePathsChildClass.staticRef, refineTerm("abstractTerm", listOf(defn.IntType)))
       .withRef[ConcreteSimplePathsChild, SimplePaths { def abstractTerm: List[Int] }]
-    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("abstractTerm", listOf(defn.AnyType)))
+    assertStrictSubtype(ConcreteSimplePathsChildClass.staticRef, refineTerm("abstractTerm", listOf(defn.AnyType)))
       .withRef[ConcreteSimplePathsChild, SimplePaths { def abstractTerm: List[Any] }]
-    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("abstractTerm", listOf(defn.BooleanType)))
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.staticRef, refineTerm("abstractTerm", listOf(defn.BooleanType)))
       .withRef[ConcreteSimplePathsChild, SimplePaths { def abstractTerm: List[Boolean] }]
 
     assertEquiv(
@@ -799,7 +803,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       refineTerm("abstractTerm", defn.StringType, isStable = true)
     )
       .withRef[SimplePaths { val abstractTerm: String }, SimplePaths { val abstractTerm: String }]
-    assertStrictSubtype(refineTerm("abstractTerm", defn.StringType, isStable = true), SimplePathsClass.appliedRef)
+    assertStrictSubtype(refineTerm("abstractTerm", defn.StringType, isStable = true), SimplePathsClass.staticRef)
       .withRef[SimplePaths { val abstractTerm: String }, SimplePaths]
 
     // no withRef on the following because dotc does not take stability into account, apparently
@@ -830,10 +834,10 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       refinedSomeMethodType
     )
       .withRef[SimplePaths { def someMethod(x: Int): Int }, SimplePaths { def someMethod(x: Int): Int }]
-    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refinedSomeMethodType)
+    assertStrictSubtype(ConcreteSimplePathsChildClass.staticRef, refinedSomeMethodType)
       .withRef[ConcreteSimplePathsChild, SimplePaths { def someMethod(x: Int): Int }]
     assertNeitherSubtype(
-      ConcreteSimplePathsChildClass.appliedRef,
+      ConcreteSimplePathsChildClass.staticRef,
       refineTerm("someMethod", MethodType(List(termName("x")), List(defn.IntType), defn.BooleanType))
     )
       .withRef[ConcreteSimplePathsChild, SimplePaths { def someMethod(x: Int): Boolean }]
@@ -857,7 +861,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       refinedSomePolyMethodType
     )
       .withRef[SimplePaths { def somePolyMethod[X](x: X): X }, SimplePaths { def somePolyMethod[Y](x: Y): Y }]
-    assertStrictSubtype(ConcreteSimplePathsChildClass.appliedRef, refinedSomePolyMethodType)
+    assertStrictSubtype(ConcreteSimplePathsChildClass.staticRef, refinedSomePolyMethodType)
       .withRef[ConcreteSimplePathsChild, SimplePaths { def somePolyMethod[Y](x: Y): Y }]
 
     // term refinement - does not exist in class
@@ -869,11 +873,11 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(refineTerm("otherTerm", defn.StringType), refineTerm("otherTerm", CharSequenceType))
       .withRef[SimplePaths { def otherTerm: String }, SimplePaths { def otherTerm: CharSequence }]
 
-    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("otherTerm", listOf(defn.IntType)))
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.staticRef, refineTerm("otherTerm", listOf(defn.IntType)))
       .withRef[ConcreteSimplePathsChild, SimplePaths { def otherTerm: List[Int] }]
-    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("otherTerm", listOf(defn.AnyType)))
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.staticRef, refineTerm("otherTerm", listOf(defn.AnyType)))
       .withRef[ConcreteSimplePathsChild, SimplePaths { def otherTerm: List[Any] }]
-    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refineTerm("otherTerm", listOf(defn.BooleanType)))
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.staticRef, refineTerm("otherTerm", listOf(defn.BooleanType)))
       .withRef[ConcreteSimplePathsChild, SimplePaths { def otherTerm: List[Boolean] }]
 
     val refinedSomeOtherMethodType =
@@ -883,10 +887,10 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       refinedSomeOtherMethodType
     )
       .withRef[SimplePaths { def someOtherMethod(x: Int): Int }, SimplePaths { def someOtherMethod(x: Int): Int }]
-    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refinedSomeOtherMethodType)
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.staticRef, refinedSomeOtherMethodType)
       .withRef[ConcreteSimplePathsChild, SimplePaths { def someOtherMethod(x: Int): Int }]
     assertNeitherSubtype(
-      ConcreteSimplePathsChildClass.appliedRef,
+      ConcreteSimplePathsChildClass.staticRef,
       refineTerm("someOtherMethod", MethodType(List(termName("x")), List(defn.IntType), defn.BooleanType))
     )
       .withRef[ConcreteSimplePathsChild, SimplePaths { def someOtherMethod(x: Int): Boolean }]
@@ -914,7 +918,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       ),
       refinedSomeOtherPolyMethodType
     )
-    assertNeitherSubtype(ConcreteSimplePathsChildClass.appliedRef, refinedSomeOtherPolyMethodType)
+    assertNeitherSubtype(ConcreteSimplePathsChildClass.staticRef, refinedSomeOtherPolyMethodType)
   }
 
   testWithContext("intersection-types") {
@@ -931,7 +935,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     ).withRef[Int & String, Int & Boolean]
 
     val SerializableClass = ctx.findTopLevelClass("java.io.Serializable")
-    assertEquiv(findTypesFromTASTyNamed("andType"), AndType(ProductClass.typeRef, SerializableClass.typeRef))
+    assertEquiv(findTypesFromTASTyNamed("andType"), AndType(ProductClass.staticRef, SerializableClass.staticRef))
   }
 
   testWithContext("union-types") {
@@ -953,7 +957,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("by-name-params") {
     val Function1Class = ctx.findTopLevelClass("scala.Function1")
     def fun1Type(argType: Type, resultType: Type): Type =
-      AppliedType(Function1Class.typeRef, argType :: resultType :: Nil)
+      AppliedType(Function1Class.staticRef, argType :: resultType :: Nil)
 
     val PStringType = PredefPrefix.select(tname"String")
 
@@ -977,13 +981,13 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   }
 
   testWithContext("wildcard-type-bounds") {
-    val seqOfWildcardProduct = mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, ProductClass.typeRef)))
+    val seqOfWildcardProduct = mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, ProductClass.staticRef)))
     val seqOfWildcardList = mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, listOf(defn.AnyType))))
     val seqOfWildcardOption = mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, optionOf(defn.AnyType))))
 
     assertEquiv(
       seqOfWildcardProduct,
-      mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, ProductClass.typeRef)))
+      mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, ProductClass.staticRef)))
     ).withRef[mutable.Seq[? <: Product], mutable.Seq[? <: Product]]
 
     assertNeitherSubtype(seqOfWildcardProduct, seqOfWildcardList)
@@ -996,7 +1000,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("type-lambdas") {
     val Function1Class = ctx.findTopLevelClass("scala.Function1")
     def fun1Type(argType: Type, resultType: Type): Type =
-      AppliedType(Function1Class.typeRef, argType :: resultType :: Nil)
+      AppliedType(Function1Class.staticRef, argType :: resultType :: Nil)
     def fun1IntTo(resultType: Type): Type =
       fun1Type(defn.IntType, resultType)
 
@@ -1161,9 +1165,9 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
 
     val matchTypeMono2WithDefaultString = matchTypeMono2WithDefault.appliedTo(defn.StringType).asInstanceOf[MatchType]
     assert(clue(matchTypeMono2WithDefaultString.reduced).isDefined)
-    assertEquiv(matchTypeMono2WithDefaultString.reduced.get, ProductClass.typeRef)
+    assertEquiv(matchTypeMono2WithDefaultString.reduced.get, ProductClass.staticRef)
       .withRef[MatchTypeMono2WithDefault[String], Product]
-    assertEquiv(matchTypeMono2WithDefaultString, ProductClass.typeRef)
+    assertEquiv(matchTypeMono2WithDefaultString, ProductClass.staticRef)
       .withRef[MatchTypeMono2WithDefault[String], Product]
   }
 

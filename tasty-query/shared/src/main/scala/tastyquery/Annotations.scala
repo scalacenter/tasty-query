@@ -37,7 +37,7 @@ object Annotations:
       * `NamedArg`s are not visible with this method. They are replaced by
       * their right-hand-side.
       */
-    def arguments(using Context): List[TermTree] =
+    def arguments: List[TermTree] =
       val local = myArguments
       if local != null then local
       else
@@ -46,9 +46,9 @@ object Annotations:
         computed
     end arguments
 
-    def argCount(using Context): Int = arguments.size
+    def argCount: Int = arguments.size
 
-    def argIfConstant(idx: Int)(using Context): Option[Constant] =
+    def argIfConstant(idx: Int): Option[Constant] =
       arguments(idx) match
         case Literal(constant) => Some(constant)
         case _                 => None
@@ -144,7 +144,7 @@ object Annotations:
     loop(tree)
   end computeAnnotConstructor
 
-  private def computeAnnotArguments(tree: TermTree)(using Context): List[TermTree] =
+  private def computeAnnotArguments(tree: TermTree): List[TermTree] =
     def invalid(): Nothing =
       throw InvalidProgramStructureException(s"Cannot find annotation arguments in $tree")
 

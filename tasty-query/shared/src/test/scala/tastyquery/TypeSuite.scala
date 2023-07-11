@@ -2581,7 +2581,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     end for
   }
 
-  testWithContext("applied-ref") {
+  testWithContext("appliedRefInsideThis") {
     val FooClass = ctx.findStaticClass("simple_trees.SelfTypes.Foo")
     val BarClass = ctx.findStaticClass("simple_trees.SelfTypes.Bar")
     val FooBarClass = ctx.findStaticClass("simple_trees.SelfTypes.FooBar")
@@ -2589,9 +2589,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val fooTArg = FooClass.typeParams.head
     val List(barTArg1, barTArg2) = BarClass.typeParams: @unchecked
 
-    assert(clue(FooClass.appliedRef).isApplied(_.isRef(FooClass), List(_.isRef(fooTArg))))
-    assert(clue(BarClass.appliedRef).isApplied(_.isRef(BarClass), List(_.isRef(barTArg1), _.isRef(barTArg2))))
-    assert(clue(FooBarClass.appliedRef).isRef(FooBarClass))
+    assert(clue(FooClass.appliedRefInsideThis).isApplied(_.isRef(FooClass), List(_.isRef(fooTArg))))
+    assert(clue(BarClass.appliedRefInsideThis).isApplied(_.isRef(BarClass), List(_.isRef(barTArg1), _.isRef(barTArg2))))
+    assert(clue(FooBarClass.appliedRefInsideThis).isRef(FooBarClass))
   }
 
   testWithContext("self-types") {
@@ -2708,7 +2708,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
   testWithContext("lookupMember") {
     val TypeMemberClass = ctx.findTopLevelClass("simple_trees.TypeMember")
-    val prefix = TypeMemberClass.appliedRef
+    val prefix = TypeMemberClass.staticRef
 
     val TypeMemberRef = prefix.lookupMember(typeName("TypeMember")).get
     assert(TypeMemberRef.optSymbol == Some(TypeMemberClass.findDecl(typeName("TypeMember"))))

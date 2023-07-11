@@ -284,7 +284,7 @@ private[pickles] class PickleReader {
             scala2ParentTypes :+ defn.MatchableType
           else if cls.owner == defn.scalaPackage && isTupleClassName(tname) && defn.hasGenericTuples then
             // Patch the superclass of TupleN classes to inherit from *:
-            defn.GenericTupleTypeOf(typeParams.map(_.typeRef)) :: scala2ParentTypes.tail
+            defn.GenericTupleTypeOf(typeParams.map(_.localRef)) :: scala2ParentTypes.tail
           else scala2ParentTypes
         val givenSelfType = if atEnd then None else Some(readTrueTypeRef())
         cls.withParentsDirect(parentTypes)
