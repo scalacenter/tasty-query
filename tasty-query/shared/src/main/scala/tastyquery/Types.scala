@@ -355,8 +355,8 @@ object Types {
       case self: Type =>
         that match
           case that: Type =>
-            if self.isSubtype(that) then self
-            else if that.isSubtype(self) then that
+            if self.isSubType(that) then self
+            else if that.isSubType(self) then that
             else self & that
           case that: WildcardTypeArg =>
             if that.bounds.contains(self) then self
@@ -374,8 +374,8 @@ object Types {
       case self: Type =>
         that match
           case that: Type =>
-            if that.isSubtype(self) then self
-            else if self.isSubtype(that) then that
+            if that.isSubType(self) then self
+            else if self.isSubType(that) then that
             else self | that
           case that: WildcardTypeArg =>
             that.derivedWildcardTypeArg(that.bounds.union(TypeAlias(self)))
@@ -472,8 +472,12 @@ object Types {
   sealed abstract class Type extends TypeOrMethodic with NonEmptyPrefix with TypeOrWildcard:
     private[tastyquery] type ThisTypeMappableType = Type
 
+    @deprecated("use isSubType instead", since = "0.9.0")
     final def isSubtype(that: Type)(using Context): Boolean =
-      Subtyping.isSubtype(this, that)
+      isSubType(that)
+
+    final def isSubType(that: Type)(using Context): Boolean =
+      Subtyping.isSubType(this, that)
 
     final def isSameType(that: Type)(using Context): Boolean =
       Subtyping.isSameType(this, that)
@@ -2216,11 +2220,11 @@ object Types {
       case tp: WildcardTypeArg =>
         contains(tp.bounds)
       case tp: Type =>
-        low.isSubtype(tp) && tp.isSubtype(high)
+        low.isSubType(tp) && tp.isSubType(high)
     end contains
 
     final def contains(that: TypeBounds)(using Context): Boolean =
-      this.low.isSubtype(that.low) && that.high.isSubtype(this.high)
+      this.low.isSubType(that.low) && that.high.isSubType(this.high)
 
     final def isSameBounds(that: TypeBounds)(using Context): Boolean =
       this.low.isSameType(that.low) && that.high.isSameType(this.high)
