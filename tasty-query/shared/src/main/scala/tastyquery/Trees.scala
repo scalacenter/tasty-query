@@ -66,7 +66,7 @@ object Trees {
       case SelectTypeTree(qualifier, name)                => qualifier :: Nil
       case TermRefTypeTree(qualifier, name)               => qualifier :: Nil
       case AnnotatedTypeTree(tpt, annotation)             => tpt :: annotation :: Nil
-      case MatchTypeTree(bound, selector, cases)          => bound.toList ::: selector :: cases
+      case MatchTypeTree(bound, selector, cases)          => bound :: selector :: cases
       case TypeCaseDef(pattern, body)                     => pattern :: body :: Nil
       case TypeTreeBind(name, body, symbol)               => body :: Nil
       case WildcardTypeArgTree(bounds)                    => bounds :: Nil
@@ -798,10 +798,10 @@ object Trees {
   }
 
   /** [bound] selector match { cases } */
-  final case class MatchTypeTree(bound: Option[TypeTree], selector: TypeTree, cases: List[TypeCaseDef])(span: Span)
+  final case class MatchTypeTree(bound: TypeTree, selector: TypeTree, cases: List[TypeCaseDef])(span: Span)
       extends TypeTree(span) {
     override protected def calculateType(using Context): Type =
-      MatchType(bound.fold(defn.AnyType)(_.toType), selector.toType, cases.map(_.toMatchTypeCase))
+      MatchType(bound.toType, selector.toType, cases.map(_.toMatchTypeCase))
 
     override final def withSpan(span: Span): MatchTypeTree = MatchTypeTree(bound, selector, cases)(span)
   }

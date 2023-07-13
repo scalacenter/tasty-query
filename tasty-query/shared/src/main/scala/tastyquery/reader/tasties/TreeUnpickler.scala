@@ -1468,8 +1468,8 @@ private[tasties] class TreeUnpickler private (
       val end = reader.readEnd()
       val selOrBound = readTypeTree
       val (bound, selector) =
-        if tagFollowShared == CASEDEF then (None, selOrBound)
-        else (Some(selOrBound), readTypeTree)
+        if tagFollowShared == CASEDEF then (TypeWrapper(defn.AnyType)(spn), selOrBound)
+        else (selOrBound, readTypeTree)
       MatchTypeTree(bound, selector, readCases[TypeCaseDef](TypeCaseDefFactory, end))(spn)
     // TODO: why in TYPEAPPLY?
     // in MATCHtpt, TYPEAPPLY

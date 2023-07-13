@@ -1942,7 +1942,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               TypeAliasDefinitionTree(
                 MatchTypeTree(
                   // No bound on the match result
-                  None,
+                  TypeWrapper(TypeRefInternal(ScalaPackageRef(), tpnme.Any)),
                   TypeIdent(TypeName(SimpleName("X"))),
                   List(TypeCaseDef(TypeIdent(TypeName(SimpleName("Int"))), TypeIdent(TypeName(SimpleName("String")))))
                 )
@@ -1960,7 +1960,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               List(TypeParam(TypeName(SimpleName("X")), NothingAnyTypeBoundsTree(), _)),
               TypeAliasDefinitionTree(
                 MatchTypeTree(
-                  Some(TypeIdent(TypeName(SimpleName("Product")))),
+                  TypeIdent(TypeName(SimpleName("Product"))),
                   TypeIdent(TypeName(SimpleName("X"))),
                   List(
                     TypeCaseDef(
@@ -1987,7 +1987,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               TypeAliasDefinitionTree(
                 MatchTypeTree(
                   // No bound on the match result
-                  None,
+                  TypeWrapper(TypeRefInternal(ScalaPackageRef(), tpnme.Any)),
                   TypeIdent(TypeName(SimpleName("X"))),
                   List(TypeCaseDef(TypeIdent(TypeName(nme.Wildcard)), TypeIdent(TypeName(SimpleName("Int")))))
                 )
@@ -2006,7 +2006,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               TypeAliasDefinitionTree(
                 MatchTypeTree(
                   // No bound on the match result
-                  None,
+                  TypeWrapper(TypeRefInternal(ScalaPackageRef(), tpnme.Any)),
                   TypeIdent(TypeName(SimpleName("X"))),
                   List(
                     TypeCaseDef(
