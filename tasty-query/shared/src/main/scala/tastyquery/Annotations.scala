@@ -53,24 +53,27 @@ object Annotations:
         case Literal(constant) => Some(constant)
         case _                 => None
 
-    /** Tests whether this annotation points to `defn.internalRepeatedAnnotClass` without resolving anything. */
-    private[tastyquery] def safeIsInternalRepeatedAnnot(using Context): Boolean =
-      defn.internalRepeatedAnnotClass match
-        case None =>
-          false
-        case Some(repeatedAnnotClass) =>
-          val tpt = findNewAnnotTypeTree(tree)
-          tpt match
-            // It is compiler-synthetic by definition, so it can only be a TypeWrapper
-            case TypeWrapper(tpe: TypeRef) =>
-              if tpe.name != tpnme.internalRepeatedAnnot then false
-              else
-                tpe.prefix match
-                  case pkg: PackageRef => pkg.symbol == defn.scalaAnnotationInternalPackage
-                  case _               => false
-            case _ =>
-              false
-    end safeIsInternalRepeatedAnnot
+    /** Tests whether this annotation points to `defn.internalRepeatedAnnotClass` without resolving anything.
+      *
+      * If yes, returns `Some(packageRef)` for the `scala.annotation.internal` package.
+      * Otherwise, returns `None`.
+      */
+    private[tastyquery] def syntacticExtractInternalRepeatedAnnot: Option[PackageRef] =
+      val tpt = findNewAnnotTypeTree(tree)
+      tpt match
+        // It is compiler-synthetic by definition, so it can only be a TypeWrapper
+        case TypeWrapper(tpe: TypeRef) =>
+          if tpe.name != tpnme.internalRepeatedAnnot then None
+          else
+            tpe.prefix match
+              case pkg: PackageRef =>
+                if pkg.fullyQualifiedName == FullyQualifiedName.scalaAnnotationInternalPackage then Some(pkg)
+                else None
+              case _ =>
+                None
+        case _ =>
+          None
+    end syntacticExtractInternalRepeatedAnnot
 
     override def toString(): String = s"Annotation($tree)"
   end Annotation

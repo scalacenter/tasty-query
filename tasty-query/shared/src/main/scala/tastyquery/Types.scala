@@ -1687,17 +1687,25 @@ object Types {
       *   - replace @repeated annotations on Seq or Array types by <repeated> types
       *   - add @inlineParam to inline parameters
       */
-    private[tastyquery] def fromSymbols(params: List[TermSymbol], resultType: TypeOrMethodic)(
-      using Context
-    ): MethodType = {
+    private[tastyquery] def fromSymbols(params: List[TermSymbol], resultType: TypeOrMethodic): MethodType = {
+      def makeRepeatedTypeOf(scalaAnnotationInternalPackageRef: PackageRef, tpe: TypeOrWildcard): AppliedType =
+        // Hack to find the PackageSymbol for `scala` without requiring a `Context`
+        val scalaPackage = scalaAnnotationInternalPackageRef.symbol.owner.nn.owner.nn
+        AppliedType(TypeRef(scalaPackage.packageRef, tpnme.RepeatedParamClassMagic), List(tpe))
+      end makeRepeatedTypeOf
+
       def annotatedToRepeated(tpe: Type): Type = tpe match
-        case tpe: AnnotatedType if tpe.annotation.safeIsInternalRepeatedAnnot =>
-          tpe.typ match
-            case applied: AppliedType if applied.args.sizeIs == 1 =>
-              // We're going to assume that `tycon` is indeed `Seq`, here, because we cannot afford to resolve it
-              defn.RepeatedTypeOf(applied.args.head)
-            case _ =>
-              throw TastyFormatException(s"in $params, $tpe is declared repeated but is not a Seq type")
+        case tpe: AnnotatedType =>
+          tpe.annotation.syntacticExtractInternalRepeatedAnnot match
+            case Some(scalaAnnotationInternalPackageRef) =>
+              tpe.typ match
+                case applied: AppliedType if applied.args.sizeIs == 1 =>
+                  // We're going to assume that `tycon` is indeed `Seq`, here, because we cannot afford to resolve it
+                  makeRepeatedTypeOf(scalaAnnotationInternalPackageRef, applied.args.head)
+                case _ =>
+                  throw TastyFormatException(s"in $params, $tpe is declared repeated but is not a Seq type")
+            case None =>
+              tpe
         case _ =>
           tpe
       end annotatedToRepeated
@@ -1774,9 +1782,7 @@ object Types {
     )(paramTypeBoundsExp: PolyType => List[TypeBounds], resultTypeExp: PolyType => TypeOrMethodic): PolyType =
       new PolyType(paramNames)(paramTypeBoundsExp, resultTypeExp)
 
-    private[tastyquery] def fromParams(params: List[TypeParam], resultType: TypeOrMethodic)(
-      using Context
-    ): TypeOrMethodic =
+    private[tastyquery] def fromParams(params: List[TypeParam], resultType: TypeOrMethodic): TypeOrMethodic =
       if params.isEmpty then resultType
       else
         val paramNames = params.map(_.name)
@@ -1869,9 +1875,7 @@ object Types {
     )(paramInfosExp: TypeLambda => List[TypeBounds], resultTypeExp: TypeLambda => Type): TypeLambda =
       new TypeLambda(paramNames)(paramInfosExp, resultTypeExp)
 
-    private[tastyquery] def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type)(
-      using Context
-    ): TypeLambda =
+    private[tastyquery] def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type): TypeLambda =
       apply(params.map(_.name))(_ => params.map(_.symbol.bounds), resultTypeExp)
 
     private[tastyquery] def fromParamInfos(params: List[TypeConstructorParam])(resultTypeExp: TypeLambda => Type)(
@@ -2067,7 +2071,7 @@ object Types {
     def apply(parentExp: RecType => Type): RecType =
       new RecType(parentExp) // TODO? Perform normalization like dotc?
 
-    private[tastyquery] def fromRefinedClassDecls(tpe: Type, refinedCls: ClassSymbol)(using Context): Type =
+    private[tastyquery] def fromRefinedClassDecls(tpe: Type, refinedCls: ClassSymbol): Type =
       val recType = RecType(rt => Substituters.substRefinementThis(tpe, refinedCls, rt.recThis))
       if recType.parent eq tpe then tpe
       else recType
@@ -2157,8 +2161,10 @@ object Types {
     def apply(pattern: Type, result: Type): MatchTypeCase =
       new MatchTypeCase(Nil)(_ => Nil, _ => pattern, _ => result)
 
-    private[tastyquery] final def fromParams(params: List[LocalTypeParamSymbol], pattern: Type, result: Type)(
-      using Context
+    private[tastyquery] final def fromParams(
+      params: List[LocalTypeParamSymbol],
+      pattern: Type,
+      result: Type
     ): MatchTypeCase =
       val paramNames = params.map(_.name)
       val paramTypeBounds = params.map(_.bounds)

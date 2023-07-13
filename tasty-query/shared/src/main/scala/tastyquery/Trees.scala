@@ -106,7 +106,23 @@ object Trees {
 
     def withSpan(span: Span): TermTree
 
-    /** Compute the actual term of this tree. */
+    /** Compute the prefix represented by this tree.
+      *
+      * The default implementation throws an `InvalidProgramStructureException`
+      * to indicate that this term tree is not a valid type prefix.
+      */
+    protected def computeAsTypePrefix: NonEmptyPrefix =
+      throw InvalidProgramStructureException(s"$this is not a valid type prefix")
+
+    /** Converts this term tree to a type prefix.
+      *
+      * @throws Exceptions.InvalidProgramStructureException
+      *   if this term tree does not represent a valid type prefix
+      */
+    private[Trees] final def toTypePrefix: NonEmptyPrefix =
+      computeAsTypePrefix
+
+    /** Compute the actual term type of this tree. */
     protected def calculateType(using Context): TermType
 
     /** The term type of this tree. */
@@ -231,7 +247,7 @@ object Trees {
   type ParamsClause = Either[List[ValDef], List[TypeParam]]
 
   private[tastyquery] object ParamsClause:
-    def makeDefDefType(paramLists: List[ParamsClause], resultTpt: TypeTree)(using Context): TypeOrMethodic =
+    def makeDefDefType(paramLists: List[ParamsClause], resultTpt: TypeTree): TypeOrMethodic =
       def rec(paramLists: List[ParamsClause]): TypeOrMethodic =
         paramLists match
           case Left(params) :: rest =>
@@ -262,6 +278,8 @@ object Trees {
 
   /** name */
   final case class Ident(name: TermName)(tpe: TermRef | PackageRef)(span: Span) extends TermTree(span):
+    override protected def computeAsTypePrefix: NonEmptyPrefix = tpe
+
     protected final def calculateType(using Context): TermType = tpe
 
     def symbol(using Context): TermSymbol | PackageSymbol = tpe match
@@ -279,14 +297,22 @@ object Trees {
       s"illegal section of unsigned name '$name' in owner ${selectOwner.get}"
     )
 
+    override protected def computeAsTypePrefix: NonEmptyPrefix =
+      makeSelection(qualifier.toTypePrefix)
+
     protected final def calculateType(using Context): TermRef | PackageRef =
-      val prefix = qualifier.tpe match
-        case prefix: NonEmptyPrefix => prefix
-        case qualType =>
+      qualifier.tpe match
+        case prefix: NonEmptyPrefix =>
+          makeSelection(prefix)
+        case qualType: MethodicType =>
           throw InvalidProgramStructureException(s"Invalid selection from $qualifier with type $qualType")
+    end calculateType
+
+    private def makeSelection(qualifierType: NonEmptyPrefix): TermRef | PackageRef =
       selectOwner match
-        case Some(selOwner) => TermRef(prefix, LookupIn(selOwner, name.asInstanceOf[SignedName]))
-        case None           => NamedType.possibleSelFromPackage(prefix, name)
+        case Some(selOwner) => TermRef(qualifierType, LookupIn(selOwner, name.asInstanceOf[SignedName]))
+        case None           => NamedType.possibleSelFromPackage(qualifierType, name)
+    end makeSelection
 
     def symbol(using Context): TermSymbol | PackageSymbol = tpe match
       case termRef: TermRef       => termRef.symbol
@@ -305,28 +331,34 @@ object Trees {
 
   /** `qual.this` */
   final case class This(qualifier: TypeIdent)(span: Span) extends TermTree(span) {
-    protected final def calculateType(using Context): TermType =
+    override protected def computeAsTypePrefix: NonEmptyPrefix =
       qualifier.toPrefix match
         case pkg: PackageRef => pkg
         case tref: TypeRef   => ThisType(tref)
         case qualTpe =>
           throw InvalidProgramStructureException(s"Unexpected type for This qualifier $qualifier: $qualTpe")
-    end calculateType
+    end computeAsTypePrefix
+
+    protected final def calculateType(using Context): TermType =
+      toTypePrefix.asInstanceOf[TermType]
 
     override final def withSpan(span: Span): This = This(qualifier)(span)
   }
 
   /** C.super[mix], where qual = C.this */
   final case class Super(qual: TermTree, mix: Option[TypeIdent])(span: Span) extends TermTree(span) {
-    protected final def calculateType(using Context): TermType =
-      val thistpe = qual.tpe match
+    override protected def computeAsTypePrefix: NonEmptyPrefix =
+      val thistpe = qual.toTypePrefix match
         case qualTpe: ThisType =>
-          qualTpe.cls.thisType // is this ever different than `qualTpe`?
+          qualTpe
         case qualTpe =>
           throw InvalidProgramStructureException(s"Unexpected type for Super qualifier $qual: $qualTpe")
       val supertpe = mix.map(_.toType)
       SuperType(thistpe, supertpe)
-    end calculateType
+    end computeAsTypePrefix
+
+    protected final def calculateType(using Context): TermType =
+      toTypePrefix.asInstanceOf[SuperType]
 
     override final def withSpan(span: Span): Super = Super(qual, mix)(span)
   }
@@ -617,6 +649,9 @@ object Trees {
   }
 
   final case class Literal(constant: Constant)(span: Span) extends TermTree(span) {
+    override protected def computeAsTypePrefix: NonEmptyPrefix =
+      ConstantType(constant)
+
     protected final def calculateType(using Context): TermType =
       ConstantType(constant)
 
@@ -646,6 +681,10 @@ object Trees {
   final case class Inlined(expr: TermTree, caller: Option[TypeIdent | SelectTypeTree], bindings: List[ValOrDefDef])(
     span: Span
   ) extends TermTree(span) {
+    override protected def computeAsTypePrefix: NonEmptyPrefix =
+      if bindings.nonEmpty then super.computeAsTypePrefix
+      else expr.toTypePrefix
+
     protected final def calculateType(using Context): TermType =
       // TODO? Do we need to do type avoidance on expr using the bindings, like dotc does?
       expr.tpe
@@ -658,17 +697,17 @@ object Trees {
   sealed abstract class TypeArgTree(span: Span) extends Tree(span):
     def withSpan(span: Span): TypeArgTree
 
-    def toTypeOrWildcard(using Context): TypeOrWildcard
+    def toTypeOrWildcard: TypeOrWildcard
   end TypeArgTree
 
   sealed abstract class TypeTree(span: Span) extends TypeArgTree(span) {
     private var myType: NonEmptyPrefix | Null = null
 
-    protected def calculateType(using Context): NonEmptyPrefix
+    protected def calculateType: NonEmptyPrefix
 
     def withSpan(span: Span): TypeTree
 
-    final def toPrefix(using Context): NonEmptyPrefix =
+    final def toPrefix: NonEmptyPrefix =
       val local = myType
       if local == null then
         val computed = calculateType
@@ -677,33 +716,28 @@ object Trees {
       else local
     end toPrefix
 
-    final def toType(using Context): Type = toPrefix.requireType
+    final def toType: Type = toPrefix.requireType
 
-    final def toTypeOrWildcard(using Context): Type = toType
+    final def toTypeOrWildcard: Type = toType
   }
 
   final case class TypeIdent(name: TypeName)(tpe: NonEmptyPrefix)(span: Span) extends TypeTree(span) {
-    override protected def calculateType(using Context): NonEmptyPrefix =
+    override protected def calculateType: NonEmptyPrefix =
       tpe
 
     override final def withSpan(span: Span): TypeIdent = TypeIdent(name)(tpe)(span)
   }
 
   final case class TypeWrapper(tp: NonEmptyPrefix)(span: Span) extends TypeTree(span) {
-    override protected def calculateType(using Context): NonEmptyPrefix = tp
+    override protected def calculateType: NonEmptyPrefix = tp
 
     override final def withSpan(span: Span): TypeWrapper = TypeWrapper(tp)(span)
   }
 
   /** ref.type */
   final case class SingletonTypeTree(ref: TermTree)(span: Span) extends TypeTree(span) {
-    override protected def calculateType(using Context): NonEmptyPrefix =
-      ref.tpe match
-        case refTpe: NonEmptyPrefix =>
-          refTpe
-        case refTpe: MethodicType =>
-          throw InvalidProgramStructureException(s"Invalid singleton type $ref.type with type $refTpe")
-    end calculateType
+    override protected def calculateType: NonEmptyPrefix =
+      ref.toTypePrefix
 
     override final def withSpan(span: Span): SingletonTypeTree = SingletonTypeTree(ref)(span)
   }
@@ -717,7 +751,7 @@ object Trees {
   )(span: Span)
       extends TypeTree(span) {
 
-    override protected def calculateType(using Context): Type =
+    override protected def calculateType: Type =
       val base = underlying.toType
       val refined = refinements.foldLeft(base) { (parent, refinement) =>
         refinement match
@@ -735,7 +769,7 @@ object Trees {
       else RecType.fromRefinedClassDecls(refined, refinedCls)
     end calculateType
 
-    private def makeRefinedBounds(name: TypeName, rhs: TypeDefinitionTree)(using Context): TypeBounds =
+    private def makeRefinedBounds(name: TypeName, rhs: TypeDefinitionTree): TypeBounds =
       rhs match
         case TypeAliasDefinitionTree(tpt) =>
           TypeAlias(tpt.toType)
@@ -753,7 +787,7 @@ object Trees {
 
   /** => T */
   final case class ByNameTypeTree(result: TypeTree)(span: Span) extends TypeTree(span) {
-    override protected def calculateType(using Context): Type =
+    override protected def calculateType: Type =
       ByNameType(result.toType)
 
     override final def withSpan(span: Span): ByNameTypeTree = ByNameTypeTree(result)(span)
@@ -763,7 +797,7 @@ object Trees {
     * TypeBounds[Tree] for wildcard application: tpt[_], tpt[?]
     */
   final case class AppliedTypeTree(tycon: TypeTree, args: List[TypeArgTree])(span: Span) extends TypeTree(span) {
-    override protected def calculateType(using Context): Type =
+    override protected def calculateType: Type =
       AppliedType(tycon.toType, args.map(_.toTypeOrWildcard))
 
     override final def withSpan(span: Span): AppliedTypeTree = AppliedTypeTree(tycon, args)(span)
@@ -771,7 +805,7 @@ object Trees {
 
   /** qualifier#name */
   final case class SelectTypeTree(qualifier: TypeTree, name: TypeName)(span: Span) extends TypeTree(span) {
-    override protected def calculateType(using Context): Type =
+    override protected def calculateType: Type =
       TypeRef(qualifier.toPrefix, name)
 
     override final def withSpan(span: Span): SelectTypeTree = SelectTypeTree(qualifier, name)(span)
@@ -779,19 +813,15 @@ object Trees {
 
   /** qualifier.name */
   final case class TermRefTypeTree(qualifier: TermTree, name: TermName)(span: Span) extends TypeTree(span) {
-    override protected def calculateType(using Context): NonEmptyPrefix =
-      qualifier.tpe match
-        case prefix: NonEmptyPrefix =>
-          NamedType.possibleSelFromPackage(prefix, name)
-        case qualType =>
-          throw InvalidProgramStructureException(s"Invalid selection from $qualifier with type $qualType")
+    override protected def calculateType: NonEmptyPrefix =
+      NamedType.possibleSelFromPackage(qualifier.toTypePrefix, name)
 
     override final def withSpan(span: Span): TermRefTypeTree = TermRefTypeTree(qualifier, name)(span)
   }
 
   /** arg @annot */
   final case class AnnotatedTypeTree(tpt: TypeTree, annotation: TermTree)(span: Span) extends TypeTree(span) {
-    override protected def calculateType(using Context): Type =
+    override protected def calculateType: Type =
       AnnotatedType(tpt.toType, Annotation(annotation))
 
     override final def withSpan(span: Span): AnnotatedTypeTree = AnnotatedTypeTree(tpt, annotation)(span)
@@ -800,7 +830,7 @@ object Trees {
   /** [bound] selector match { cases } */
   final case class MatchTypeTree(bound: TypeTree, selector: TypeTree, cases: List[TypeCaseDef])(span: Span)
       extends TypeTree(span) {
-    override protected def calculateType(using Context): Type =
+    override protected def calculateType: Type =
       MatchType(bound.toType, selector.toType, cases.map(_.toMatchTypeCase))
 
     override final def withSpan(span: Span): MatchTypeTree = MatchTypeTree(bound, selector, cases)(span)
@@ -809,7 +839,7 @@ object Trees {
   final case class TypeCaseDef(pattern: TypeTree, body: TypeTree)(span: Span) extends Tree(span):
     def withSpan(span: Span): TypeCaseDef = TypeCaseDef(pattern, body)(span)
 
-    private[Trees] def toMatchTypeCase(using Context): MatchTypeCase =
+    private[Trees] def toMatchTypeCase: MatchTypeCase =
       val bindsBuffer = mutable.ListBuffer.empty[LocalTypeParamSymbol]
       collectBinds(pattern, bindsBuffer)
       val binds = bindsBuffer.toList
@@ -833,7 +863,7 @@ object Trees {
   final case class TypeTreeBind(name: TypeName, body: TypeDefinitionTree, symbol: LocalTypeParamSymbol)(span: Span)
       extends TypeTree(span)
       with DefTree {
-    override protected def calculateType(using Context): Type =
+    override protected def calculateType: Type =
       TypeRef(NoPrefix, symbol)
 
     override final def withSpan(span: Span): TypeTreeBind = TypeTreeBind(name, body, symbol)(span)
@@ -842,7 +872,7 @@ object Trees {
   final case class WildcardTypeArgTree(bounds: TypeBoundsTree)(span: Span) extends TypeArgTree(span) {
     private var myTypeOrWildcard: WildcardTypeArg | Null = null
 
-    def toTypeOrWildcard(using Context): TypeOrWildcard =
+    def toTypeOrWildcard: TypeOrWildcard =
       val local = myTypeOrWildcard
       if local != null then local
       else
@@ -856,14 +886,14 @@ object Trees {
   }
 
   final case class TypeLambdaTree(tparams: List[TypeParam], body: TypeTree)(span: Span) extends TypeTree(span) {
-    override protected def calculateType(using Context): Type =
+    override protected def calculateType: Type =
       TypeLambda.fromParams(tparams)(tl => tl.integrate(tparams.map(_.symbol), body.toType))
 
     override final def withSpan(span: Span): TypeLambdaTree = TypeLambdaTree(tparams, body)(span)
   }
 
   final case class TypeBindingsTree(bindings: List[TypeMember], body: TypeTree)(span: Span) extends TypeTree(span):
-    override protected def calculateType(using Context): Type = body.toType
+    override protected def calculateType: Type = body.toType
 
     override def withSpan(span: Span): TypeBindingsTree = TypeBindingsTree(bindings, body)(span)
   end TypeBindingsTree
@@ -877,21 +907,21 @@ object Trees {
   sealed abstract class TypeBoundsTree(span: Span) extends TypeDefinitionTree(span):
     def withSpan(span: Span): TypeBoundsTree
 
-    def toTypeBounds(using Context): TypeBounds
+    def toTypeBounds: TypeBounds
   end TypeBoundsTree
 
   final case class InferredTypeBoundsTree(bounds: TypeBounds)(span: Span) extends TypeBoundsTree(span):
     def withSpan(span: Span): InferredTypeBoundsTree =
       InferredTypeBoundsTree(bounds)(span)
 
-    def toTypeBounds(using Context): TypeBounds = bounds
+    def toTypeBounds: TypeBounds = bounds
   end InferredTypeBoundsTree
 
   final case class ExplicitTypeBoundsTree(low: TypeTree, high: TypeTree)(span: Span) extends TypeBoundsTree(span):
     def withSpan(span: Span): ExplicitTypeBoundsTree =
       ExplicitTypeBoundsTree(low, high)(span)
 
-    def toTypeBounds(using Context): TypeBounds =
+    def toTypeBounds: TypeBounds =
       RealTypeBounds(low.toType, high.toType)
   end ExplicitTypeBoundsTree
 
@@ -911,7 +941,7 @@ object Trees {
     def withSpan(span: Span): PolyTypeDefinitionTree =
       PolyTypeDefinitionTree(tparams, body)(span)
 
-    private[tastyquery] def integrateInto(resultType: Type)(using Context): Type =
+    private[tastyquery] def integrateInto(resultType: Type): Type =
       TypeLambda.fromParams(tparams)(tl => tl.integrate(tparams.map(_.symbol), resultType))
   end PolyTypeDefinitionTree
 
