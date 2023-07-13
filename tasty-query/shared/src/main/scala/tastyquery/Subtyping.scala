@@ -9,9 +9,9 @@ import tastyquery.TypeMaps.*
 
 private[tastyquery] object Subtyping:
   def isSameType(tp1: Type, tp2: Type)(using Context): Boolean =
-    isSubtype(tp1, tp2) && isSubtype(tp2, tp1)
+    isSubType(tp1, tp2) && isSubType(tp2, tp1)
 
-  def isSubtype(tp1: Type, tp2: Type)(using Context): Boolean =
+  def isSubType(tp1: Type, tp2: Type)(using Context): Boolean =
     // `eq` is semantically important for identity-based types such as `TypeParamRef`
     (tp1 eq tp2) || level1(tp1, tp2)
 
@@ -35,7 +35,7 @@ private[tastyquery] object Subtyping:
     case tp2: Type =>
       tp1 match
         case tp1: Type =>
-          isSubtype(tp1, tp2)
+          isSubType(tp1, tp2)
         case _ =>
           false
   end isSubTypeOrMethodic
@@ -43,10 +43,10 @@ private[tastyquery] object Subtyping:
   def isSubTypeArg(arg1: TypeOrWildcard, arg2: TypeOrWildcard, varianceSign: Int)(using Context): Boolean =
     varianceSign match
       case 1 =>
-        isSubtype(arg1.highIfWildcard, arg2.highIfWildcard)
+        isSubType(arg1.highIfWildcard, arg2.highIfWildcard)
 
       case -1 =>
-        isSubtype(arg2.lowIfWildcard, arg1.lowIfWildcard)
+        isSubType(arg2.lowIfWildcard, arg1.lowIfWildcard)
 
       case 0 =>
         arg2 match
@@ -63,12 +63,12 @@ private[tastyquery] object Subtyping:
       true
 
     case tp2: TypeRef if tp2.isFromJavaObject =>
-      isSubtype(tp1, defn.AnyType)
+      isSubType(tp1, defn.AnyType)
 
     case tp2: TypeRef =>
       tp2.optAliasedType match
         case Some(alias) =>
-          if isSubtype(tp1, alias) then return true
+          if isSubType(tp1, alias) then return true
         case None =>
           ()
 
@@ -76,7 +76,7 @@ private[tastyquery] object Subtyping:
         case tp1: TypeRef =>
           tp1.optAliasedType match
             case Some(alias) =>
-              if isSubtype(alias, tp2) then return true
+              if isSubType(alias, tp2) then return true
             case None =>
               ()
           level1NamedNamed(tp1, tp2)
@@ -94,13 +94,13 @@ private[tastyquery] object Subtyping:
         case tp1: ThisType =>
           tp1.cls == cls2
         case tp1: TypeRef if cls2.isModuleClass && tp1.isSpecificClass(cls2) =>
-          (cls2.isStatic || isSubprefix(tp1.prefix, cls2.typeRef.prefix))
+          (cls2.isStatic || isSubPrefix(tp1.prefix, cls2.typeRef.prefix))
             || level2(tp1, tp2)
         case _ =>
           level2(tp1, tp2)
 
     case tp2: AndType =>
-      isSubtype(tp1, tp2.first) && isSubtype(tp1, tp2.second)
+      isSubType(tp1, tp2.first) && isSubType(tp1, tp2.second)
 
     case tp2: ConstantType =>
       tp1 match
@@ -110,7 +110,7 @@ private[tastyquery] object Subtyping:
           level2(tp1, tp2)
 
     case tp2: AnnotatedType =>
-      isSubtype(tp1, tp2.typ)
+      isSubType(tp1, tp2.typ)
 
     case _ =>
       level2(tp1, tp2)
@@ -122,7 +122,7 @@ private[tastyquery] object Subtyping:
 
     if sym1.isDefined && sym1 == sym2 then
       sym1.get.isStatic
-      || isSubprefix(tp1.prefix, tp2.prefix)
+      || isSubPrefix(tp1.prefix, tp2.prefix)
       || level2(tp1, tp2)
     else
       /* When the symbols are not the same, we could still have a subtyping
@@ -143,7 +143,7 @@ private[tastyquery] object Subtyping:
 
       val trueBecauseOverriddenMembers =
         tp1.name == tp2.name
-          && isSubprefix(tp1.prefix, tp2.prefix)
+          && isSubPrefix(tp1.prefix, tp2.prefix)
           && areBothNonMethodic
           && !areBothClasses // classes can shadow each other without being subtypes
 
@@ -157,7 +157,7 @@ private[tastyquery] object Subtyping:
     case tp1: TypeRef =>
       tp1.optAliasedType match
         case Some(alias) =>
-          isSubtype(alias, tp2)
+          isSubType(alias, tp2)
             || level3(tp1, tp2)
         case _ =>
           isBottom(tp1)
@@ -172,21 +172,21 @@ private[tastyquery] object Subtyping:
       val cls1 = tp1.cls
       tp2 match {
         case tp2: TermRef if cls1.isModuleClass && isTypeRefOf(tp2.underlying, cls1) =>
-          (cls1.isStatic || isSubprefix(cls1.typeRef.prefix, tp2.prefix))
+          (cls1.isStatic || isSubPrefix(cls1.typeRef.prefix, tp2.prefix))
             || level3(tp1, tp2)
         case _ =>
           level3(tp1, tp2)
       }
 
     case tp1: OrType =>
-      isSubtype(tp1.first, tp2) && isSubtype(tp1.second, tp2)
+      isSubType(tp1.first, tp2) && isSubType(tp1.second, tp2)
 
     case tp1: AnnotatedType =>
-      isSubtype(tp1.typ, tp2)
+      isSubType(tp1.typ, tp2)
 
     case tp1: MatchType =>
       tp1.reduced match
-        case Some(reduced) => isSubtype(reduced, tp2)
+        case Some(reduced) => isSubType(reduced, tp2)
         case None          => level3(tp1, tp2)
 
     case _ =>
@@ -205,7 +205,7 @@ private[tastyquery] object Subtyping:
         level4(tp1, tp2)
 
     case tp2: TypeRef =>
-      isSubtype(tp1, tp2.bounds.low)
+      isSubType(tp1, tp2.bounds.low)
         || level4(tp1, tp2)
 
     case tp2: AppliedType =>
@@ -216,37 +216,37 @@ private[tastyquery] object Subtyping:
         case tp1: TypeLambda =>
           // TODO Check bounds and variances
           tp1.paramRefs.lengthCompare(tp2.paramRefs) == 0
-            && isSubtype(tp1.resultType, tp2.appliedTo(tp1.paramRefs))
+            && isSubType(tp1.resultType, tp2.appliedTo(tp1.paramRefs))
         case _ =>
           // Try eta-expansion
           val tparams1 = tp1.typeParams
-          val etaExpandSuccess = tparams1.nonEmpty && isSubtype(etaExpand(tp1, tparams1), tp2)
+          val etaExpandSuccess = tparams1.nonEmpty && isSubType(etaExpand(tp1, tparams1), tp2)
           etaExpandSuccess || level4(tp1, tp2)
 
     case tp2: RefinedType =>
-      (isSubtype(tp1, tp2.parent) && hasMatchingRefinedMember(tp1, tp2))
+      (isSubType(tp1, tp2.parent) && hasMatchingRefinedMember(tp1, tp2))
         || level4(tp1, tp2)
 
     case tp2: RecType =>
       tp1.dealias match
         case tp1: RecType =>
-          isSubtype(tp1.parent, tp2.expand(tp1.recThis))
+          isSubType(tp1.parent, tp2.expand(tp1.recThis))
         case tp1 =>
           val tp1stable = ensureStableSingleton(tp1)
-          isSubtype(fixRecs(tp1stable, tp1stable), tp2.expand(tp1stable))
+          isSubType(fixRecs(tp1stable, tp1stable), tp2.expand(tp1stable))
 
     case tp2: OrType =>
-      isSubtype(tp1, tp2.first) || isSubtype(tp1, tp2.second)
+      isSubType(tp1, tp2.first) || isSubType(tp1, tp2.second)
         || level4(tp1, tp2)
 
     case tp2: ByNameType =>
       tp1 match
-        case tp1: ByNameType => isSubtype(tp1.resultType, tp2.resultType)
+        case tp1: ByNameType => isSubType(tp1.resultType, tp2.resultType)
         case _               => level4(tp1, tp2)
 
     case tp2: MatchType =>
       tp2.reduced match
-        case Some(reduced) => isSubtype(tp1, reduced)
+        case Some(reduced) => isSubType(tp1, reduced)
         case None          => level4(tp1, tp2)
 
     case _ =>
@@ -255,7 +255,7 @@ private[tastyquery] object Subtyping:
 
   private def level3WithBaseType(tp1: Type, tp2: Type, cls2: ClassSymbol)(using Context): Boolean =
     nonExprBaseType(tp1, cls2) match
-      case Some(base) if base ne tp1 => isSubtype(tryCaptureConversion(tp1, base), tp2)
+      case Some(base) if base ne tp1 => isSubType(tryCaptureConversion(tp1, base), tp2)
       case _                         => level4(tp1, tp2)
   end level3WithBaseType
 
@@ -301,7 +301,7 @@ private[tastyquery] object Subtyping:
               case tycon2: TypeRef =>
                 val tycon1Sym = tycon1.optSymbol
                 val tycon2Sym = tycon2.optSymbol
-                if tycon1Sym.isDefined && tycon1Sym == tycon2Sym && isSubprefix(tycon1.prefix, tycon2.prefix) then
+                if tycon1Sym.isDefined && tycon1Sym == tycon2Sym && isSubPrefix(tycon1.prefix, tycon2.prefix) then
                   isSubArgs(tp1, tp1Applied.args, tp2.args, tparams)
                 else false
               case _ =>
@@ -324,10 +324,10 @@ private[tastyquery] object Subtyping:
         else
           tycon2.optSymbol match
             case Some(cls2: ClassSymbol) =>
-              (defn.hasGenericTuples && defn.isTupleNClass(cls2) && isSubtype(tp1, defn.GenericTupleTypeOf(tp2.args)))
+              (defn.hasGenericTuples && defn.isTupleNClass(cls2) && isSubType(tp1, defn.GenericTupleTypeOf(tp2.args)))
                 || level3WithBaseType(tp1, tp2, cls2)
             case Some(sym2: TypeMemberSymbol) if sym2.isTypeAlias =>
-              isSubtype(tp1, tp2.superType)
+              isSubType(tp1, tp2.superType)
             case _ =>
               // TODO? Handle bounded type lambdas (compareLower in TypeComparer)
               level4(tp1, tp2)
@@ -339,7 +339,7 @@ private[tastyquery] object Subtyping:
 
       case _ =>
         val dealiased = tp2.dealias
-        if dealiased ne tp2 then isSubtype(tp1, dealiased)
+        if dealiased ne tp2 then isSubType(tp1, dealiased)
         else false
   end compareAppliedType2
 
@@ -435,7 +435,7 @@ private[tastyquery] object Subtyping:
       else false
 
     case tp1: TypeRef =>
-      isSubtype(tp1.bounds.high, tp2)
+      isSubType(tp1.bounds.high, tp2)
 
     case tp1: AppliedType =>
       compareAppliedType1(tp1, tp2)
@@ -446,14 +446,14 @@ private[tastyquery] object Subtyping:
           case tp2: TermRef =>
             tp2.underlying.dealias match
               case tp2Singleton: SingletonType =>
-                isSubtype(tp1, tp2Singleton)
+                isSubType(tp1, tp2Singleton)
               case _ =>
                 false
           case _ =>
             false
 
       def proceedWithWidenedType: Boolean =
-        isSubtype(tp1.underlying, tp2)
+        isSubType(tp1.underlying, tp2)
 
       comparePaths || proceedWithWidenedType
 
@@ -463,17 +463,17 @@ private[tastyquery] object Subtyping:
           false // this case is already handled in level3
         case _ =>
           tp2.typeParams.lengthCompare(tp1.paramRefs) == 0
-            && isSubtype(tp1.resultType, tp2.appliedTo(tp1.paramRefs))
+            && isSubType(tp1.resultType, tp2.appliedTo(tp1.paramRefs))
 
     case tp1: RefinedType =>
-      isSubtype(tp1.parent, tp2)
+      isSubType(tp1.parent, tp2)
 
     case tp1: RecType =>
-      isSubtype(tp1.parent, tp2)
+      isSubType(tp1.parent, tp2)
 
     case tp1: AndType =>
       // TODO Try and simplify first
-      isSubtype(tp1.first, tp2) || isSubtype(tp1.second, tp2)
+      isSubType(tp1.first, tp2) || isSubType(tp1.second, tp2)
 
     case tp1: MatchType =>
       def isSubMatchType: Boolean = tp2 match
@@ -482,7 +482,7 @@ private[tastyquery] object Subtyping:
         case _ =>
           false
 
-      isSubtype(tp1.underlying, tp2) || isSubMatchType
+      isSubType(tp1.underlying, tp2) || isSubMatchType
 
     case _ =>
       false
@@ -494,7 +494,7 @@ private[tastyquery] object Subtyping:
       case TypeRef.OfClass(_) =>
         false
       case tycon1: TypeProxy =>
-        isSubtype(tp1.superType, tp2) // TODO superTypeNormalized for match types
+        isSubType(tp1.superType, tp2) // TODO superTypeNormalized for match types
       case _ =>
         false
   end compareAppliedType1
@@ -502,7 +502,7 @@ private[tastyquery] object Subtyping:
   private def isSubMatchTypeCase(caze1: MatchTypeCase, caze2: MatchTypeCase)(using Context): Boolean =
     caze1.paramNames.lengthCompare(caze2.paramNames) == 0
       && isSameType(caze1.pattern, Substituters.substBinders(caze2.pattern, caze2, caze1))
-      && isSubtype(caze1.result, Substituters.substBinders(caze2.result, caze2, caze1))
+      && isSubType(caze1.result, Substituters.substBinders(caze2.result, caze2, caze1))
   end isSubMatchTypeCase
 
   private def isNullable(tp: Type)(using Context): Boolean = tp match
@@ -531,7 +531,7 @@ private[tastyquery] object Subtyping:
       false
   end isNullable
 
-  private[tastyquery] def isSubprefix(pre1: Prefix, pre2: Prefix)(using Context): Boolean =
+  private[tastyquery] def isSubPrefix(pre1: Prefix, pre2: Prefix)(using Context): Boolean =
     pre1 match
       case NoPrefix =>
         pre2 eq NoPrefix
@@ -541,9 +541,9 @@ private[tastyquery] object Subtyping:
           case NoPrefix | _: Type => false
       case pre1: Type =>
         pre2 match
-          case pre2: Type               => isSubtype(pre1, pre2)
+          case pre2: Type               => isSubType(pre1, pre2)
           case NoPrefix | _: PackageRef => false
-  end isSubprefix
+  end isSubPrefix
 
   private def isBottom(tp: Type)(using Context): Boolean =
     tp.widen.isInstanceOf[NothingType]

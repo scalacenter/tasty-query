@@ -32,11 +32,11 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     def withRef[A, B](using A <:< B, NotGiven[B <:< A]): Unit = ()
 
   def assertSubtype(tp1: Type, tp2: Type)(using Context): Unit =
-    val sub = tp1.isSubtype(tp2)
+    val sub = tp1.isSubType(tp2)
     assert(sub, clues(tp1.showBasic, tp2.showBasic, tp1, tp2))
 
   def assertNotSubtype(tp1: Type, tp2: Type)(using Context): Unit =
-    val sub = tp1.isSubtype(tp2)
+    val sub = tp1.isSubType(tp2)
     assert(!sub, clues(tp1.showBasic, tp2.showBasic, tp1, tp2))
 
   def assertEquiv(tp1: Type, tp2: Type)(using Context): EquivResult.type =
@@ -1354,7 +1354,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       if decl.kind == TermSymbolKind.Def && decl.name != nme.Constructor
     do
       val tree = decl.tree.get.asInstanceOf[DefDef].rhs.get
-      assert(tree.tpe.requireType.isSubtype(finalResultType(decl.declaredType)))
+      assert(tree.tpe.requireType.isSubType(finalResultType(decl.declaredType)))
 
       tree match
         case Apply(method @ TypeApply(poly, List(targ)), List(arg)) =>

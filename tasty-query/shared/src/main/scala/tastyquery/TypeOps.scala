@@ -38,7 +38,7 @@ private[tastyquery] object TypeOps:
               case cls: PackageSymbol =>
                 origTp
               case cls: ClassSymbol =>
-                if (thiscls.isSubclass(cls) && pre.baseType(thiscls).isDefined)
+                if (thiscls.isSubClass(cls) && pre.baseType(thiscls).isDefined)
                   /*if (variance <= 0 && !isLegalPrefix(pre)) // isLegalPrefix always true?
                   if (variance < 0) {
                     approximated = true

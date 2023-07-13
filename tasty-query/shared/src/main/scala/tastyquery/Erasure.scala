@@ -167,10 +167,10 @@ private[tastyquery] object Erasure:
     if cls1 == defn.ErasedNothingClass then cls2
     else if cls2 == defn.ErasedNothingClass then cls1
     else if cls1 == defn.NullClass then
-      if cls2.isSubclass(defn.ObjectClass) then cls2
+      if cls2.isSubClass(defn.ObjectClass) then cls2
       else defn.AnyClass
     else if cls2 == defn.NullClass then
-      if cls1.isSubclass(defn.ObjectClass) then cls1
+      if cls1.isSubClass(defn.ObjectClass) then cls1
       else defn.AnyClass
     else
       /** takeWhile+1 */
@@ -183,7 +183,7 @@ private[tastyquery] object Erasure:
       end takeUpTo
 
       // We are not interested in anything that is not a supertype of cls2
-      val cls2superclasses = cls1.linearization.filter(cls2.isSubclass(_))
+      val cls2superclasses = cls1.linearization.filter(cls2.isSubClass(_))
 
       // From the spec, "Linearization also satisfies the property that a
       // linearization of a class always contains the linearization of its
@@ -194,7 +194,7 @@ private[tastyquery] object Erasure:
       // Candidates such that "no other common superclass or trait derives from S"
       // TODO Also, drop `PairClass` since it is not valid after erasue
       val minimums = candidates.filter { candidate =>
-        candidates.forall(x => !x.isSubclass(candidate) || (x eq candidate))
+        candidates.forall(x => !x.isSubClass(candidate) || (x eq candidate))
       }
 
       // Pick the last minimum to prioritize classes over traits
@@ -230,8 +230,8 @@ private[tastyquery] object Erasure:
     */
   private def compareErasedGlb(tp1: ErasedTypeRef, tp2: ErasedTypeRef)(using Context): Int =
     def compareClasses(cls1: ClassSymbol, cls2: ClassSymbol): Int =
-      if cls1.isSubclass(cls2) then -1
-      else if cls2.isSubclass(cls1) then 1
+      if cls1.isSubClass(cls2) then -1
+      else if cls2.isSubClass(cls1) then 1
       else cls1.fullName.toString.compareTo(cls2.fullName.toString)
     end compareClasses
 

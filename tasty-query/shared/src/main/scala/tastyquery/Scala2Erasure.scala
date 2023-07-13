@@ -207,7 +207,7 @@ private[tastyquery] object Scala2Erasure:
             case sym1: TypeSymbol =>
               that match
                 case sym2: TypeSymbol =>
-                  if sym1.isClass && sym2.isClass then sym1.asClass.isSubclass(sym2.asClass)
+                  if sym1.isClass && sym2.isClass then sym1.asClass.isSubClass(sym2.asClass)
                   else if !sym1.isClass then goUpperBound(sym1)
                   else
                     /* sym2 is an abstract type, return false because

@@ -313,7 +313,7 @@ object Symbols {
       if inClass == owner then Some(this)
       else if canMatchInheritedSymbols then
         val ownerClass = owner.asClass
-        if ownerClass.isSubclass(inClass) then matchingDecl(inClass, siteClass = ownerClass)
+        if ownerClass.isSubClass(inClass) then matchingDecl(inClass, siteClass = ownerClass)
         else None
       else None
 
@@ -336,7 +336,7 @@ object Symbols {
     /** The symbol overriding this symbol in given subclass `inClass`, if any. */
     final def overridingSymbol(inClass: ClassSymbol)(using Context): Option[MatchingSymbolType] =
       if inClass == owner then Some(this)
-      else if canMatchInheritedSymbols && inClass.isSubclass(owner.asClass) then
+      else if canMatchInheritedSymbols && inClass.isSubClass(owner.asClass) then
         matchingDecl(inClass, siteClass = inClass)
       else None
 
@@ -369,8 +369,8 @@ object Symbols {
       */
     final def matchingSymbol(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[MatchingSymbolType] =
       require(owner.isClass, s"illegal matchingSymbol on local symbol $this")
-      require(siteClass.isSubclass(owner.asClass), s"site class $siteClass must be a subclass of owner $owner")
-      require(siteClass.isSubclass(inClass), s"site class $siteClass must be a subclass of target class $inClass")
+      require(siteClass.isSubClass(owner.asClass), s"site class $siteClass must be a subclass of owner $owner")
+      require(siteClass.isSubClass(inClass), s"site class $siteClass must be a subclass of target class $inClass")
 
       if inClass == owner then Some(this)
       else if !canMatchInheritedSymbols then None
@@ -1052,7 +1052,11 @@ object Symbols {
       }
       this :: parentsLin
 
+    @deprecated("use isSubClass instead", since = "0.9.0")
     final def isSubclass(that: ClassSymbol)(using Context): Boolean =
+      isSubClass(that)
+
+    final def isSubClass(that: ClassSymbol)(using Context): Boolean =
       linearization.contains(that)
 
     private[tastyquery] final def withSpecialErasure(specialErasure: () => ErasedTypeRef.ClassRef): this.type =
@@ -1267,7 +1271,7 @@ object Symbols {
 
       baseTypeForClassCache.getOrElseUpdate(
         cls,
-        if cls.isSubclass(this) then
+        if cls.isSubClass(this) then
           if this.isStatic && this.typeParams.isEmpty then Some(this.typeRef)
           else foldGlb(None, cls.parents)
         else None

@@ -10,7 +10,7 @@ import tastyquery.Names.termName
 import tastyquery.Symbols.*
 import tastyquery.Types.*
 import tastyquery.TypeMaps.*
-import tastyquery.Subtyping.{isSameType, isSubtype}
+import tastyquery.Subtyping.{isSameType, isSubType}
 
 private[tastyquery] object TypeMatching:
   private enum MatchResult:
@@ -52,7 +52,7 @@ private[tastyquery] object TypeMatching:
   private def matchCase(scrutinee: Type, caze: MatchTypeCase)(using Context): MatchResult =
     if caze.paramNames.isEmpty then
       // fast path
-      if scrutinee.isSubtype(caze.pattern) then MatchResult.Reduced(caze.result)
+      if scrutinee.isSubType(caze.pattern) then MatchResult.Reduced(caze.result)
       else if provablyDisjoint(scrutinee, caze.pattern) then MatchResult.Disjoint
       else MatchResult.Stuck
     else
@@ -129,7 +129,7 @@ private[tastyquery] object TypeMatching:
                 val scrutineeTyconSym = scrutineeTycon.optSymbol
                 val patternTyconSym = patternTycon.optSymbol
                 val sameTycon = scrutineeTyconSym.isDefined && scrutineeTyconSym == patternTyconSym
-                if sameTycon && Subtyping.isSubprefix(scrutineeTycon.prefix, patternTycon.prefix) then
+                if sameTycon && Subtyping.isSubPrefix(scrutineeTycon.prefix, patternTycon.prefix) then
                   tryMatchArgs(scrutinee.args, pattern.args, patternTycon.typeParams)
                 else false
 
@@ -238,7 +238,7 @@ private[tastyquery] object TypeMatching:
         tp1.value != tp2.value
 
       case (TypeRef.OfClass(cls1), TypeRef.OfClass(cls2)) =>
-        if cls1.isSubclass(cls2) || cls2.isSubclass(cls1) then
+        if cls1.isSubClass(cls2) || cls2.isSubClass(cls1) then
           // One of them is a subclass of the other -> not disjoint
           false
         else if cls1.openLevel == OpenLevel.Final || cls2.openLevel == OpenLevel.Final then
@@ -295,9 +295,9 @@ private[tastyquery] object TypeMatching:
       case (tp1: TermRef, tp2: TermRef) if isEnumValueOrModule(tp1) && isEnumValueOrModule(tp2) =>
         tp1.symbol != tp2.symbol
       case (tp1: TermRef, tp2: TypeRef) if isEnumValue(tp1) =>
-        !tp1.isSubtype(tp2)
+        !tp1.isSubType(tp2)
       case (tp1: TypeRef, tp2: TermRef) if isEnumValue(tp2) =>
-        !tp2.isSubtype(tp1)
+        !tp2.isSubType(tp1)
 
       case (tp1: TypeProxy, tp2: TypeProxy) =>
         def trySuperTp1 = tp1 match
