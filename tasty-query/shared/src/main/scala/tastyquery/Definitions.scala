@@ -417,6 +417,6 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   end uninitializedMethod
 
   private[tastyquery] lazy val uninitializedMethodTermRef: TermRef =
-    TermRef(TermRef(PackageRef(defn.scalaCompiletimePackage), termName("package$package")), termName("uninitialized"))
+    TermRef(TermRef(defn.scalaCompiletimePackage.packageRef, termName("package$package")), termName("uninitialized"))
 
 end Definitions

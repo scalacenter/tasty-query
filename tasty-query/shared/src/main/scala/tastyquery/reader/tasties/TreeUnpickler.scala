@@ -987,9 +987,10 @@ private[tasties] class TreeUnpickler private (
     case TERMREFpkg =>
       val spn = span
       reader.readByte()
-      val fullyQualifiedName = readFullyQualifiedName
-      val simpleName = fullyQualifiedName.sourceName.asSimpleName
-      val tpe = PackageRef(fullyQualifiedName)
+      val tpe = readPackageRef()
+      val simpleName = tpe match
+        case tpe: PackageRef => tpe.fullyQualifiedName.sourceName.asSimpleName
+        case tpe: TermRef    => tpe.name // fallback for incomplete or invalid programs
       Ident(simpleName)(tpe)(span)
     case TERMREFdirect =>
       val spn = span
@@ -1064,6 +1065,24 @@ private[tasties] class TreeUnpickler private (
     caches.getSymbol[Symbol](symAddr)
   }
 
+  /** Reads a package reference, with a fallback on faked term references.
+    *
+    * In a full, correct classpath, `readPackageRef()` will always return a
+    * `PackageRef`. However, in an incomplete or incorrect classpath, this
+    * method may return a `TermRef` if the target package does not exist.
+    *
+    * An alternative would be to create missing packages on the fly, but that
+    * would not be consistent with `Trees.Select.tpe` and
+    * `Trees.TermRefTypeTree.toType`.
+    */
+  private def readPackageRef(): PackageRef | TermRef =
+    val fullyQualifiedName = readFullyQualifiedName
+    fullyQualifiedName.path.foldLeft[PackageRef | TermRef](defn.RootPackage.packageRef) { (prefix, name) =>
+      val termName = name.asInstanceOf[TermName] // readFullyQualifiedName only reads TermName's in paths
+      NamedType.possibleSelFromPackage(prefix, termName)
+    }
+  end readPackageRef
+
   private def readTypeRef(): TypeRef =
     readTypeMappable().asInstanceOf[TypeRef]
 
@@ -1101,7 +1120,7 @@ private[tasties] class TreeUnpickler private (
       TypeRef(readNonEmptyPrefix(), sym)
     case TYPEREFpkg =>
       reader.readByte()
-      PackageRef(readFullyQualifiedName)
+      readPackageRef()
     case SHAREDtype =>
       reader.readByte()
       val addr = reader.readAddr()
@@ -1116,7 +1135,7 @@ private[tasties] class TreeUnpickler private (
       TermRef(readNonEmptyPrefix(), sym)
     case TERMREFpkg =>
       reader.readByte()
-      new PackageRef(readFullyQualifiedName)
+      readPackageRef()
     case TERMREF =>
       reader.readByte()
       val name = readName

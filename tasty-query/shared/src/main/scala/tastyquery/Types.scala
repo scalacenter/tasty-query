@@ -925,13 +925,11 @@ object Types {
 
   object NamedType {
 
-    private[tastyquery] def possibleSelFromPackage(prefix: NonEmptyPrefix, name: TermName)(
-      using Context
-    ): (TermRef | PackageRef) =
+    private[tastyquery] def possibleSelFromPackage(prefix: NonEmptyPrefix, name: TermName): (TermRef | PackageRef) =
       prefix match
         case prefix: PackageRef if name.isInstanceOf[SimpleName] =>
           prefix.symbol.getPackageDecl(name.asSimpleName) match
-            case Some(nested) => PackageRef(nested)
+            case Some(nested) => nested.packageRef
             case _            => TermRef(prefix, name)
         case _ =>
           TermRef(prefix, name)
@@ -1114,23 +1112,10 @@ object Types {
     end resolveLookupIn
   end TermRef
 
-  final class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends TermType with NonEmptyPrefix {
+  final class PackageRef private[tastyquery] (val symbol: PackageSymbol) extends TermType with NonEmptyPrefix {
     private[tastyquery] type ThisTypeMappableType = PackageRef
 
-    private var packageSymbol: PackageSymbol | Null = null
-
-    def this(packageSym: PackageSymbol) =
-      this(packageSym.fullName)
-      packageSymbol = packageSym
-
-    def symbol(using Context): PackageSymbol = {
-      val local = packageSymbol
-      if (local == null) {
-        val resolved = ctx.findPackageFromRoot(fullyQualifiedName)
-        packageSymbol = resolved
-        resolved
-      } else local
-    }
+    def fullyQualifiedName: FullyQualifiedName = symbol.fullName
 
     def widen(using Context): PackageRef = this
 

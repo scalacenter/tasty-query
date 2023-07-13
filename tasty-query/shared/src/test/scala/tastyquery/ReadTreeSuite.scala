@@ -1474,7 +1474,10 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             SimpleName("random"),
             TypeWrapper(
               TypeRefInternal(
-                ty.PackageRef(FullyQualifiedName(List(SimpleName("scala"), SimpleName("util")))),
+                /* This should be a PackageRef for scala.util, but since it is not
+                 * available on the restricted classpath, it becomes a TermRef instead.
+                 */
+                TermRefInternal(ty.PackageRef(FullyQualifiedName.scalaPackageName), SimpleName("util")),
                 TypeName(SimpleName("Random"))
               )
             ),
@@ -1484,7 +1487,10 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 Select(
                   New(
                     SelectTypeTree(
-                      TypeWrapper(ty.PackageRef(FullyQualifiedName(List(SimpleName("scala"), SimpleName("util"))))),
+                      // Same as above
+                      TypeWrapper(
+                        TermRefInternal(ty.PackageRef(FullyQualifiedName.scalaPackageName), SimpleName("util"))
+                      ),
                       TypeName(SimpleName("Random"))
                     )
                   ),

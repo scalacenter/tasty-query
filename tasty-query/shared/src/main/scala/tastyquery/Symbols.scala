@@ -1619,7 +1619,7 @@ object Symbols {
     private val myDeclarations = mutable.HashMap[Name, Symbol]()
 
     // Cache fields
-    val packageRef: PackageRef = PackageRef(this: @unchecked)
+    val packageRef: PackageRef = new PackageRef(this)
     private var myAllPackageObjectDecls: List[ClassSymbol] | Null = null
 
     this.withFlags(EmptyFlagSet, None)
