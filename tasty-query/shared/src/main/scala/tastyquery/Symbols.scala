@@ -216,6 +216,27 @@ object Symbols {
   sealed abstract class TermOrTypeSymbol(override val owner: Symbol) extends Symbol(owner):
     type MatchingSymbolType >: this.type <: TermOrTypeSymbol
 
+    private var myLocalRef: NamedType | Null = null
+
+    /** A reference to this symbol that is valid within its declaring scope.
+      *
+      * If this symbol is a polymorphic type, for example a polymorphic class,
+      * it is left unapplied.
+      */
+    def localRef: NamedType =
+      // overridden in subclasses to provide a better-known result type
+      val local = myLocalRef
+      if local != null then local
+      else
+        val pre = owner match
+          case owner: PackageSymbol => owner.packageRef
+          case owner: ClassSymbol   => owner.thisType
+          case _                    => NoPrefix
+        val computed = NamedType(pre, this)
+        myLocalRef = computed
+        computed
+    end localRef
+
     /** The source language in which this symbol was defined.
       *
       * The source language of a symbol may have an influence on how it is
@@ -493,6 +514,9 @@ object Symbols {
       if isModuleVal then declaredType.requireType.classSymbol
       else None
 
+    override final def localRef: TermRef =
+      super.localRef.asTermRef
+
     final def staticRef(using Context): TermRef =
       require(isStatic, s"Cannot construct a staticRef for non-static symbol $this")
       TermRef(owner.staticOwnerPrefix, this)
@@ -600,6 +624,9 @@ object Symbols {
     type DefiningTreeType <: TypeDef | TypeTreeBind
     type MatchingSymbolType = TypeSymbol
 
+    override final def localRef: TypeRef =
+      super.localRef.asTypeRef
+
     protected final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[TypeSymbol] =
       inClass.getDecl(name).filterNot(_.isPrivate)
 
@@ -697,9 +724,6 @@ object Symbols {
 
     @deprecated("use localRef instead", since = "0.9.0")
     final def typeRef: TypeRef = localRef
-
-    /** A reference to this class type param that is valid within its declaring scope. */
-    final def localRef: TypeRef = TypeRef(owner.thisType, this)
 
     /** The argument corresponding to this class type parameter as seen from prefix `pre`.
       *
@@ -1486,22 +1510,6 @@ object Symbols {
 
       lookup(linearization)
     end resolveMatchingMember
-
-    private var myLocalRef: TypeRef | Null = null
-
-    /** A reference to this (unapplied) class type that is valid within its declaring scope. */
-    private[tastyquery] final def localRef: TypeRef =
-      val local = myLocalRef
-      if local != null then local
-      else
-        val pre = owner match
-          case owner: PackageSymbol => owner.packageRef
-          case owner: ClassSymbol   => owner.thisType
-          case _                    => NoPrefix
-        val computed = TypeRef(pre, this)
-        myLocalRef = computed
-        computed
-    end localRef
 
     private var myThisType: ThisType | Null = null
 
