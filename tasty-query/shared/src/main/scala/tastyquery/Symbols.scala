@@ -267,6 +267,23 @@ object Symbols {
           case Some(scope) => Visibility.ScopedPrivate(scope)
     end visibility
 
+    /** Is this symbol an abstract member?
+      *
+      * An abstract member must be implemented in a subclass of its owner.
+      * Term members are abstract if they have no right-hand-side. Type members
+      * are abstract if they are neither type aliases nor opaque type aliases.
+      *
+      * Other kinds of symbols are never abstract members. To test whether a
+      * class is `abstract`, use [[ClassSymbol.isAbstractClass]].
+      *
+      * Note that this is false for `abstract override` members.
+      */
+    final def isAbstractMember: Boolean = this match
+      case self: TermSymbol                    => flags.is(Abstract)
+      case self: TypeMemberSymbol              => self.typeDef.isInstanceOf[TypeMemberDefinition.AbstractType]
+      case _: ClassSymbol | _: TypeParamSymbol => false
+    end isAbstractMember
+
     /** Is this symbol a final member, in the sense that it cannot be overridden?
       *
       * Classes are always final members, since Scala 3 does not allow to
@@ -425,14 +442,6 @@ object Symbols {
       else if flags.is(Mutable) then TermSymbolKind.Var
       else if flags.is(Lazy) then TermSymbolKind.LazyVal
       else TermSymbolKind.Val
-
-    /** Is this term definition an abstract member?
-      *
-      * An abstract member must be implemented in a subclass of its owner.
-      *
-      * Note that this is false for `abstract override` members.
-      */
-    final def isAbstractMember: Boolean = flags.is(Abstract)
 
     /** Is this term definition `abstract override`? */
     final def isAbstractOverride: Boolean = flags.is(AbsOverride)
