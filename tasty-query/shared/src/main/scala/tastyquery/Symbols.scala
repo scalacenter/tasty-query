@@ -182,15 +182,11 @@ object Symbols {
 
     final def isType: Boolean = this.isInstanceOf[TypeSymbol]
     final def isTerm: Boolean = this.isInstanceOf[TermSymbol]
-
-    final def isDeclaringSymbol: Boolean = this.isInstanceOf[DeclaringSymbol]
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
     final def isPackage: Boolean = this.isInstanceOf[PackageSymbol]
-    final def isRoot: Boolean = isPackage && owner == null
 
     final def asType: TypeSymbol = this.asInstanceOf[TypeSymbol]
     final def asTerm: TermSymbol = this.asInstanceOf[TermSymbol]
-    final def asDeclaringSymbol: DeclaringSymbol = this.asInstanceOf[DeclaringSymbol]
     final def asClass: ClassSymbol = this.asInstanceOf[ClassSymbol]
     final def asPackage: PackageSymbol = this.asInstanceOf[PackageSymbol]
 
@@ -1311,7 +1307,7 @@ object Symbols {
       if isOwnThis then baseTypeOnOwnThisOpt
       else
         baseTypeOnOwnThisOpt.map { (baseTypeOnOwnThis: BaseType) =>
-          asBaseType(baseTypeOnOwnThis.asSeenFrom(tp.prefix, tpCls.owner.asDeclaringSymbol))
+          asBaseType(baseTypeOnOwnThis.asSeenFrom(tp.prefix, tpCls.owner.asInstanceOf[DeclaringSymbol]))
         }
     end baseTypeOfClassTypeRef
 
@@ -1638,6 +1634,9 @@ object Symbols {
         pkg
       }
     end getPackageDeclOrCreate
+
+    /** Is this the root package? */
+    final def isRootPackage: Boolean = owner == null
 
     /** Gets the subpackage with the specified `name`, if it exists.
       *

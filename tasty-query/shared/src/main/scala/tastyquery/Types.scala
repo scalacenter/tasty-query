@@ -958,8 +958,10 @@ object Types {
          * module class.
          * Terms cannot otherwise appear in paths.
          */
-        val cls = if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].asClass else owner
-        cls.asDeclaringSymbol.getDecl(name).getOrElse {
+        val cls =
+          if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].asClass
+          else owner.asInstanceOf[DeclaringSymbol]
+        cls.getDecl(name).getOrElse {
           throw new MemberNotFoundException(owner, name)
         }
       }
