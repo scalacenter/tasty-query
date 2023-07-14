@@ -94,7 +94,7 @@ private[tastyquery] object Subtyping:
         case tp1: ThisType =>
           tp1.cls == cls2
         case tp1: TypeRef if cls2.isModuleClass && tp1.isSpecificClass(cls2) =>
-          (cls2.isStatic || isSubPrefix(tp1.prefix, cls2.typeRef.prefix))
+          (cls2.isStatic || isSubPrefix(tp1.prefix, cls2.localRef.prefix))
             || level2(tp1, tp2)
         case _ =>
           level2(tp1, tp2)
@@ -172,7 +172,7 @@ private[tastyquery] object Subtyping:
       val cls1 = tp1.cls
       tp2 match {
         case tp2: TermRef if cls1.isModuleClass && isTypeRefOf(tp2.underlying, cls1) =>
-          (cls1.isStatic || isSubPrefix(cls1.typeRef.prefix, tp2.prefix))
+          (cls1.isStatic || isSubPrefix(cls1.localRef.prefix, tp2.prefix))
             || level3(tp1, tp2)
         case _ =>
           level3(tp1, tp2)

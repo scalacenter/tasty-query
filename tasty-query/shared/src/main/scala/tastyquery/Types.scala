@@ -611,7 +611,8 @@ object Types {
       * - Inherited by all other type proxies.
       * - `None` for all other types.
       */
-    @tailrec final def normalizedPrefix(using Context): Option[Prefix] = this match {
+    @tailrec
+    private[tastyquery] final def normalizedPrefix(using Context): Option[Prefix] = this match {
       case tp: TypeRef =>
         tp.optAliasedType match
           case Some(alias) => alias.normalizedPrefix
@@ -764,7 +765,7 @@ object Types {
       * This is the same as `underlying`, except that for applied types,
       * it returns the upper bound of the constructor re-applied to the arguments.
       */
-    def superType(using Context): Type = underlying
+    private[tastyquery] def superType(using Context): Type = underlying
 
     private[tastyquery] final def superTypeNormalized(using Context): Type =
       superType // .normalized
@@ -779,7 +780,7 @@ object Types {
       * reduction depends on context and should not be cached (at least not without
       * the very specific cache invalidation condition for matchtypes).
       */
-    def translucentSuperType(using Context): Type = superType
+    private[tastyquery] def translucentSuperType(using Context): Type = superType
 
     private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       underlying.resolveMember(name, pre)
@@ -924,29 +925,27 @@ object Types {
 
   object NamedType {
 
-    private[tastyquery] def possibleSelFromPackage(prefix: NonEmptyPrefix, name: TermName)(
-      using Context
-    ): (TermRef | PackageRef) =
+    private[tastyquery] def possibleSelFromPackage(prefix: NonEmptyPrefix, name: TermName): (TermRef | PackageRef) =
       prefix match
         case prefix: PackageRef if name.isInstanceOf[SimpleName] =>
           prefix.symbol.getPackageDecl(name.asSimpleName) match
-            case Some(nested) => PackageRef(nested)
+            case Some(nested) => nested.packageRef
             case _            => TermRef(prefix, name)
         case _ =>
           TermRef(prefix, name)
     end possibleSelFromPackage
 
-    def apply(prefix: Prefix, sym: TermOrTypeSymbol)(using Context): NamedType =
+    def apply(prefix: Prefix, sym: TermOrTypeSymbol): NamedType =
       sym match
         case sym: TypeSymbol => TypeRef(prefix, sym)
         case sym: TermSymbol => TermRef(prefix, sym)
 
-    def apply(prefix: NonEmptyPrefix, name: Name)(using Context): NamedType =
+    def apply(prefix: NonEmptyPrefix, name: Name): NamedType =
       name match
         case name: TypeName => TypeRef(prefix, name)
         case name: TermName => TermRef(prefix, name)
 
-    private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef)(using Context): NamedType =
+    private[tastyquery] def apply(prefix: Prefix, external: Scala2ExternalSymRef): NamedType =
       external.name match
         case _: TypeName => TypeRef(prefix, external)
         case _: TermName => TermRef(prefix, external)
@@ -1040,7 +1039,7 @@ object Types {
       ensureResolved()
       myUnderlying.asInstanceOf[TypeOrMethodic]
 
-    override def underlying(using ctx: Context): Type =
+    override def underlying(using Context): Type =
       underlyingOrMethodic.requireType
 
     final override def isStable(using Context): Boolean =
@@ -1113,23 +1112,10 @@ object Types {
     end resolveLookupIn
   end TermRef
 
-  final class PackageRef(val fullyQualifiedName: FullyQualifiedName) extends TermType with NonEmptyPrefix {
+  final class PackageRef private[tastyquery] (val symbol: PackageSymbol) extends TermType with NonEmptyPrefix {
     private[tastyquery] type ThisTypeMappableType = PackageRef
 
-    private var packageSymbol: PackageSymbol | Null = null
-
-    def this(packageSym: PackageSymbol) =
-      this(packageSym.fullName)
-      packageSymbol = packageSym
-
-    def symbol(using Context): PackageSymbol = {
-      val local = packageSymbol
-      if (local == null) {
-        val resolved = ctx.findPackageFromRoot(fullyQualifiedName)
-        packageSymbol = resolved
-        resolved
-      } else local
-    }
+    def fullyQualifiedName: FullyQualifiedName = symbol.fullName
 
     def widen(using Context): PackageRef = this
 
@@ -1281,7 +1267,7 @@ object Types {
         case TypeAlias(alias) => Some(alias)
         case _                => None
 
-    override def translucentSuperType(using Context): Type = optSymbol match
+    private[tastyquery] override def translucentSuperType(using Context): Type = optSymbol match
       case Some(sym: TypeMemberSymbol) =>
         sym.typeDef match
           case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => alias
@@ -1396,7 +1382,7 @@ object Types {
   final class SuperType(val thistpe: ThisType, val explicitSupertpe: Option[Type]) extends TypeProxy with SingletonType:
     private var mySupertpe: Type | Null = explicitSupertpe.orNull
 
-    final def supertpe(using Context): Type =
+    private[tastyquery] final def supertpe(using Context): Type =
       val local = mySupertpe
       if local != null then local
       else
@@ -1407,7 +1393,7 @@ object Types {
 
     override def underlying(using Context): Type = supertpe
 
-    override def superType(using Context): Type =
+    private[tastyquery] override def superType(using Context): Type =
       val superCls = supertpe match
         case supertpe: TypeRef => supertpe.asClass
         case _                 => throw AssertionError(s"Cannot compute super class for $this")
@@ -1433,14 +1419,14 @@ object Types {
   final class AppliedType(val tycon: Type, val args: List[TypeOrWildcard]) extends TypeProxy {
     override def underlying(using Context): Type = tycon
 
-    override def superType(using Context): Type =
+    private[tastyquery] override def superType(using Context): Type =
       tycon match
         case tycon: TypeLambda  => tycon.appliedTo(args)
         case TypeRef.OfClass(_) => tycon
         case tycon: TypeProxy   => tycon.superType.applyIfParameterized(args)
         case _                  => defn.AnyType
 
-    override def translucentSuperType(using Context): Type = tycon match
+    private[tastyquery] override def translucentSuperType(using Context): Type = tycon match
       case tycon: TypeRef if tycon.optSymbol.exists(_.isOpaqueTypeAlias) =>
         tycon.translucentSuperType.applyIfParameterized(args)
       case _ =>
@@ -1701,17 +1687,25 @@ object Types {
       *   - replace @repeated annotations on Seq or Array types by <repeated> types
       *   - add @inlineParam to inline parameters
       */
-    private[tastyquery] def fromSymbols(params: List[TermSymbol], resultType: TypeOrMethodic)(
-      using Context
-    ): MethodType = {
+    private[tastyquery] def fromSymbols(params: List[TermSymbol], resultType: TypeOrMethodic): MethodType = {
+      def makeRepeatedTypeOf(scalaAnnotationInternalPackageRef: PackageRef, tpe: TypeOrWildcard): AppliedType =
+        // Hack to find the PackageSymbol for `scala` without requiring a `Context`
+        val scalaPackage = scalaAnnotationInternalPackageRef.symbol.owner.nn.owner.nn
+        AppliedType(TypeRef(scalaPackage.packageRef, tpnme.RepeatedParamClassMagic), List(tpe))
+      end makeRepeatedTypeOf
+
       def annotatedToRepeated(tpe: Type): Type = tpe match
-        case tpe: AnnotatedType if tpe.annotation.safeIsInternalRepeatedAnnot =>
-          tpe.typ match
-            case applied: AppliedType if applied.args.sizeIs == 1 =>
-              // We're going to assume that `tycon` is indeed `Seq`, here, because we cannot afford to resolve it
-              defn.RepeatedTypeOf(applied.args.head)
-            case _ =>
-              throw TastyFormatException(s"in $params, $tpe is declared repeated but is not a Seq type")
+        case tpe: AnnotatedType =>
+          tpe.annotation.syntacticExtractInternalRepeatedAnnot match
+            case Some(scalaAnnotationInternalPackageRef) =>
+              tpe.typ match
+                case applied: AppliedType if applied.args.sizeIs == 1 =>
+                  // We're going to assume that `tycon` is indeed `Seq`, here, because we cannot afford to resolve it
+                  makeRepeatedTypeOf(scalaAnnotationInternalPackageRef, applied.args.head)
+                case _ =>
+                  throw TastyFormatException(s"in $params, $tpe is declared repeated but is not a Seq type")
+            case None =>
+              tpe
         case _ =>
           tpe
       end annotatedToRepeated
@@ -1788,9 +1782,7 @@ object Types {
     )(paramTypeBoundsExp: PolyType => List[TypeBounds], resultTypeExp: PolyType => TypeOrMethodic): PolyType =
       new PolyType(paramNames)(paramTypeBoundsExp, resultTypeExp)
 
-    private[tastyquery] def fromParams(params: List[TypeParam], resultType: TypeOrMethodic)(
-      using Context
-    ): TypeOrMethodic =
+    private[tastyquery] def fromParams(params: List[TypeParam], resultType: TypeOrMethodic): TypeOrMethodic =
       if params.isEmpty then resultType
       else
         val paramNames = params.map(_.name)
@@ -1883,9 +1875,7 @@ object Types {
     )(paramInfosExp: TypeLambda => List[TypeBounds], resultTypeExp: TypeLambda => Type): TypeLambda =
       new TypeLambda(paramNames)(paramInfosExp, resultTypeExp)
 
-    private[tastyquery] def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type)(
-      using Context
-    ): TypeLambda =
+    private[tastyquery] def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type): TypeLambda =
       apply(params.map(_.name))(_ => params.map(_.symbol.bounds), resultTypeExp)
 
     private[tastyquery] def fromParamInfos(params: List[TypeConstructorParam])(resultTypeExp: TypeLambda => Type)(
@@ -2081,7 +2071,7 @@ object Types {
     def apply(parentExp: RecType => Type): RecType =
       new RecType(parentExp) // TODO? Perform normalization like dotc?
 
-    private[tastyquery] def fromRefinedClassDecls(tpe: Type, refinedCls: ClassSymbol)(using Context): Type =
+    private[tastyquery] def fromRefinedClassDecls(tpe: Type, refinedCls: ClassSymbol): Type =
       val recType = RecType(rt => Substituters.substRefinementThis(tpe, refinedCls, rt.recThis))
       if recType.parent eq tpe then tpe
       else recType
@@ -2171,8 +2161,10 @@ object Types {
     def apply(pattern: Type, result: Type): MatchTypeCase =
       new MatchTypeCase(Nil)(_ => Nil, _ => pattern, _ => result)
 
-    private[tastyquery] final def fromParams(params: List[LocalTypeParamSymbol], pattern: Type, result: Type)(
-      using Context
+    private[tastyquery] final def fromParams(
+      params: List[LocalTypeParamSymbol],
+      pattern: Type,
+      result: Type
     ): MatchTypeCase =
       val paramNames = params.map(_.name)
       val paramTypeBounds = params.map(_.bounds)
@@ -2283,8 +2275,6 @@ object Types {
 
   final class WildcardTypeArg(val bounds: TypeBounds) extends TypeMappable with TypeOrWildcard {
     private[tastyquery] type ThisTypeMappableType = WildcardTypeArg
-
-    def underlying(using Context): Type = bounds.high
 
     private[tastyquery] def derivedWildcardTypeArg(bounds: TypeBounds): WildcardTypeArg =
       if bounds eq this.bounds then this

@@ -345,5 +345,8 @@ object Names {
     val emptyPackageName = FullyQualifiedName(nme.EmptyPackageName :: Nil)
     val scalaPackageName = FullyQualifiedName(nme.scalaPackageName :: Nil)
     val javaLangPackageName = FullyQualifiedName(nme.javaPackageName :: nme.langPackageName :: Nil)
+
+    private[tastyquery] val scalaAnnotationInternalPackage =
+      FullyQualifiedName(nme.scalaPackageName :: termName("annotation") :: termName("internal") :: Nil)
   end FullyQualifiedName
 }

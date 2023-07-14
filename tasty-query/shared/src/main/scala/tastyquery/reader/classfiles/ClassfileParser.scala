@@ -170,7 +170,7 @@ private[reader] object ClassfileParser {
 
     val module = TermSymbol
       .create(name.toTermName, classOwner)
-      .withDeclaredType(moduleClass.typeRef)
+      .withDeclaredType(moduleClass.localRef)
       .withFlags(clsFlags | Flags.ModuleValCreationFlags, clsPrivateWithin)
       .setAnnotations(Nil)
     allRegisteredSymbols += module
