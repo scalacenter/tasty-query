@@ -258,9 +258,7 @@ private[tastyquery] object Printers:
     def print(tparam: TypeConstructorParam): Unit =
       print(tparam.declaredVariance)
       print(tparam.name)
-      tparam match
-        case tparam: TypeLambdaParam      => print(tparam.bounds)
-        case tparam: ClassTypeParamSymbol => print(tparam.bounds)
+      print(tparam.declaredBounds)
     end print
 
     def print(variance: Variance): Unit =

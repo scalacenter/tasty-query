@@ -280,7 +280,7 @@ private[tastyquery] object TypeMaps {
           case arg: TypeRef =>
             arg.optSymbol match
               case Some(argSym: ClassTypeParamSymbol) if arg.prefix.isArgPrefixOf(argSym) =>
-                expandBounds(argSym.bounds)
+                expandBounds(argSym.declaredBounds)
               case _ =>
                 reapply(arg)
           case arg: WildcardTypeArg => expandBounds(arg.bounds)

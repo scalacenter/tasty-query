@@ -257,8 +257,8 @@ object Types {
     /** The name of the type parameter. */
     def name: TypeName
 
-    /** The bounds of the type parameter. */
-    def bounds: TypeBounds
+    /** The declared bounds of the type parameter. */
+    def declaredBounds: TypeBounds
   end TypeConstructorParam
 
   sealed abstract class TypeMappable:
@@ -1558,7 +1558,7 @@ object Types {
       if params.isEmpty then resultType
       else
         val paramNames = params.map(_.name)
-        val paramTypeBounds = params.map(_.bounds)
+        val paramTypeBounds = params.map(_.declaredBounds)
         apply(paramNames)(
           tpLambda => paramTypeBounds.map(tpLambda.integrate(params, _)),
           tpLambda => tpLambda.integrate(params, resultType).asInstanceOf[RT]
@@ -1790,7 +1790,7 @@ object Types {
         val paramNames = params.map(_.name)
         val paramSyms = params.map(_.symbol)
         apply(paramNames)(
-          polyType => paramSyms.map(param => polyType.integrate(paramSyms, param.bounds)),
+          polyType => paramSyms.map(param => polyType.integrate(paramSyms, param.declaredBounds)),
           polyType => polyType.integrate(paramSyms, resultType)
         )
   end PolyType
@@ -1826,7 +1826,7 @@ object Types {
     def name: TypeName =
       typeLambda.paramNames(num)
 
-    def bounds: TypeBounds =
+    def declaredBounds: TypeBounds =
       typeLambda.paramTypeBounds(num)
   end TypeLambdaParam
 
@@ -1878,12 +1878,12 @@ object Types {
       new TypeLambda(paramNames)(paramInfosExp, resultTypeExp)
 
     private[tastyquery] def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type): TypeLambda =
-      apply(params.map(_.name))(_ => params.map(_.symbol.bounds), resultTypeExp)
+      apply(params.map(_.name))(_ => params.map(_.symbol.declaredBounds), resultTypeExp)
 
     private[tastyquery] def fromParamInfos(params: List[TypeConstructorParam])(resultTypeExp: TypeLambda => Type)(
       using Context
     ): TypeLambda =
-      apply(params.map(_.name))(_ => params.map(_.bounds), resultTypeExp)
+      apply(params.map(_.name))(_ => params.map(_.declaredBounds), resultTypeExp)
   end TypeLambda
 
   final class TypeParamRef(val binders: TypeBinders, val paramNum: Int) extends TypeProxy with ParamRef {
@@ -2169,7 +2169,7 @@ object Types {
       result: Type
     ): MatchTypeCase =
       val paramNames = params.map(_.name)
-      val paramTypeBounds = params.map(_.bounds)
+      val paramTypeBounds = params.map(_.declaredBounds)
       apply(paramNames)(
         mtc => paramTypeBounds.map(mtc.integrate(params, _)),
         mtc => mtc.integrate(params, pattern),

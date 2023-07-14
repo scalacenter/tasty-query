@@ -648,17 +648,20 @@ object Symbols {
   sealed abstract class TypeSymbolWithBounds protected (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner):
     type DefiningTreeType <: TypeMember | TypeParam | TypeTreeBind
 
-    def bounds: TypeBounds
+    @deprecated("use declaredBounds instead", since = "0.9.0")
+    final def bounds: TypeBounds = declaredBounds
+
+    def declaredBounds: TypeBounds
 
     private[tastyquery] final def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
       def default: TypeBounds =
-        bounds.mapBounds(_.asSeenFrom(prefix, owner))
+        declaredBounds.mapBounds(_.asSeenFrom(prefix, owner))
 
       this match
         case sym: ClassTypeParamSymbol =>
           prefix match
             case prefix: ThisType if prefix.cls == owner =>
-              bounds
+              declaredBounds
             case prefix: Type =>
               sym.argForParam(prefix, widenAbstract = true) match
                 case Some(wild: WildcardTypeArg) => wild.bounds
@@ -692,19 +695,19 @@ object Symbols {
     type DefiningTreeType >: TypeParam <: TypeParam | TypeTreeBind
 
     // Reference fields (checked in doCheckCompleted)
-    private var myBounds: TypeBounds | Null = null
+    private var myDeclaredBounds: TypeBounds | Null = null
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
-      if myBounds == null then failNotCompleted("bounds are not initialized")
+      if myDeclaredBounds == null then failNotCompleted("bounds are not initialized")
 
-    private[tastyquery] final def setBounds(bounds: TypeBounds): this.type =
-      if myBounds != null then throw IllegalStateException(s"Trying to re-set the bounds of $this")
-      myBounds = bounds
+    private[tastyquery] final def setDeclaredBounds(bounds: TypeBounds): this.type =
+      if myDeclaredBounds != null then throw IllegalStateException(s"Trying to re-set the bounds of $this")
+      myDeclaredBounds = bounds
       this
 
-    final def bounds: TypeBounds =
-      val local = myBounds
+    final def declaredBounds: TypeBounds =
+      val local = myDeclaredBounds
       if local == null then throw IllegalStateException(s"$this was not assigned type bounds")
       else local
   end TypeParamSymbol
@@ -843,7 +846,7 @@ object Symbols {
     private[tastyquery] def aliasedTypeAsSeenFrom(pre: Prefix)(using Context): Type =
       aliasedType.asSeenFrom(pre, owner)
 
-    final def bounds: TypeBounds = typeDef match
+    final def declaredBounds: TypeBounds = typeDef match
       case TypeMemberDefinition.TypeAlias(alias)           => TypeAlias(alias)
       case TypeMemberDefinition.AbstractType(bounds)       => bounds
       case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds
