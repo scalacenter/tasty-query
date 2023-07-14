@@ -430,11 +430,13 @@ object Symbols {
       else if flags.is(Lazy) then TermSymbolKind.LazyVal
       else TermSymbolKind.Val
 
-    /** Is this term definition abstract?
+    /** Is this term definition an abstract member?
+      *
+      * An abstract member must be implemented in a subclass of its owner.
       *
       * Note that this is false for `abstract override` members.
       */
-    final def isAbstract: Boolean = flags.is(Abstract)
+    final def isAbstractMember: Boolean = flags.is(Abstract)
 
     /** Is this term definition `abstract override`? */
     final def isAbstractOverride: Boolean = flags.is(AbsOverride)
@@ -897,9 +899,12 @@ object Symbols {
 
     /** Is this class abstract?
       *
+      * An abstract class cannot be directly instantiated. It must be extended
+      * by a concrete class before doing so.
+      *
       * This is true for `trait`s and `abstract class`es.
       */
-    final def isAbstract: Boolean = flags.isAnyOf(Abstract | Trait)
+    final def isAbstractClass: Boolean = flags.isAnyOf(Abstract | Trait)
 
     /** Is this the hidden class of an `object`? */
     final def isModuleClass: Boolean = flags.is(Module)
