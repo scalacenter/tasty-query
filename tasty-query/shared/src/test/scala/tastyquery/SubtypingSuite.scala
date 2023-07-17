@@ -1363,14 +1363,14 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       tree match
         case Apply(method @ TypeApply(poly, List(targ)), List(arg)) =>
           // Check that the term argument corresponds to the declared term param type
-          val methodType = method.tpe.widen.asInstanceOf[MethodType]
+          val methodType = method.tpe.widenTermRef.asInstanceOf[MethodType]
           assert(clue(methodType.paramNames).sizeIs == 1)
           val argTpe = arg.tpe.requireType
           val paramTpe = methodType.instantiateParamTypes(List(argTpe)).head
           assertStrictSubtype(argTpe, paramTpe)
 
           // Check that the type argument corresponds to the declared type param bounds
-          val polyType = poly.tpe.widen.asInstanceOf[PolyType]
+          val polyType = poly.tpe.widenTermRef.asInstanceOf[PolyType]
           assert(clue(polyType.paramNames).sizeIs == 1)
           val targTpe = targ.toType
           val tParamBounds = polyType.instantiateParamTypeBounds(List(targTpe)).head

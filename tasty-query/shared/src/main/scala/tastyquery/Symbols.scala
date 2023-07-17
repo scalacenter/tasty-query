@@ -182,15 +182,11 @@ object Symbols {
 
     final def isType: Boolean = this.isInstanceOf[TypeSymbol]
     final def isTerm: Boolean = this.isInstanceOf[TermSymbol]
-
-    final def isDeclaringSymbol: Boolean = this.isInstanceOf[DeclaringSymbol]
     final def isClass: Boolean = this.isInstanceOf[ClassSymbol]
     final def isPackage: Boolean = this.isInstanceOf[PackageSymbol]
-    final def isRoot: Boolean = isPackage && owner == null
 
     final def asType: TypeSymbol = this.asInstanceOf[TypeSymbol]
     final def asTerm: TermSymbol = this.asInstanceOf[TermSymbol]
-    final def asDeclaringSymbol: DeclaringSymbol = this.asInstanceOf[DeclaringSymbol]
     final def asClass: ClassSymbol = this.asInstanceOf[ClassSymbol]
     final def asPackage: PackageSymbol = this.asInstanceOf[PackageSymbol]
 
@@ -219,6 +215,27 @@ object Symbols {
 
   sealed abstract class TermOrTypeSymbol(override val owner: Symbol) extends Symbol(owner):
     type MatchingSymbolType >: this.type <: TermOrTypeSymbol
+
+    private var myLocalRef: NamedType | Null = null
+
+    /** A reference to this symbol that is valid within its declaring scope.
+      *
+      * If this symbol is a polymorphic type, for example a polymorphic class,
+      * it is left unapplied.
+      */
+    def localRef: NamedType =
+      // overridden in subclasses to provide a better-known result type
+      val local = myLocalRef
+      if local != null then local
+      else
+        val pre = owner match
+          case owner: PackageSymbol => owner.packageRef
+          case owner: ClassSymbol   => owner.thisType
+          case _                    => NoPrefix
+        val computed = NamedType(pre, this)
+        myLocalRef = computed
+        computed
+    end localRef
 
     /** The source language in which this symbol was defined.
       *
@@ -270,6 +287,23 @@ object Symbols {
           case None        => Visibility.Public
           case Some(scope) => Visibility.ScopedPrivate(scope)
     end visibility
+
+    /** Is this symbol an abstract member?
+      *
+      * An abstract member must be implemented in a subclass of its owner.
+      * Term members are abstract if they have no right-hand-side. Type members
+      * are abstract if they are neither type aliases nor opaque type aliases.
+      *
+      * Other kinds of symbols are never abstract members. To test whether a
+      * class is `abstract`, use [[ClassSymbol.isAbstractClass]].
+      *
+      * Note that this is false for `abstract override` members.
+      */
+    final def isAbstractMember: Boolean = this match
+      case self: TermSymbol                    => flags.is(Abstract)
+      case self: TypeMemberSymbol              => self.typeDef.isInstanceOf[TypeMemberDefinition.AbstractType]
+      case _: ClassSymbol | _: TypeParamSymbol => false
+    end isAbstractMember
 
     /** Is this symbol a final member, in the sense that it cannot be overridden?
       *
@@ -430,12 +464,6 @@ object Symbols {
       else if flags.is(Lazy) then TermSymbolKind.LazyVal
       else TermSymbolKind.Val
 
-    /** Is this term definition abstract?
-      *
-      * Note that this is false for `abstract override` members.
-      */
-    final def isAbstract: Boolean = flags.is(Abstract)
-
     /** Is this term definition `abstract override`? */
     final def isAbstractOverride: Boolean = flags.is(AbsOverride)
 
@@ -485,6 +513,9 @@ object Symbols {
     final def moduleClass(using Context): Option[ClassSymbol] =
       if isModuleVal then declaredType.requireType.classSymbol
       else None
+
+    override final def localRef: TermRef =
+      super.localRef.asTermRef
 
     final def staticRef(using Context): TermRef =
       require(isStatic, s"Cannot construct a staticRef for non-static symbol $this")
@@ -593,6 +624,9 @@ object Symbols {
     type DefiningTreeType <: TypeDef | TypeTreeBind
     type MatchingSymbolType = TypeSymbol
 
+    override final def localRef: TypeRef =
+      super.localRef.asTypeRef
+
     protected final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[TypeSymbol] =
       inClass.getDecl(name).filterNot(_.isPrivate)
 
@@ -614,17 +648,20 @@ object Symbols {
   sealed abstract class TypeSymbolWithBounds protected (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner):
     type DefiningTreeType <: TypeMember | TypeParam | TypeTreeBind
 
-    def bounds: TypeBounds
+    @deprecated("use declaredBounds instead", since = "0.9.0")
+    final def bounds: TypeBounds = declaredBounds
+
+    def declaredBounds: TypeBounds
 
     private[tastyquery] final def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
       def default: TypeBounds =
-        bounds.mapBounds(_.asSeenFrom(prefix, owner))
+        declaredBounds.mapBounds(_.asSeenFrom(prefix, owner))
 
       this match
         case sym: ClassTypeParamSymbol =>
           prefix match
             case prefix: ThisType if prefix.cls == owner =>
-              bounds
+              declaredBounds
             case prefix: Type =>
               sym.argForParam(prefix, widenAbstract = true) match
                 case Some(wild: WildcardTypeArg) => wild.bounds
@@ -658,19 +695,19 @@ object Symbols {
     type DefiningTreeType >: TypeParam <: TypeParam | TypeTreeBind
 
     // Reference fields (checked in doCheckCompleted)
-    private var myBounds: TypeBounds | Null = null
+    private var myDeclaredBounds: TypeBounds | Null = null
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
-      if myBounds == null then failNotCompleted("bounds are not initialized")
+      if myDeclaredBounds == null then failNotCompleted("bounds are not initialized")
 
-    private[tastyquery] final def setBounds(bounds: TypeBounds): this.type =
-      if myBounds != null then throw IllegalStateException(s"Trying to re-set the bounds of $this")
-      myBounds = bounds
+    private[tastyquery] final def setDeclaredBounds(bounds: TypeBounds): this.type =
+      if myDeclaredBounds != null then throw IllegalStateException(s"Trying to re-set the bounds of $this")
+      myDeclaredBounds = bounds
       this
 
-    final def bounds: TypeBounds =
-      val local = myBounds
+    final def declaredBounds: TypeBounds =
+      val local = myDeclaredBounds
       if local == null then throw IllegalStateException(s"$this was not assigned type bounds")
       else local
   end TypeParamSymbol
@@ -690,9 +727,6 @@ object Symbols {
 
     @deprecated("use localRef instead", since = "0.9.0")
     final def typeRef: TypeRef = localRef
-
-    /** A reference to this class type param that is valid within its declaring scope. */
-    final def localRef: TypeRef = TypeRef(owner.thisType, this)
 
     /** The argument corresponding to this class type parameter as seen from prefix `pre`.
       *
@@ -812,7 +846,7 @@ object Symbols {
     private[tastyquery] def aliasedTypeAsSeenFrom(pre: Prefix)(using Context): Type =
       aliasedType.asSeenFrom(pre, owner)
 
-    final def bounds: TypeBounds = typeDef match
+    final def declaredBounds: TypeBounds = typeDef match
       case TypeMemberDefinition.TypeAlias(alias)           => TypeAlias(alias)
       case TypeMemberDefinition.AbstractType(bounds)       => bounds
       case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds
@@ -897,9 +931,12 @@ object Symbols {
 
     /** Is this class abstract?
       *
+      * An abstract class cannot be directly instantiated. It must be extended
+      * by a concrete class before doing so.
+      *
       * This is true for `trait`s and `abstract class`es.
       */
-    final def isAbstract: Boolean = flags.isAnyOf(Abstract | Trait)
+    final def isAbstractClass: Boolean = flags.isAnyOf(Abstract | Trait)
 
     /** Is this the hidden class of an `object`? */
     final def isModuleClass: Boolean = flags.is(Module)
@@ -1306,7 +1343,7 @@ object Symbols {
       if isOwnThis then baseTypeOnOwnThisOpt
       else
         baseTypeOnOwnThisOpt.map { (baseTypeOnOwnThis: BaseType) =>
-          asBaseType(baseTypeOnOwnThis.asSeenFrom(tp.prefix, tpCls.owner.asDeclaringSymbol))
+          asBaseType(baseTypeOnOwnThis.asSeenFrom(tp.prefix, tpCls.owner.asInstanceOf[DeclaringSymbol]))
         }
     end baseTypeOfClassTypeRef
 
@@ -1477,22 +1514,6 @@ object Symbols {
       lookup(linearization)
     end resolveMatchingMember
 
-    private var myLocalRef: TypeRef | Null = null
-
-    /** A reference to this (unapplied) class type that is valid within its declaring scope. */
-    private[tastyquery] final def localRef: TypeRef =
-      val local = myLocalRef
-      if local != null then local
-      else
-        val pre = owner match
-          case owner: PackageSymbol => owner.packageRef
-          case owner: ClassSymbol   => owner.thisType
-          case _                    => NoPrefix
-        val computed = TypeRef(pre, this)
-        myLocalRef = computed
-        computed
-    end localRef
-
     private var myThisType: ThisType | Null = null
 
     /** The `ThisType` for this class, as visible from inside this class. */
@@ -1633,6 +1654,9 @@ object Symbols {
         pkg
       }
     end getPackageDeclOrCreate
+
+    /** Is this the root package? */
+    final def isRootPackage: Boolean = owner == null
 
     /** Gets the subpackage with the specified `name`, if it exists.
       *

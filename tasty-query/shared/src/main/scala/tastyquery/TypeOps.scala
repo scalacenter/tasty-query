@@ -86,32 +86,32 @@ private[tastyquery] object TypeOps:
   // Tests around `matches`
 
   /** The implementation for `tp1.matches(tp2)`. */
-  final def matchesType(tp1: TypeOrMethodic, tp2: TypeOrMethodic)(using Context): Boolean = tp1.widen match
+  final def matchesType(tp1: TypeOrMethodic, tp2: TypeOrMethodic)(using Context): Boolean = tp1 match
     case tp1: MethodType =>
-      tp2.widen match
+      tp2 match
         case tp2: MethodType =>
           // implicitness is ignored when matching
           matchingMethodParams(tp1, tp2)
             && matchesType(tp1.resultType, Substituters.substBinders(tp2.resultType, tp2, tp1))
-        case tp2 =>
+        case _ =>
           tp1.paramNames.isEmpty
             && matchesType(tp1.resultType, tp2)
 
     case tp1: PolyType =>
-      tp2.widen match
+      tp2 match
         case tp2: PolyType =>
           matchingPolyParams(tp1, tp2)
             && matchesType(tp1.resultType, Substituters.substBinders(tp2.resultType, tp2, tp1))
         case _ =>
           false
 
-    case _ =>
-      tp2.widen match
+    case tp1: Type =>
+      tp2 match
         case _: PolyType =>
           false
         case tp2: MethodType =>
           matchesType(tp1, tp2.resultType)
-        case tp2 =>
+        case _ =>
           true
   end matchesType
 

@@ -258,7 +258,7 @@ private[pickles] class PickleReader {
               case TypeAlias(alias)       => TypeMemberDefinition.TypeAlias(alias)
             )
           case sym: TypeParamSymbol =>
-            sym.setBounds(bounds)
+            sym.setDeclaredBounds(bounds)
         sym
       case CLASSsym =>
         val tname = name.toTypeName
@@ -347,11 +347,12 @@ private[pickles] class PickleReader {
     if typeParams.isEmpty then tpe1
     else
       /* Make a PolyType with the same type parameters as the class, and
-       * subsitute references to them of the form `C.this.T` by the
+       * substitute references to them of the form `C.this.T` by the
        * corresponding `paramRefs` of the `PolyType`.
        */
       PolyType(typeParams.map(_.name))(
-        pt => typeParams.map(p => Substituters.substLocalThisClassTypeParams(p.bounds, typeParams, pt.paramRefs)),
+        pt =>
+          typeParams.map(p => Substituters.substLocalThisClassTypeParams(p.declaredBounds, typeParams, pt.paramRefs)),
         pt => Substituters.substLocalThisClassTypeParams(tpe1, typeParams, pt.paramRefs)
       )
   end patchConstructorType
@@ -622,7 +623,7 @@ private[pickles] class PickleReader {
           val refined = decls.toList.foldLeft(parent) { (parent, sym) =>
             sym match
               case sym: TypeMemberSymbol =>
-                TypeRefinement(parent, sym.name, sym.bounds)
+                TypeRefinement(parent, sym.name, sym.declaredBounds)
               case sym: TermSymbol =>
                 TermRefinement(parent, sym.kind == TermSymbolKind.Val, sym.name, sym.declaredType)
               case _: TypeParamSymbol | _: ClassSymbol =>
@@ -798,7 +799,7 @@ private[pickles] class PickleReader {
     def mapArg(arg: TypeOrWildcard): TypeOrWildcard = arg match {
       case arg: TypeRef =>
         boundSymOf(arg) match
-          case Some(sym) => WildcardTypeArg(sym.bounds)
+          case Some(sym) => WildcardTypeArg(sym.declaredBounds)
           case None      => arg
       case _ =>
         arg

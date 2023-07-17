@@ -279,7 +279,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
     val tparam = ClassTypeParamSymbol.create(typeName("T"), cls)
     tparam.withFlags(ClassTypeParam | paramFlags, None)
-    tparam.setBounds(NothingAnyBounds)
+    tparam.setDeclaredBounds(NothingAnyBounds)
     tparam.setAnnotations(Nil)
     tparam.checkCompleted()
 
@@ -326,14 +326,14 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
       ClassTypeParamSymbol
         .create(typeName("T" + i), cls)
         .withFlags(ClassTypeParam | Contravariant, None)
-        .setBounds(NothingAnyBounds)
+        .setDeclaredBounds(NothingAnyBounds)
         .setAnnotations(Nil)
     }
     val resultTypeParam =
       ClassTypeParamSymbol
         .create(typeName("R"), cls)
         .withFlags(ClassTypeParam | Covariant, None)
-        .setBounds(NothingAnyBounds)
+        .setDeclaredBounds(NothingAnyBounds)
         .setAnnotations(Nil)
 
     val allTypeParams = inputTypeParams :+ resultTypeParam

@@ -122,7 +122,7 @@ private[tastyquery] object TypeMatching:
             && tryMatchArgs(scrutineeArgs.tail, patternArgs.tail, tparams.tail)
         end tryMatchArgs
 
-        def tryMatchingApply(patternTycon: TypeRef): Boolean = scrutinee.highIfWildcard.widen match
+        def tryMatchingApply(patternTycon: TypeRef): Boolean = scrutinee.highIfWildcard match
           case scrutinee: AppliedType =>
             scrutinee.tycon match
               case scrutineeTycon: TypeRef =>

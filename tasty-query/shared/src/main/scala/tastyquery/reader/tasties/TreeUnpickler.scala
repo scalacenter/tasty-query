@@ -579,7 +579,7 @@ private[tasties] class TreeUnpickler private (
       val name = readName.toTypeName
       val typeDefTree = readTypeDefinition(forOpaque = false)
       val typeBounds = toTypeParamBounds(typeDefTree)
-      paramSymbol.setBounds(typeBounds)
+      paramSymbol.setDeclaredBounds(typeBounds)
       readAnnotationsInModifiers(paramSymbol, end)
       definingTree(paramSymbol, TypeParam(name, typeDefTree, paramSymbol)(spn))
     }
@@ -1494,7 +1494,7 @@ private[tasties] class TreeUnpickler private (
         } else readTypeDefinition(forOpaque = false)
         val sym = caches.getSymbol[LocalTypeParamSymbol](start)
         readAnnotationsInModifiers(sym, end)
-        sym.setBounds(bounds)
+        sym.setDeclaredBounds(bounds)
         definingTree(sym, TypeTreeBind(name, body, sym)(spn))
       }
     case BYNAMEtpt =>

@@ -63,7 +63,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def isApplied(cls: Type => Boolean, argRefs: Seq[TypeOrWildcard => Boolean])(using Context): Boolean =
       tpe match
         case tpe: TermType =>
-          tpe.widen match
+          tpe.widenTermRef match
             case app: AppliedType if cls(app.tycon) =>
               app.args.corresponds(argRefs)((arg, argRef) => argRef(arg))
             case _ => false
@@ -413,7 +413,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case typed @ Typed(expr @ Select(qualifier, SimpleName("head")), _) => (typed, expr, qualifier)
     }
     assert(clue(qualifier.tpe).isRef(isSym))
-    assert(clue(clue(expr.tpe).widen).isRef(tTypeCaptureSym))
+    assert(clue(clue(expr.tpe).widenTermRef).isRef(tTypeCaptureSym))
     assert(typed.tpe.isRef(tTypeCaptureSym))
   }
 
@@ -844,8 +844,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(GenericJavaClass.typeParams).sizeIs == 1)
     val tparam = GenericJavaClass.typeParams.head
 
-    assert(clue(tparam.bounds.low).isNothing)
-    assert(clue(tparam.bounds.high).isFromJavaObject)
+    assert(clue(tparam.declaredBounds.low).isNothing)
+    assert(clue(tparam.declaredBounds.high).isFromJavaObject)
   }
 
   testWithContext("inferred-from-java-object") {
@@ -1101,7 +1101,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     methodName match {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"method")
     }
-    (fun.tpe.widen: @unchecked) match {
+    (fun.tpe.widenTermRef: @unchecked) match {
       case mt: MethodType =>
         assert(clue(mt.paramNames) == List(name"x"))
         assert(clue(mt.paramTypes.head).isRef(defn.IntClass))
@@ -1123,7 +1123,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     methodName match {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"identity")
     }
-    (tapp.tpe.widen: @unchecked) match {
+    (tapp.tpe.widenTermRef: @unchecked) match {
       case mt: MethodType =>
         assert(clue(mt.paramNames) == List(name"x"))
         assert(clue(mt.paramTypes.head).isRef(defn.IntClass))
@@ -1354,7 +1354,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     def extractFormalTypedActualParamTypes(apply: TermTree): (Type, TermType, TermType) = apply match
       case Apply(fun, List(typed @ Typed(arg, _))) =>
-        val (formal, _) = extractParamAndResultType(fun.tpe.widen)
+        val (formal, _) = extractParamAndResultType(fun.tpe.widenTermRef)
         (formal, typed.tpe, arg.tpe)
       case _ =>
         fail("unexpected body", clues(apply))
@@ -1397,7 +1397,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
       assertRepeatedOfInt(formal)
       assertRepeatedOfInt(typed)
-      assertSeqOfInt(actual.widen)
+      assertSeqOfInt(actual.widenTermRef)
     end for
   }
 
@@ -1432,7 +1432,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         fail(s"not a MethodType for $sym", clues(tpe))
     end match
 
-    assert(clue(body.tpe.widen).isRef(BitSetClass))
+    assert(clue(body.tpe.widenTermRef).isRef(BitSetClass))
   }
 
   testWithContext("baseType with higher-kinded type params instantiated to own subclass") {
@@ -2375,7 +2375,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def testDirect(testMethodName: String, targetMethodName: SimpleName, expectedType: TermType => Boolean): Unit =
       val fun @ (_: Select) = rhsOf(testMethodName): @unchecked
       assert(isAnyMethod(clue(fun.symbol), clue(targetMethodName)), testMethodName)
-      assert(expectedType(clue(fun.tpe.widen)), testMethodName)
+      assert(expectedType(clue(fun.tpe.widenTermRef)), testMethodName)
 
     def testTypeApply(testMethodName: String, targetMethodName: SimpleName, expectedType: TermType => Boolean): Unit =
       val rhs @ TypeApply(fun: Select, _) = rhsOf(testMethodName): @unchecked
@@ -2865,12 +2865,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(typeParams).map(_.name) == List(typeName("A"), typeName("CC"), typeName("C")))
 
     val tpA = typeParams(0)
-    assert(clue(tpA.bounds).low.isNothing)
-    assert(clue(tpA.bounds).high.isAny)
+    assert(clue(tpA.declaredBounds).low.isNothing)
+    assert(clue(tpA.declaredBounds).high.isAny)
 
     val tpCC = typeParams(1)
-    assert(clue(tpCC.bounds).low.isNothing)
-    tpCC.bounds.high match
+    assert(clue(tpCC.declaredBounds).low.isNothing)
+    tpCC.declaredBounds.high match
       case tl: TypeLambda =>
         assert(clue(tl.paramNames) == List(typeName("X")))
         val paramRef = tl.paramRefs.head
@@ -2879,8 +2879,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         fail("unexpected upper bound for CC", clues(high))
 
     val tpC = typeParams(2)
-    assert(clue(tpC.bounds).low.isNothing)
-    clue(tpC.bounds).high match
+    assert(clue(tpC.declaredBounds).low.isNothing)
+    clue(tpC.declaredBounds).high match
       case high: AppliedType =>
         assert(clue(high).tycon.isRef(MutableSeqClass))
         high.args.head match

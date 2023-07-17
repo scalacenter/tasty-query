@@ -257,8 +257,8 @@ object Types {
     /** The name of the type parameter. */
     def name: TypeName
 
-    /** The bounds of the type parameter. */
-    def bounds: TypeBounds
+    /** The declared bounds of the type parameter. */
+    def declaredBounds: TypeBounds
   end TypeConstructorParam
 
   sealed abstract class TypeMappable:
@@ -406,7 +406,17 @@ object Types {
   sealed abstract class TermType extends TypeMappable:
     private[tastyquery] type ThisTypeMappableType >: this.type <: TermType
 
+    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
     def widen(using Context): TermType
+
+    /** Widens `TermRef`s one level to their `underlyingOrMethodic` type.
+      *
+      * - If this term type is a `TermRef`, returns `this.underlyingOrMethodic`.
+      * - Otherwise, returns `this`.
+      */
+    final def widenTermRef(using Context): TermType = this match
+      case self: TermRef => self.underlyingOrMethodic
+      case _             => this
   end TermType
 
   /** A type or a methodic type.
@@ -417,6 +427,7 @@ object Types {
     private[tastyquery] type ThisTypeMappableType >: this.type <: TypeOrMethodic
 
     /** Widen singleton types, ByNameTypes, AnnotatedTypes and RefinedTypes. */
+    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
     final def widen(using Context): TypeOrMethodic = this match
       case _: TypeRef        => this // fast path for most frequent case
       case tp: TermRef       => tp.underlyingOrMethodic.widen
@@ -484,20 +495,27 @@ object Types {
 
     /** The class symbol of this type, None if reduction is not possible */
     @tailrec
-    private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this.widen match
+    private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this match
       case TypeRef.OfClass(cls) =>
         Some(cls)
       case tpe: TypeRef =>
         tpe.optAliasedType match
           case Some(alias) => alias.classSymbol
           case None        => None
+      case tpe: TermRef =>
+        tpe.underlyingOrMethodic match
+          case underlying: Type => underlying.classSymbol
+          case _: MethodicType  => None
       case tpe: TypeProxy =>
         tpe.superType.classSymbol
       case tpe: TypeLambda =>
         // apparently we need this :(
         tpe.resultType.classSymbol
-      case _ =>
+      case _: NothingType | _: AnyKindType | _: OrType | _: AndType =>
         None
+      case _: CustomTransientGroundType =>
+        None
+    end classSymbol
 
     /** The type parameters of this type, if it is a type constructor.
       *
@@ -958,8 +976,10 @@ object Types {
          * module class.
          * Terms cannot otherwise appear in paths.
          */
-        val cls = if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].asClass else owner
-        cls.asDeclaringSymbol.getDecl(name).getOrElse {
+        val cls =
+          if owner.isTerm then owner.asTerm.declaredType.asInstanceOf[TypeRef].asClass
+          else owner.asInstanceOf[DeclaringSymbol]
+        cls.getDecl(name).getOrElse {
           throw new MemberNotFoundException(owner, name)
         }
       }
@@ -1117,6 +1137,7 @@ object Types {
 
     def fullyQualifiedName: FullyQualifiedName = symbol.fullName
 
+    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
     def widen(using Context): PackageRef = this
 
     private[tastyquery] final def resolveMember(name: Name)(using Context): ResolveMemberResult =
@@ -1556,7 +1577,7 @@ object Types {
       if params.isEmpty then resultType
       else
         val paramNames = params.map(_.name)
-        val paramTypeBounds = params.map(_.bounds)
+        val paramTypeBounds = params.map(_.declaredBounds)
         apply(paramNames)(
           tpLambda => paramTypeBounds.map(tpLambda.integrate(params, _)),
           tpLambda => tpLambda.integrate(params, resultType).asInstanceOf[RT]
@@ -1788,7 +1809,7 @@ object Types {
         val paramNames = params.map(_.name)
         val paramSyms = params.map(_.symbol)
         apply(paramNames)(
-          polyType => paramSyms.map(param => polyType.integrate(paramSyms, param.bounds)),
+          polyType => paramSyms.map(param => polyType.integrate(paramSyms, param.declaredBounds)),
           polyType => polyType.integrate(paramSyms, resultType)
         )
   end PolyType
@@ -1824,7 +1845,7 @@ object Types {
     def name: TypeName =
       typeLambda.paramNames(num)
 
-    def bounds: TypeBounds =
+    def declaredBounds: TypeBounds =
       typeLambda.paramTypeBounds(num)
   end TypeLambdaParam
 
@@ -1876,12 +1897,12 @@ object Types {
       new TypeLambda(paramNames)(paramInfosExp, resultTypeExp)
 
     private[tastyquery] def fromParams(params: List[TypeParam])(resultTypeExp: TypeLambda => Type): TypeLambda =
-      apply(params.map(_.name))(_ => params.map(_.symbol.bounds), resultTypeExp)
+      apply(params.map(_.name))(_ => params.map(_.symbol.declaredBounds), resultTypeExp)
 
     private[tastyquery] def fromParamInfos(params: List[TypeConstructorParam])(resultTypeExp: TypeLambda => Type)(
       using Context
     ): TypeLambda =
-      apply(params.map(_.name))(_ => params.map(_.bounds), resultTypeExp)
+      apply(params.map(_.name))(_ => params.map(_.declaredBounds), resultTypeExp)
   end TypeLambda
 
   final class TypeParamRef(val binders: TypeBinders, val paramNum: Int) extends TypeProxy with ParamRef {
@@ -2167,7 +2188,7 @@ object Types {
       result: Type
     ): MatchTypeCase =
       val paramNames = params.map(_.name)
-      val paramTypeBounds = params.map(_.bounds)
+      val paramTypeBounds = params.map(_.declaredBounds)
       apply(paramNames)(
         mtc => paramTypeBounds.map(mtc.integrate(params, _)),
         mtc => mtc.integrate(params, pattern),

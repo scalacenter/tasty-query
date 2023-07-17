@@ -2325,7 +2325,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   testUnpickle("uninitialized-var", "simple_trees.Uninitialized") { tree =>
     val wildcardRHSCheck: StructureCheck = {
       case ValDef(SimpleName("wildcardRHS"), TypeIdent(TypeName(SimpleName("Int"))), Some(Ident(nme.Wildcard)), sym)
-          if !sym.isAbstract =>
+          if !sym.isAbstractMember =>
     }
     assert(containsSubtree(wildcardRHSCheck)(clue(tree)))
 
@@ -2335,7 +2335,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeIdent(TypeName(SimpleName("Product"))),
             Some(Select(_, SimpleName("uninitialized"))),
             sym
-          ) if !sym.isAbstract =>
+          ) if !sym.isAbstractMember =>
     }
     assert(containsSubtree(uninitializedRHSCheck)(clue(tree)))
 
@@ -2345,13 +2345,14 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeIdent(TypeName(SimpleName("String"))),
             Some(Ident(SimpleName("uninitialized"))),
             sym
-          ) if !sym.isAbstract =>
+          ) if !sym.isAbstractMember =>
     }
     assert(containsSubtree(renamedUninitializedRHSCheck)(clue(tree)))
 
     // Confidence check
     val abstractVarCheck: StructureCheck = {
-      case ValDef(SimpleName("abstractVar"), TypeIdent(TypeName(SimpleName("Int"))), None, sym) if sym.isAbstract =>
+      case ValDef(SimpleName("abstractVar"), TypeIdent(TypeName(SimpleName("Int"))), None, sym)
+          if sym.isAbstractMember =>
     }
     assert(containsSubtree(abstractVarCheck)(clue(tree)))
   }
