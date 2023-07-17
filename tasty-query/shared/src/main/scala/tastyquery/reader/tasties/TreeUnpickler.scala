@@ -723,9 +723,8 @@ private[tasties] class TreeUnpickler private (
     tree
 
   private def makeIdent(name: TermName, tpe: TermType, spn: Span): Ident =
-    val tpe1: TermRef | PackageRef = tpe match
-      case tpe: TermRef    => tpe
-      case tpe: PackageRef => tpe
+    val tpe1 = tpe match
+      case tpe: TermReferenceType => tpe
       case _ => throw TastyFormatException(s"unexpected type $tpe for Ident name $name span $spn in $posErrorMsg")
     Ident(name)(tpe1)(spn)
   end makeIdent
@@ -1075,9 +1074,9 @@ private[tasties] class TreeUnpickler private (
     * would not be consistent with `Trees.Select.tpe` and
     * `Trees.TermRefTypeTree.toType`.
     */
-  private def readPackageRef(): PackageRef | TermRef =
+  private def readPackageRef(): TermReferenceType =
     val fullyQualifiedName = readFullyQualifiedName
-    fullyQualifiedName.path.foldLeft[PackageRef | TermRef](defn.RootPackage.packageRef) { (prefix, name) =>
+    fullyQualifiedName.path.foldLeft[TermReferenceType](defn.RootPackage.packageRef) { (prefix, name) =>
       val termName = name.asInstanceOf[TermName] // readFullyQualifiedName only reads TermName's in paths
       NamedType.possibleSelFromPackage(prefix, termName)
     }
