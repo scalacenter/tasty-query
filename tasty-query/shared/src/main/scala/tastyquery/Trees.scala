@@ -277,7 +277,7 @@ object Trees {
   // --- TermTrees and PatternTrees -------------------------------------------
 
   /** name */
-  final case class Ident(name: TermName)(tpe: TermRef | PackageRef)(span: Span) extends TermTree(span):
+  final case class Ident(name: TermName)(tpe: TermReferenceType)(span: Span) extends TermTree(span):
     override protected def computeAsTypePrefix: NonEmptyPrefix = tpe
 
     protected final def calculateType(using Context): TermType = tpe
@@ -300,7 +300,7 @@ object Trees {
     override protected def computeAsTypePrefix: NonEmptyPrefix =
       makeSelection(qualifier.toTypePrefix)
 
-    protected final def calculateType(using Context): TermRef | PackageRef =
+    protected final def calculateType(using Context): TermReferenceType =
       qualifier.tpe match
         case prefix: NonEmptyPrefix =>
           makeSelection(prefix)
@@ -308,7 +308,7 @@ object Trees {
           throw InvalidProgramStructureException(s"Invalid selection from $qualifier with type $qualType")
     end calculateType
 
-    private def makeSelection(qualifierType: NonEmptyPrefix): TermRef | PackageRef =
+    private def makeSelection(qualifierType: NonEmptyPrefix): TermReferenceType =
       selectOwner match
         case Some(selOwner) => TermRef(qualifierType, LookupIn(selOwner, name.asInstanceOf[SignedName]))
         case None           => NamedType.possibleSelFromPackage(qualifierType, name)

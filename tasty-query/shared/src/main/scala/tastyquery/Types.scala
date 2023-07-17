@@ -90,6 +90,10 @@ import tastyquery.Trees.*
   * TypeOrWildcard             either a type or a wildcard, used in the type arguments of `AppliedType`
   *  +- Type
   *  +- WildcardTypeArg        `? >: L <: H`
+  *
+  * TermSelectionType          the reference type of an `Ident` or `Select`
+  *  +- PackageRef
+  *  +- TermRef
   * ```
   *
   * All of the above types inherit from `TypeMappable`, which represents things
@@ -418,6 +422,12 @@ object Types {
       case self: TermRef => self.underlyingOrMethodic
       case _             => this
   end TermType
+
+  /** The type of term reference, i.e., of an `Ident` or `Select`.
+    *
+    * It is either a `TermRef` or a `PackageRef`.
+    */
+  sealed trait TermReferenceType extends TermType with NonEmptyPrefix
 
   /** A type or a methodic type.
     *
@@ -943,7 +953,7 @@ object Types {
 
   object NamedType {
 
-    private[tastyquery] def possibleSelFromPackage(prefix: NonEmptyPrefix, name: TermName): (TermRef | PackageRef) =
+    private[tastyquery] def possibleSelFromPackage(prefix: NonEmptyPrefix, name: TermName): TermReferenceType =
       prefix match
         case prefix: PackageRef if name.isInstanceOf[SimpleName] =>
           prefix.symbol.getPackageDecl(name.asSimpleName) match
@@ -991,7 +1001,8 @@ object Types {
     val prefix: Prefix,
     private var myDesignator: TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
   ) extends NamedType
-      with SingletonType {
+      with SingletonType
+      with TermReferenceType {
 
     type ThisName = TermName
     type ThisSymbolType = TermSymbol
@@ -1132,7 +1143,10 @@ object Types {
     end resolveLookupIn
   end TermRef
 
-  final class PackageRef private[tastyquery] (val symbol: PackageSymbol) extends TermType with NonEmptyPrefix {
+  final class PackageRef private[tastyquery] (val symbol: PackageSymbol)
+      extends TermType
+      with NonEmptyPrefix
+      with TermReferenceType {
     private[tastyquery] type ThisTypeMappableType = PackageRef
 
     def fullyQualifiedName: FullyQualifiedName = symbol.fullName
