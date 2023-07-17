@@ -368,7 +368,7 @@ object Trees {
     import Apply.*
 
     private def resolveMethodType(funTpe: TermType, args: List[TermType])(using Context): TermType =
-      funTpe.widen match
+      funTpe.widenTermRef match
         case funTpe: MethodType =>
           for arg <- args do
             if !arg.isInstanceOf[Type] then
@@ -451,7 +451,7 @@ object Trees {
   final case class TypeApply(fun: TermTree, args: List[TypeTree])(span: Span) extends TermTree(span) {
 
     private def resolvePolyType(funTpe: TermType, args: List[TypeOrWildcard])(using Context): TermType =
-      funTpe.widen match
+      funTpe.widenTermRef match
         case funTpe: PolyType =>
           funTpe.instantiate(args)
         case tpe =>
@@ -527,7 +527,7 @@ object Trees {
         tpt.toType
 
       case None =>
-        val methodType = meth.tpe.widen match
+        val methodType = meth.tpe.widenTermRef match
           case mt: MethodType if !mt.resultType.isInstanceOf[MethodicType] =>
             mt
           case mt =>

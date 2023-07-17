@@ -160,13 +160,8 @@ private[tastyquery] object Subtyping:
           isSubType(alias, tp2)
             || level3(tp1, tp2)
         case _ =>
-          isBottom(tp1)
-            || level3(tp1, tp2)
+          level3(tp1, tp2)
       end match
-
-    case tp1: TermRef =>
-      isBottom(tp1)
-        || level3(tp1, tp2)
 
     case tp1: ThisType =>
       val cls1 = tp1.cls
@@ -196,8 +191,7 @@ private[tastyquery] object Subtyping:
   private def level3(tp1: Type, tp2: Type)(using Context): Boolean = tp2 match
     case TypeRef.OfClass(cls2) =>
       if cls2.typeParams.isEmpty then
-        if isBottom(tp1) then true
-        else if tp1.isLambdaSub then false // should be tp1.hasHigherKind, but the scalalib does not like that
+        if tp1.isLambdaSub then false // should be tp1.hasHigherKind, but the scalalib does not like that
         else if cls2 == defn.AnyClass then true
         else level3WithBaseType(tp1, tp2, cls2)
       else
@@ -293,7 +287,7 @@ private[tastyquery] object Subtyping:
     if tparams.isEmpty then
       throw InvalidProgramStructureException(s"found type constructor $tycon2 without type params in AppliedType")
 
-    def isMatchingApply(tp1: Type): Boolean = tp1.widen match
+    def isMatchingApply(tp1: Type): Boolean = tp1 match
       case tp1Applied: AppliedType =>
         tp1Applied.tycon match
           case tycon1: TypeRef =>
@@ -544,9 +538,6 @@ private[tastyquery] object Subtyping:
           case pre2: Type               => isSubType(pre1, pre2)
           case NoPrefix | _: PackageRef => false
   end isSubPrefix
-
-  private def isBottom(tp: Type)(using Context): Boolean =
-    tp.widen.isInstanceOf[NothingType]
 
   private def isTypeRefOf(tp: TypeOrMethodic, cls: ClassSymbol)(using Context): Boolean = tp match
     case tp: TypeRef => tp.isSpecificClass(cls)

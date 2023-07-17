@@ -406,7 +406,17 @@ object Types {
   sealed abstract class TermType extends TypeMappable:
     private[tastyquery] type ThisTypeMappableType >: this.type <: TermType
 
+    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
     def widen(using Context): TermType
+
+    /** Widens `TermRef`s one level to their `underlyingOrMethodic` type.
+      *
+      * - If this term type is a `TermRef`, returns `this.underlyingOrMethodic`.
+      * - Otherwise, returns `this`.
+      */
+    final def widenTermRef(using Context): TermType = this match
+      case self: TermRef => self.underlyingOrMethodic
+      case _             => this
   end TermType
 
   /** A type or a methodic type.
@@ -417,6 +427,7 @@ object Types {
     private[tastyquery] type ThisTypeMappableType >: this.type <: TypeOrMethodic
 
     /** Widen singleton types, ByNameTypes, AnnotatedTypes and RefinedTypes. */
+    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
     final def widen(using Context): TypeOrMethodic = this match
       case _: TypeRef        => this // fast path for most frequent case
       case tp: TermRef       => tp.underlyingOrMethodic.widen
@@ -484,20 +495,27 @@ object Types {
 
     /** The class symbol of this type, None if reduction is not possible */
     @tailrec
-    private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this.widen match
+    private[tastyquery] final def classSymbol(using Context): Option[ClassSymbol] = this match
       case TypeRef.OfClass(cls) =>
         Some(cls)
       case tpe: TypeRef =>
         tpe.optAliasedType match
           case Some(alias) => alias.classSymbol
           case None        => None
+      case tpe: TermRef =>
+        tpe.underlyingOrMethodic match
+          case underlying: Type => underlying.classSymbol
+          case _: MethodicType  => None
       case tpe: TypeProxy =>
         tpe.superType.classSymbol
       case tpe: TypeLambda =>
         // apparently we need this :(
         tpe.resultType.classSymbol
-      case _ =>
+      case _: NothingType | _: AnyKindType | _: OrType | _: AndType =>
         None
+      case _: CustomTransientGroundType =>
+        None
+    end classSymbol
 
     /** The type parameters of this type, if it is a type constructor.
       *
@@ -1119,6 +1137,7 @@ object Types {
 
     def fullyQualifiedName: FullyQualifiedName = symbol.fullName
 
+    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
     def widen(using Context): PackageRef = this
 
     private[tastyquery] final def resolveMember(name: Name)(using Context): ResolveMemberResult =

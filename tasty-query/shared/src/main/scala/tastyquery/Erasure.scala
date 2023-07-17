@@ -20,9 +20,7 @@ private[tastyquery] object Erasure:
 
   def erase(tpe: Type, language: SourceLanguage)(using Context): ErasedTypeRef =
     given SourceLanguage = language
-    tpe match
-      case _: ByNameType => ClassRef(defn.Function0Class)
-      case _             => finishErase(preErase(tpe))
+    finishErase(preErase(tpe))
   end erase
 
   /** First pass of erasure, where some special types are preserved as is.
@@ -67,7 +65,7 @@ private[tastyquery] object Erasure:
       case tpe: WildcardTypeArg => arrayOfBounds(tpe.bounds)
     end arrayOf
 
-    tpe.widen match
+    tpe match
       case tpe: AppliedType =>
         tpe.tycon match
           case TypeRef.OfClass(cls) =>
@@ -89,6 +87,8 @@ private[tastyquery] object Erasure:
                 preErase(tpe.underlying)
           case _ =>
             preErase(tpe.underlying)
+      case tpe: SingletonType =>
+        preErase(tpe.underlying)
       case tpe: TypeParamRef =>
         preErase(tpe.bounds.high)
       case tpe: MatchType =>
@@ -102,15 +102,19 @@ private[tastyquery] object Erasure:
           case SourceLanguage.Java   => preErase(tpe.first)
           case SourceLanguage.Scala2 => preErase(Scala2Erasure.eraseAndType(tpe))
           case SourceLanguage.Scala3 => erasedGlb(preErase(tpe.first), preErase(tpe.second))
+      case tpe: AnnotatedType =>
+        preErase(tpe.typ)
+      case tpe: RefinedType =>
+        preErase(tpe.parent)
       case tpe: RecType =>
         preErase(tpe.parent)
+      case _: ByNameType =>
+        defn.Function0Class.erasure
       case _: NothingType =>
         defn.ErasedNothingClass.erasure
       case _: AnyKindType =>
         defn.ObjectClass.erasure
-      case _: SingletonType | _: ByNameType | _: AnnotatedType | _: RefinedType =>
-        throw AssertionError(s"Unexpected widened type $tpe")
-      case _: MethodicType | _: TypeLambda | _: CustomTransientGroundType =>
+      case _: TypeLambda | _: CustomTransientGroundType =>
         throw IllegalArgumentException(s"Unexpected type in erasure: $tpe")
   end preErase
 

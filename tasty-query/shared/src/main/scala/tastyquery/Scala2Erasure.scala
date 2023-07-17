@@ -91,7 +91,7 @@ private[tastyquery] object Scala2Erasure:
     * `isNonBottomSubClass` behaves like it would in Scala 2, in particular
     * this lets us strip all aliases.
     */
-  private def pseudoSymbol(tp: Type)(using Context): PseudoSymbol = widenDealias(tp) match
+  private def pseudoSymbol(tp: Type)(using Context): PseudoSymbol = tp.dealias match
     case tpw: Scala2RefinedType =>
       checkSupported(tpw)
       tpw
@@ -118,11 +118,6 @@ private[tastyquery] object Scala2Erasure:
         s"Internal error: unhandled class ${tpw.getClass} for type $tpw in pseudoSymbol($tp)"
       )
   end pseudoSymbol
-
-  private def widenDealias(tp: TypeOrMethodic)(using Context): TypeOrMethodic =
-    val tp1 = tp.widen.dealias
-    if tp1 eq tp then tp
-    else widenDealias(tp1)
 
   extension (psym: PseudoSymbol)(using Context)
     /** Would these two pseudo-symbols be represented with the same symbol in Scala 2? */
