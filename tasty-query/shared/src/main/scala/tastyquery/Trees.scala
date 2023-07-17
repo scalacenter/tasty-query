@@ -276,22 +276,33 @@ object Trees {
 
   // --- TermTrees and PatternTrees -------------------------------------------
 
-  /** name */
-  final case class Ident(name: TermName)(tpe: TermReferenceType)(span: Span) extends TermTree(span):
-    override protected def computeAsTypePrefix: NonEmptyPrefix = tpe
+  /** An `Ident` or a `Select`. */
+  sealed abstract class TermReferenceTree(span: Span) extends TermTree(span):
+    final def referenceType(using Context): TermReferenceType =
+      tpe.asInstanceOf[TermReferenceType]
 
-    protected final def calculateType(using Context): TermType = tpe
+    // Refine the result type to make sure that `tpe` is always a `TermReferenceType`.
+    protected def calculateType(using Context): TermReferenceType
 
-    def symbol(using Context): TermSymbol | PackageSymbol = tpe match
+    final def symbol(using Context): TermSymbol | PackageSymbol = referenceType match
       case termRef: TermRef       => termRef.symbol
       case packageRef: PackageRef => packageRef.symbol
+
+    def withSpan(span: Span): TermReferenceTree
+  end TermReferenceTree
+
+  /** name */
+  final case class Ident(name: TermName)(tpe: TermReferenceType)(span: Span) extends TermReferenceTree(span):
+    override protected def computeAsTypePrefix: NonEmptyPrefix = tpe
+
+    protected final def calculateType(using Context): TermReferenceType = tpe
 
     override final def withSpan(span: Span): Ident = Ident(name)(tpe)(span)
   end Ident
 
   /** qualifier.termName */
   final case class Select(qualifier: TermTree, name: TermName)(selectOwner: Option[TypeRef])(span: Span)
-      extends TermTree(span):
+      extends TermReferenceTree(span):
     require(
       selectOwner.isEmpty || name.isInstanceOf[SignedName],
       s"illegal section of unsigned name '$name' in owner ${selectOwner.get}"
@@ -313,11 +324,6 @@ object Trees {
         case Some(selOwner) => TermRef(qualifierType, LookupIn(selOwner, name.asInstanceOf[SignedName]))
         case None           => NamedType.possibleSelFromPackage(qualifierType, name)
     end makeSelection
-
-    def symbol(using Context): TermSymbol | PackageSymbol = tpe match
-      case termRef: TermRef       => termRef.symbol
-      case packageRef: PackageRef => packageRef.symbol
-      case tpe                    => throw AssertionError(s"unexpected type $tpe in Select node")
 
     override def withSpan(span: Span): Select = Select(qualifier, name)(selectOwner)(span)
   end Select
