@@ -19,6 +19,7 @@ private[tastyquery] object Flags:
 
     def |(otherFlags: FlagSet): FlagSet = bits | otherFlags.bits
     def &(otherFlags: FlagSet): FlagSet = bits & otherFlags.bits
+    def &~(otherFlags: FlagSet): FlagSet = bits & ~otherFlags.bits
 
     def show: String =
       val result = new java.lang.StringBuilder

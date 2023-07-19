@@ -277,4 +277,24 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     testVisibility("scopedProtectedField", Visibility.ScopedProtected(simpleTreesPkg))
     testVisibility("publicField", Visibility.Public)
   }
+
+  testWithContext("scala-2-getters", "scala.StringContext", "scala.collection.mutable.ArrayBuffer") {
+    val StringContextClass = ctx.findTopLevelClass("scala.StringContext")
+
+    val partsSym = StringContextClass.findDecl(termName("parts"))
+    assert(clue(partsSym.kind) == TermSymbolKind.Val)
+    assert(clue(partsSym.visibility) == Visibility.Public)
+
+    assert(clue(StringContextClass.getDecl(termName("parts "))).isEmpty)
+    assert(!clue(StringContextClass.declarations).exists(_.name == termName("parts ")))
+
+    val ArrayBufferClass = ctx.findTopLevelClass("scala.collection.mutable.ArrayBuffer")
+
+    val size0Sym = ArrayBufferClass.findDecl(termName("size0"))
+    assert(clue(size0Sym.kind) == TermSymbolKind.Var)
+    assert(clue(size0Sym.visibility) == Visibility.Protected)
+
+    assert(clue(ArrayBufferClass.getDecl(termName("size0 "))).isEmpty)
+    assert(!clue(ArrayBufferClass.declarations).exists(_.name == termName("size0 ")))
+  }
 }

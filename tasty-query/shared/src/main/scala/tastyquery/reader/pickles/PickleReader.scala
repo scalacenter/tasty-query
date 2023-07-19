@@ -214,11 +214,20 @@ private[pickles] class PickleReader {
     if storedWhileReadingOwner != null then return storedWhileReadingOwner.asInstanceOf[MaybeExternalSymbol]
 
     val pickleFlags = readPickleFlags(name1.isTypeName)
-    val flags = pickleFlagsToFlags(pickleFlags)
+    val flags0 = pickleFlagsToFlags(pickleFlags)
     val name =
-      if pickleFlags.isType && flags.is(Module) then name1.toTermName.withObjectSuffix.toTypeName
-      else if flags.is(Method) && (name1 == Scala2Constructor || name1 == Scala2TraitConstructor) then nme.Constructor
+      if pickleFlags.isType && flags0.is(Module) then name1.toTermName.withObjectSuffix.toTypeName
+      else if flags0.is(Method) && (name1 == Scala2Constructor || name1 == Scala2TraitConstructor) then nme.Constructor
       else name1
+
+    // Adapt the flags of getters so they become like vals/vars instead
+    val flags =
+      if flags0.isAllOf(Method | Accessor) && !name.toString().endsWith("_=") then
+        val flags1 = flags0 &~ (Method | Accessor)
+        if flags1.is(StableRealizable) then flags1
+        else flags1 | Mutable
+      else flags0
+    end flags
 
     val (privateWithin, infoRef) = {
       val ref = pkl.readNat()
@@ -291,10 +300,16 @@ private[pickles] class PickleReader {
         cls.withGivenSelfType(givenSelfType)
         cls
       case VALsym =>
-        // Discard `$extension` methods, as they should not be seen from a Scala 3 point of view
+        /* Discard symbols that should not be seen from a Scala 3 point of view:
+         * - private fields generated for vals/vars (with a trailing ' ' in their name)
+         * - `$extension` methods
+         */
         val forceNotDeclaration = name1 match
-          case SimpleName(str) => flags.is(Method) && str.endsWith("$extension")
-          case _               => false
+          case SimpleName(str) =>
+            if flags.is(Method) then str.endsWith("$extension")
+            else if flags.isAllOf(Private | Local, butNotAnyOf = Method) then str.endsWith(" ")
+            else false
+          case _ => false
         val sym =
           if pickleFlags.isExistential || forceNotDeclaration then
             TermSymbol.createNotDeclaration(name.toTermName, owner)
