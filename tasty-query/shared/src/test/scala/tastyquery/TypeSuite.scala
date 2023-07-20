@@ -2970,7 +2970,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
                   case cRefinement: TypeRefinement =>
                     cRefinement.refinedBounds match
                       case TypeAlias(appliedCC0: AppliedType) =>
-                        //assert(clue(appliedCC0.tycon) eq paramRefs(0))
+                        assert(clue(appliedCC0.tycon) eq paramRefs(0))
                         assert(clue(appliedCC0.args).sizeIs == 2)
                         appliedCC0.args(0) match
                           case alphaK: TypeRef =>

@@ -2097,6 +2097,10 @@ object Types {
     final def expand(recThisType: Type)(using Context): Type =
       Substituters.substRecThis(parent, this, recThisType)
 
+    private[tastyquery] def derivedRecType(parent: Type): RecType =
+      if parent eq this.parent then this
+      else RecType(rt => Substituters.substBinders(parent, this, rt))
+
     override def toString(): String = s"RecType@$debugID($parent)"
 
     def debugID: Int = System.identityHashCode(this)
@@ -2300,7 +2304,7 @@ object Types {
   final class SkolemType(val tpe: Type) extends SingletonType {
     override def underlying(using Context): Type = tpe
 
-    private[tastyquery] def derivedSkolemType(tpe: Type)(using Context): SkolemType =
+    private[tastyquery] def derivedSkolemType(tpe: Type): SkolemType =
       if (tpe eq this.tpe) this else SkolemType(tpe)
 
     override def toString: String = s"SkolemType@$debugID($tpe)"
