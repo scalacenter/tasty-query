@@ -228,10 +228,17 @@ object Symbols {
       val local = myLocalRef
       if local != null then local
       else
-        val pre = owner match
-          case owner: PackageSymbol => owner.packageRef
-          case owner: ClassSymbol   => owner.thisType
-          case _                    => NoPrefix
+        val pre = this match
+          case self: ClassSymbol if self.isRefinementClass =>
+            /* Refinement classes are not declarations of their owner.
+             * They must be referenced without any prefix.
+             */
+            NoPrefix
+          case _ =>
+            owner match
+              case owner: PackageSymbol => owner.packageRef
+              case owner: ClassSymbol   => owner.thisType
+              case _                    => NoPrefix
         val computed = NamedType(pre, this)
         myLocalRef = computed
         computed
@@ -952,6 +959,9 @@ object Symbols {
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
       isValueClass && this != defn.AnyValClass && !defn.isPrimitiveValueClass(this)
+
+    private[tastyquery] def isRefinementClass: Boolean =
+      name == tpnme.RefinedClassMagic
 
     /** Get the companion class of this class, if it exists:
       * - for `class C` => `object class C[$]`

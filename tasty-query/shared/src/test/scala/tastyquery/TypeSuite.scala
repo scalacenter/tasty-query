@@ -2947,4 +2947,46 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     testRefinement(UsingGivenClass, "refinementWithUsing", expectContextual = true, expectImplicit = false)
     testRefinement(UsingGivenClass, "refinementWithImplicit", expectContextual = false, expectImplicit = true)
   }
+
+  testWithContext("scala-2-recursive-refinements") {
+    val IsMapClass = ctx.findTopLevelModuleClass("scala.collection.generic.IsMap")
+
+    val mapOpsIsMapSym = IsMapClass.findNonOverloadedDecl(termName("mapOpsIsMap"))
+
+    mapOpsIsMapSym.declaredType match
+      case pt: PolyType =>
+        assert(clue(pt.paramNames) == List(typeName("CC0"), typeName("K0"), typeName("V0")))
+        val paramRefs = pt.paramRefs
+
+        def failWrongResultType(): Nothing =
+          fail(s"unexpected result type: ${pt.resultType}")
+
+        // { α => (((scala.collection.generic.IsMap[CC0[K0, V0]] { type V = V0 }) { type C = CC0[α.K, α.V] }) { type K = K0 }) }
+        pt.resultType match
+          case rt: RecType =>
+            rt.parent match
+              case kRefinement: TypeRefinement =>
+                kRefinement.parent match
+                  case cRefinement: TypeRefinement =>
+                    cRefinement.refinedBounds match
+                      case TypeAlias(appliedCC0: AppliedType) =>
+                        //assert(clue(appliedCC0.tycon) eq paramRefs(0))
+                        assert(clue(appliedCC0.args).sizeIs == 2)
+                        appliedCC0.args(0) match
+                          case alphaK: TypeRef =>
+                            assert(clue(alphaK).name == typeName("K"))
+                            assert(clue(alphaK).prefix eq rt.recThis)
+                          case _ =>
+                            failWrongResultType()
+                      case _ =>
+                        failWrongResultType()
+                  case _ =>
+                    failWrongResultType()
+              case _ =>
+                failWrongResultType()
+          case _ =>
+            failWrongResultType()
+      case pt =>
+        fail(s"not a PolyType: ${pt.showBasic}")
+  }
 }
