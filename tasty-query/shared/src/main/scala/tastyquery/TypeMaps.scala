@@ -35,6 +35,8 @@ private[tastyquery] object TypeMaps {
 
     protected def derivedSelect(tp: NamedType, pre: Type): Type =
       tp.derivedSelect(pre)
+    protected def derivedRecType(tp: RecType, parent: Type): RecType =
+      tp.derivedRecType(parent)
     protected def derivedTypeRefinement(tp: TypeRefinement, parent: Type, refinedBounds: TypeBounds): Type =
       tp.derivedTypeRefinement(parent, tp.refinedName, refinedBounds)
     protected def derivedTermRefinement(tp: TermRefinement, parent: Type, refinedType: TypeOrMethodic): Type =
@@ -55,6 +57,8 @@ private[tastyquery] object TypeMaps {
       tp.derivedByNameType(restpe)
     protected def derivedLambdaType(tp: LambdaType, formals: List[tp.PInfo], restpe: tp.ResultType): tp.This =
       tp.derivedLambdaType(tp.paramNames, formals, restpe)
+    protected def derivedSkolemType(tp: SkolemType, tpe: Type): SkolemType =
+      tp.derivedSkolemType(tpe)
 
     protected def derivedTypeAlias(tp: TypeAlias, alias: Type): TypeBounds =
       tp.derivedTypeAlias(alias)
@@ -111,6 +115,9 @@ private[tastyquery] object TypeMaps {
         case tp: AppliedType =>
           tp.map(this(_), this(_))
 
+        case _: ThisType | _: SuperType | _: ConstantType | _: BoundType | _: NothingType | _: AnyKindType =>
+          tp
+
         case tp: TypeLambda =>
           mapOverLambda(tp)
 
@@ -120,8 +127,8 @@ private[tastyquery] object TypeMaps {
         case tp: AnnotatedType =>
           derivedAnnotatedType(tp, this(tp.typ), tp.annotation) // tp.annotation.mapWith(this)
 
-        case _: ThisType =>
-          tp
+        case tp: RecType =>
+          derivedRecType(tp, this(tp.parent))
 
         case tp: TypeRefinement =>
           derivedTypeRefinement(tp, this(tp.parent), this(tp.refinedBounds))
@@ -144,8 +151,11 @@ private[tastyquery] object TypeMaps {
             derivedMatchType(tp, newBound, newScrutinee, newCases)
           }
 
-        case _ =>
-          tp
+        case tp: SkolemType =>
+          derivedSkolemType(tp, this(tp.tpe))
+
+        case _: CustomTransientGroundType =>
+          throw UnsupportedOperationException(s"Cannot map over $tp")
       }
     end mapOver
 
