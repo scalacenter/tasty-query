@@ -193,6 +193,7 @@ private[tastyquery] object Subtyping:
       if cls2.typeParams.isEmpty then
         if tp1.isLambdaSub then false // should be tp1.hasHigherKind, but the scalalib does not like that
         else if cls2 == defn.AnyClass then true
+        else if cls2 == defn.SingletonClass && isSingleton(tp1) then true
         else level3WithBaseType(tp1, tp2, cls2)
       else
         // TODO Try eta-expansion if tp1.isLambdaSub && !tp1.isAnyKind
@@ -499,9 +500,14 @@ private[tastyquery] object Subtyping:
       && isSubType(caze1.result, Substituters.substBinders(caze2.result, caze2, caze1))
   end isSubMatchTypeCase
 
+  private def isSingleton(tp: Type)(using Context): Boolean = tp match
+    case tp: SingletonType => tp.isStable
+    case _                 => false
+  end isSingleton
+
   private def isNullable(tp: Type)(using Context): Boolean = tp match
     case TypeRef.OfClass(cls) =>
-      !cls.isValueClass && !cls.isModuleClass
+      !cls.isValueClass && !cls.isModuleClass && cls != defn.SingletonClass
     case tp: TypeRef =>
       false
     case tp: TermRef =>

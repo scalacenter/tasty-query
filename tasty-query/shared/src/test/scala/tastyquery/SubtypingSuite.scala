@@ -213,6 +213,24 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertNeitherSubtype(defn.NullType, PredefModuleClass.staticRef)
   }
 
+  testWithContext("singleton") {
+    val SingletonType = defn.SingletonClass.staticRef
+
+    assertEquiv(SingletonType, defn.SingletonClass.newStaticRef).withRef[Singleton, Singleton]
+
+    assertStrictSubtype(SingletonType, defn.AnyType).withRef[Singleton, Any]
+    assertStrictSubtype(defn.NothingType, SingletonType).withRef[Nothing, Singleton]
+    assertNeitherSubtype(defn.NullType, SingletonType).withRef[Null, Singleton]
+
+    assertStrictSubtype(ConstantType(Constant(1)), SingletonType).withRef[1, Singleton]
+    assertStrictSubtype(ConstantType(Constant(false)), SingletonType).withRef[false, Singleton]
+
+    assertNeitherSubtype(defn.IntType, SingletonType).withRef[Int, Singleton]
+
+    assertNeitherSubtype(findTypesFromTASTyNamed("singletonRef"), SingletonType)
+    assertStrictSubtype(findTypesFromTASTyNamed("singleton"), SingletonType)
+  }
+
   testWithContext("subclasses") {
     assertStrictSubtype(defn.AnyValType, defn.AnyType).withRef[AnyVal, Any]
     assertStrictSubtype(defn.ObjectType, defn.AnyType).withRef[Object, Any]
