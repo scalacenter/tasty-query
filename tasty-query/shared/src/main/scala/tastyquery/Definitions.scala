@@ -128,6 +128,9 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val NullClass =
     createSpecialClass(typeName("Null"), AnyClass.topLevelRef :: MatchableClass.topLevelRef :: Nil, Abstract | Final)
 
+  val SingletonClass = createSpecialClass(typeName("Singleton"), AnyClass.topLevelRef :: Nil, Final)
+    .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
+
   val NothingAnyBounds = RealTypeBounds(SyntacticNothingType, AnyClass.topLevelRef)
 
   private def createSpecialTypeAlias(

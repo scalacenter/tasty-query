@@ -22,6 +22,9 @@ class TypesFromTASTy:
 
   val invariantOpaqueOfInt: InvariantOpaque[Int] = makeInvariantOpaque(5)
 
+  val singletonRef: String = "hello"
+  val singleton: singletonRef.type = singletonRef
+
   /* This explicit selection generates a
    * Select(PackageRef(crosspackagetasty), TopLevelOpaqueTypeAlias)
    * in TASTy, without any mention of the enclosing package object.

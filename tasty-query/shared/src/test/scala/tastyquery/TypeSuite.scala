@@ -2989,4 +2989,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case pt =>
         fail(s"not a PolyType: ${pt.showBasic}")
   }
+
+  testWithContext("singleton-class-type") {
+    val SingletonClassTypeClass = ctx.findTopLevelClass("simple_trees.SingletonClassType")
+
+    val fooSym = SingletonClassTypeClass.findDecl(termName("foo"))
+    assert(clue(fooSym.declaredType).isTypeRefOf(defn.SingletonClass))
+  }
 }
