@@ -71,6 +71,7 @@ object Names {
     val scalaPackageName: SimpleName = termName("scala")
     val javaPackageName: SimpleName = termName("java")
     val langPackageName: SimpleName = termName("lang")
+    val runtimePackageName: SimpleName = termName("runtime")
 
     val EmptyTuple: SimpleName = termName("EmptyTuple")
 
@@ -130,6 +131,8 @@ object Names {
     val FromJavaObjectAliasMagic: TypeName = typeName("<FromJavaObject>")
 
     val scala2PackageObjectClass: TypeName = termName("package").withObjectSuffix.toTypeName
+
+    private[tastyquery] val runtimeNothing: TypeName = typeName("Nothing$")
 
     private[tastyquery] val internalRepeatedAnnot: TypeName = typeName("Repeated")
 
@@ -345,6 +348,7 @@ object Names {
     val emptyPackageName = FullyQualifiedName(nme.EmptyPackageName :: Nil)
     val scalaPackageName = FullyQualifiedName(nme.scalaPackageName :: Nil)
     val javaLangPackageName = FullyQualifiedName(nme.javaPackageName :: nme.langPackageName :: Nil)
+    val scalaRuntimePackageName = FullyQualifiedName(nme.scalaPackageName :: nme.runtimePackageName :: Nil)
 
     private[tastyquery] val scalaAnnotationInternalPackage =
       FullyQualifiedName(nme.scalaPackageName :: termName("annotation") :: termName("internal") :: Nil)
