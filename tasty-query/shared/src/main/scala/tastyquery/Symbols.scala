@@ -999,7 +999,10 @@ object Symbols {
     private[tastyquery] final def signatureName: FullyQualifiedName =
       def computeErasedName(owner: Symbol, name: TypeName): FullyQualifiedName = owner match
         case owner: PackageSymbol =>
-          owner.fullName.select(name)
+          val ownerFullName = owner.fullName
+          if name == tpnme.runtimeNothing && ownerFullName == FullyQualifiedName.scalaRuntimePackageName then
+            FullyQualifiedName(nme.scalaPackageName :: tpnme.Nothing :: Nil)
+          else ownerFullName.select(name)
 
         case owner: ClassSymbol =>
           owner.signatureName.mapLast(_.toTermName).select(name)

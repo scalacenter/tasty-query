@@ -18,6 +18,8 @@ class OverloadedApply {
   def foo(a: Array[Foo.type]): Unit = ()
   def foo(a: => Num): Unit = ()
   def foo: String = "foo"
+  def foo(a: java.lang.String): Nothing = ???
+  def foo(a: CharSequence): Null = null
 
   @targetName("bar") def foo(a: Box[Int]): Unit = ()
 
@@ -28,5 +30,7 @@ class OverloadedApply {
   def callE = foo(Num())
   def callF = foo
   def callG = foo(Box(3))
+  def callH = foo("hello")
+  def callI = foo("hello": CharSequence)
 
 }

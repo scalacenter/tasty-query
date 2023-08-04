@@ -171,7 +171,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(parentClasses) == List(defn.ObjectClass, ProductClass, SerializableClass))
   }
 
-  def applyOverloadedTest(name: String)(callMethod: String, checkParamType: Context ?=> Type => Boolean): Unit =
+  def applyOverloadedTest(name: String)(
+    callMethod: String,
+    checkParamType: Context ?=> Type => Boolean,
+    checkResultType: Context ?=> TermType => Boolean = _.isRef(defn.UnitClass)
+  ): Unit =
     testWithContext(name) {
       val OverloadedApplyClass = ctx.findTopLevelClass("simple_trees.OverloadedApply")
 
@@ -185,10 +189,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         tree match
           case app @ Apply(fooRef @ Select(_, SignedName(SimpleName("foo"), _, _)), _) =>
             callCount += 1
-            assert(app.tpe.isRef(defn.UnitClass), clue(app))
+            assert(checkResultType(app.tpe), clue(app))
             val fooSym = fooRef.tpe.asInstanceOf[TermRef].symbol
             val mt = fooSym.declaredType.asInstanceOf[MethodType]
-            assert(clue(mt.resultType).isRef(defn.UnitClass))
+            assert(checkResultType(clue(mt.resultType)))
             assert(checkParamType(clue(mt.paramTypes.head)))
           case _ => ()
       }
@@ -225,6 +229,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       _.isRef(ctx.findTopLevelClass("simple_trees.OverloadedApply").findDecl(tname"Box")),
       List(_.isRef(defn.IntClass))
     )
+  )
+  applyOverloadedTest("apply-overloaded-nothing")("callH", _.isRef(defn.StringClass), _.isType(_.isExactlyNothing))
+  applyOverloadedTest("apply-overloaded-null")(
+    "callI",
+    _.isRef(ctx.findTopLevelClass("java.lang.CharSequence")),
+    _.isRef(defn.NullClass)
   )
 
   testWithContext("apply-overloaded-not-method") {
