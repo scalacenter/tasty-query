@@ -1295,16 +1295,23 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def getRhsOf(name: String): TermTree =
       FunctionClass.findNonOverloadedDecl(termName(name)).tree.get.asInstanceOf[ValDef].rhs.get
 
+    def findLambdaOf(tree: TermTree): Lambda = tree match
+      case tree: Lambda   => tree
+      case Block(_, expr) => findLambdaOf(expr)
+      case _              => fail("lambda expected", clues(tree))
+
     // val functionLambda = (x: Int) => x + 1
     val functionLambda = getRhsOf("functionLambda")
     assert(
       clue(functionLambda.tpe)
         .isApplied(_.isRef(defn.FunctionNClass(1)), List(_.isRef(defn.IntClass), _.isRef(defn.IntClass)))
     )
+    assert(clue(findLambdaOf(functionLambda).samClassSymbol) == defn.FunctionNClass(1))
 
     // val samLambda: Runnable = () => ()
     val samLambda = getRhsOf("samLambda")
     assert(clue(samLambda.tpe).isRef(ctx.findTopLevelClass("java.lang.Runnable")))
+    assert(clue(findLambdaOf(samLambda).samClassSymbol) == ctx.findTopLevelClass("java.lang.Runnable"))
 
     // val polyID: [T] => T => T = [T] => (x: T) => x
     val polyID = getRhsOf("polyID")
@@ -1346,6 +1353,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case dependentIDTpe =>
         fail(s"unexpected dependentID type: $dependentIDTpe")
     end match
+    assert(clue(findLambdaOf(dependentID).samClassSymbol) == defn.FunctionNClass(1))
   }
 
   testWithContext("varargs") {
