@@ -133,6 +133,7 @@ object Symbols {
       if isFlagsInitialized then myFlags
       else throw IllegalStateException(s"flags of $this have not been initialized")
 
+    @deprecated("pattern-match on owner instead", since = "0.10.0")
     final def enclosingDecl: DeclaringSymbol = owner match {
       case owner: DeclaringSymbol => owner
       case _: Symbol | null =>
