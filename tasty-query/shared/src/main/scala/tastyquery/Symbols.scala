@@ -140,13 +140,6 @@ object Symbols {
         assert(false, s"cannot access owner, ${this.name} is local or not declared within any scope")
     }
 
-    /** The closest enclosing package of this symbol.
-      * Returns this if this is a package.
-      */
-    private[tastyquery] final def closestPackage: PackageSymbol = this match
-      case pkg: PackageSymbol    => pkg
-      case sym: TermOrTypeSymbol => sym.owner.closestPackage
-
     private[Symbols] final def addDeclIfDeclaringSym(decl: TermOrTypeSymbol): decl.type =
       this match
         case declaring: DeclaringSymbol => declaring.addDecl(decl)

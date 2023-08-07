@@ -146,15 +146,16 @@ private[reader] object ClassfileParser {
   )(using Context, Resolver): List[InnerClassDecl] = {
     import structure.{reader, given}
 
-    val pkg = classOwner.closestPackage
-
     val allRegisteredSymbols = mutable.ListBuffer.empty[Symbol]
 
     val cls = ClassSymbol.create(name.toTypeName, classOwner)
     allRegisteredSymbols += cls
 
     def privateWithin(access: AccessFlags): Option[PackageSymbol] =
-      if access.isPackagePrivate then Some(pkg) else None
+      def enclosingPackage(sym: Symbol): PackageSymbol = sym match
+        case sym: PackageSymbol    => sym
+        case sym: TermOrTypeSymbol => enclosingPackage(sym.owner)
+      if access.isPackagePrivate then Some(enclosingPackage(classOwner)) else None
 
     val clsFlags = structure.access.toFlags | JavaDefined
     val clsPrivateWithin = privateWithin(structure.access)
