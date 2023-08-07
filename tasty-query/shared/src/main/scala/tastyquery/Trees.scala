@@ -528,7 +528,7 @@ object Trees {
     *  @param tpt    Defined only if the lambda's type is a SAMtype rather than a function type.
     */
   final case class Lambda(meth: TermTree, tpt: Option[TypeTree])(span: Span) extends TermTree(span) {
-    protected final def calculateType(using Context): TermType = tpt match
+    protected final def calculateType(using Context): Type = tpt match
       case Some(tpt) =>
         tpt.toType
 
@@ -547,6 +547,19 @@ object Trees {
           TermRefinement(parent, isStable = false, nme.m_apply, methodType)
         else functionNTypeRef.appliedTo(methodType.paramTypes :+ methodType.resultType.asInstanceOf[Type])
     end calculateType
+
+    /** The class symbol of the SAM type of this lambda.
+      *
+      * A `Lambda` can be considered as an anonymous class of the form `new tpt { ... }`.
+      * Given that observation, `samClassSymbol` represents the `parentClasses.head` of that
+      * hypothetical anonymous class.
+      *
+      * When `tpt` is `None`, `samClassSymbol` will be one of the `scala.FunctionN` classes.
+      */
+    def samClassSymbol(using Context): ClassSymbol =
+      tpe.requireType.classSymbol.getOrElse {
+        throw InvalidProgramStructureException(s"Non-class type $tpe for SAM type of $this")
+      }
 
     override final def withSpan(span: Span): Lambda = Lambda(meth, tpt)(span)
   }
