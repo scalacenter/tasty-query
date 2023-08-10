@@ -11,6 +11,7 @@ import tastyquery.Exceptions.*
 import tastyquery.Names.*
 import tastyquery.Spans.*
 import tastyquery.Symbols.*
+import tastyquery.Traversers.*
 import tastyquery.Types.*
 
 object Trees {
@@ -18,70 +19,20 @@ object Trees {
   sealed abstract class Tree(val pos: SourcePosition) {
     def withPos(pos: SourcePosition): Tree
 
-    private def subtrees: List[Tree] = this match {
-      case PackageDef(pid, stats)                   => stats
-      case ImportSelector(imported, renamed, bound) => imported :: renamed.toList ::: bound.toList
-      case Import(expr, selectors)                  => expr :: selectors
-      case Export(expr, selectors)                  => expr :: selectors
-      case ClassDef(name, rhs, symbol)              => rhs :: Nil
-      case TypeMember(name, rhs, symbol)            => rhs :: Nil
-      case TypeParam(name, bounds, symbol)          => bounds :: Nil
-      case Template(constr, parents, self, body)    => constr :: parents ::: self.toList ::: body
-      case ValDef(name, tpt, rhs, symbol)           => tpt :: rhs.toList
-      case SelfDef(name, tpt)                       => tpt :: Nil
-      case DefDef(name, params, tpt, rhs, symbol)   => params.flatMap(_.merge) ::: tpt :: rhs.toList
-      case Select(qualifier, name)                  => qualifier :: Nil
-      case SelectOuter(qualifier, levels)           => qualifier :: Nil
-      case Super(qual, mix)                         => qual :: Nil
-      case Apply(fun, args)                         => fun :: args
-      case TypeApply(fun, args)                     => fun :: args
-      case New(tpt)                                 => tpt :: Nil
-      case Typed(expr, tpt)                         => expr :: tpt :: Nil
-      case Assign(lhs, rhs)                         => lhs :: rhs :: Nil
-      case NamedArg(name, arg)                      => arg :: Nil
-      case Block(stats, expr)                       => stats :+ expr
-      case If(cond, thenPart, elsePart)             => cond :: thenPart :: elsePart :: Nil
-      case InlineIf(cond, thenPart, elsePart)       => cond :: thenPart :: elsePart :: Nil
-      case Lambda(meth, tpt)                        => meth :: tpt.toList
-      case Match(selector, cases)                   => selector :: cases
-      case InlineMatch(selector, cases)             => selector.toList ::: cases
-      case CaseDef(pattern, guard, body)            => pattern :: guard.toList ::: body :: Nil
-      case TypeTest(body, tpt)                      => body :: tpt :: Nil
-      case Bind(name, body, symbol)                 => body :: Nil
-      case Alternative(trees)                       => trees
-      case Unapply(fun, implicits, patterns)        => fun :: implicits ++ patterns
-      case ExprPattern(expr)                        => expr :: Nil
-      case SeqLiteral(elems, elemtpt)               => elems ::: elemtpt :: Nil
-      case While(cond, body)                        => cond :: body :: Nil
-      case Throw(expr)                              => expr :: Nil
-      case Try(expr, cases, finalizer)              => (expr :: cases) ::: finalizer.toList
-      case Return(expr, from)                       => expr.toList
-      case Inlined(expr, caller, bindings)          => expr :: bindings
+    private def subtrees: List[Tree] =
+      object collector extends TreeTraverser:
+        private val buffer = mutable.ListBuffer.empty[Tree]
 
-      case SingletonTypeTree(term)                        => term :: Nil
-      case RefinedTypeTree(parent, refinements, classSym) => parent :: refinements
-      case ByNameTypeTree(result)                         => result :: Nil
-      case AppliedTypeTree(tycon, args)                   => tycon :: args
-      case TypeWrapper(tp)                                => Nil
-      case SelectTypeTree(qualifier, name)                => qualifier :: Nil
-      case TermRefTypeTree(qualifier, name)               => qualifier :: Nil
-      case AnnotatedTypeTree(tpt, annotation)             => tpt :: annotation :: Nil
-      case MatchTypeTree(bound, selector, cases)          => bound :: selector :: cases
-      case TypeCaseDef(pattern, body)                     => pattern :: body :: Nil
-      case TypeTreeBind(name, body, symbol)               => body :: Nil
-      case WildcardTypeArgTree(bounds)                    => bounds :: Nil
-      case TypeLambdaTree(tparams, body)                  => tparams ::: body :: Nil
-      case TypeBindingsTree(bindings, body)               => bindings ::: body :: Nil
+        def apply(tree: Tree): List[Tree] =
+          super.traverse(tree)
+          buffer.toList
 
-      case InferredTypeBoundsTree(bounds)               => Nil
-      case ExplicitTypeBoundsTree(low, high)            => low :: high :: Nil
-      case TypeAliasDefinitionTree(alias)               => alias :: Nil
-      case OpaqueTypeAliasDefinitionTree(bounds, alias) => bounds :: alias :: Nil
-      case PolyTypeDefinitionTree(tparams, body)        => tparams ::: body :: Nil
-      case NamedTypeBoundsTree(name, bounds)            => Nil
+        override def traverse(tree: Tree): Unit =
+          buffer += tree
+      end collector
 
-      case _: ImportIdent | _: Ident | _: This | _: Literal | _: WildcardPattern | _: TypeIdent => Nil
-    }
+      collector(this)
+    end subtrees
 
     def walkTree[R](op: Tree => R)(reduce: (R, R) => R, default: => R): R = {
       // Apply the operation to the tree itself and all its sutbrees. Reduce the result with the given @reduce function
@@ -90,7 +41,13 @@ object Trees {
     }
 
     /* If the operation does not produce a result, simply apply it to all subtrees of the tree */
-    def walkTree(op: Tree => Unit): Unit = walkTree[Unit](op)((_, _) => (), ())
+    def walkTree(op: Tree => Unit): Unit =
+      new TreeTraverser {
+        override def traverse(tree: Tree): Unit =
+          op(tree)
+          super.traverse(tree)
+      }.traverse(this)
+    end walkTree
   }
 
   sealed abstract class TopLevelTree(pos: SourcePosition) extends Tree(pos):
