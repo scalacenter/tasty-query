@@ -2,6 +2,8 @@ package tastyquery
 
 import scala.annotation.tailrec
 
+import scala.collection.mutable
+
 import tastyquery.Classpaths.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
@@ -55,9 +57,14 @@ object Contexts {
   final class Context private[Contexts] (private[tastyquery] val classloader: Loader) {
     private given Context = this
 
+    private val sourceFiles = mutable.HashMap.empty[String, SourceFile]
+
     private val (RootPackage @ _, EmptyPackage @ _) = PackageSymbol.createRoots()
 
     val defn: Definitions = Definitions(this: @unchecked, RootPackage, EmptyPackage)
+
+    private[tastyquery] def getSourceFile(path: String): SourceFile =
+      sourceFiles.getOrElseUpdate(path, new SourceFile(path))
 
     /** For a given classpath entry, return a lazy view over all the roots covered by the entry. */
     def findSymbolsByClasspathEntry(entry: Classpath.Entry): Iterable[TermOrTypeSymbol] =
