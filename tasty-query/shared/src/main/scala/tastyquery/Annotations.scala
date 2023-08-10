@@ -102,8 +102,8 @@ object Annotations:
         }
       val ctorName = ctor.signedName.asInstanceOf[SignedName]
 
-      val ns = Spans.NoSpan
-      val tree = Apply(Select(New(TypeWrapper(typeRef)(ns))(ns), ctorName)(Some(typeRef))(ns), Nil)(ns)
+      val pos = SourcePosition.NoPosition
+      val tree = Apply(Select(New(TypeWrapper(typeRef)(pos))(pos), ctorName)(Some(typeRef))(pos), Nil)(pos)
 
       new Annotation(tree)
     end apply

@@ -8,6 +8,8 @@ import tastyquery.Trees.*
 import tastyquery.Types.*
 import tastyquery.Spans.*
 
+import tastyquery.TestUtils.*
+
 class PositionSuite extends RestrictedUnpicklingSuite {
   private def getCodeRelPath(name: String): String =
     var Array(dir, filename) = name.split('.')
@@ -36,10 +38,8 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   end testUnpickleWithCode
 
   private def treeToCode(tree: Tree, code: String): (Int, String) =
-    if tree.span.exists then (tree.span.start, code.slice(tree.span.start, tree.span.end)) else (-1, "")
-
-  private def treeToCode(tree: TypeTree, code: String): (Int, String) =
-    if tree.span.exists then (tree.span.start, code.slice(tree.span.start, tree.span.end)) else (-1, "")
+    if !tree.pos.isUnknown then (tree.pos.startOffset, code.slice(tree.pos.startOffset, tree.pos.endOffset))
+    else (-1, "")
 
   private def collectCode[T <: Tree](tree: Tree, code: String)(using tt: TypeTest[Tree, T]): List[String] =
     tree
@@ -85,6 +85,16 @@ class PositionSuite extends RestrictedUnpicklingSuite {
              |      ()
              |    }""".stripMargin)
     )
+
+    val whilePos = findTree(tree) { case whileTree: While =>
+      whileTree.pos
+    }
+    assert(clue(whilePos.startLine) == 4)
+    assert(clue(whilePos.startColumn) == 4)
+    assert(clue(whilePos.pointLine) == 4)
+    assert(clue(whilePos.pointColumn) == 4)
+    assert(clue(whilePos.endLine) == 6)
+    assert(clue(whilePos.endColumn) == 5)
   }
 
   testUnpickleWithCode("match", "simple_trees.Match") { (tree, code) =>
@@ -99,6 +109,16 @@ class PositionSuite extends RestrictedUnpicklingSuite {
              |    case _ => -x
              |  }""".stripMargin)
     )
+
+    val matchPos = findTree(tree) {
+      case matchTree: Match if !matchTree.pos.isUnknown => matchTree.pos
+    }
+    assert(clue(matchPos.startLine) == 3)
+    assert(clue(matchPos.startColumn) == 23)
+    assert(clue(matchPos.pointLine) == 3)
+    assert(clue(matchPos.pointColumn) == 25)
+    assert(clue(matchPos.endLine) == 10)
+    assert(clue(matchPos.endColumn) == 3)
   }
 
   testUnpickleWithCode("case-def", "simple_trees.Match") { (tree, code) =>

@@ -1623,10 +1623,10 @@ object Symbols {
     private[tastyquery] def createNotDeclaration(name: TypeName, owner: Symbol): ClassSymbol =
       ClassSymbol(name, owner)
 
-    private[tastyquery] def createRefinedClassSymbol(owner: Symbol, flags: FlagSet, span: Span)(
+    private[tastyquery] def createRefinedClassSymbol(owner: Symbol, flags: FlagSet, pos: SourcePosition)(
       using Context
     ): ClassSymbol =
-      // TODO Store the `span`
+      // TODO Store the `pos`
       createRefinedClassSymbol(owner, flags)
 
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, flags: FlagSet)(using Context): ClassSymbol =

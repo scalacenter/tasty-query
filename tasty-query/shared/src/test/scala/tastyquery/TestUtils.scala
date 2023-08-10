@@ -12,13 +12,13 @@ object TestUtils:
     def tname(): TypeName =
       TypeName(SimpleName(sc.parts.mkString))
 
-  def findLocalValDef(body: Tree, name: TermName)(using Context): TermSymbol =
+  def findLocalValDef(body: Tree, name: TermName): TermSymbol =
     findTree(body) {
       case vd: ValDef if vd.name == name => vd.symbol
     }
   end findLocalValDef
 
-  def findTree[A](body: Tree)(test: PartialFunction[Tree, A])(using Context): A =
+  def findTree[A](body: Tree)(test: PartialFunction[Tree, A]): A =
     var result: Option[A] = None
     body.walkTree { tree =>
       tree match

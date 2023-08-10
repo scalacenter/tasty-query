@@ -15,7 +15,7 @@ import language.implicitConversions
   *  Point: unsigned 12 Bits relative to start
   *  NoSpan encoded as -1L (this is a normally invalid span because point would lie beyond end).
   */
-object Spans {
+private[tastyquery] object Spans {
 
   private inline val StartEndBits = 26
   private inline val StartEndMask = (1L << StartEndBits) - 1

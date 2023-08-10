@@ -16,6 +16,8 @@ import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
+import tastyquery.SourcePosition
+import tastyquery.SourcePosition.NoPosition
 import tastyquery.Spans.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
@@ -189,19 +191,16 @@ private[tasties] class TreeUnpickler private (
   private def posErrorMsg: String = s"at address ${reader.currentAddr} in file $filename"
   private def posErrorMsg(atAddr: Addr): String = s"at address $atAddr in file $filename"
 
-  def spanAt(addr: Addr): Span =
+  def spanAt(addr: Addr): SourcePosition =
     posUnpicklerOpt match {
       case Some(posUnpickler) =>
-        posUnpickler.spanAt(addr)
+        posUnpickler.sourcePositionAt(addr)
       case _ =>
-        NoSpan
+        SourcePosition.NoPosition
     }
 
-  def span: Span =
+  def span: SourcePosition =
     spanAt(reader.currentAddr)
-
-  private def spanSeq(trees: Seq[Tree]): Span = trees.foldLeft(NoSpan)((s, t) => s.union(t.span))
-  private def spanSeqT(trees: Seq[TypeTree]): Span = trees.foldLeft(NoSpan)((s, t) => s.union(t.span))
 
   def forkAt(start: Addr): TreeUnpickler =
     new TreeUnpickler(filename, reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt, caches)
@@ -490,7 +489,7 @@ private[tasties] class TreeUnpickler private (
         case TYPEBOUNDS =>
           val bounds = readTypeBounds
           if forOpaque then throw TastyFormatException(s"Unexpected abstract type bounds $bounds at $posErrorMsg")
-          InferredTypeBoundsTree(bounds)(NoSpan)
+          InferredTypeBoundsTree(bounds)(NoPosition)
 
         case TYPEBOUNDStpt =>
           val spn = span
@@ -515,8 +514,8 @@ private[tasties] class TreeUnpickler private (
         case _ =>
           val alias = readTypeTree
           if forOpaque then
-            OpaqueTypeAliasDefinitionTree(InferredTypeBoundsTree(defn.NothingAnyBounds)(NoSpan), alias)(alias.span)
-          else TypeAliasDefinitionTree(alias)(alias.span)
+            OpaqueTypeAliasDefinitionTree(InferredTypeBoundsTree(defn.NothingAnyBounds)(NoPosition), alias)(alias.pos)
+          else TypeAliasDefinitionTree(alias)(alias.pos)
     }
   end readTypeDefinition
 
@@ -530,12 +529,12 @@ private[tasties] class TreeUnpickler private (
     }
   end readTypeOrWildcard
 
-  private def readTypeOrWildcardTree(span: Span): TypeArgTree =
+  private def readTypeOrWildcardTree(pos: SourcePosition): TypeArgTree =
     readPotentiallyShared {
       reader.nextByte match
         case TYPEBOUNDS | TYPEBOUNDStpt =>
           val bounds = readTypeDefinition(forOpaque = false).asInstanceOf[TypeBoundsTree]
-          WildcardTypeArgTree(bounds)(span)
+          WildcardTypeArgTree(bounds)(pos)
         case _ =>
           readTypeTree
     }
@@ -659,7 +658,7 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       val name = readName
       val tpt = readTypeTree
-      Some(SelfDef(name, tpt)(tpt.span))
+      Some(SelfDef(name, tpt)(tpt.pos))
     }
 
   private def readValOrDefDef: ValOrDefDef = {
@@ -722,11 +721,11 @@ private[tasties] class TreeUnpickler private (
     symbol.withTree(tree)
     tree
 
-  private def makeIdent(name: TermName, tpe: TermType, spn: Span): Ident =
+  private def makeIdent(name: TermName, tpe: TermType, pos: SourcePosition): Ident =
     val tpe1 = tpe match
       case tpe: TermReferenceType => tpe
-      case _ => throw TastyFormatException(s"unexpected type $tpe for Ident name $name span $spn in $posErrorMsg")
-    Ident(name)(tpe1)(spn)
+      case _ => throw TastyFormatException(s"unexpected type $tpe for Ident name $name at $pos in $posErrorMsg")
+    Ident(name)(tpe1)(pos)
   end makeIdent
 
   private def readPattern: PatternTree = reader.nextByte match
@@ -742,7 +741,7 @@ private[tasties] class TreeUnpickler private (
       reader.readEnd()
       val body = readPattern
       val tpt = readTypeTree
-      TypeTest(body, tpt)(body.span.union(tpt.span))
+      TypeTest(body, tpt)(body.pos.union(tpt.pos))
     case BIND =>
       val spn = span
       val start = reader.currentAddr
@@ -759,7 +758,8 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       val end = reader.readEnd()
       val alts = reader.until(end)(readPattern)
-      Alternative(alts)(spanSeq(alts))
+      val spn = alts.map(_.pos).reduce(_.union(_))
+      Alternative(alts)(spn)
     case UNAPPLY =>
       val spn = span
       reader.readByte()
@@ -776,10 +776,10 @@ private[tasties] class TreeUnpickler private (
     case SHAREDterm =>
       val spn = span
       reader.readByte()
-      forkAt(reader.readAddr()).readPattern.withSpan(spn)
+      forkAt(reader.readAddr()).readPattern.withPos(spn)
     case _ =>
       val expr = readTerm
-      ExprPattern(expr)(expr.span)
+      ExprPattern(expr)(expr.pos)
   end readPattern
 
   private def readTermOrUninitialized(): TermTree = reader.nextByte match
@@ -870,7 +870,7 @@ private[tasties] class TreeUnpickler private (
       reader.readEnd()
       val expr = readTerm
       val tpt = readTypeTree
-      Typed(expr, tpt)(expr.span.union(tpt.span))
+      Typed(expr, tpt)(expr.pos.union(tpt.pos))
     case THROW =>
       val spn = span
       reader.readByte()
@@ -969,7 +969,7 @@ private[tasties] class TreeUnpickler private (
     case SHAREDterm =>
       val spn = span
       reader.readByte()
-      forkAt(reader.readAddr()).readTerm.withSpan(spn)
+      forkAt(reader.readAddr()).readTerm.withPos(spn)
 
     // paths
     case THIS =>
@@ -1014,7 +1014,7 @@ private[tasties] class TreeUnpickler private (
     case SHAREDtype =>
       val spn = span
       reader.readByte()
-      forkAt(reader.readAddr()).readTerm.withSpan(spn)
+      forkAt(reader.readAddr()).readTerm.withPos(spn)
     case tag if isConstantTag(tag) =>
       val spn = span
       Literal(readConstant)(spn)
@@ -1511,7 +1511,7 @@ private[tasties] class TreeUnpickler private (
     case SHAREDterm =>
       val spn = span
       reader.readByte()
-      forkAt(reader.readAddr()).readTypeTree.withSpan(spn)
+      forkAt(reader.readAddr()).readTypeTree.withPos(spn)
     case tag if isTypeTreeTag(tag) =>
       throw TastyFormatException(s"Unexpected type tree tag ${astTagToString(tag)} $posErrorMsg")
     case _ =>
