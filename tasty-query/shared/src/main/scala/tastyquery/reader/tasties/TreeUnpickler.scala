@@ -912,7 +912,11 @@ private[tasties] class TreeUnpickler private (
       val spn = span
       reader.readByte()
       val end = reader.readEnd()
-      val method = readTerm
+      val method = readTerm match
+        case refTree: TermReferenceTree =>
+          refTree
+        case method =>
+          throw TastyFormatException(s"Illegal method reference $method for LAMBDA node $posErrorMsg")
       val tpt = reader.ifBeforeOpt(end)(readTypeTree)
       Lambda(method, tpt)(spn)
     case MATCH =>
