@@ -34,6 +34,7 @@ object Trees {
       collector(this)
     end subtrees
 
+    @deprecated("use a subclass of Traversers.TreeTraverser instead", since = "0.10.0")
     def walkTree[R](op: Tree => R)(reduce: (R, R) => R, default: => R): R = {
       // Apply the operation to the tree itself and all its sutbrees. Reduce the result with the given @reduce function
       def rec(t: Tree): R = reduce(op(t), t.subtrees.map(rec).foldLeft(default)(reduce))
@@ -41,6 +42,7 @@ object Trees {
     }
 
     /* If the operation does not produce a result, simply apply it to all subtrees of the tree */
+    @deprecated("use a subclass of Traversers.TreeTraverser instead", since = "0.10.0")
     def walkTree(op: Tree => Unit): Unit =
       new TreeTraverser {
         override def traverse(tree: Tree): Unit =

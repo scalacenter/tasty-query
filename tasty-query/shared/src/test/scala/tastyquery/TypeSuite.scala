@@ -11,6 +11,7 @@ import tastyquery.Trees.*
 import tastyquery.Types.*
 
 import TestUtils.*
+import tastyquery.Traversers.TreeTraverser
 
 class TypeSuite extends UnrestrictedUnpicklingSuite {
   extension [T](elems: List[T])
@@ -139,16 +140,15 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     var recCallCount = 0
 
-    gcdTree.walkTree { tree =>
-      tree match
+    new TreeTraverser {
+      override def traverse(tree: Tree): Unit = tree match
         case recCall @ Apply(gcdRef @ Select(_, SignedName(SimpleName("gcd"), _, _)), _) =>
           recCallCount += 1
-
           assert(gcdRef.tpe.isRef(gcdSym), clue(gcdRef))
-
           assert(recCall.tpe.isRef(NumClass), clue(recCall))
-        case _ => ()
-    }
+        case _ =>
+          super.traverse(tree)
+    }.traverse(gcdTree)
 
     assert(recCallCount == 1)
 
@@ -185,8 +185,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
       var callCount = 0
 
-      callTree.walkTree { tree =>
-        tree match
+      new TreeTraverser {
+        override def traverse(tree: Tree): Unit = tree match
           case app @ Apply(fooRef @ Select(_, SignedName(SimpleName("foo"), _, _)), _) =>
             callCount += 1
             assert(checkResultType(app.tpe), clue(app))
@@ -194,8 +194,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
             val mt = fooSym.declaredType.asInstanceOf[MethodType]
             assert(checkResultType(clue(mt.resultType)))
             assert(checkParamType(clue(mt.paramTypes.head)))
-          case _ => ()
-      }
+          case _ =>
+            super.traverse(tree)
+      }.traverse(callTree)
 
       assert(callCount == 1)
     }
@@ -246,14 +247,15 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     var callCount = 0
 
-    callTree.walkTree { tree =>
-      tree match
+    new TreeTraverser {
+      override def traverse(tree: Tree): Unit = tree match
         case fooRef @ Select(_, SimpleName("foo")) =>
           callCount += 1
           val fooSym = fooRef.tpe.asInstanceOf[TermRef].symbol
           assert(clue(fooSym.paramRefss).isEmpty)
-        case _ => ()
-    }
+        case _ =>
+          super.traverse(tree)
+    }.traverse(callTree)
 
     assert(callCount == 1)
   }
@@ -274,8 +276,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     var recCallCount = 0
 
-    evalTree.walkTree { tree =>
-      tree match
+    new TreeTraverser {
+      override def traverse(tree: Tree): Unit = tree match
         case recCall @ Apply(TypeApply(evalRef @ Select(_, SignedName(SimpleName("eval"), _, _)), List(targ)), _) =>
           recCallCount += 1
 
@@ -290,8 +292,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
           assert(clue(targ).toType.isRef(expectedTargClass))
           assert(recCall.tpe.isRef(expectedTargClass), clue(recCall))
-        case _ => ()
-    }
+
+        case _ =>
+          super.traverse(tree)
+    }.traverse(evalTree)
 
     assert(recCallCount == 4) // 4 calls in the body of `eval`
 
@@ -320,8 +324,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     var xCount = 0
     var yCount = 0
 
-    fTree.walkTree { tree =>
-      tree match {
+    new TreeTraverser {
+      override def traverse(tree: Tree): Unit = tree match
         case tree @ Ident(`x`) =>
           xCount += 1
           assert(tree.tpe.isOfClass(defn.IntClass), clue(tree.tpe))
@@ -329,9 +333,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
           yCount += 1
           assert(tree.tpe.isOfClass(defn.IntClass), clue(tree.tpe))
         case _ =>
-          ()
-      }
-    }
+          super.traverse(tree)
+    }.traverse(fTree)
 
     assert(xCount == 2, clue(xCount))
     assert(yCount == 1, clue(yCount))
@@ -345,17 +348,15 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     var bitSetIdentCount = 0
 
-    fTree.walkTree { tree =>
-      tree match {
+    new TreeTraverser {
+      override def traverse(tree: Tree): Unit = tree match
         case tree @ Ident(SimpleName("BitSet")) =>
           bitSetIdentCount += 1
           val sym = tree.tpe.asInstanceOf[TermRef].symbol
           assert(sym.name == name"BitSet", clue(sym.name.toDebugString))
-          ()
         case _ =>
-          ()
-      }
-    }
+          super.traverse(tree)
+    }.traverse(fTree)
 
     assert(bitSetIdentCount == 1, clue(bitSetIdentCount))
   }
@@ -372,15 +373,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     var wildcardPatternCount = 0
 
-    fTree.walkTree { tree =>
-      tree match {
+    new TreeTraverser {
+      override def traverse(tree: Tree): Unit = tree match
         case tree @ WildcardPattern(tpe) =>
           wildcardPatternCount += 1
           assert(tpe.isRef(defn.IntClass), clue(tpe))
         case _ =>
-          ()
-      }
-    }
+          super.traverse(tree)
+    }.traverse(fTree)
 
     assert(wildcardPatternCount == 2, clue(wildcardPatternCount))
   }
@@ -435,16 +435,15 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     var returnCount = 0
 
-    withReturnTree.walkTree { tree =>
-      tree match {
+    new TreeTraverser {
+      override def traverse(tree: Tree): Unit = tree match
         case tree @ Return(expr, from) =>
           returnCount += 1
           assert(from == withReturnSym, clue(from))
           assert(tree.tpe.isNothing)
         case _ =>
-          ()
-      }
-    }
+          super.traverse(tree)
+    }.traverse(withReturnTree)
 
     assert(returnCount == 1, clue(returnCount))
   }
@@ -457,15 +456,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     var assignCount = 0
 
-    fTree.walkTree { tree =>
-      tree match {
+    new TreeTraverser {
+      override def traverse(tree: Tree): Unit = tree match
         case tree @ Assign(lhs, rhs) =>
           assignCount += 1
           assert(tree.tpe.isRef(defn.UnitClass), clue(tree.tpe))
         case _ =>
-          ()
-      }
-    }
+          super.traverse(tree)
+    }.traverse(fTree)
 
     assert(assignCount == 1, clue(assignCount))
   }
