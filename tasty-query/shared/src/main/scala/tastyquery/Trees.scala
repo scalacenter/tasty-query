@@ -532,7 +532,7 @@ object Trees {
   /**  @param meth   A reference to the method.
     *  @param tpt    Defined only if the lambda's type is a SAMtype rather than a function type.
     */
-  final case class Lambda(meth: TermTree, tpt: Option[TypeTree])(pos: SourcePosition) extends TermTree(pos) {
+  final case class Lambda(meth: TermReferenceTree, tpt: Option[TypeTree])(pos: SourcePosition) extends TermTree(pos) {
     protected final def calculateType(using Context): Type = tpt match
       case Some(tpt) =>
         tpt.toType
