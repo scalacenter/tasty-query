@@ -133,18 +133,12 @@ object Symbols {
       if isFlagsInitialized then myFlags
       else throw IllegalStateException(s"flags of $this have not been initialized")
 
+    @deprecated("pattern-match on owner instead", since = "0.10.0")
     final def enclosingDecl: DeclaringSymbol = owner match {
       case owner: DeclaringSymbol => owner
       case _: Symbol | null =>
         assert(false, s"cannot access owner, ${this.name} is local or not declared within any scope")
     }
-
-    /** The closest enclosing package of this symbol.
-      * Returns this if this is a package.
-      */
-    private[tastyquery] final def closestPackage: PackageSymbol = this match
-      case pkg: PackageSymbol    => pkg
-      case sym: TermOrTypeSymbol => sym.owner.closestPackage
 
     private[Symbols] final def addDeclIfDeclaringSym(decl: TermOrTypeSymbol): decl.type =
       this match
