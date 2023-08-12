@@ -1,5 +1,6 @@
 package tastyquery
 
+import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.reflect.TypeTest
 
@@ -7,6 +8,7 @@ import tastyquery.Names.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
 import tastyquery.Spans.*
+import tastyquery.Traversers.*
 
 import tastyquery.TestUtils.*
 
@@ -42,12 +44,19 @@ class PositionSuite extends RestrictedUnpicklingSuite {
     else (-1, "")
 
   private def collectCode[T <: Tree](tree: Tree, code: String)(using tt: TypeTest[Tree, T]): List[String] =
-    tree
-      .walkTree[List[(Int, String)]]({
-        case tt(t: T) => List(treeToCode(t, code))
-        case _        => Nil
-      })(_ ::: _, Nil)
-      .distinct
+    object collector extends TreeTraverser:
+      val buffer = mutable.ListBuffer.empty[(Int, String)]
+
+      override def traverse(tree: Tree): Unit =
+        tree match
+          case tt(t: T) => buffer += treeToCode(t, code)
+          case _        => ()
+        super.traverse(tree)
+    end collector
+
+    collector.traverse(tree)
+
+    collector.buffer.toList.distinct
       .map(_._2)
       .filter(_ != "")
 

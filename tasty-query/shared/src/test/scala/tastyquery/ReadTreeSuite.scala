@@ -12,6 +12,7 @@ import tastyquery.Constants.{ClazzTag, Constant, IntTag, NullTag}
 import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
+import tastyquery.Traversers.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
 
@@ -22,7 +23,19 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   type TypeStructureCheck = PartialFunction[Type, Unit]
 
   def containsSubtree(p: StructureCheck)(t: Tree): Boolean =
-    t.walkTree(p.isDefinedAt)(_ || _, false)
+    object finder extends TreeTraverser:
+      var found = false
+
+      override def traverse(tree: Tree): Unit =
+        if !found then
+          if p.isDefinedAt(tree) then found = true
+          else super.traverse(tree)
+      end traverse
+    end finder
+
+    finder.traverse(t)
+    finder.found
+  end containsSubtree
 
   private object SimpleIdent:
     def unapply(ident: Ident): Option[String] = ident match
