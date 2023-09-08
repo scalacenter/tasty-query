@@ -11,21 +11,21 @@ import tastyquery.Exceptions.*
 import tastyquery.Names.*
 import tastyquery.Signatures.*
 
-import tastyquery.reader.UTF8Utils
+import tastyquery.reader.{ReaderContext, UTF8Utils}
 
 private[reader] object TastyUnpickler {
 
   abstract class SectionUnpickler[R](val name: String) {
-    def unpickle(filename: String, reader: TastyReader, nameAtRef: NameTable)(using Context): R
+    def unpickle(filename: String, reader: TastyReader, nameAtRef: NameTable)(using ReaderContext): R
   }
 
   class TreeSectionUnpickler(posUnpickler: Option[PositionUnpickler]) extends SectionUnpickler[TreeUnpickler]("ASTs") {
-    def unpickle(filename: String, reader: TastyReader, nameAtRef: NameTable)(using Context): TreeUnpickler =
+    def unpickle(filename: String, reader: TastyReader, nameAtRef: NameTable)(using ReaderContext): TreeUnpickler =
       new TreeUnpickler(filename, reader, nameAtRef, posUnpickler)
   }
 
   class PositionSectionUnpickler extends SectionUnpickler[PositionUnpickler]("Positions") {
-    def unpickle(filename: String, reader: TastyReader, nameAtRef: NameTable)(using Context): PositionUnpickler =
+    def unpickle(filename: String, reader: TastyReader, nameAtRef: NameTable)(using ReaderContext): PositionUnpickler =
       new PositionUnpickler(reader, nameAtRef)
   }
 
@@ -146,7 +146,7 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
     }
   }
 
-  def unpickle[R](filename: String, sec: SectionUnpickler[R])(using Context): Option[R] =
+  def unpickle[R](filename: String, sec: SectionUnpickler[R])(using ReaderContext): Option[R] =
     for (reader <- sectionReader.get(sec.name)) yield sec.unpickle(filename, reader, nameAtRef)
 
   def bytes: Array[Byte] = reader.bytes

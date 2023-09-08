@@ -13,6 +13,8 @@ import tastyquery.SourceLanguage
 import tastyquery.Symbols.*
 import tastyquery.Types.*
 
+import tastyquery.reader.ReaderContext
+import tastyquery.reader.ReaderContext.rctx
 import tastyquery.reader.pickles.{Unpickler, PickleReader}
 
 import ClassfileReader.*
@@ -38,29 +40,29 @@ private[reader] object ClassfileParser {
     private val refs = mutable.HashMap.empty[SimpleName, TypeRef]
     private val staticrefs = mutable.HashMap.empty[SimpleName, TermRef]
 
-    private def computeRef(binaryName: SimpleName, isStatic: Boolean)(using Context, InnerClasses): NamedType =
+    private def computeRef(binaryName: SimpleName, isStatic: Boolean)(using ReaderContext, InnerClasses): NamedType =
       innerClasses.get(binaryName) match
         case Some(InnerClassRef(name, outer, isStaticInner)) =>
           val pre = lookup(outer, isStaticInner)
-          pre.select(if isStatic then name else name.toTypeName)
+          NamedType(pre, if isStatic then name else name.toTypeName)
         case None if !isStatic && binaryName == javaLangObjectBinaryName =>
-          defn.FromJavaObjectType
+          rctx.FromJavaObjectType
         case None =>
           val (pkgRef, cls) = binaryName.name.lastIndexOf('/') match
-            case -1 => (defn.RootPackage.packageRef, binaryName)
+            case -1 => (rctx.RootPackage.packageRef, binaryName)
             case i  => (computePkg(binaryName.name.take(i)), termName(binaryName.name.drop(i + 1)))
-          pkgRef.select(if isStatic then cls else cls.toTypeName)
+          NamedType(pkgRef, if isStatic then cls else cls.toTypeName)
     end computeRef
 
-    private def computePkg(packageName: String)(using Context): PackageRef =
+    private def computePkg(packageName: String)(using ReaderContext): TermReferenceType =
       val parts = packageName.split('/').map(termName).toList
-      ctx.findPackageFromRoot(FullyQualifiedName(parts)).packageRef
+      rctx.createPackageSelection(parts)
 
-    private def lookup(binaryName: SimpleName, isStatic: Boolean)(using Context, InnerClasses): NamedType =
+    private def lookup(binaryName: SimpleName, isStatic: Boolean)(using ReaderContext, InnerClasses): NamedType =
       if isStatic then staticrefs.getOrElseUpdate(binaryName, computeRef(binaryName, isStatic = true).asTermRef)
       else refs.getOrElseUpdate(binaryName, computeRef(binaryName, isStatic = false).asTypeRef)
 
-    def resolve(binaryName: SimpleName)(using Context, InnerClasses): TypeRef =
+    def resolve(binaryName: SimpleName)(using ReaderContext, InnerClasses): TypeRef =
       lookup(binaryName, isStatic = false).asTypeRef
 
   end Resolver
@@ -81,7 +83,7 @@ private[reader] object ClassfileParser {
       structure: Structure,
       lookup: Map[SimpleName, ClassData],
       innerClasses: Forked[DataStream]
-    )(using Context): InnerClasses =
+    ): InnerClasses =
       import structure.reader
 
       def missingClass(binaryName: SimpleName) =
@@ -116,7 +118,7 @@ private[reader] object ClassfileParser {
     val attributes: Forked[DataStream]
   )(using val pool: reader.ConstantPool)
 
-  def loadScala2Class(structure: Structure, runtimeAnnotStart: Forked[DataStream])(using Context): Unit = {
+  def loadScala2Class(structure: Structure, runtimeAnnotStart: Forked[DataStream])(using ReaderContext): Unit = {
     import structure.{reader, given}
 
     val Some(Annotation(tpe, args)) = runtimeAnnotStart.use {
@@ -143,7 +145,7 @@ private[reader] object ClassfileParser {
     classSig: SigOrSupers,
     innerLookup: Map[SimpleName, ClassData],
     optInnerClasses: Option[Forked[DataStream]]
-  )(using Context, Resolver): List[InnerClassDecl] = {
+  )(using ReaderContext, Resolver): List[InnerClassDecl] = {
     import structure.{reader, given}
 
     val allRegisteredSymbols = mutable.ListBuffer.empty[Symbol]
@@ -165,7 +167,7 @@ private[reader] object ClassfileParser {
       .withTypeParams(Nil)
       .withFlags(clsFlags | Flags.ModuleClassCreationFlags, clsPrivateWithin)
       .setAnnotations(Nil)
-      .withParentsDirect(defn.ObjectType :: Nil)
+      .withParentsDirect(rctx.ObjectType :: Nil)
       .withGivenSelfType(None)
     allRegisteredSymbols += moduleClass
 
@@ -221,7 +223,7 @@ private[reader] object ClassfileParser {
           }
       end parents
       val parents1 =
-        if parents.head eq defn.FromJavaObjectType then defn.ObjectType :: parents.tail
+        if parents.head eq rctx.FromJavaObjectType then rctx.ObjectType :: parents.tail
         else parents
       cls.withParentsDirect(parents1)
     end initParents
@@ -232,9 +234,9 @@ private[reader] object ClassfileParser {
     initParents()
 
     // Intercept java.lang.Object and java.lang.String to create their magic methods
-    if cls.owner == defn.javaLangPackage then
-      if cls.name == tpnme.Object then defn.createObjectMagicMethods(cls)
-      else if cls.name == tpnme.String then defn.createStringMagicMethods(cls)
+    if cls.owner == rctx.javaLangPackage then
+      if cls.name == tpnme.Object then rctx.createObjectMagicMethods(cls)
+      else if cls.name == tpnme.String then rctx.createStringMagicMethods(cls)
 
     for (sym, javaFlags, sigOrDesc) <- loadMembers() do
       val parsedType = sigOrDesc match
@@ -255,12 +257,12 @@ private[reader] object ClassfileParser {
     innerClasses.declarations
   }
 
-  private def patchForVarargs(sym: TermSymbol, tpe: TypeOrMethodic)(using Context): MethodicType =
+  private def patchForVarargs(sym: TermSymbol, tpe: TypeOrMethodic)(using ReaderContext): MethodicType =
     tpe match
       case tpe: MethodType if tpe.paramNames.sizeIs >= 1 =>
         val patchedLast = tpe.paramTypes.last match
           case ArrayTypeExtractor(lastElemType) =>
-            defn.RepeatedTypeOf(lastElemType)
+            rctx.RepeatedTypeOf(lastElemType)
           case _ =>
             throw ClassfileFormatException(s"Found ACC_VARARGS on $sym but its last param type was not an array: $tpe")
         tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypes.init :+ patchedLast, tpe.resultType)
@@ -276,11 +278,11 @@ private[reader] object ClassfileParser {
     * is not otherwise guaranteed to work in all situations.
     */
   private object ArrayTypeExtractor:
-    def unapply(tpe: AppliedType)(using Context): Option[TypeOrWildcard] =
+    def unapply(tpe: AppliedType)(using ReaderContext): Option[TypeOrWildcard] =
       tpe.tycon match
         case tycon: TypeRef if tycon.name == tpnme.Array && tpe.args.sizeIs == 1 =>
           tycon.prefix match
-            case prefix: PackageRef if prefix.symbol == defn.scalaPackage =>
+            case prefix: PackageRef if prefix.symbol == rctx.scalaPackage =>
               Some(tpe.args.head)
             case _ =>
               None
@@ -288,7 +290,7 @@ private[reader] object ClassfileParser {
           None
   end ArrayTypeExtractor
 
-  private def parse(classRoot: ClassData, structure: Structure)(using Context): ClassKind = {
+  private def parse(classRoot: ClassData, structure: Structure): ClassKind = {
     import structure.{reader, given}
 
     def process(attributesStream: Forked[DataStream]): ClassKind =
@@ -359,7 +361,7 @@ private[reader] object ClassfileParser {
     )
   }
 
-  private def toplevel(classOwner: DeclaringSymbol, classRoot: ClassData)(using Context): Structure = {
+  private def toplevel(classOwner: DeclaringSymbol, classRoot: ClassData): Structure = {
     def headerAndStructure(reader: ClassfileReader)(using DataStream) = {
       reader.acceptHeader(classOwner, classRoot)
       structure(reader)(using reader.readConstantPool())
@@ -368,7 +370,7 @@ private[reader] object ClassfileParser {
     ClassfileReader.unpickle(classRoot)(headerAndStructure)
   }
 
-  def readKind(classOwner: DeclaringSymbol, classRoot: ClassData)(using Context): ClassKind =
+  def readKind(classOwner: DeclaringSymbol, classRoot: ClassData): ClassKind =
     parse(classRoot, toplevel(classOwner, classRoot))
 
 }

@@ -9,27 +9,30 @@ import tastyquery.Types.*
 import tastyquery.Symbols.*
 import tastyquery.Flags
 
+import tastyquery.reader.ReaderContext
+import tastyquery.reader.ReaderContext.rctx
+
 import ClassfileParser.*
 
 private[classfiles] object Descriptors:
 
   def parseSupers(cls: ClassSymbol, superClass: Option[SimpleName], interfaces: IArray[SimpleName])(
-    using Context,
+    using ReaderContext,
     InnerClasses,
     Resolver
   ): List[Type] =
     cls.withTypeParams(Nil)
     // !!! Cannot access `defn.ObjectClass` here, because that's a cycle when initializing defn.ObjectClass itself
-    if cls.owner == defn.javaLangPackage && cls.name == tpnme.Object then defn.AnyType :: defn.MatchableType :: Nil
+    if cls.owner == rctx.javaLangPackage && cls.name == tpnme.Object then rctx.AnyType :: rctx.MatchableType :: Nil
     else
-      val superRef = superClass.map(classRef).getOrElse(defn.ObjectType)
+      val superRef = superClass.map(classRef).getOrElse(rctx.ObjectType)
       superRef :: interfaces.map(classRef).toList
 
-  def classRef(binaryName: SimpleName)(using Context, InnerClasses, Resolver): TypeRef =
+  def classRef(binaryName: SimpleName)(using ReaderContext, InnerClasses, Resolver): TypeRef =
     resolver.resolve(binaryName)
 
   @throws[ClassfileFormatException]
-  def parseDescriptor(member: Symbol, desc: String)(using Context, InnerClasses, Resolver): TypeOrMethodic =
+  def parseDescriptor(member: Symbol, desc: String)(using ReaderContext, InnerClasses, Resolver): TypeOrMethodic =
     // TODO: once we support inner classes, decide if we merge with parseSignature
     var offset = 0
     var end = desc.length
@@ -61,14 +64,14 @@ private[classfiles] object Descriptors:
     def baseType: Option[Type] =
       if available >= 1 then
         (peek: @switch) match
-          case 'B' => commitSimple(1, Some(defn.ByteType))
-          case 'C' => commitSimple(1, Some(defn.CharType))
-          case 'D' => commitSimple(1, Some(defn.DoubleType))
-          case 'F' => commitSimple(1, Some(defn.FloatType))
-          case 'I' => commitSimple(1, Some(defn.IntType))
-          case 'J' => commitSimple(1, Some(defn.LongType))
-          case 'S' => commitSimple(1, Some(defn.ShortType))
-          case 'Z' => commitSimple(1, Some(defn.BooleanType))
+          case 'B' => commitSimple(1, Some(rctx.ByteType))
+          case 'C' => commitSimple(1, Some(rctx.CharType))
+          case 'D' => commitSimple(1, Some(rctx.DoubleType))
+          case 'F' => commitSimple(1, Some(rctx.FloatType))
+          case 'I' => commitSimple(1, Some(rctx.IntType))
+          case 'J' => commitSimple(1, Some(rctx.LongType))
+          case 'S' => commitSimple(1, Some(rctx.ShortType))
+          case 'Z' => commitSimple(1, Some(rctx.BooleanType))
           case _   => None
       else None
 
@@ -81,14 +84,14 @@ private[classfiles] object Descriptors:
     def arrayType: Option[Type] =
       if consume('[') then
         val tpe = fieldDescriptor
-        Some(defn.ArrayTypeOf(tpe))
+        Some(rctx.ArrayTypeOf(tpe))
       else None
 
     def fieldDescriptor: Type =
       baseType.orElse(objectType).orElse(arrayType).getOrElse(abort)
 
     def returnDescriptor: Type =
-      if consume('V') then defn.UnitType
+      if consume('V') then rctx.UnitType
       else fieldDescriptor
 
     def methodDescriptor: MethodType =

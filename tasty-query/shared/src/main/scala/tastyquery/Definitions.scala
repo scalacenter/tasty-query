@@ -411,7 +411,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   def isTupleNClass(sym: ClassSymbol): Boolean =
     sym.owner == scalaPackage && TupleNClasses.contains(sym)
 
-  lazy val hasGenericTuples = scalaPackage.getDecl(tpnme.TupleCons).isDefined
+  lazy val hasGenericTuples = ctx.classloader.hasGenericTuples
 
   lazy val uninitializedMethod: Option[TermSymbol] =
     scalaCompiletimePackage.getDecl(moduleClassName("package$package")).flatMap { packageObjectClass =>

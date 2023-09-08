@@ -15,8 +15,11 @@ import tastyquery.SourceFile
 import tastyquery.SourcePosition
 import tastyquery.Spans.*
 
+import tastyquery.reader.ReaderContext
+import tastyquery.reader.ReaderContext.rctx
+
 /** Unpickler for tree positions */
-private[reader] class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnpickler.NameTable)(using Context) {
+private[reader] class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnpickler.NameTable)(using ReaderContext) {
   import reader.*
 
   private val mySourcePositions = mutable.HashMap.empty[Addr, SourcePosition]
@@ -67,7 +70,7 @@ private[reader] class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnp
           header = readInt()
           if header == SOURCE then
             val path = nameAtRef.simple(readNameRef()).toString()
-            curSource = ctx.getSourceFile(path)
+            curSource = rctx.getSourceFile(path)
             if noSourceSeenYet then
               curSource.setLineSizes(myLineSizes)
               noSourceSeenYet = false

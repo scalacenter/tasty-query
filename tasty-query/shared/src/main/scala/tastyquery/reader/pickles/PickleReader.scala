@@ -13,7 +13,8 @@ import tastyquery.Substituters
 import tastyquery.Symbols.*
 import tastyquery.Types.*
 
-import tastyquery.reader.UTF8Utils
+import tastyquery.reader.{ReaderContext, UTF8Utils}
+import tastyquery.reader.ReaderContext.rctx
 
 import PickleReader.*
 import PickleFormat.*
@@ -92,22 +93,22 @@ private[pickles] class PickleReader {
     }
   }
 
-  def readLocalSymbolRef()(using Context, PklStream, Entries, Index): Symbol =
+  def readLocalSymbolRef()(using ReaderContext, PklStream, Entries, Index): Symbol =
     readMaybeExternalSymbolRef() match
       case sym: Symbol => sym
       case external =>
         errorBadSignature(s"expected local symbol reference but found $external")
 
-  def readLocalSymbolAt(i: Int)(using Context, PklStream, Entries, Index): Symbol =
+  def readLocalSymbolAt(i: Int)(using ReaderContext, PklStream, Entries, Index): Symbol =
     readMaybeExternalSymbolAt(i) match
       case sym: Symbol => sym
       case external =>
         errorBadSignature(s"expected local symbol reference but found $external")
 
-  def readMaybeExternalSymbolRef()(using Context, PklStream, Entries, Index): MaybeExternalSymbol =
+  def readMaybeExternalSymbolRef()(using ReaderContext, PklStream, Entries, Index): MaybeExternalSymbol =
     readMaybeExternalSymbolAt(pkl.readNat())
 
-  def ensureReadAllLocalDeclsOfRefinement(ownerIndex: Int)(using Context, PklStream, Entries, Index): Unit =
+  def ensureReadAllLocalDeclsOfRefinement(ownerIndex: Int)(using ReaderContext, PklStream, Entries, Index): Unit =
     index.loopWithIndices { (offset, i) =>
       val idx = index(i)
       val tag = pkl.bytes(idx).toInt
@@ -123,7 +124,7 @@ private[pickles] class PickleReader {
     }
   end ensureReadAllLocalDeclsOfRefinement
 
-  def readMaybeExternalSymbolAt(i: Int)(using Context, PklStream, Entries, Index): MaybeExternalSymbol =
+  def readMaybeExternalSymbolAt(i: Int)(using ReaderContext, PklStream, Entries, Index): MaybeExternalSymbol =
     // Similar to at(), but sometimes readMaybeExternalSymbol stores the result itself in entries
     val tOpt = entries(i).asInstanceOf[MaybeExternalSymbol | Null]
     if tOpt == null then {
@@ -136,7 +137,9 @@ private[pickles] class PickleReader {
       res
     } else tOpt
 
-  def readMaybeExternalSymbol(storeInEntriesAt: Int)(using Context, PklStream, Entries, Index): MaybeExternalSymbol = {
+  def readMaybeExternalSymbol(
+    storeInEntriesAt: Int
+  )(using ReaderContext, PklStream, Entries, Index): MaybeExternalSymbol = {
     // val start = indexCoord(readIndex) // no need yet to record the position of symbols
     val tag = pkl.readByte()
     val end = pkl.readEnd()
@@ -148,10 +151,10 @@ private[pickles] class PickleReader {
 
     def readExtSymbol(): MaybeExternalSymbol =
       val name = readNameRef().decode
-      val owner = if (atEnd) ctx.defn.RootPackage else readMaybeExternalSymbolRef()
+      val owner = if (atEnd) rctx.RootPackage else readMaybeExternalSymbolRef()
       name match
         case nme.RootName | nme.RootPackageName =>
-          ctx.defn.RootPackage
+          rctx.RootPackage
         case _ =>
           def defaultRef = ExternalSymbolRef(owner, name)
           owner match
@@ -202,7 +205,7 @@ private[pickles] class PickleReader {
       case external =>
         errorBadSignature(s"expected local symbol reference but found $external")
 
-    if name1 == nme.m_getClass && owner.owner == defn.scalaPackage && HasProblematicGetClass.contains(owner.name) then
+    if name1 == nme.m_getClass && owner.owner == rctx.scalaPackage && HasProblematicGetClass.contains(owner.name) then
       return NoExternalSymbolRef.instance
 
     /* In some situations, notably involving EXISTENTIALtpe, reading the
@@ -272,7 +275,8 @@ private[pickles] class PickleReader {
       case CLASSsym =>
         val tname = name.toTypeName
         val cls =
-          if tname == tpnme.RefinedClassMagic then ClassSymbol.createRefinedClassSymbol(owner, Scala2Defined)
+          if tname == tpnme.RefinedClassMagic then
+            ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, Scala2Defined)
           else if tname == tpnme.scala2LocalChild then ClassSymbol.createNotDeclaration(tname, owner)
           else ClassSymbol.create(tname, owner)
         storeResultInEntries(cls)
@@ -288,12 +292,12 @@ private[pickles] class PickleReader {
           case tpe =>
             throw Scala2PickleFormatException(s"unexpected type $tpe for $cls, owner is $owner")
         val parentTypes =
-          if cls.owner == defn.scalaPackage && tname == tpnme.AnyVal then
+          if cls.owner == rctx.scalaPackage && tname == tpnme.AnyVal then
             // Patch the superclasses of AnyVal to contain Matchable
-            scala2ParentTypes :+ defn.MatchableType
-          else if cls.owner == defn.scalaPackage && isTupleClassName(tname) && defn.hasGenericTuples then
+            scala2ParentTypes :+ rctx.MatchableType
+          else if cls.owner == rctx.scalaPackage && isTupleClassName(tname) && rctx.hasGenericTuples then
             // Patch the superclass of TupleN classes to inherit from *:
-            defn.GenericTupleTypeOf(typeParams.map(_.localRef)) :: scala2ParentTypes.tail
+            rctx.GenericTupleTypeOf(typeParams.map(_.localRef)) :: scala2ParentTypes.tail
           else scala2ParentTypes
         val givenSelfType = if atEnd then None else Some(readTrueTypeRef())
         cls.withParentsDirect(parentTypes)
@@ -346,7 +350,7 @@ private[pickles] class PickleReader {
     sym
   }
 
-  private def patchConstructorType(cls: ClassSymbol, tpe: TypeOrMethodic)(using Context): TypeOrMethodic =
+  private def patchConstructorType(cls: ClassSymbol, tpe: TypeOrMethodic)(using ReaderContext): TypeOrMethodic =
     def resultToUnit(tpe: TypeOrMethodic): TypeOrMethodic =
       tpe match
         case tpe: PolyType =>
@@ -354,7 +358,7 @@ private[pickles] class PickleReader {
         case tpe: MethodType =>
           tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypes, resultToUnit(tpe.resultType))
         case _: Type =>
-          defn.UnitType
+          rctx.UnitType
 
     val tpe1 = resultToUnit(tpe)
 
@@ -372,7 +376,7 @@ private[pickles] class PickleReader {
       )
   end patchConstructorType
 
-  def readChildren()(using Context, PklStream, Entries, Index): Unit =
+  def readChildren()(using ReaderContext, PklStream, Entries, Index): Unit =
     val tag = pkl.readByte()
     assert(tag == CHILDREN)
     val end = pkl.readEnd()
@@ -473,7 +477,7 @@ private[pickles] class PickleReader {
     val tag = pkl.bytes(index(i))
     tag == CHILDREN
 
-  protected def isRefinementClass(sym: Symbol)(using Context): Boolean =
+  protected def isRefinementClass(sym: Symbol): Boolean =
     sym.name == tpnme.RefinedClassMagic
 
   def isSymbolRef(i: Int)(using PklStream, Index): Boolean = {
@@ -481,36 +485,36 @@ private[pickles] class PickleReader {
     (firstSymTag <= tag && tag <= lastExtSymTag)
   }
 
-  private def readPrefixRef()(using Context, PklStream, Entries, Index): Prefix =
+  private def readPrefixRef()(using ReaderContext, PklStream, Entries, Index): Prefix =
     readTypeMappableRef() match
       case tpe: Prefix => tpe
       case tpe         => errorBadSignature(s"expected a prefix but got $tpe")
 
-  private def readTrueTypeRef()(using Context, PklStream, Entries, Index): Type =
+  private def readTrueTypeRef()(using ReaderContext, PklStream, Entries, Index): Type =
     readTypeMappableRef() match
       case tpe: Type => tpe
       case tpe       => errorBadSignature(s"expected a type but got $tpe")
 
   /** Read a type */
-  private def readTrueType()(using Context, PklStream, Entries, Index): Type =
+  private def readTrueType()(using ReaderContext, PklStream, Entries, Index): Type =
     readTypeMappable() match
       case tpe: Type => tpe
       case tpe       => errorBadSignature(s"expected a type but got $tpe")
 
-  private def readTypeOrWildcardRef()(using Context, PklStream, Entries, Index): TypeOrWildcard =
+  private def readTypeOrWildcardRef()(using ReaderContext, PklStream, Entries, Index): TypeOrWildcard =
     readTypeMappableRef() match
       case tpe: TypeOrWildcard => tpe
       case tpe                 => errorBadSignature(s"expected a type argument but got $tpe")
 
-  private def readTypeOrMethodicRef()(using Context, PklStream, Entries, Index): TypeOrMethodic =
+  private def readTypeOrMethodicRef()(using ReaderContext, PklStream, Entries, Index): TypeOrMethodic =
     readTypeMappableRef() match
       case tpe: TypeOrMethodic => tpe
       case tpe                 => errorBadSignature(s"expected a type or methodic type but got $tpe")
 
-  private def readTypeMappableRef()(using Context, PklStream, Entries, Index): TypeMappable =
+  private def readTypeMappableRef()(using ReaderContext, PklStream, Entries, Index): TypeMappable =
     at(pkl.readNat())(readTypeMappable())
 
-  private def readTypeMappable()(using Context, PklStream, Entries, Index): TypeMappable = {
+  private def readTypeMappable()(using ReaderContext, PklStream, Entries, Index): TypeMappable = {
     def select(pre: Prefix, sym: TermOrTypeSymbol): Type =
       // structural members need to be selected by name, their symbols are only
       // valid in the synthetic refinement class that defines them.
@@ -529,7 +533,7 @@ private[pickles] class PickleReader {
          * while still being able to detect these erroneous types if we really
          * want to.
          */
-        TypeRef(defn.scalaPackage.packageRef, typeName("<notype>"))
+        TypeRef(rctx.scalaPackage.packageRef, typeName("<notype>"))
       case NOPREFIXtpe =>
         NoPrefix
       case THIStpe =>
@@ -611,7 +615,7 @@ private[pickles] class PickleReader {
         def isByNameParamClass(tpe: Type): Boolean = tpe match
           case tpe: TypeRef if tpe.name == tpnme.scala2ByName =>
             tpe.prefix match
-              case prefix: PackageRef => prefix.symbol == defn.scalaPackage
+              case prefix: PackageRef => prefix.symbol == rctx.scalaPackage
               case _                  => false
           case _ =>
             false
@@ -632,7 +636,7 @@ private[pickles] class PickleReader {
         val parents = pkl.until(end, () => readTrueTypeRef())
         val parent = parents.reduceLeft(AndType(_, _))
         ensureReadAllLocalDeclsOfRefinement(clazzIndex)
-        val decls = clazz.declarations
+        val decls = clazz.declarationsOfClass
         if decls.isEmpty then parent
         else
           val refined = decls.toList.foldLeft(parent) { (parent, sym) =>
@@ -685,7 +689,7 @@ private[pickles] class PickleReader {
     }
   }
 
-  private def readTypeParams()(using Context, PklStream, Entries, Index): List[ClassTypeParamSymbol] = {
+  private def readTypeParams()(using ReaderContext, PklStream, Entries, Index): List[ClassTypeParamSymbol] = {
     val tag = pkl.readByte()
     val end = pkl.readEnd()
     if (tag == POLYtpe) {
@@ -695,14 +699,14 @@ private[pickles] class PickleReader {
   }
 
   /** Convert temp poly type to TypeLambda and leave other types alone. */
-  private def translateTempPolyForTypeArg(tp: TypeOrWildcard)(using Context): TypeOrWildcard =
+  private def translateTempPolyForTypeArg(tp: TypeOrWildcard)(using ReaderContext): TypeOrWildcard =
     translateTempPolyForTypeMember(tp) match
       case TypeAlias(alias)       => alias
       case bounds: RealTypeBounds => WildcardTypeArg(bounds)
   end translateTempPolyForTypeArg
 
   /** Convert temp poly type to TypeLambda and leave other types alone. */
-  private def translateTempPolyForTypeMember(tp: TypeOrWildcard)(using Context): TypeBounds = tp match
+  private def translateTempPolyForTypeMember(tp: TypeOrWildcard)(using ReaderContext): TypeBounds = tp match
     case tp: WildcardTypeArg =>
       def rec(bound: Type): Type =
         translateTempPolyForTypeMember(bound).asInstanceOf[TypeAlias].alias
@@ -728,7 +732,7 @@ private[pickles] class PickleReader {
   end translateTempPolyForTypeMember
 
   /** Convert temp poly type to PolyType and leave other types alone. */
-  private def translateTempPolyForMethod(tp: TypeOrMethodic)(using Context): TypeOrMethodic = tp match
+  private def translateTempPolyForMethod(tp: TypeOrMethodic)(using ReaderContext): TypeOrMethodic = tp match
     case TempPolyType(tparams, restpe) =>
       val localTParams = tparams.asInstanceOf[List[LocalTypeParamSymbol]] // no class type params in methods
       restpe match
@@ -744,11 +748,11 @@ private[pickles] class PickleReader {
   private def noSuchTypeTag(tag: Int, end: Int): Nothing =
     errorBadSignature("bad type tag: " + tag)
 
-  private def readConstantRef()(using Context, PklStream, Entries, Index): Constant | TermRef =
+  private def readConstantRef()(using ReaderContext, PklStream, Entries, Index): Constant | TermRef =
     at(pkl.readNat())(readConstant())
 
   /** Read a constant */
-  private def readConstant()(using Context, PklStream, Entries, Index): Constant | TermRef = {
+  private def readConstant()(using ReaderContext, PklStream, Entries, Index): Constant | TermRef = {
     import java.lang.Float.intBitsToFloat
     import java.lang.Double.longBitsToDouble
 
@@ -789,7 +793,7 @@ private[pickles] class PickleReader {
     * to
     *   tp { name: T }
     */
-  private def elimExistentials(boundSyms: List[TypeMemberSymbol], tp: Type)(using Context): Type =
+  private def elimExistentials(boundSyms: List[TypeMemberSymbol], tp: Type)(using ReaderContext): Type =
     // Need to be careful not to run into cyclic references here (observed when
     // compiling t247.scala). That's why we avoid taking `symbol` of a TypeRef
     // unless names match up.
@@ -901,13 +905,13 @@ private[reader] object PickleReader {
   }
 
   final class ExternalSymbolRef(owner: MaybeExternalSymbol, name: Name) {
-    def toTypeRef(pre: Prefix)(using Context): TypeRef =
+    def toTypeRef(pre: Prefix)(using ReaderContext): TypeRef =
       toNamedType(pre).asInstanceOf[TypeRef]
 
-    def toTermRef(pre: Prefix)(using Context): TermRef =
+    def toTermRef(pre: Prefix)(using ReaderContext): TermRef =
       toNamedType(pre).asInstanceOf[TermRef]
 
-    def toNamedType(pre: Prefix)(using Context): NamedType =
+    def toNamedType(pre: Prefix)(using ReaderContext): NamedType =
       NamedType(pre, toScala2ExternalSymRef)
 
     def toScala2ExternalSymRef: Scala2ExternalSymRef =

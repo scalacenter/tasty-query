@@ -23,6 +23,9 @@ import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
 
+import tastyquery.reader.ReaderContext
+import tastyquery.reader.ReaderContext.rctx
+
 import TastyUnpickler.NameTable
 
 private[tasties] sealed trait AbstractCaseDefFactory[CaseDefType]
@@ -35,11 +38,11 @@ private[tasties] class TreeUnpickler private (
   nameAtRef: NameTable,
   posUnpicklerOpt: Option[PositionUnpickler],
   caches: TreeUnpickler.Caches
-)(using Context) {
+)(using ReaderContext) {
   import TreeUnpickler.*
 
   def this(filename: String, reader: TastyReader, nameAtRef: NameTable, posUnpicklerOpt: Option[PositionUnpickler])(
-    using Context
+    using ReaderContext
   ) = this(filename, reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
 
   def unpickle(): List[Tree] =
@@ -58,7 +61,7 @@ private[tasties] class TreeUnpickler private (
   end unpickle
 
   private def enterSymbols(): Unit =
-    while !reader.isAtEnd do createSymbols(defn.RootPackage)
+    while !reader.isAtEnd do createSymbols(rctx.RootPackage)
 
   /* This method walks a TASTy file and creates all symbols in it.
    *
@@ -77,7 +80,7 @@ private[tasties] class TreeUnpickler private (
         val end = reader.readEnd()
         val sym = readPotentiallyShared({
           assert(reader.readByte() == TERMREFpkg, posErrorMsg)
-          ctx.findPackageFromRootOrCreate(readFullyQualifiedName)
+          rctx.findPackageFromRootOrCreate(readFullyQualifiedName)
         })
         reader.until(end)(createSymbols(owner = sym))
       case TYPEDEF =>
@@ -85,7 +88,12 @@ private[tasties] class TreeUnpickler private (
         val name = readName.toTypeName
         val tag = reader.nextByte
         val sym =
-          if tag == TEMPLATE then ClassSymbol.create(name, owner)
+          if tag == TEMPLATE then
+            val cls = ClassSymbol.create(name, owner)
+            owner match
+              case owner: PackageSymbol => caches.declaredTopLevelClasses += (owner, name) -> cls
+              case _                    => ()
+            cls
           else TypeMemberSymbol.create(name, owner)
         caches.registerSym(start, sym)
         readSymbolModifiers(sym, tag, end)
@@ -113,12 +121,12 @@ private[tasties] class TreeUnpickler private (
           if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(name.toTypeName, owner)
           else TermSymbol.create(name, owner)
         caches.registerSym(start, sym)
-        sym.withFlags(Case, None)
+        sym.setFlags(Case)
         // bind is never an owner
         reader.until(end)(createSymbols(owner))
       case REFINEDtpt =>
         val spn = spanAt(start)
-        val sym = ClassSymbol.createRefinedClassSymbol(owner, EmptyFlagSet, spn)
+        val sym = ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, EmptyFlagSet, spn)
         caches.registerSym(start, sym)
         val end = reader.readEnd()
         reader.until(end)(createSymbols(owner = sym))
@@ -247,14 +255,13 @@ private[tasties] class TreeUnpickler private (
     modsReader.skipTree() // tpt
     val rhsIsEmpty = modsReader.nothingButMods(end)
     if !rhsIsEmpty then modsReader.skipTree()
-    val (flags, privateWithin) = modsReader.readModifiers(end)
+    val flags = modsReader.readModifiers(sym, end)
     val normalizedFlags = normalizeFlags(sym, tag, flags, rhsIsEmpty)
-    sym.withFlags(normalizedFlags, privateWithin)
+    sym.setFlags(normalizedFlags)
 
   /** Read modifiers into a set of flags and a privateWithin boundary symbol. */
-  private def readModifiers(end: Addr): (FlagSet, Option[DeclaringSymbol]) =
+  private def readModifiers(sym: Symbol, end: Addr): FlagSet =
     var flags: FlagSet = EmptyFlagSet
-    var privateWithin: Option[DeclaringSymbol] = None
     def addFlag(flag: FlagSet): Unit =
       flags |= flag
       reader.readByte()
@@ -308,40 +315,67 @@ private[tasties] class TreeUnpickler private (
         case INFIX         => addFlag(Infix)
         case PRIVATEqualified =>
           ignoreFlag()
-          privateWithin = Some(readWithin)
+          skipTree()
         case PROTECTEDqualified =>
           addFlag(Protected)
-          privateWithin = Some(readWithin)
+          skipTree()
         case ANNOTATION =>
           ignoreFlag()
           ignoreAnnot()
         case tag =>
           assert(false, s"illegal modifier tag $tag at ${reader.currentAddr}, end = $end")
     end while
-    (flags, privateWithin)
+    flags
   end readModifiers
 
-  private def readWithin: DeclaringSymbol =
-    readTypeMappable() match
-      case TypeRef.OfClass(cls) => cls
-      case pkgRef: PackageRef   => pkgRef.symbol
-      case tpe                  => throw TastyFormatException(s"unexpected type for readWithin: $tpe")
+  private def readWithin(sym: Symbol): DeclaringSymbol =
+    /* Must be a combination of NoPrefix, PackageRef, TypeRef and ThisType that
+     * all point to elements of the owner chain of `sym` or their companion classes.
+     */
+    val orig = readTypeMappable()
+
+    def throwInvalid(): Nothing =
+      throw TastyFormatException(s"unexpected type in readWithin for $sym: $orig")
+
+    def resolveLocalClass(tpe: TypeRef): ClassSymbol = tpe.prefix match
+      case NoPrefix =>
+        tpe.localSymbol match
+          case cls: ClassSymbol => cls
+          case _                => throwInvalid()
+
+      case prefix: PackageRef =>
+        caches.declaredTopLevelClasses.getOrElse((prefix.symbol, tpe.name), throwInvalid())
+
+      case prefix: ThisType =>
+        resolveLocalClass(prefix.tref).getDeclImpl(tpe.name) match
+          case Some(cls: ClassSymbol) => cls
+          case _                      => throwInvalid()
+
+      case _ =>
+        throwInvalid()
+    end resolveLocalClass
+
+    orig match
+      case pkgRef: PackageRef => pkgRef.symbol
+      case tpe: TypeRef       => resolveLocalClass(tpe)
+      case tpe                => throwInvalid()
   end readWithin
 
   private def readAnnotationsInModifiers(sym: Symbol, end: Addr): Unit =
+    var privateWithin: Option[DeclaringSymbol] = None
     var annots: List[Annotation] = Nil
 
     while reader.currentAddr != end && isModifierTag(reader.nextByte) do
       reader.readByte() match
         case PRIVATEqualified | PROTECTEDqualified =>
-          skipTree()
+          privateWithin = Some(readWithin(sym))
         case ANNOTATION =>
           annots ::= readAnnotation()
         case _ =>
           ()
     end while
 
-    sym.setAnnotations(annots)
+    sym.setPrivateWithin(privateWithin).setAnnotations(annots)
   end readAnnotationsInModifiers
 
   private def readAnnotation(): Annotation =
@@ -386,7 +420,7 @@ private[tasties] class TreeUnpickler private (
       val packageEnd = reader.readEnd()
       val pid = readPotentiallyShared({
         assert(reader.readByte() == TERMREFpkg, posErrorMsg)
-        ctx.findPackageFromRootOrCreate(readFullyQualifiedName)
+        rctx.findPackageFromRootOrCreate(readFullyQualifiedName)
       })
       PackageDef(pid, reader.until(packageEnd)(readTopLevelStat))(spn)
     case _ => readStat
@@ -514,7 +548,7 @@ private[tasties] class TreeUnpickler private (
         case _ =>
           val alias = readTypeTree
           if forOpaque then
-            OpaqueTypeAliasDefinitionTree(InferredTypeBoundsTree(defn.NothingAnyBounds)(NoPosition), alias)(alias.pos)
+            OpaqueTypeAliasDefinitionTree(InferredTypeBoundsTree(rctx.NothingAnyBounds)(NoPosition), alias)(alias.pos)
           else TypeAliasDefinitionTree(alias)(alias.pos)
     }
   end readTypeDefinition
@@ -789,7 +823,7 @@ private[tasties] class TreeUnpickler private (
       val name = readName
       val typ = readTermType()
       val typ1 =
-        if name == nme.Wildcard then defn.uninitializedMethodTermRef
+        if name == nme.Wildcard then rctx.uninitializedMethodTermRef
         else typ
       makeIdent(name, typ1, spn)
     case _ =>
@@ -807,7 +841,7 @@ private[tasties] class TreeUnpickler private (
           /* This is a bit of a hack for default arguments to Java annotations with default values.
            * See simple_trees.Annotations.javaAnnotWithDefaultImplicit().
            */
-          defn.uninitializedMethodTermRef
+          rctx.uninitializedMethodTermRef
         else typ
       makeIdent(name, typ1, spn)
     case APPLY =>
@@ -1068,22 +1102,11 @@ private[tasties] class TreeUnpickler private (
     caches.getSymbol[Symbol](symAddr)
   }
 
-  /** Reads a package reference, with a fallback on faked term references.
-    *
-    * In a full, correct classpath, `readPackageRef()` will always return a
-    * `PackageRef`. However, in an incomplete or incorrect classpath, this
-    * method may return a `TermRef` if the target package does not exist.
-    *
-    * An alternative would be to create missing packages on the fly, but that
-    * would not be consistent with `Trees.Select.tpe` and
-    * `Trees.TermRefTypeTree.toType`.
-    */
+  /** Reads a package reference, with a fallback on faked term references. */
   private def readPackageRef(): TermReferenceType =
-    val fullyQualifiedName = readFullyQualifiedName
-    fullyQualifiedName.path.foldLeft[TermReferenceType](defn.RootPackage.packageRef) { (prefix, name) =>
-      val termName = name.asInstanceOf[TermName] // readFullyQualifiedName only reads TermName's in paths
-      NamedType.possibleSelFromPackage(prefix, termName)
-    }
+    // readFullyQualifiedName only reads TermName's in paths, so the cast is OK
+    val path = readFullyQualifiedName.path.asInstanceOf[List[TermName]]
+    rctx.createPackageSelection(path)
   end readPackageRef
 
   private def readTypeRef(): TypeRef =
@@ -1471,7 +1494,7 @@ private[tasties] class TreeUnpickler private (
       val end = reader.readEnd()
       val selOrBound = readTypeTree
       val (bound, selector) =
-        if tagFollowShared == CASEDEF then (TypeWrapper(defn.AnyType)(spn), selOrBound)
+        if tagFollowShared == CASEDEF then (TypeWrapper(rctx.AnyType)(spn), selOrBound)
         else (selOrBound, readTypeTree)
       MatchTypeTree(bound, selector, readCases[TypeCaseDef](TypeCaseDefFactory, end))(spn)
     // TODO: why in TYPEAPPLY?
@@ -1614,6 +1637,12 @@ private[tasties] object TreeUnpickler {
     val definingTypeTreeCache = mutable.Map.empty[Addr, TypeTree]
 
     val registeredBinders = mutable.Map.empty[Addr, Binders]
+
+    /** The top-level classes declared in this .tasty file.
+      *
+      * This is used in `readWithin` to resolve top-level class references without a Context.
+      */
+    val declaredTopLevelClasses = mutable.AnyRefMap.empty[(PackageSymbol, TypeName), ClassSymbol]
 
     def hasSymbolAt(addr: Addr): Boolean = localSymbols.contains(addr)
 

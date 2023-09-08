@@ -112,23 +112,14 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
-          // private, so this is fine
-          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.reader.tasties.TreeUnpickler#Caches.refinedTypeTreeCache"),
-          ProblemFilters.exclude[MissingClassProblem]("tastyquery.reader.tasties.TreeUnpickler$LocalContext"),
+          // Everything in tastyquery.reader is private[tastyquery] at most
+          ProblemFilters.exclude[Problem]("tastyquery.reader.*"),
 
-          // private[reader], so this is fine
-          ProblemFilters.exclude[Problem]("tastyquery.reader.tasties.TastyUnpickler#*"),
-
-          // private[tastyquery], so this is fine
-          ProblemFilters.exclude[MissingClassProblem]("tastyquery.Types$TypeParamInfo"),
-
-          /* We removed TypeParamInfo from the parents of ClassTypeParam.
-           * Since TypeParamInfo was `private[tastyquery]`, there is little chance it leaked.
-           */
-          ProblemFilters.exclude[MissingTypesProblem]("tastyquery.Symbols$ClassTypeParamSymbol"),
-
-          // new abstract method in fully sealed trait, so this is fine
-          ProblemFilters.exclude[ReversedMissingMethodProblem]("tastyquery.Types#TermLambdaType.paramTypes"),
+          // private[tastyquery], not an issue
+          ProblemFilters.exclude[IncompatibleMethTypeProblem]("tastyquery.Symbols#ClassSymbol.createRefinedClassSymbol"),
+          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#PolyType.fromParamsSymbols"),
+          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#TypeLambda.fromParamsSymbols"),
+          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#TypeLambdaTypeCompanion.fromParamsSymbols"),
         )
       },
     )

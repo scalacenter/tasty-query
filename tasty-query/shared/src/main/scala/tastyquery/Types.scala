@@ -693,10 +693,10 @@ object Types {
       None // TODO
 
     /** Is this type exactly Nothing (no vars, aliases, refinements etc allowed)? */
-    private[tastyquery] final def isExactlyNothing(using Context): Boolean = this match
+    private[tastyquery] final def isExactlyNothing: Boolean = this match
       case tp: TypeRef if tp.name == tpnme.Nothing =>
         tp.prefix.match
-          case prefix: PackageRef => prefix.symbol == defn.scalaPackage
+          case prefix: PackageRef => prefix.symbol.isScalaPackage
           case _                  => false
       case _ =>
         false
@@ -893,6 +893,10 @@ object Types {
 
     private[tastyquery] final def isLocalRef(sym: Symbol): Boolean =
       prefix == NoPrefix && (designator eq sym)
+
+    private[tastyquery] final def localSymbol: ThisSymbolType =
+      require(prefix == NoPrefix, prefix)
+      designator.asInstanceOf[ThisSymbolType]
 
     private[tastyquery] final def isSomeClassTypeParamRef: Boolean =
       designator.isInstanceOf[ClassTypeParamSymbol]
@@ -1585,9 +1589,7 @@ object Types {
   sealed abstract class TypeLambdaTypeCompanion[RT <: TypeOrMethodic, LT <: TypeLambdaType]
       extends LambdaTypeCompanion[TypeName, TypeBounds, RT, LT] {
     @targetName("fromParamsSymbols")
-    private[tastyquery] final def fromParams(params: List[LocalTypeParamSymbol], resultType: RT)(
-      using Context
-    ): LT | RT =
+    private[tastyquery] final def fromParams(params: List[LocalTypeParamSymbol], resultType: RT): LT | RT =
       if params.isEmpty then resultType
       else
         val paramNames = params.map(_.name)

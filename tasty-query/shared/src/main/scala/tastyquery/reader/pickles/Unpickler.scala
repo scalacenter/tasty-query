@@ -2,13 +2,14 @@ package tastyquery.reader.pickles
 
 import PickleReader.{PklStream, index, pkl}
 
-import tastyquery.Contexts.Context
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.SourceLanguage
 
+import tastyquery.reader.ReaderContext
+
 private[reader] object Unpickler {
-  def loadInfo(sigBytes: IArray[Byte])(using Context): Unit = {
+  def loadInfo(sigBytes: IArray[Byte])(using ReaderContext): Unit = {
 
     def run(reader: PickleReader, structure: reader.Structure)(using PklStream): Unit = {
       import structure.given

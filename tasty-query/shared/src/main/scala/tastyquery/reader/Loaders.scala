@@ -11,6 +11,7 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 
+import tastyquery.reader.ReaderContext.rctx
 import tastyquery.reader.classfiles.ClassfileParser
 import tastyquery.reader.classfiles.ClassfileParser.{ClassKind, InnerClassDecl, Resolver}
 import tastyquery.reader.tasties.TastyUnpickler
@@ -26,7 +27,7 @@ private[tastyquery] object Loaders {
         pkg.fullName.select(rootName)
   end Loader
 
-  class Loader(val classpath: Classpath) { loader =>
+  class Loader(val classpath: Classpath) {
 
     given Resolver = Resolver()
 
@@ -39,6 +40,7 @@ private[tastyquery] object Loaders {
 
     private var searched = false
     private var packages: Map[PackageSymbol, IArray[PackageData]] = compiletime.uninitialized
+    private var _hasGenericTuples: Boolean = compiletime.uninitialized
     private var byEntry: ByEntryMap | Null = null
     private val roots: mutable.Map[PackageSymbol, mutable.Map[SimpleName, Entry]] = mutable.HashMap.empty
     private var topLevelTastys: Map[Loader.Root, List[Tree]] = Map.empty
@@ -65,11 +67,13 @@ private[tastyquery] object Loaders {
       * In any case, no new declarations can ever be found for the given root
       * after this method.
       */
-    private def completeRoot(root: Loader.Root, entry: Entry)(using Context): Unit =
+    private def completeRoot(root: Loader.Root, entry: Entry)(using ctx: Context): Unit =
+      doCompleteRoot(root, entry)(using ReaderContext(ctx))
 
+    private def doCompleteRoot(root: Loader.Root, entry: Entry)(using ReaderContext): Unit =
       def innerClassLookup(nested: IArray[ClassData]): Map[SimpleName, ClassData] =
         val mkBinaryName: String => SimpleName =
-          if root.pkg == defn.EmptyPackage then termName(_)
+          if root.pkg == rctx.EmptyPackage then termName(_)
           else
             val pre = root.pkg.fullName.path.mkString("/")
             bin => termName(s"$pre/$bin")
@@ -140,7 +144,7 @@ private[tastyquery] object Loaders {
         case entry: Entry.TastyOnly =>
           // Tested in `SymbolSuite`, `ReadTreeSuite`, these do not need to see class files.
           enterTasty(root, entry.tastyData)
-    end completeRoot
+    end doCompleteRoot
 
     /** Loads all the roots of the given `pkg`. */
     private[tastyquery] def loadAllRoots(pkg: PackageSymbol)(using Context): Unit =
@@ -272,8 +276,12 @@ private[tastyquery] object Loaders {
 
       if !searched then
         searched = true
-        loader.packages = loadPackages().groupMap((pkg, _) => pkg)((_, data) => data)
+        packages = loadPackages().groupMap((pkg, _) => pkg)((_, data) => data)
+        _hasGenericTuples =
+          packages.get(defn.scalaPackage).exists(_.exists(_.tastys.exists(_.binaryName == "$times$colon")))
     end initPackages
+
+    def hasGenericTuples: Boolean = _hasGenericTuples
 
     private def computeByEntry()(using Context): ByEntryMap =
       require(searched)
