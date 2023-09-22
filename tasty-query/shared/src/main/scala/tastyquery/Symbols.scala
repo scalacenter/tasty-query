@@ -75,7 +75,7 @@ object Symbols {
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
     private var myTree: Option[DefiningTreeType] = None
-    private var myPrivateWithin: Option[DeclaringSymbol] = None
+    private var myPrivateWithin: Option[DeclaringSymbol] | Null = null
     private var myAnnotations: List[Annotation] | Null = null
 
     /** Checks that this `Symbol` has been completely initialized.
@@ -96,6 +96,7 @@ object Symbols {
       */
     protected def doCheckCompleted(): Unit =
       if !isFlagsInitialized then throw failNotCompleted("flags were not initialized")
+      if myPrivateWithin == null then throw failNotCompleted("privateWithin was not initialized")
       if myAnnotations == null then throw failNotCompleted("annotations were not initialized")
 
     private[tastyquery] def withTree(t: DefiningTreeType): this.type =
@@ -107,12 +108,24 @@ object Symbols {
       myTree
 
     private[tastyquery] final def withFlags(flags: FlagSet, privateWithin: Option[DeclaringSymbol]): this.type =
-      if isFlagsInitialized then throw IllegalStateException(s"reassignment of flags to $this")
+      setFlags(flags)
+      setPrivateWithin(privateWithin)
+
+    private[tastyquery] final def setFlags(flags: FlagSet): this.type =
+      if isFlagsInitialized || myPrivateWithin != null then
+        throw IllegalStateException(s"reassignment of flags to $this")
       else
         isFlagsInitialized = true
         myFlags = flags
+        this
+    end setFlags
+
+    private[tastyquery] final def setPrivateWithin(privateWithin: Option[DeclaringSymbol]): this.type =
+      if myPrivateWithin != null then throw IllegalStateException(s"reassignment of privateWithin to $this")
+      else
         myPrivateWithin = privateWithin
         this
+    end setPrivateWithin
 
     private[tastyquery] final def setAnnotations(annots: List[Annotation]): this.type =
       if myAnnotations != null then throw IllegalStateException(s"reassignment of annotations to $this")
@@ -126,8 +139,9 @@ object Symbols {
       else throw IllegalStateException(s"annotations of $this have not been initialized")
 
     protected final def privateWithin: Option[DeclaringSymbol] =
-      if isFlagsInitialized then myPrivateWithin
-      else throw IllegalStateException(s"flags of $this have not been initialized")
+      val local = myPrivateWithin
+      if local != null then local
+      else throw IllegalStateException(s"privateWithin of $this has not been initialized")
 
     protected final def flags: FlagSet =
       if isFlagsInitialized then myFlags
@@ -1187,13 +1201,16 @@ object Symbols {
     end distinguishOverloaded
 
     final def getDecl(name: TypeName)(using Context): Option[TypeSymbol] =
+      getDeclImpl(name)
+
+    private[tastyquery] final def getDeclImpl(name: TypeName): Option[TypeSymbol] =
       myDeclarations.get(name) match
         case Some(decls) =>
           assert(decls.sizeIs == 1, decls)
           Some(decls.head.asType)
         case None =>
           None
-    end getDecl
+    end getDeclImpl
 
     final def getDecl(name: TermName)(using Context): Option[TermSymbol] =
       getDecl(name: Name).map(_.asTerm)
@@ -1273,6 +1290,9 @@ object Symbols {
     end findNonOverloadedDecl
 
     final def declarations(using Context): List[TermOrTypeSymbol] =
+      declarationsOfClass
+
+    private[tastyquery] final def declarationsOfClass: List[TermOrTypeSymbol] =
       myDeclarations.values.toList.flatten
 
     // Member lookup, including inherited members
@@ -1537,9 +1557,7 @@ object Symbols {
       *
       * This is only used by the Scala 2 unpickler.
       */
-    private[tastyquery] def setScala2SealedChildren(children: List[Symbol | Scala2ExternalSymRef])(
-      using Context
-    ): Unit =
+    private[tastyquery] def setScala2SealedChildren(children: List[Symbol | Scala2ExternalSymRef]): Unit =
       if !flags.is(Scala2Defined) then
         throw IllegalArgumentException(s"Illegal $this.setScala2SealedChildren($children) for non-Scala 2 class")
       if myScala2SealedChildren.isDefined then
@@ -1617,17 +1635,20 @@ object Symbols {
     private[tastyquery] def createNotDeclaration(name: TypeName, owner: Symbol): ClassSymbol =
       ClassSymbol(name, owner)
 
-    private[tastyquery] def createRefinedClassSymbol(owner: Symbol, flags: FlagSet, pos: SourcePosition)(
-      using Context
+    private[tastyquery] def createRefinedClassSymbol(
+      owner: Symbol,
+      objectType: TypeRef,
+      flags: FlagSet,
+      pos: SourcePosition
     ): ClassSymbol =
       // TODO Store the `pos`
-      createRefinedClassSymbol(owner, flags)
+      createRefinedClassSymbol(owner, objectType, flags)
 
-    private[tastyquery] def createRefinedClassSymbol(owner: Symbol, flags: FlagSet)(using Context): ClassSymbol =
+    private[tastyquery] def createRefinedClassSymbol(owner: Symbol, objectType: TypeRef, flags: FlagSet): ClassSymbol =
       val cls = ClassSymbol(tpnme.RefinedClassMagic, owner) // by-pass `owner.addDeclIfDeclaringSym`
       cls
         .withTypeParams(Nil)
-        .withParentsDirect(defn.ObjectType :: Nil)
+        .withParentsDirect(objectType :: Nil)
         .withGivenSelfType(None)
         .withFlags(flags, None)
         .setAnnotations(Nil)
@@ -1664,6 +1685,10 @@ object Symbols {
 
     /** Is this the root package? */
     final def isRootPackage: Boolean = owner == null
+
+    /** Is this the scala package? */
+    private[tastyquery] def isScalaPackage: Boolean =
+      name == nme.scalaPackageName && owner != null && owner.isRootPackage
 
     /** Gets the subpackage with the specified `name`, if it exists.
       *

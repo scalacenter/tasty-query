@@ -12,6 +12,9 @@ import tastyquery.Names.*
 import tastyquery.Types.*
 import tastyquery.Symbols.*
 
+import tastyquery.reader.ReaderContext
+import tastyquery.reader.ReaderContext.rctx
+
 import ClassfileParser.{InnerClasses, Resolver}
 
 private[classfiles] object JavaSignatures:
@@ -20,7 +23,7 @@ private[classfiles] object JavaSignatures:
 
   @throws[ClassfileFormatException]
   def parseSignature(member: Symbol { val owner: Symbol }, signature: String, allRegisteredSymbols: Growable[Symbol])(
-    using Context,
+    using ReaderContext,
     InnerClasses,
     Resolver
   ): TypeOrMethodic =
@@ -29,8 +32,8 @@ private[classfiles] object JavaSignatures:
     val isClass = member.isClass
     val isMethod = member.isTerm && member.asTerm.isMethod
 
-    lazy val someEmptyType = Some(defn.AnyType)
-    lazy val emptyTypeBounds = defn.NothingAnyBounds
+    lazy val someEmptyType = Some(rctx.AnyType)
+    lazy val emptyTypeBounds = rctx.NothingAnyBounds
 
     extension (env: JavaSignature)
 
@@ -130,14 +133,14 @@ private[classfiles] object JavaSignatures:
     def baseType: Option[Type] =
       if available >= 1 then
         (peek: @switch) match
-          case 'B' => commitSimple(1, Some(defn.ByteType))
-          case 'C' => commitSimple(1, Some(defn.CharType))
-          case 'D' => commitSimple(1, Some(defn.DoubleType))
-          case 'F' => commitSimple(1, Some(defn.FloatType))
-          case 'I' => commitSimple(1, Some(defn.IntType))
-          case 'J' => commitSimple(1, Some(defn.LongType))
-          case 'S' => commitSimple(1, Some(defn.ShortType))
-          case 'Z' => commitSimple(1, Some(defn.BooleanType))
+          case 'B' => commitSimple(1, Some(rctx.ByteType))
+          case 'C' => commitSimple(1, Some(rctx.CharType))
+          case 'D' => commitSimple(1, Some(rctx.DoubleType))
+          case 'F' => commitSimple(1, Some(rctx.FloatType))
+          case 'I' => commitSimple(1, Some(rctx.IntType))
+          case 'J' => commitSimple(1, Some(rctx.LongType))
+          case 'S' => commitSimple(1, Some(rctx.ShortType))
+          case 'Z' => commitSimple(1, Some(rctx.BooleanType))
           case _   => None
       else None
 
@@ -175,16 +178,16 @@ private[classfiles] object JavaSignatures:
       if available >= 1 then
         (peek: @switch) match
           case '*' =>
-            commitSimple(1, WildcardTypeArg(defn.NothingAnyBounds))
+            commitSimple(1, WildcardTypeArg(rctx.NothingAnyBounds))
           case '+' =>
             commit(1) {
               val upper = referenceType(env)
-              WildcardTypeArg(RealTypeBounds(defn.NothingType, upper))
+              WildcardTypeArg(RealTypeBounds(rctx.NothingType, upper))
             }
           case '-' =>
             commit(1) {
               val lower = referenceType(env)
-              WildcardTypeArg(RealTypeBounds(lower, defn.FromJavaObjectType))
+              WildcardTypeArg(RealTypeBounds(lower, rctx.FromJavaObjectType))
             }
           case _ =>
             referenceType(env)
@@ -199,10 +202,10 @@ private[classfiles] object JavaSignatures:
         expect(':')
         referenceTypeSignature(env) match
           case Some(tpe) => tpe
-          case _         => defn.FromJavaObjectType
+          case _         => rctx.FromJavaObjectType
       val interfaceBounds = readWhile(':', referenceType(env))
       if env.withAddedParam(tname) then emptyTypeBounds // shortcut as we will throw away the bounds
-      else RealTypeBounds(defn.NothingType, interfaceBounds.foldLeft(classBound)(AndType(_, _)))
+      else RealTypeBounds(rctx.NothingType, interfaceBounds.foldLeft(classBound)(AndType(_, _)))
 
     def typeParamsRest(env: JavaSignature): List[TypeBounds] =
       readUntil('>', typeParameter(env))
@@ -215,11 +218,11 @@ private[classfiles] object JavaSignatures:
     def arrayType(env: JavaSignature): Option[Type] =
       if consume('[') then
         val tpe = javaTypeSignature(env)
-        Some(defn.ArrayTypeOf(tpe))
+        Some(rctx.ArrayTypeOf(tpe))
       else None
 
     def result(env: JavaSignature): Type =
-      if consume('V') then defn.UnitType
+      if consume('V') then rctx.UnitType
       else javaTypeSignature(env)
 
     def referenceType(env: JavaSignature): Type =

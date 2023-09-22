@@ -189,20 +189,16 @@ private[classfiles] final class ClassfileReader private () {
     reader
   }
 
-  def readFields(op: (SimpleName, SigOrDesc, AccessFlags) => Unit)(using DataStream, ConstantPool)(
-    using Context
-  ): Unit =
+  def readFields(op: (SimpleName, SigOrDesc, AccessFlags) => Unit)(using DataStream, ConstantPool): Unit =
     readMembers(isMethod = false, op)
 
-  def readMethods(op: (SimpleName, SigOrDesc, AccessFlags) => Unit)(using DataStream, ConstantPool)(
-    using Context
-  ): Unit =
+  def readMethods(op: (SimpleName, SigOrDesc, AccessFlags) => Unit)(using DataStream, ConstantPool): Unit =
     readMembers(isMethod = true, op)
 
   private def readMembers(
     isMethod: Boolean,
     op: (SimpleName, SigOrDesc, AccessFlags) => Unit
-  )(using DataStream, ConstantPool)(using Context): Unit = {
+  )(using DataStream, ConstantPool): Unit = {
     val count = data.readU2()
     loop(count) {
       val accessFlags = readAccessFlags()
