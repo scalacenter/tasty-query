@@ -117,6 +117,7 @@ lazy val tastyQuery =
 
           // private[tastyquery], not an issue
           ProblemFilters.exclude[IncompatibleMethTypeProblem]("tastyquery.Symbols#ClassSymbol.createRefinedClassSymbol"),
+          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Symbols#ClassSymbol.createRefinedClassSymbol"),
           ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#PolyType.fromParamsSymbols"),
           ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#TypeLambda.fromParamsSymbols"),
           ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#TypeLambdaTypeCompanion.fromParamsSymbols"),
