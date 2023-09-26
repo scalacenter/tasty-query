@@ -1635,15 +1635,6 @@ object Symbols {
     private[tastyquery] def createNotDeclaration(name: TypeName, owner: Symbol): ClassSymbol =
       ClassSymbol(name, owner)
 
-    private[tastyquery] def createRefinedClassSymbol(
-      owner: Symbol,
-      objectType: TypeRef,
-      flags: FlagSet,
-      pos: SourcePosition
-    ): ClassSymbol =
-      // TODO Store the `pos`
-      createRefinedClassSymbol(owner, objectType, flags)
-
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, objectType: TypeRef, flags: FlagSet): ClassSymbol =
       val cls = ClassSymbol(tpnme.RefinedClassMagic, owner) // by-pass `owner.addDeclIfDeclaringSym`
       cls

@@ -2,8 +2,9 @@
 
 package tastyquery.reader.tasties
 
+import scala.annotation.tailrec
+
 import scala.collection.mutable
-import scala.compiletime.uninitialized
 
 import dotty.tools.tasty.TastyBuffer.{Addr, NameRef}
 import dotty.tools.tasty.TastyFormat.SOURCE
@@ -22,7 +23,8 @@ import tastyquery.reader.ReaderContext.rctx
 private[reader] class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnpickler.NameTable)(using ReaderContext) {
   import reader.*
 
-  private val mySourcePositions = mutable.HashMap.empty[Addr, SourcePosition]
+  private val mySpans = mutable.HashMap.empty[Addr, Span]
+  private val mySourceFiles = mutable.HashMap.empty[Addr, SourceFile]
   private var isDefined = false
 
   def ensureDefined(): Unit =
@@ -36,57 +38,58 @@ private[reader] class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnp
         myLineSizes(i) += readNat()
         i += 1
 
-      /* Read the source positions
-       * There are spans and SOURCE directives. A source directive applies to
-       * the span *just before it* and the following. This is a peculiarity due
-       * to how dotc maintains the addresses of spans and sources. For us, it
-       * makes the unpickling algorithm a bit messy.
+      /* Read the spans and SOURCE directives.
+       *
+       * SOURCE directives inherit their `curAddress` from the previous span entry.
+       * They will apply to the tree at that address and all its subtree.
        */
 
       var noSourceSeenYet = true
-      var curSource = SourceFile.NoSource
       var curAddress = 0
       var curStart = 0
       var curEnd = 0
 
-      var eof = false
-      var header = readInt()
-      while !eof do
-        val addressDelta = header >> 3
-        val hasStart = (header & 4) != 0
-        val hasEnd = (header & 2) != 0
-        val hasPoint = (header & 1) != 0
+      while !isAtEnd do
+        val header = readInt()
+        if header == SOURCE then
+          val path = nameAtRef.simple(readNameRef()).toString()
+          val source = rctx.getSourceFile(path)
+          mySourceFiles(Addr(curAddress)) = source
 
-        curAddress += addressDelta
-        assert(curAddress >= 0)
-        if hasStart then curStart += readInt()
-        if hasEnd then curEnd += readInt()
-        val span =
-          if hasPoint then Span(curStart, curEnd, curStart + readInt())
-          else Span(curStart, curEnd)
-
-        if isAtEnd then eof = true
+          // Attach the line sizes to the first source file we encounter
+          if noSourceSeenYet then
+            source.setLineSizes(myLineSizes)
+            noSourceSeenYet = false
         else
-          header = readInt()
-          if header == SOURCE then
-            val path = nameAtRef.simple(readNameRef()).toString()
-            curSource = rctx.getSourceFile(path)
-            if noSourceSeenYet then
-              curSource.setLineSizes(myLineSizes)
-              noSourceSeenYet = false
+          val addressDelta = header >> 3
+          val hasStart = (header & 4) != 0
+          val hasEnd = (header & 2) != 0
+          val hasPoint = (header & 1) != 0
 
-            if isAtEnd then eof = true
-            else header = readInt()
+          curAddress += addressDelta
+          assert(curAddress >= 0)
+          if hasStart then curStart += readInt()
+          if hasEnd then curEnd += readInt()
+          val span =
+            if hasPoint then Span(curStart, curEnd, curStart + readInt())
+            else Span(curStart, curEnd)
+          mySpans(Addr(curAddress)) = span
         end if
-
-        mySourcePositions(Addr(curAddress)) = new SourcePosition(curSource, span)
       end while
 
       isDefined = true
     }
   end ensureDefined
 
-  def sourcePositionAt(addr: Addr): SourcePosition =
+  def spanAt(addr: Addr): Span =
     ensureDefined()
-    mySourcePositions.getOrElse(addr, SourcePosition.NoPosition)
+    mySpans.getOrElse(addr, NoSpan)
+
+  def hasSourceFileAt(addr: Addr): Boolean =
+    ensureDefined()
+    mySourceFiles.contains(addr)
+
+  def sourceFileAt(addr: Addr, default: SourceFile): SourceFile =
+    ensureDefined()
+    mySourceFiles.getOrElse(addr, default)
 }
