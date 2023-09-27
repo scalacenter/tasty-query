@@ -78,7 +78,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickleWithCode("apply", "simple_trees.EtaExpansion") { (tree, code) =>
-    assertEquals(collectCode[Apply](tree, code), List("f(0)", "takesFunction(intMethod)"))
+    assertEquals(collectCode[Apply](tree, code), List("f(0)", "takesFunction(intMethod)", "intMethod"))
   }
 
   /** Control structures */
@@ -109,18 +109,23 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   testUnpickleWithCode("match", "simple_trees.Match") { (tree, code) =>
     assertEquals(
       collectCode[Match](tree, code),
-      List("""x match {
-             |    case 0 => 0
-             |    case 1 | -1 | 2 => x + 1
-             |    case 7 if x == 7 => x - 1
-             |    case 3 | 4 | 5 if x < 5 => 0
-             |    case _ if (x % 2 == 0) => x / 2
-             |    case _ => -x
-             |  }""".stripMargin)
+      List(
+        """x match {
+          |    case 0 => 0
+          |    case 1 | -1 | 2 => x + 1
+          |    case 7 if x == 7 => x - 1
+          |    case 3 | 4 | 5 if x < 5 => 0
+          |    case _ if (x % 2 == 0) => x / 2
+          |    case _ => -x
+          |  }""".stripMargin,
+        """xs match
+          |    case List(elems: _*) => 0
+          |    case _               => 1""".stripMargin
+      )
     )
 
-    val matchPos = findTree(tree) {
-      case matchTree: Match if !matchTree.pos.isUnknown => matchTree.pos
+    val matchPos = findTree(tree) { case matchTree @ Match(Ident(SimpleName("x")), _) =>
+      matchTree.pos
     }
     assert(clue(matchPos.startLine) == 3)
     assert(clue(matchPos.startColumn) == 23)
@@ -318,7 +323,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickleWithCode("type-apply", "simple_trees.TypeApply") { (tree, code) =>
-    assertEquals(collectCode[TypeApply](tree, code), List("Seq[Int]", "A[Int, Seq[String]]"))
+    assertEquals(collectCode[TypeApply](tree, code), List("Seq", "Seq[Int]", "A[Int, Seq[String]]"))
   }
 
   testUnpickleWithCode("type-ident", "simple_trees.Typed") { (tree, code) =>
@@ -356,6 +361,8 @@ class PositionSuite extends RestrictedUnpicklingSuite {
         """X match {
           |    case Int => String
           |  }""".stripMargin,
+        """Product = X match {
+          |    case Int => Some[Int]""".stripMargin,
         """X match {
           |    case _ => Int
           |  }""".stripMargin,
@@ -375,11 +382,33 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickleWithCode("type-definition-tree-1", "simple_trees.TypeMember") { (tree, code) =>
-    assertEquals(collectCode[TypeDefinitionTree](tree, code), List("Int", ">: Null <: Product", "Int"))
+    assertEquals(
+      collectCode[TypeDefinitionTree](tree, code),
+      List(
+        "Int",
+        /* The following makes no sense; it is the position of the type def
+         * of `type AbstractType`. It's probably dotc's auto-assigning of
+         * positions that goes wild.
+         */
+        """type AbstractType
+          |  type AbstractWithBounds >: Null <: Product""".stripMargin,
+        ">: Null <: Product",
+        "Int",
+        "Null <: Product = Null",
+        "Null <: Product"
+      )
+    )
   }
 
   testUnpickleWithCode("type-definition-tree-2", "simple_trees.TypeLambda") { (tree, code) =>
-    assertEquals(collectCode[TypeDefinitionTree](tree, code), List("[X] =>> List[X]", "List[X]"))
+    assertEquals(
+      collectCode[TypeDefinitionTree](tree, code),
+      List(
+        "[X] =>> List[X]",
+        "X] =>> List[X]", // TODO Improve this
+        "List[X]"
+      )
+    )
   }
 
   /** Inlined */

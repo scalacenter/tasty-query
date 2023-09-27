@@ -201,18 +201,16 @@ private[tasties] class TreeUnpickler private (
   private def posErrorMsg: String = s"at address ${reader.currentAddr} in file $filename"
   private def posErrorMsg(atAddr: Addr): String = s"at address $atAddr in file $filename"
 
-  def spanAt(addr: Addr)(using SourceFile): SourcePosition =
+  def spanAt(addr: Addr): Span =
     posUnpicklerOpt match {
       case Some(posUnpickler) =>
-        val span = posUnpickler.spanAt(addr)
-        if span.exists then SourcePosition(summon[SourceFile], span)
-        else SourcePosition.NoPosition
+        posUnpickler.spanAt(addr)
       case _ =>
-        SourcePosition.NoPosition
+        NoSpan
     }
 
-  def span(using SourceFile): SourcePosition =
-    spanAt(reader.currentAddr)
+  def span(using source: SourceFile): SourcePosition =
+    SourcePosition.auto(source, spanAt(reader.currentAddr))
 
   private inline def maybeAdjustSourceFileIn[A](inline op: SourceFile ?=> A)(using source: SourceFile): A =
     val newSourceFile = posUnpicklerOpt match
@@ -805,11 +803,12 @@ private[tasties] class TreeUnpickler private (
       if name == nme.Wildcard || name == nme.WildcardSequence then WildcardPattern(typ.requireType)(spn)
       else ExprPattern(makeIdent(name, typ, spn))(spn)
     case TYPED =>
+      val spn = span
       reader.readByte()
       reader.readEnd()
       val body = readPattern
       val tpt = readTypeTree
-      TypeTest(body, tpt)(body.pos.union(tpt.pos))
+      TypeTest(body, tpt)(spn)
     case BIND =>
       val spn = span
       val start = reader.currentAddr
@@ -823,10 +822,10 @@ private[tasties] class TreeUnpickler private (
       symbol.withDeclaredType(typ)
       definingTree(symbol, Bind(name, body, symbol)(spn))
     case ALTERNATIVE =>
+      val spn = span
       reader.readByte()
       val end = reader.readEnd()
       val alts = reader.until(end)(readPattern)
-      val spn = alts.map(_.pos).reduce(_.union(_))
       Alternative(alts)(spn)
     case UNAPPLY =>
       val spn = span
@@ -844,7 +843,8 @@ private[tasties] class TreeUnpickler private (
     case SHAREDterm =>
       val spn = span
       reader.readByte()
-      forkAt(reader.readAddr()).readPattern.withPos(spn)
+      val shared = forkAt(reader.readAddr()).readPattern
+      if spn.isUnknown then shared else shared.withPos(spn)
     case _ =>
       val expr = readTerm
       ExprPattern(expr)(expr.pos)
@@ -939,11 +939,12 @@ private[tasties] class TreeUnpickler private (
       val cls = readTypeTree
       New(cls)(spn)
     case TYPED =>
+      val spn = span
       reader.readByte()
       reader.readEnd()
       val expr = readTerm
       val tpt = readTypeTree
-      Typed(expr, tpt)(expr.pos.union(tpt.pos))
+      Typed(expr, tpt)(spn)
     case THROW =>
       val spn = span
       reader.readByte()
@@ -958,13 +959,12 @@ private[tasties] class TreeUnpickler private (
       val finalizer = reader.ifBeforeOpt(end)(readTerm)
       Try(expr, catchCases, finalizer)(spn)
     case ASSIGN =>
+      val spn = span
       reader.readByte()
       reader.readEnd()
-      val lhsSpan = span
       val lhs = readTerm
-      val rhsSpan = span
       val rhs = readTerm
-      Assign(lhs, rhs)(lhsSpan.union(rhsSpan))
+      Assign(lhs, rhs)(spn)
     case BLOCK =>
       val spn = span
       reader.readByte()
@@ -1046,7 +1046,8 @@ private[tasties] class TreeUnpickler private (
     case SHAREDterm =>
       val spn = span
       reader.readByte()
-      forkAt(reader.readAddr()).readTerm.withPos(spn)
+      val shared = forkAt(reader.readAddr()).readTerm
+      if spn.isUnknown then shared else shared.withPos(spn)
 
     // paths
     case THIS =>
@@ -1091,7 +1092,8 @@ private[tasties] class TreeUnpickler private (
     case SHAREDtype =>
       val spn = span
       reader.readByte()
-      forkAt(reader.readAddr()).readTerm.withPos(spn)
+      val shared = forkAt(reader.readAddr()).readTerm
+      if spn.isUnknown then shared else shared.withPos(spn)
     case tag if isConstantTag(tag) =>
       val spn = span
       Literal(readConstant)(spn)
@@ -1585,7 +1587,8 @@ private[tasties] class TreeUnpickler private (
     case SHAREDterm =>
       val spn = span
       reader.readByte()
-      forkAt(reader.readAddr()).readTypeTree.withPos(spn)
+      val shared = forkAt(reader.readAddr()).readTypeTree
+      if spn.isUnknown then shared else shared.withPos(spn)
     case tag if isTypeTreeTag(tag) =>
       throw TastyFormatException(s"Unexpected type tree tag ${astTagToString(tag)} $posErrorMsg")
     case _ =>
