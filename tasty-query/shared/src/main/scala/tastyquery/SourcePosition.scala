@@ -3,8 +3,10 @@ package tastyquery
 import tastyquery.Spans.Span
 import tastyquery.Spans.NoSpan
 
-final class SourcePosition private[tastyquery] (val sourceFile: SourceFile, private val span: Span):
+final class SourcePosition private[tastyquery] (val sourceFile: SourceFile, private[tastyquery] val span: Span):
   override def toString(): String = s"$sourceFile:$span"
+
+  private[tastyquery] def isAuto: Boolean = !span.exists && sourceFile != SourceFile.NoSource
 
   /** True if this source position is unknown. */
   def isUnknown: Boolean = !span.exists
@@ -76,4 +78,7 @@ end SourcePosition
 
 object SourcePosition:
   val NoPosition: SourcePosition = new SourcePosition(SourceFile.NoSource, NoSpan)
+
+  private[tastyquery] def auto(source: SourceFile, span: Span): SourcePosition =
+    new SourcePosition(source, span)
 end SourcePosition

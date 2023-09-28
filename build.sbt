@@ -121,6 +121,11 @@ lazy val tastyQuery =
           ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#PolyType.fromParamsSymbols"),
           ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#TypeLambda.fromParamsSymbols"),
           ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#TypeLambdaTypeCompanion.fromParamsSymbols"),
+
+          // New abstract methods in a completely sealed hierarchy, not an issue
+          ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("tastyquery.Trees#*.canEqual"),
+          ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("tastyquery.Trees#*.productArity"),
+          ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("tastyquery.Trees#*.productElement"),
         )
       },
     )

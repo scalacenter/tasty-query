@@ -1,5 +1,6 @@
 package tastyquery
 
+import scala.annotation.constructorOnly
 import scala.annotation.tailrec
 
 import scala.collection.mutable
@@ -16,7 +17,40 @@ import tastyquery.Types.*
 
 object Trees {
 
-  sealed abstract class Tree(val pos: SourcePosition) {
+  sealed abstract class Tree(@constructorOnly posInit: SourcePosition) extends Product {
+    val pos: SourcePosition =
+      if posInit.isAuto then (this: @unchecked).computeAutoPos(posInit.sourceFile)
+      else posInit
+
+    private def computeAutoPos(source: SourceFile): SourcePosition = this match
+      case Inlined(call, _, _) =>
+        call.pos
+
+      case _ =>
+        def rec(span: Span, item: Any): Span = item.asInstanceOf[Matchable] match
+          case item: Tree =>
+            if item.pos.sourceFile == source then span.union(item.pos.span)
+            else span
+          case x :: xs =>
+            rec(rec(span, x), xs)
+          case Left(x) =>
+            rec(span, x)
+          case Right(x) =>
+            rec(span, x)
+          case _ =>
+            span
+        end rec
+
+        var span = NoSpan
+        val len = productArity
+        var i = 0
+        while i != len do
+          span = rec(span, productElement(i))
+          i += 1
+
+        SourcePosition(source, span)
+    end computeAutoPos
+
     def withPos(pos: SourcePosition): Tree
 
     private def subtrees: List[Tree] =
