@@ -1123,18 +1123,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             // match x$1 with type x$1
             Some(
               Match(
-                Typed(
-                  Ident(SimpleName("x$1")),
-                  TypeWrapper(
-                    ty.AnnotatedType(
-                      TermRefInternal(NoPrefix, SymbolWithName(SimpleName("x$1"))),
-                      ty.Annotation(
-                        New(TypeWrapper(TypeRefInternal(ScalaPackageRef(), TypeName(SimpleName("unchecked")))))
-                      )
-                    )
-                  )
-                ),
-                cases
+                Ident(SimpleName("x$1")),
+                List(CaseDef(ExprPattern(Literal(Constant(0))), None, Block(Nil, Literal(Constant(1)))))
               )
             ),
             _
