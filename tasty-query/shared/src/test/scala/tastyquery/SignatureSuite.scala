@@ -295,6 +295,18 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
     val arrayOfUnion = UnionType.findNonOverloadedDecl(name"arrayOfUnion")
     assertSigned(arrayOfUnion, "(java.lang.Object[]):java.lang.Object[]")
+
+    val unitOrNull = UnionType.findNonOverloadedDecl(termName("unitOrNull"))
+    assertSigned(unitOrNull, "(scala.runtime.BoxedUnit):scala.runtime.BoxedUnit")
+
+    val intOrNull = UnionType.findNonOverloadedDecl(termName("intOrNull"))
+    assertSigned(intOrNull, "(java.lang.Object):java.lang.Object")
+
+    val optionOrNull = UnionType.findNonOverloadedDecl(termName("optionOrNull"))
+    assertSigned(optionOrNull, "(scala.Option):scala.Option")
+
+    val optionOrUnit = UnionType.findNonOverloadedDecl(termName("optionOrUnit"))
+    assertSigned(optionOrUnit, "(java.lang.Object):java.lang.Object")
   }
 
   testWithContext("refined types") {

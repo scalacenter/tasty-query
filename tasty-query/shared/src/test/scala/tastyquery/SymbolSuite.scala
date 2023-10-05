@@ -17,7 +17,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
   /** Needed for correct resolving of ctor signatures */
   val fundamentalClasses: Seq[String] =
-    Seq("java.lang.Object", "scala.Unit", "scala.AnyVal", "scala.annotation.targetName")
+    Seq("java.lang.Object", "scala.Unit", "scala.AnyVal", "scala.annotation.targetName", "scala.runtime.BoxedUnit")
 
   def testWithContext(name: String, rootSymbolPath: String, extraRootSymbolPaths: String*)(using munit.Location)(
     body: Context ?=> Unit

@@ -416,6 +416,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   lazy val ProductClass = scalaPackage.requiredClass("Product")
 
   lazy val ErasedNothingClass = scalaRuntimePackage.requiredClass("Nothing$")
+  lazy val ErasedBoxedUnitClass = scalaRuntimePackage.requiredClass("BoxedUnit")
 
   private[tastyquery] lazy val targetNameAnnotClass = scalaAnnotationPackage.optionalClass("targetName")
 

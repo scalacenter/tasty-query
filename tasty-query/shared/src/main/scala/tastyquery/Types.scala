@@ -163,6 +163,9 @@ object Types {
     def erase(tpe: Type, language: SourceLanguage)(using Context): ErasedTypeRef =
       Erasure.erase(tpe, language)
 
+    def erase(tpe: Type, language: SourceLanguage, keepUnit: Boolean)(using Context): ErasedTypeRef =
+      Erasure.erase(tpe, language, keepUnit)
+
     extension (typeRef: ArrayTypeRef)
       def elemType: ErasedTypeRef =
         if typeRef.dimensions == 1 then typeRef.base

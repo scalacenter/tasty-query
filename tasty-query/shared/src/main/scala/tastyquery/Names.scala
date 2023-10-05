@@ -133,6 +133,7 @@ object Names {
     val scala2PackageObjectClass: TypeName = termName("package").withObjectSuffix.toTypeName
 
     private[tastyquery] val runtimeNothing: TypeName = typeName("Nothing$")
+    private[tastyquery] val runtimeBoxedUnit: TypeName = typeName("BoxedUnit")
 
     private[tastyquery] val internalRepeatedAnnot: TypeName = typeName("Repeated")
 

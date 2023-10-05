@@ -19,8 +19,11 @@ private[tastyquery] object Erasure:
     erase(tpe, SourceLanguage.Scala3)
 
   def erase(tpe: Type, language: SourceLanguage)(using Context): ErasedTypeRef =
+    erase(tpe, language, keepUnit = false)
+
+  def erase(tpe: Type, language: SourceLanguage, keepUnit: Boolean)(using Context): ErasedTypeRef =
     given SourceLanguage = language
-    finishErase(preErase(tpe))
+    finishErase(preErase(tpe, keepUnit))
   end erase
 
   /** First pass of erasure, where some special types are preserved as is.
@@ -28,12 +31,12 @@ private[tastyquery] object Erasure:
     * In particular, `Any` is preserved as `Any`, instead of becoming
     * `java.lang.Object`.
     */
-  private def preErase(tpe: Type)(using Context, SourceLanguage): ErasedTypeRef =
+  private def preErase(tpe: Type, keepUnit: Boolean)(using Context, SourceLanguage): ErasedTypeRef =
     def hasArrayErasure(cls: ClassSymbol): Boolean =
       cls == defn.ArrayClass || (cls == defn.RepeatedParamClass && summon[SourceLanguage] == SourceLanguage.Java)
 
     def arrayOfBounds(bounds: TypeBounds): ErasedTypeRef =
-      preErase(bounds.high) match
+      preErase(bounds.high, keepUnit = false) match
         case ClassRef(cls) if cls == defn.AnyClass || cls == defn.AnyValClass =>
           ClassRef(defn.ObjectClass)
         case typeRef =>
@@ -50,7 +53,8 @@ private[tastyquery] object Erasure:
           case _ =>
             arrayOf(tpe.translucentSuperType)
       case TypeRef.OfClass(cls) =>
-        ClassRef(cls).arrayOf()
+        if cls == defn.UnitClass then ClassRef(defn.ErasedBoxedUnitClass).arrayOf()
+        else ClassRef(cls).arrayOf()
       case tpe: TypeRef =>
         tpe.optSymbol match
           case Some(sym: TypeMemberSymbol) =>
@@ -61,7 +65,7 @@ private[tastyquery] object Erasure:
           case _ =>
             arrayOfBounds(tpe.bounds)
       case tpe: TypeParamRef    => arrayOfBounds(tpe.bounds)
-      case tpe: Type            => preErase(tpe).arrayOf()
+      case tpe: Type            => preErase(tpe, keepUnit = false).arrayOf()
       case tpe: WildcardTypeArg => arrayOfBounds(tpe.bounds)
     end arrayOf
 
@@ -74,40 +78,44 @@ private[tastyquery] object Erasure:
               arrayOf(targ)
             else ClassRef(cls)
           case _ =>
-            preErase(tpe.translucentSuperType)
+            preErase(tpe.translucentSuperType, keepUnit)
       case TypeRef.OfClass(cls) =>
-        ClassRef(cls)
+        if !keepUnit && cls == defn.UnitClass then ClassRef(defn.ErasedBoxedUnitClass)
+        else ClassRef(cls)
       case tpe: TypeRef =>
         tpe.optSymbol match
           case Some(sym: TypeMemberSymbol) =>
             sym.typeDef match
               case TypeMemberDefinition.OpaqueTypeAlias(_, alias) =>
-                preErase(alias)
+                preErase(alias, keepUnit)
               case _ =>
-                preErase(tpe.underlying)
+                preErase(tpe.underlying, keepUnit)
           case _ =>
-            preErase(tpe.underlying)
+            preErase(tpe.underlying, keepUnit)
       case tpe: SingletonType =>
-        preErase(tpe.underlying)
+        preErase(tpe.underlying, keepUnit)
       case tpe: TypeParamRef =>
-        preErase(tpe.bounds.high)
+        preErase(tpe.bounds.high, keepUnit)
       case tpe: MatchType =>
         tpe.reduced match
-          case Some(reduced) => preErase(reduced)
-          case None          => preErase(tpe.bound)
+          case Some(reduced) => preErase(reduced, keepUnit)
+          case None          => preErase(tpe.bound, keepUnit)
       case tpe: OrType =>
-        erasedLub(preErase(tpe.first), preErase(tpe.second))
+        erasedLub(preErase(tpe.first, keepUnit = false), preErase(tpe.second, keepUnit = false))
       case tpe: AndType =>
         summon[SourceLanguage] match
-          case SourceLanguage.Java   => preErase(tpe.first)
-          case SourceLanguage.Scala2 => preErase(Scala2Erasure.eraseAndType(tpe))
-          case SourceLanguage.Scala3 => erasedGlb(preErase(tpe.first), preErase(tpe.second))
+          case SourceLanguage.Java =>
+            preErase(tpe.first, keepUnit = false)
+          case SourceLanguage.Scala2 =>
+            preErase(Scala2Erasure.eraseAndType(tpe), keepUnit = false)
+          case SourceLanguage.Scala3 =>
+            erasedGlb(preErase(tpe.first, keepUnit = false), preErase(tpe.second, keepUnit = false))
       case tpe: AnnotatedType =>
-        preErase(tpe.typ)
+        preErase(tpe.typ, keepUnit)
       case tpe: RefinedType =>
-        preErase(tpe.parent)
+        preErase(tpe.parent, keepUnit)
       case tpe: RecType =>
-        preErase(tpe.parent)
+        preErase(tpe.parent, keepUnit)
       case _: ByNameType =>
         defn.Function0Class.erasure
       case _: NothingType =>
@@ -168,7 +176,8 @@ private[tastyquery] object Erasure:
   end erasedLub
 
   private def erasedClassRefLub(cls1: ClassSymbol, cls2: ClassSymbol)(using Context): ClassSymbol =
-    if cls1 == defn.ErasedNothingClass then cls2
+    if cls1 == cls2 then cls1
+    else if cls1 == defn.ErasedNothingClass then cls2
     else if cls2 == defn.ErasedNothingClass then cls1
     else if cls1 == defn.NullClass then
       if cls2.isSubClass(defn.ObjectClass) then cls2
@@ -176,6 +185,7 @@ private[tastyquery] object Erasure:
     else if cls2 == defn.NullClass then
       if cls1.isSubClass(defn.ObjectClass) then cls1
       else defn.AnyClass
+    else if cls1 == defn.ErasedBoxedUnitClass || cls2 == defn.ErasedBoxedUnitClass then defn.ObjectClass
     else
       /** takeWhile+1 */
       def takeUpTo[T](l: List[T])(f: T => Boolean): List[T] =
