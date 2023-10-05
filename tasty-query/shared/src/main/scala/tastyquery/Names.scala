@@ -138,6 +138,8 @@ object Names {
 
     private[tastyquery] val scala2LocalChild: TypeName = typeName("<local child>")
     private[tastyquery] val scala2ByName: TypeName = typeName("<byname>")
+
+    private[tastyquery] val PredefModule: TypeName = moduleClassName("Predef")
   }
 
   /** Create a type name from a string */

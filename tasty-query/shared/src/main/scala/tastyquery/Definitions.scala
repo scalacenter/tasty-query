@@ -273,6 +273,28 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   lazy val String_+ : TermSymbol = StringClass.findNonOverloadedDecl(nme.m_+)
 
+  /** Creates the members that are patched from stdLibPatches on Predef.
+    *
+    * dotc does that generically, but it does not really work for us, as we
+    * cannot read other files while loading one file.
+    */
+  private[tastyquery] def createPredefMagicMethods(cls: ClassSymbol): Unit =
+    val nnMethodType = PolyType(List(typeName("T")))(
+      _ => List(NothingAnyBounds),
+      pt => MethodType(List(termName("x")))(_ => List(pt.paramRefs(0)), mt => AndType(mt.paramRefs(0), pt.paramRefs(0)))
+    )
+    createSpecialMethod(cls, termName("nn"), nnMethodType, Inline | Final | Extension)
+
+    val anyRefOrNull = OrType(AnyRefType, NullType)
+    val eqNeMethodType = MethodType(
+      List(termName("x")),
+      List(anyRefOrNull),
+      MethodType(List(termName("y")), List(anyRefOrNull), BooleanType)
+    )
+    createSpecialMethod(cls, termName("eq"), eqNeMethodType, Inline | Final | Extension)
+    createSpecialMethod(cls, termName("ne"), eqNeMethodType, Inline | Final | Extension)
+  end createPredefMagicMethods
+
   private def createSpecialPolyClass(
     name: TypeName,
     paramFlags: FlagSet,

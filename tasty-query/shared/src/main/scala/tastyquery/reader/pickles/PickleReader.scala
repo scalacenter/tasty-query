@@ -302,6 +302,7 @@ private[pickles] class PickleReader {
         val givenSelfType = if atEnd then None else Some(readTrueTypeRef())
         cls.withParentsDirect(parentTypes)
         cls.withGivenSelfType(givenSelfType)
+        if cls.owner == rctx.scalaPackage && tname == tpnme.PredefModule then rctx.createPredefMagicMethods(cls)
         cls
       case VALsym =>
         /* Discard symbols that should not be seen from a Scala 3 point of view:
