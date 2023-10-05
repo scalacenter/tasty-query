@@ -243,7 +243,8 @@ private[reader] object ClassfileParser {
         case SigOrDesc.Desc(desc) => Descriptors.parseDescriptor(sym, desc)
         case SigOrDesc.Sig(sig)   => JavaSignatures.parseSignature(sym, sig, allRegisteredSymbols)
       val adaptedType =
-        if sym.isMethod && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
+        if sym.isMethod && sym.name == nme.Constructor then cls.makePolyConstructorType(parsedType)
+        else if sym.isMethod && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
         else parsedType
       sym.withDeclaredType(adaptedType)
 

@@ -362,19 +362,7 @@ private[pickles] class PickleReader {
           rctx.UnitType
 
     val tpe1 = resultToUnit(tpe)
-
-    val typeParams = cls.typeParams
-    if typeParams.isEmpty then tpe1
-    else
-      /* Make a PolyType with the same type parameters as the class, and
-       * substitute references to them of the form `C.this.T` by the
-       * corresponding `paramRefs` of the `PolyType`.
-       */
-      PolyType(typeParams.map(_.name))(
-        pt =>
-          typeParams.map(p => Substituters.substLocalThisClassTypeParams(p.declaredBounds, typeParams, pt.paramRefs)),
-        pt => Substituters.substLocalThisClassTypeParams(tpe1, typeParams, pt.paramRefs)
-      )
+    cls.makePolyConstructorType(tpe1)
   end patchConstructorType
 
   def readChildren()(using ReaderContext, PklStream, Entries, Index): Unit =

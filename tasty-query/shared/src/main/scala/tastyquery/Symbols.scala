@@ -1628,6 +1628,21 @@ object Symbols {
         case tpe =>
           throw InvalidProgramStructureException(s"Unexpected type $tpe for $annot")
     end extractSealedChildFromChildAnnot
+
+    private[tastyquery] def makePolyConstructorType(selfReferencingCtorType: TypeOrMethodic): TypeOrMethodic =
+      val typeParams = this.typeParams
+      if typeParams.isEmpty then selfReferencingCtorType
+      else
+        /* Make a PolyType with the same type parameters as the class, and
+         * substitute references to them of the form `C.this.T` by the
+         * corresponding `paramRefs` of the `PolyType`.
+         */
+        PolyType(typeParams.map(_.name))(
+          pt =>
+            typeParams.map(p => Substituters.substLocalThisClassTypeParams(p.declaredBounds, typeParams, pt.paramRefs)),
+          pt => Substituters.substLocalThisClassTypeParams(selfReferencingCtorType, typeParams, pt.paramRefs)
+        )
+    end makePolyConstructorType
   }
 
   object ClassSymbol:
