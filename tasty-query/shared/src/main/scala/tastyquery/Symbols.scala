@@ -283,8 +283,8 @@ object Symbols {
     final def isPublic: Boolean =
       !flags.isAnyOf(Private | Protected | Local) && privateWithin.isEmpty
 
-    private[Symbols] final def isPrivateThis: Boolean =
-      flags.isAllOf(Private | Local)
+    private[Symbols] final def isPrivateParamAccessor: Boolean =
+      flags.isAllOf(Private | Local | ParamAccessor)
 
     /** The declared visibility of this symbol. */
     final def visibility: Visibility =
@@ -1495,7 +1495,7 @@ object Symbols {
         case _                                => false
 
       getDecl(name) match
-        case some @ Some(sym) if !sym.isPrivateThis || isOwnThis =>
+        case some @ Some(sym) if !sym.isPrivateParamAccessor || isOwnThis =>
           some
         case _ =>
           if name == nme.Constructor then None
