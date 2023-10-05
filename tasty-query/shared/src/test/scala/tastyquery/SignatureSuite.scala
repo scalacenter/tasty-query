@@ -358,4 +358,27 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(takeEmptyTupleSig, "(scala.Tuple$package.EmptyTuple):scala.Unit")
   }
 
+  testWithContext("local object") {
+    // #357
+    val LocalObjectClass = ctx.findTopLevelClass("simple_trees.LocalObject")
+
+    val methodBody = LocalObjectClass.findNonOverloadedDecl(termName("method")).tree.get.asInstanceOf[DefDef].rhs.get
+
+    val myLocalObjectClass = findTree(methodBody) {
+      case ClassDef(_, _, sym) if sym.isModuleClass => sym
+    }
+
+    val fooMethod = findTree(methodBody) { case DefDef(SimpleName("foo"), _, _, _, sym) =>
+      sym
+    }
+    assertSigned(fooMethod, "(simple_trees.LocalObject._$MyLocalObject):simple_trees.LocalObject._$MyLocalObject")
+
+    val (fooSelect, expectedSig) = findTree(methodBody) {
+      case Apply(select @ Select(This(_), SignedName(SimpleName("foo"), sig, _)), _) => (select, sig)
+    }
+
+    assert(clue(fooMethod.signature) == clue(expectedSig))
+    assert(clue(fooSelect.symbol) == clue(fooMethod))
+  }
+
 end SignatureSuite
