@@ -61,6 +61,17 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
           false
     end isIntersectionOf
 
+    def isUnionOf(tpes: (Type => Boolean)*)(using Context): Boolean =
+      tpe match
+        case tpe: Type =>
+          def parts(tpe: Type): List[Type] = tpe match
+            case tpe: OrType => parts(tpe.first) ::: parts(tpe.second)
+            case _           => tpe :: Nil
+          parts(tpe).isListOf(tpes*)
+        case _ =>
+          false
+    end isUnionOf
+
     def isApplied(cls: Type => Boolean, argRefs: Seq[TypeOrWildcard => Boolean])(using Context): Boolean =
       tpe match
         case tpe: TermType =>
@@ -3011,5 +3022,24 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val fooSym = SingletonClassTypeClass.findDecl(termName("foo"))
     assert(clue(fooSym.declaredType).isTypeRefOf(defn.SingletonClass))
+  }
+
+  testWithContext("join") {
+    val UnionTypeJoinClass = ctx.findTopLevelModuleClass("simple_trees.UnionTypeJoin")
+
+    val aClass = UnionTypeJoinClass.findDecl(typeName("A")).asClass
+    val bClass = UnionTypeJoinClass.findDecl(typeName("B")).asClass
+    val cClass = UnionTypeJoinClass.findDecl(typeName("C")).asClass
+    val dClass = UnionTypeJoinClass.findDecl(typeName("D")).asClass
+    val eClass = UnionTypeJoinClass.findDecl(typeName("E")).asClass
+
+    // Spec says that join(A | B) = C[A | B] & D
+    val orType = OrType(aClass.staticRef, bClass.staticRef)
+    assert(
+      clue(orType.join).isIntersectionOf(
+        _.isApplied(_.isRef(cClass), List(_.isUnionOf(_.isRef(aClass), _.isRef(bClass)))),
+        _.isRef(dClass)
+      )
+    )
   }
 }

@@ -145,4 +145,60 @@ private[tastyquery] object TypeOps:
 
     loop(tp1.paramTypes, tp2.paramTypes)
   end matchingMethodParams
+
+  // baseClasses
+
+  /** The set of classes inherited by this type, in linearization order. */
+  def baseClasses(tp: Type)(using Context): List[ClassSymbol] =
+    tp match
+      case TypeRef.OfClass(cls) =>
+        cls.linearization
+
+      case tp: TypeProxy =>
+        baseClasses(tp.superType)
+
+      case tp: AndType =>
+        // Base classes are the merge of the operand base classes.
+        val baseClasses1 = baseClasses(tp.first)
+        val baseClasses1Set = baseClasses1.toSet
+
+        def recur(baseClasses2: List[ClassSymbol]): List[ClassSymbol] = baseClasses2 match
+          case baseClass2 :: baseClasses2Rest =>
+            if baseClasses1Set.contains(baseClass2) then
+              // Don't add baseClass2 since it's already there; shortcut altogether if it is not a trait
+              if baseClass2.isTrait then recur(baseClasses2Rest)
+              else baseClasses1 // common class, therefore the rest is the same in both sequences
+            else
+              // Include baseClass2 and continue
+              baseClass2 :: recur(baseClasses2Rest)
+          case Nil =>
+            baseClasses1
+        end recur
+
+        recur(baseClasses(tp.second))
+
+      case tp: OrType =>
+        // Base classes are the intersection of the operand base classes.
+        // scala.Null is ignored on both sides
+        val baseClasses1 = baseClasses(tp.first).filter(_ != defn.NullClass)
+        val baseClasses1Set = baseClasses1.toSet
+
+        def recur(baseClasses2: List[ClassSymbol]): List[ClassSymbol] = baseClasses2 match
+          case baseClass2 :: baseClasses2Rest =>
+            if baseClasses1Set.contains(baseClass2) then
+              // Include baseClass2 which is common; shortcut altogether if it is not a trait
+              if baseClass2.isTrait then baseClass2 :: recur(baseClasses2Rest)
+              else baseClasses2 // common class, therefore the rest is the same in both sequences
+            else
+              // Exclude baseClass2 and continue
+              recur(baseClasses2Rest)
+          case Nil =>
+            Nil
+        end recur
+
+        recur(baseClasses(tp.second).filter(_ != defn.NullClass))
+
+      case _: AnyKindType | _: NothingType | _: TypeLambda | _: CustomTransientGroundType =>
+        Nil
+  end baseClasses
 end TypeOps
