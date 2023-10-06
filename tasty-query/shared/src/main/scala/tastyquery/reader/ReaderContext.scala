@@ -71,6 +71,9 @@ private[reader] final class ReaderContext(underlying: Context):
   def createStringMagicMethods(cls: ClassSymbol): Unit =
     underlying.defn.createStringMagicMethods(cls)
 
+  def createEnumMagicMethods(cls: ClassSymbol): Unit =
+    underlying.defn.createEnumMagicMethods(cls)
+
   def createPredefMagicMethods(cls: ClassSymbol): Unit =
     underlying.defn.createPredefMagicMethods(cls)
 end ReaderContext

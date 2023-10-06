@@ -121,6 +121,7 @@ object Names {
     val Tuple: TypeName = typeName("Tuple")
     val NonEmptyTuple: TypeName = typeName("NonEmptyTuple")
     val TupleCons: TypeName = typeName("*:")
+    val Enum: TypeName = typeName("Enum")
 
     @deprecated("you probably meant the term name `nme.EmptyTuple` instead", since = "0.8.3")
     val EmptyTuple: TypeName = typeName("EmptyTuple")

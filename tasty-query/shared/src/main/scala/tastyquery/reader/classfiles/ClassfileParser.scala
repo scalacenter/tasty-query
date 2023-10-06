@@ -237,6 +237,7 @@ private[reader] object ClassfileParser {
     if cls.owner == rctx.javaLangPackage then
       if cls.name == tpnme.Object then rctx.createObjectMagicMethods(cls)
       else if cls.name == tpnme.String then rctx.createStringMagicMethods(cls)
+      else if cls.name == tpnme.Enum then rctx.createEnumMagicMethods(cls)
 
     for (sym, javaFlags, sigOrDesc) <- loadMembers() do
       val parsedType = sigOrDesc match

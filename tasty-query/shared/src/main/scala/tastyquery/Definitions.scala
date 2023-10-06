@@ -273,6 +273,10 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   lazy val String_+ : TermSymbol = StringClass.findNonOverloadedDecl(nme.m_+)
 
+  private[tastyquery] def createEnumMagicMethods(cls: ClassSymbol): Unit =
+    createSpecialMethod(cls, nme.Constructor, PolyType(List(typeName("E")), List(NothingAnyBounds), UnitType))
+  end createEnumMagicMethods
+
   /** Creates the members that are patched from stdLibPatches on Predef.
     *
     * dotc does that generically, but it does not really work for us, as we
