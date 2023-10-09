@@ -1156,9 +1156,9 @@ object Symbols {
           if owner == defn.scalaPackage then
             // The classes with special erasures that are loaded from Scala 2 pickles or .tasty files
             name match
-              case tpnme.AnyVal | tpnme.TupleCons    => defn.ObjectClass.erasure
-              case tpnme.Tuple | tpnme.NonEmptyTuple => defn.ProductClass.erasure
-              case _                                 => ErasedTypeRef.ClassRef(this)
+              case tpnme.AnyVal                                        => defn.ObjectClass.erasure
+              case tpnme.Tuple | tpnme.NonEmptyTuple | tpnme.TupleCons => defn.ProductClass.erasure
+              case _                                                   => ErasedTypeRef.ClassRef(this)
           else ErasedTypeRef.ClassRef(this)
     end computeErasure
 

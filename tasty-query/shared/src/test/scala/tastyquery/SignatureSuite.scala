@@ -364,10 +364,18 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(takeNonEmptyTupleSig, "(scala.Product):scala.Unit")
 
     val takeStarColonSig = TuplesClass.findNonOverloadedDecl(termName("takeStarColon"))
-    assertSigned(takeStarColonSig, "(java.lang.Object):scala.Unit")
+    assertSigned(takeStarColonSig, "(scala.Product):scala.Unit")
 
     val takeEmptyTupleSig = TuplesClass.findNonOverloadedDecl(termName("takeEmptyTuple"))
     assertSigned(takeEmptyTupleSig, "(scala.Tuple$package.EmptyTuple):scala.Unit")
+
+    val TupleClass = ctx.findTopLevelClass("scala.Tuple")
+
+    val colonStar = TupleClass.findNonOverloadedDecl(termName(":*"))
+    assertSigned(colonStar, "(2,java.lang.Object):scala.Product")
+
+    val starColon = TupleClass.findNonOverloadedDecl(termName("*:"))
+    assertSigned(starColon, "(2,java.lang.Object):scala.Product")
   }
 
   testWithContext("local object") {
