@@ -826,7 +826,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val tpe = refInterface.declaredType.asInstanceOf[TypeLambdaType]
       val List(tparamRefA) = tpe.paramRefs: @unchecked
       assert(
-        tparamRefA.bounds.high.isIntersectionOf(_.isFromJavaObject, _.isRef(JavaInterface1), _.isRef(JavaInterface2)),
+        tparamRefA.bounds.high.isIntersectionOf(_.isRef(JavaInterface1), _.isRef(JavaInterface2)),
         clues(tparamRefA.bounds)
       )
     }

@@ -91,6 +91,19 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(getFirstEntry, "():java.util.TreeMap.Entry")
   }
 
+  testWithContext("Java bounded generic") {
+    val FilesModuleClass = ctx.findTopLevelModuleClass("java.nio.file.Files")
+
+    val readAttributes = FilesModuleClass
+      .findAllOverloadedDecls(termName("readAttributes"))
+      .find(_.declaredType.isInstanceOf[PolyType])
+      .get
+    assertSigned(
+      readAttributes,
+      "(1,java.nio.file.Path,java.lang.Class,java.nio.file.LinkOption[]):java.nio.file.attribute.BasicFileAttributes"
+    )
+  }
+
   testWithContext("RichInt") {
     val RichInt = ctx.findTopLevelClass("scala.runtime.RichInt")
 
