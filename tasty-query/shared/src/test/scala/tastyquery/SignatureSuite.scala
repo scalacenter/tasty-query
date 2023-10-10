@@ -170,6 +170,28 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(withArrayExactAnyVal, "(java.lang.Object[]):scala.Unit")
   }
 
+  testWithContext("unit-erasure") {
+    val UnitErasureClass = ctx.findTopLevelClass("simple_trees.UnitErasure")
+
+    val unitVal = UnitErasureClass.findNonOverloadedDecl(termName("unitVal"))
+    assertNotSigned(unitVal, "():scala.Unit")
+
+    val unitVar = UnitErasureClass.findNonOverloadedDecl(termName("unitVar"))
+    assertNotSigned(unitVar, "():scala.Unit")
+
+    val unitVarSetter = UnitErasureClass.findNonOverloadedDecl(termName("unitVar_="))
+    assertSigned(unitVarSetter, "(scala.runtime.BoxedUnit):scala.Unit")
+
+    val unitParamelessDef = UnitErasureClass.findNonOverloadedDecl(termName("unitParamelessDef"))
+    assertNotSigned(unitParamelessDef, "():scala.Unit")
+
+    val unitResult = UnitErasureClass.findNonOverloadedDecl(termName("unitResult"))
+    assertSigned(unitResult, "():scala.Unit")
+
+    val unitParam = UnitErasureClass.findNonOverloadedDecl(termName("unitParam"))
+    assertSigned(unitParam, "(scala.runtime.BoxedUnit):java.lang.Object")
+  }
+
   testWithContext("type-member") {
     val TypeMember = ctx.findTopLevelClass("simple_trees.TypeMember")
 
