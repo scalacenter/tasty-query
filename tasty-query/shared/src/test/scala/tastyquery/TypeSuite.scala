@@ -4,14 +4,15 @@ import scala.collection.mutable
 
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
+import tastyquery.Traversers.TreeTraverser
 import tastyquery.Trees.*
 import tastyquery.Types.*
 
 import TestUtils.*
-import tastyquery.Traversers.TreeTraverser
 
 class TypeSuite extends UnrestrictedUnpicklingSuite {
   extension [T](elems: List[T])
@@ -3041,5 +3042,79 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         _.isRef(dClass)
       )
     )
+  }
+
+  testWithContext("all-symbol-resolutions") {
+    /* Test that we can resolve the `.symbol` of all the `Ident`s and `Select`s
+     * within the test-sources.
+     */
+
+    var successCount = 0
+    val errorsBuilder = List.newBuilder[String]
+
+    def testSelect(tree: TermReferenceTree): Unit =
+      try
+        tree.symbol
+        tree.referenceType match
+          case tpe: NamedType if tpe.prefix != NoPrefix =>
+            successCount += 1
+          case _ =>
+            // too "easy"; don't count that as a success
+            ()
+      catch
+        case ex: MemberNotFoundException =>
+          val displayPos =
+            if tree.pos.hasLineColumnInformation then s":${tree.pos.pointLine}:${tree.pos.pointColumn}"
+            else ""
+          val prefixDetails = ex.prefix match
+            case prefix: SingletonType => s" (${prefix.showBasic}: ${prefix.superType.showBasic})"
+            case prefix: Type          => s" (${prefix.showBasic})"
+            case _                     => ""
+
+          errorsBuilder += s"${tree.pos.sourceFile.path}$displayPos: ${ex.getMessage()}$prefixDetails"
+    end testSelect
+
+    def walkTree(tree: Tree): Unit =
+      new Traversers.TreeTraverser {
+        override def traverse(tree: Tree): Unit = tree match
+          case tree: TermReferenceTree =>
+            super.traverse(tree)
+            testSelect(tree)
+          case _ =>
+            super.traverse(tree)
+      }.traverse(tree)
+    end walkTree
+
+    def walk(pkg: PackageSymbol): Unit =
+      for sym <- pkg.declarations do
+        sym match
+          case sym: PackageSymbol => walk(sym)
+          case sym: ClassSymbol   => sym.tree.foreach(walkTree(_))
+          case _                  => ()
+    end walk
+
+    val testSourcesPackages = List(
+      "companions",
+      "crosspackagetasty",
+      "empty_class",
+      "imported_files",
+      "imports",
+      "inheritance",
+      "javacompat",
+      "javadefined",
+      "mixjavascala",
+      "scala2compat",
+      "simple_trees",
+      "subtyping",
+      "synthetics"
+    )
+    for testSourcesPackage <- testSourcesPackages do walk(ctx.findPackage(testSourcesPackage))
+
+    val errors = errorsBuilder.result()
+    if errors.nonEmpty then
+      fail(errors.mkString("Could not resolved the `symbol` of some trees in the test-sources:\n", "\n", "\n"))
+
+    // As of this writing, there were 1201 successes
+    assert(clue(successCount) > 1000)
   }
 }
