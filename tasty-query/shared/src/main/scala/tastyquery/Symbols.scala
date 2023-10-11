@@ -283,8 +283,8 @@ object Symbols {
     final def isPublic: Boolean =
       !flags.isAnyOf(Private | Protected | Local) && privateWithin.isEmpty
 
-    private[Symbols] final def isPrivateThis: Boolean =
-      flags.isAllOf(Private | Local)
+    private[Symbols] final def isPrivateParamAccessor: Boolean =
+      flags.isAllOf(Private | Local | ParamAccessor)
 
     /** The declared visibility of this symbol. */
     final def visibility: Visibility =
@@ -1156,9 +1156,9 @@ object Symbols {
           if owner == defn.scalaPackage then
             // The classes with special erasures that are loaded from Scala 2 pickles or .tasty files
             name match
-              case tpnme.AnyVal | tpnme.TupleCons    => defn.ObjectClass.erasure
-              case tpnme.Tuple | tpnme.NonEmptyTuple => defn.ProductClass.erasure
-              case _                                 => ErasedTypeRef.ClassRef(this)
+              case tpnme.AnyVal                                        => defn.ObjectClass.erasure
+              case tpnme.Tuple | tpnme.NonEmptyTuple | tpnme.TupleCons => defn.ProductClass.erasure
+              case _                                                   => ErasedTypeRef.ClassRef(this)
           else ErasedTypeRef.ClassRef(this)
     end computeErasure
 
@@ -1495,7 +1495,7 @@ object Symbols {
         case _                                => false
 
       getDecl(name) match
-        case some @ Some(sym) if !sym.isPrivateThis || isOwnThis =>
+        case some @ Some(sym) if !sym.isPrivateParamAccessor || isOwnThis =>
           some
         case _ =>
           if name == nme.Constructor then None
@@ -1628,6 +1628,21 @@ object Symbols {
         case tpe =>
           throw InvalidProgramStructureException(s"Unexpected type $tpe for $annot")
     end extractSealedChildFromChildAnnot
+
+    private[tastyquery] def makePolyConstructorType(selfReferencingCtorType: TypeOrMethodic): TypeOrMethodic =
+      val typeParams = this.typeParams
+      if typeParams.isEmpty then selfReferencingCtorType
+      else
+        /* Make a PolyType with the same type parameters as the class, and
+         * substitute references to them of the form `C.this.T` by the
+         * corresponding `paramRefs` of the `PolyType`.
+         */
+        PolyType(typeParams.map(_.name))(
+          pt =>
+            typeParams.map(p => Substituters.substLocalThisClassTypeParams(p.declaredBounds, typeParams, pt.paramRefs)),
+          pt => Substituters.substLocalThisClassTypeParams(selfReferencingCtorType, typeParams, pt.paramRefs)
+        )
+    end makePolyConstructorType
   }
 
   object ClassSymbol:

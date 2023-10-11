@@ -190,14 +190,14 @@ private[tastyquery] object Subtyping:
 
   private def level3(tp1: Type, tp2: Type)(using Context): Boolean = tp2 match
     case TypeRef.OfClass(cls2) =>
-      if cls2.typeParams.isEmpty then
+      val tparams2 = cls2.typeParams
+      if tparams2.isEmpty then
         if tp1.isLambdaSub then false // should be tp1.hasHigherKind, but the scalalib does not like that
         else if cls2 == defn.AnyClass then true
         else if cls2 == defn.SingletonClass && isSingleton(tp1) then true
         else level3WithBaseType(tp1, tp2, cls2)
-      else
-        // TODO Try eta-expansion if tp1.isLambdaSub && !tp1.isAnyKind
-        level4(tp1, tp2)
+      else if tp1.isLambdaSub then isSubType(tp1, etaExpand(tp2, tparams2))
+      else level4(tp1, tp2)
 
     case tp2: TypeRef =>
       isSubType(tp1, tp2.bounds.low)

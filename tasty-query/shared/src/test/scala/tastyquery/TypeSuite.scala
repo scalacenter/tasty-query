@@ -4,14 +4,15 @@ import scala.collection.mutable
 
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Modifiers.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
+import tastyquery.Traversers.TreeTraverser
 import tastyquery.Trees.*
 import tastyquery.Types.*
 
 import TestUtils.*
-import tastyquery.Traversers.TreeTraverser
 
 class TypeSuite extends UnrestrictedUnpicklingSuite {
   extension [T](elems: List[T])
@@ -60,6 +61,17 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         case _ =>
           false
     end isIntersectionOf
+
+    def isUnionOf(tpes: (Type => Boolean)*)(using Context): Boolean =
+      tpe match
+        case tpe: Type =>
+          def parts(tpe: Type): List[Type] = tpe match
+            case tpe: OrType => parts(tpe.first) ::: parts(tpe.second)
+            case _           => tpe :: Nil
+          parts(tpe).isListOf(tpes*)
+        case _ =>
+          false
+    end isUnionOf
 
     def isApplied(cls: Type => Boolean, argRefs: Seq[TypeOrWildcard => Boolean])(using Context): Boolean =
       tpe match
@@ -815,7 +827,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val tpe = refInterface.declaredType.asInstanceOf[TypeLambdaType]
       val List(tparamRefA) = tpe.paramRefs: @unchecked
       assert(
-        tparamRefA.bounds.high.isIntersectionOf(_.isFromJavaObject, _.isRef(JavaInterface1), _.isRef(JavaInterface2)),
+        tparamRefA.bounds.high.isIntersectionOf(_.isRef(JavaInterface1), _.isRef(JavaInterface2)),
         clues(tparamRefA.bounds)
       )
     }
@@ -3011,5 +3023,98 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     val fooSym = SingletonClassTypeClass.findDecl(termName("foo"))
     assert(clue(fooSym.declaredType).isTypeRefOf(defn.SingletonClass))
+  }
+
+  testWithContext("join") {
+    val UnionTypeJoinClass = ctx.findTopLevelModuleClass("simple_trees.UnionTypeJoin")
+
+    val aClass = UnionTypeJoinClass.findDecl(typeName("A")).asClass
+    val bClass = UnionTypeJoinClass.findDecl(typeName("B")).asClass
+    val cClass = UnionTypeJoinClass.findDecl(typeName("C")).asClass
+    val dClass = UnionTypeJoinClass.findDecl(typeName("D")).asClass
+    val eClass = UnionTypeJoinClass.findDecl(typeName("E")).asClass
+
+    // Spec says that join(A | B) = C[A | B] & D
+    val orType = OrType(aClass.staticRef, bClass.staticRef)
+    assert(
+      clue(orType.join).isIntersectionOf(
+        _.isApplied(_.isRef(cClass), List(_.isUnionOf(_.isRef(aClass), _.isRef(bClass)))),
+        _.isRef(dClass)
+      )
+    )
+  }
+
+  testWithContext("all-symbol-resolutions") {
+    /* Test that we can resolve the `.symbol` of all the `Ident`s and `Select`s
+     * within the test-sources.
+     */
+
+    var successCount = 0
+    val errorsBuilder = List.newBuilder[String]
+
+    def testSelect(tree: TermReferenceTree): Unit =
+      try
+        tree.symbol
+        tree.referenceType match
+          case tpe: NamedType if tpe.prefix != NoPrefix =>
+            successCount += 1
+          case _ =>
+            // too "easy"; don't count that as a success
+            ()
+      catch
+        case ex: MemberNotFoundException =>
+          val displayPos =
+            if tree.pos.hasLineColumnInformation then s":${tree.pos.pointLine}:${tree.pos.pointColumn}"
+            else ""
+          val prefixDetails = ex.prefix match
+            case prefix: SingletonType => s" (${prefix.showBasic}: ${prefix.superType.showBasic})"
+            case prefix: Type          => s" (${prefix.showBasic})"
+            case _                     => ""
+
+          errorsBuilder += s"${tree.pos.sourceFile.path}$displayPos: ${ex.getMessage()}$prefixDetails"
+    end testSelect
+
+    def walkTree(tree: Tree): Unit =
+      new Traversers.TreeTraverser {
+        override def traverse(tree: Tree): Unit = tree match
+          case tree: TermReferenceTree =>
+            super.traverse(tree)
+            testSelect(tree)
+          case _ =>
+            super.traverse(tree)
+      }.traverse(tree)
+    end walkTree
+
+    def walk(pkg: PackageSymbol): Unit =
+      for sym <- pkg.declarations do
+        sym match
+          case sym: PackageSymbol => walk(sym)
+          case sym: ClassSymbol   => sym.tree.foreach(walkTree(_))
+          case _                  => ()
+    end walk
+
+    val testSourcesPackages = List(
+      "companions",
+      "crosspackagetasty",
+      "empty_class",
+      "imported_files",
+      "imports",
+      "inheritance",
+      "javacompat",
+      "javadefined",
+      "mixjavascala",
+      "scala2compat",
+      "simple_trees",
+      "subtyping",
+      "synthetics"
+    )
+    for testSourcesPackage <- testSourcesPackages do walk(ctx.findPackage(testSourcesPackage))
+
+    val errors = errorsBuilder.result()
+    if errors.nonEmpty then
+      fail(errors.mkString("Could not resolved the `symbol` of some trees in the test-sources:\n", "\n", "\n"))
+
+    // As of this writing, there were 1201 successes
+    assert(clue(successCount) > 1000)
   }
 }

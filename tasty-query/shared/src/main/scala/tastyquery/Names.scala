@@ -121,6 +121,7 @@ object Names {
     val Tuple: TypeName = typeName("Tuple")
     val NonEmptyTuple: TypeName = typeName("NonEmptyTuple")
     val TupleCons: TypeName = typeName("*:")
+    val Enum: TypeName = typeName("Enum")
 
     @deprecated("you probably meant the term name `nme.EmptyTuple` instead", since = "0.8.3")
     val EmptyTuple: TypeName = typeName("EmptyTuple")
@@ -133,11 +134,14 @@ object Names {
     val scala2PackageObjectClass: TypeName = termName("package").withObjectSuffix.toTypeName
 
     private[tastyquery] val runtimeNothing: TypeName = typeName("Nothing$")
+    private[tastyquery] val runtimeBoxedUnit: TypeName = typeName("BoxedUnit")
 
     private[tastyquery] val internalRepeatedAnnot: TypeName = typeName("Repeated")
 
     private[tastyquery] val scala2LocalChild: TypeName = typeName("<local child>")
     private[tastyquery] val scala2ByName: TypeName = typeName("<byname>")
+
+    private[tastyquery] val PredefModule: TypeName = moduleClassName("Predef")
   }
 
   /** Create a type name from a string */

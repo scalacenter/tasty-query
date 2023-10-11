@@ -91,6 +91,19 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(getFirstEntry, "():java.util.TreeMap.Entry")
   }
 
+  testWithContext("Java bounded generic") {
+    val FilesModuleClass = ctx.findTopLevelModuleClass("java.nio.file.Files")
+
+    val readAttributes = FilesModuleClass
+      .findAllOverloadedDecls(termName("readAttributes"))
+      .find(_.declaredType.isInstanceOf[PolyType])
+      .get
+    assertSigned(
+      readAttributes,
+      "(1,java.nio.file.Path,java.lang.Class,java.nio.file.LinkOption[]):java.nio.file.attribute.BasicFileAttributes"
+    )
+  }
+
   testWithContext("RichInt") {
     val RichInt = ctx.findTopLevelClass("scala.runtime.RichInt")
 
@@ -155,6 +168,28 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
     val withArrayExactAnyVal = TypeRefIn.findNonOverloadedDecl(name"withArrayExactAnyVal")
     assertSigned(withArrayExactAnyVal, "(java.lang.Object[]):scala.Unit")
+  }
+
+  testWithContext("unit-erasure") {
+    val UnitErasureClass = ctx.findTopLevelClass("simple_trees.UnitErasure")
+
+    val unitVal = UnitErasureClass.findNonOverloadedDecl(termName("unitVal"))
+    assertNotSigned(unitVal, "():scala.Unit")
+
+    val unitVar = UnitErasureClass.findNonOverloadedDecl(termName("unitVar"))
+    assertNotSigned(unitVar, "():scala.Unit")
+
+    val unitVarSetter = UnitErasureClass.findNonOverloadedDecl(termName("unitVar_="))
+    assertSigned(unitVarSetter, "(scala.runtime.BoxedUnit):scala.Unit")
+
+    val unitParamelessDef = UnitErasureClass.findNonOverloadedDecl(termName("unitParamelessDef"))
+    assertNotSigned(unitParamelessDef, "():scala.Unit")
+
+    val unitResult = UnitErasureClass.findNonOverloadedDecl(termName("unitResult"))
+    assertSigned(unitResult, "():scala.Unit")
+
+    val unitParam = UnitErasureClass.findNonOverloadedDecl(termName("unitParam"))
+    assertSigned(unitParam, "(scala.runtime.BoxedUnit):java.lang.Object")
   }
 
   testWithContext("type-member") {
@@ -295,6 +330,18 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
     val arrayOfUnion = UnionType.findNonOverloadedDecl(name"arrayOfUnion")
     assertSigned(arrayOfUnion, "(java.lang.Object[]):java.lang.Object[]")
+
+    val unitOrNull = UnionType.findNonOverloadedDecl(termName("unitOrNull"))
+    assertSigned(unitOrNull, "(scala.runtime.BoxedUnit):scala.runtime.BoxedUnit")
+
+    val intOrNull = UnionType.findNonOverloadedDecl(termName("intOrNull"))
+    assertSigned(intOrNull, "(java.lang.Object):java.lang.Object")
+
+    val optionOrNull = UnionType.findNonOverloadedDecl(termName("optionOrNull"))
+    assertSigned(optionOrNull, "(scala.Option):scala.Option")
+
+    val optionOrUnit = UnionType.findNonOverloadedDecl(termName("optionOrUnit"))
+    assertSigned(optionOrUnit, "(java.lang.Object):java.lang.Object")
   }
 
   testWithContext("refined types") {
@@ -352,10 +399,18 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(takeNonEmptyTupleSig, "(scala.Product):scala.Unit")
 
     val takeStarColonSig = TuplesClass.findNonOverloadedDecl(termName("takeStarColon"))
-    assertSigned(takeStarColonSig, "(java.lang.Object):scala.Unit")
+    assertSigned(takeStarColonSig, "(scala.Product):scala.Unit")
 
     val takeEmptyTupleSig = TuplesClass.findNonOverloadedDecl(termName("takeEmptyTuple"))
     assertSigned(takeEmptyTupleSig, "(scala.Tuple$package.EmptyTuple):scala.Unit")
+
+    val TupleClass = ctx.findTopLevelClass("scala.Tuple")
+
+    val colonStar = TupleClass.findNonOverloadedDecl(termName(":*"))
+    assertSigned(colonStar, "(2,java.lang.Object):scala.Product")
+
+    val starColon = TupleClass.findNonOverloadedDecl(termName("*:"))
+    assertSigned(starColon, "(2,java.lang.Object):scala.Product")
   }
 
   testWithContext("local object") {

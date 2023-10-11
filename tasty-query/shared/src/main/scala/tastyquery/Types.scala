@@ -163,6 +163,9 @@ object Types {
     def erase(tpe: Type, language: SourceLanguage)(using Context): ErasedTypeRef =
       Erasure.erase(tpe, language)
 
+    def erase(tpe: Type, language: SourceLanguage, keepUnit: Boolean)(using Context): ErasedTypeRef =
+      Erasure.erase(tpe, language, keepUnit)
+
     extension (typeRef: ArrayTypeRef)
       def elemType: ErasedTypeRef =
         if typeRef.dimensions == 1 then typeRef.base
@@ -2339,10 +2342,38 @@ object Types {
       val myJoin = this.myJoin
       if (myJoin != null) then myJoin
       else
-        val computedJoin = defn.ObjectType // TypeOps.orDominator(this)
+        val computedJoin = computeJoin()
         this.myJoin = computedJoin
         computedJoin
     }
+
+    private def computeJoin()(using Context): Type =
+      /** The minimal set of classes in `classes` which derive all other classes in `classes` */
+      def dominators(classes: List[ClassSymbol], acc: List[ClassSymbol]): List[ClassSymbol] = classes match
+        case cls :: rest =>
+          if acc.exists(_.isSubClass(cls)) then dominators(rest, acc)
+          else dominators(rest, cls :: acc)
+        case Nil =>
+          acc
+      end dominators
+
+      val prunedNulls = tryPruneNulls(this)
+
+      val commonBaseClasses = TypeOps.baseClasses(prunedNulls)
+      val doms = dominators(commonBaseClasses, Nil)
+      doms.flatMap(cls => prunedNulls.baseType(cls)).reduceLeft(AndType.make(_, _))
+    end computeJoin
+
+    private def tryPruneNulls(tp: Type)(using Context): Type = tp match
+      case tp: OrType =>
+        val first = tryPruneNulls(tp.first)
+        val second = tryPruneNulls(tp.second)
+        if first.isSubType(defn.NullType) && defn.NullType.isSubType(second) then second
+        else if second.isSubType(defn.NullType) && defn.NullType.isSubType(first) then first
+        else tp.derivedOrType(first, second)
+      case _ =>
+        tp
+    end tryPruneNulls
 
     private[tastyquery] def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       join.resolveMember(name, pre)

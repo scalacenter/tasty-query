@@ -40,8 +40,9 @@ object Signatures:
           case info: PolyType =>
             rec(info.resultType, acc ::: ParamSig.TypeLen(info.paramTypeBounds.length) :: Nil)
           case tpe: Type =>
-            val retType = optCtorReturn.map(_.localRef).getOrElse(tpe)
-            Signature(acc, ErasedTypeRef.erase(retType, language).toSigFullName)
+            val retType = optCtorReturn.map(_.appliedRefInsideThis).getOrElse(tpe)
+            val erasedRetType = ErasedTypeRef.erase(retType, language, keepUnit = true)
+            Signature(acc, erasedRetType.toSigFullName)
         }
 
       rec(info, Nil)

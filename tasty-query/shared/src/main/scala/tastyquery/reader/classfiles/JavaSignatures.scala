@@ -200,12 +200,13 @@ private[classfiles] object JavaSignatures:
       val tname = identifier().toTypeName
       val classBound =
         expect(':')
-        referenceTypeSignature(env) match
-          case Some(tpe) => tpe
-          case _         => rctx.FromJavaObjectType
+        referenceTypeSignature(env).toList
       val interfaceBounds = readWhile(':', referenceType(env))
       if env.withAddedParam(tname) then emptyTypeBounds // shortcut as we will throw away the bounds
-      else RealTypeBounds(rctx.NothingType, interfaceBounds.foldLeft(classBound)(AndType(_, _)))
+      else
+        val allBounds = classBound ::: interfaceBounds
+        val bound = if allBounds.isEmpty then rctx.AnyType else allBounds.reduceLeft(AndType(_, _))
+        RealTypeBounds(rctx.NothingType, bound)
 
     def typeParamsRest(env: JavaSignature): List[TypeBounds] =
       readUntil('>', typeParameter(env))

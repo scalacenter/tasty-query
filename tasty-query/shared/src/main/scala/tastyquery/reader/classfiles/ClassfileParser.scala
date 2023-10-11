@@ -237,13 +237,15 @@ private[reader] object ClassfileParser {
     if cls.owner == rctx.javaLangPackage then
       if cls.name == tpnme.Object then rctx.createObjectMagicMethods(cls)
       else if cls.name == tpnme.String then rctx.createStringMagicMethods(cls)
+      else if cls.name == tpnme.Enum then rctx.createEnumMagicMethods(cls)
 
     for (sym, javaFlags, sigOrDesc) <- loadMembers() do
       val parsedType = sigOrDesc match
         case SigOrDesc.Desc(desc) => Descriptors.parseDescriptor(sym, desc)
         case SigOrDesc.Sig(sig)   => JavaSignatures.parseSignature(sym, sig, allRegisteredSymbols)
       val adaptedType =
-        if sym.isMethod && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
+        if sym.isMethod && sym.name == nme.Constructor then cls.makePolyConstructorType(parsedType)
+        else if sym.isMethod && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
         else parsedType
       sym.withDeclaredType(adaptedType)
 
