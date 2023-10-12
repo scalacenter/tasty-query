@@ -492,7 +492,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     // No 'withRef' because this codebase uses explicit nulls; we would need an Any-typed or (T | Null)-typed reference
     assertStrictSubtype(defn.NullType, x)
     assertStrictSubtype(defn.NullType, xAlias)
-    assertStrictSubtype(defn.NullType, xAlias.symbol.declaredType.requireType)
+    assertStrictSubtype(defn.NullType, xAlias.underlying)
 
     assertEquiv(x.select(tname"AbstractType"), x.select(tname"AbstractType"))
       .withRef[refx.AbstractType, refx.AbstractType]
@@ -1556,7 +1556,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       (body.tpe: @unchecked) match
         case tpe: TermRef =>
           assert(tpe.prefix == NoPrefix)
-          assertEquiv(tpe.symbol.declaredType.requireType, defn.IntType)
+          assertEquiv(tpe.underlying, defn.IntType)
 
       val methodType = makeMethodSym.declaredType.asInstanceOf[MethodType]
       assertStrictSubtype(body.tpe.requireType, methodType.resultType.requireType)
@@ -1584,7 +1584,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       (body.tpe: @unchecked) match
         case tpe: TermRef =>
           assert(tpe.prefix == NoPrefix)
-          assertEquiv(tpe.symbol.declaredType.requireType, defn.IntType)
+          assertEquiv(tpe.underlying, defn.IntType)
 
       val methodType = makeMethodSym.declaredType.asInstanceOf[MethodType]
       assertStrictSubtype(body.tpe.requireType, methodType.resultType.requireType)
