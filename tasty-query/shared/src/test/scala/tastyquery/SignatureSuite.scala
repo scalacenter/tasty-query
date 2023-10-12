@@ -436,4 +436,14 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assert(clue(fooSelect.symbol) == clue(fooMethod))
   }
 
+  testWithContext("context function types") {
+    val SpecialFunctionTypesClass = ctx.findTopLevelClass("simple_trees.SpecialFunctionTypes")
+
+    val contextFunction = SpecialFunctionTypesClass.findNonOverloadedDecl(termName("contextFunction"))
+    assertSigned(contextFunction, "(scala.Function1):scala.Unit")
+
+    val contextFunctionResult = SpecialFunctionTypesClass.findNonOverloadedDecl(termName("contextFunctionResult"))
+    assertSigned(contextFunctionResult, "(java.lang.String):scala.Function1")
+  }
+
 end SignatureSuite
