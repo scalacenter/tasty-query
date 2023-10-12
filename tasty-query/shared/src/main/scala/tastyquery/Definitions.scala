@@ -1,6 +1,7 @@
 package tastyquery
 
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
@@ -437,6 +438,36 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   def isTupleNClass(sym: ClassSymbol): Boolean =
     sym.owner == scalaPackage && TupleNClasses.contains(sym)
+
+  private[tastyquery] lazy val PolyFunctionClass = scalaPackage.optionalClass("PolyFunction")
+
+  private[tastyquery] object PolyFunctionType:
+    def unapply(tpe: TermRefinement): Option[MethodicType] =
+      PolyFunctionClass match
+        case None =>
+          None
+        case Some(polyFunctionClass) =>
+          if tpe.refinedName != nme.m_apply then None
+          else
+            tpe.refinedType match
+              case methodic: MethodicType =>
+                if tpe.parent.baseType(polyFunctionClass).isDefined then Some(methodic)
+                else None
+              case _: Type =>
+                None
+    end unapply
+
+    private[tastyquery] def functionClassOf(mt: MethodicType): ClassSymbol = mt match
+      case mt: PolyType =>
+        mt.resultType match
+          case resultType: MethodicType =>
+            functionClassOf(resultType)
+          case resultType: Type =>
+            throw InvalidProgramStructureException(s"Invalid PolyFunction type ${mt.showBasic}")
+      case mt: MethodType =>
+        FunctionNClass(mt.paramNames.size)
+    end functionClassOf
+  end PolyFunctionType
 
   lazy val hasGenericTuples = ctx.classloader.hasGenericTuples
 

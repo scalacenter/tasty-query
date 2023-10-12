@@ -112,6 +112,8 @@ private[tastyquery] object Erasure:
             erasedGlb(preErase(tpe.first, keepUnit = false), preErase(tpe.second, keepUnit = false))
       case tpe: AnnotatedType =>
         preErase(tpe.typ, keepUnit)
+      case tpe @ defn.PolyFunctionType(mt) =>
+        ClassRef(defn.PolyFunctionType.functionClassOf(mt))
       case tpe: RefinedType =>
         preErase(tpe.parent, keepUnit)
       case tpe: RecType =>
