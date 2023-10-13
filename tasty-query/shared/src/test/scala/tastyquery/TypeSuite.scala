@@ -3117,4 +3117,65 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     // As of this writing, there were 1201 successes
     assert(clue(successCount) > 1000)
   }
+
+  testWithContext("signature-polymorphic-methods") {
+    val MethodHandleClass = ctx.findTopLevelClass("java.lang.invoke.MethodHandle")
+
+    val invokeExact = MethodHandleClass.findNonOverloadedDecl(termName("invokeExact"))
+    assert(clue(invokeExact.isSignaturePolymorphicMethod))
+
+    val invokeWithArgumentss = MethodHandleClass.findAllOverloadedDecls(termName("invokeWithArguments"))
+    for invokeWithArguments <- invokeWithArgumentss do assert(!clue(invokeWithArguments.isSignaturePolymorphicMethod))
+
+    // Try with VarHandle -- ignored on JDK 8
+    ctx.findPackage("java.lang.invoke").getDecl(typeName("VarHandle")) match
+      case Some(sym) =>
+        val VarHandleClass = sym.asClass
+
+        val get = VarHandleClass.findNonOverloadedDecl(termName("get"))
+        assert(clue(get.isSignaturePolymorphicMethod))
+
+        val toMethodHandle = VarHandleClass.findNonOverloadedDecl(termName("toMethodHandle"))
+        assert(!clue(toMethodHandle.isSignaturePolymorphicMethod))
+
+      case None =>
+        // Ignore
+        ()
+    end match
+  }
+
+  testWithContext("call-signature-polymorphic-methods") {
+    val ApplySigPolyClass = ctx.findTopLevelClass("simple_trees.ApplySigPoly")
+    val FooClass = ctx.findStaticClass("simple_trees.ApplySigPoly.Foo")
+
+    val DefDef(_, _, _, Some(testBody), _) =
+      ApplySigPolyClass.findNonOverloadedDecl(termName("test")).tree.get: @unchecked
+
+    def findCall(methodHandleVarName: String): Apply =
+      findTree(testBody) {
+        case app @ Apply(
+              Select(Ident(SimpleName(`methodHandleVarName`)), SignedName(SimpleName("invokeExact"), _, _)),
+              _
+            ) =>
+          app
+      }
+
+    def checkTypes(call: Apply, paramTypes0: List[Type], resultType: Type): Unit =
+      val paramTypes = FooClass.staticRef :: paramTypes0
+      val methodType = call.methodType
+      assert(methodType.paramTypes.size == paramTypes.size)
+      assert(call.args.size == paramTypes.size)
+      for (expectedType, methodParamType, arg) <- paramTypes.lazyZip(methodType.paramTypes).lazyZip(call.args) do
+        assert(clue(expectedType).isSameType(clue(methodParamType)))
+        assert(clue(arg.tpe.requireType).isSubType(clue(expectedType)))
+      assert(clue(methodType.resultType.requireType).isSameType(clue(resultType)))
+    end checkTypes
+
+    checkTypes(findCall("mhNeg"), List(defn.IntType), defn.IntType)
+    checkTypes(findCall("mhRev"), List(defn.StringType), defn.StringType)
+    checkTypes(findCall("mhOverL"), List(defn.LongType), defn.StringType)
+    checkTypes(findCall("mhOverI"), List(defn.IntType), defn.StringType)
+    checkTypes(findCall("mhUnit"), List(defn.StringType), defn.UnitType)
+    checkTypes(findCall("mhObj"), List(defn.StringType), defn.AnyType)
+  }
 }

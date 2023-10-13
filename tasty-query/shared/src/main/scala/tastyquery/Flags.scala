@@ -79,6 +79,7 @@ private[tastyquery] object Flags:
   val Protected: Flag = newFlag("Protected")
   val Scala2Defined: Flag = newFlag("Scala2Defined")
   val Sealed: Flag = newFlag("Sealed")
+  val SignaturePolymorphic: Flag = newFlag("SignaturePolymorphic")
   val SuperParamAlias: Flag = newFlag("SuperParamAlias")
   val Static: Flag = newFlag("Static")
   private[tastyquery] val StableRealizable: Flag = newFlag("StableRealizable")

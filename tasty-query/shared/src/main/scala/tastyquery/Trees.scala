@@ -366,21 +366,34 @@ object Trees {
   }
 
   /** fun(args) */
-  final case class Apply(fun: TermTree, args: List[TermTree])(pos: SourcePosition) extends TermTree(pos):
+  final case class Apply protected[tastyquery] (fun: TermTree, args: List[TermTree])(
+    private var _methodType: MethodType | Null,
+    pos: SourcePosition
+  ) extends TermTree(pos):
     import Apply.*
 
-    private def resolveMethodType(funTpe: TermType, args: List[TermType])(using Context): TermType =
-      funTpe.widenTermRef match
-        case funTpe: MethodType =>
-          for arg <- args do
-            if !arg.isInstanceOf[Type] then
-              throw InvalidProgramStructureException(s"application of non-type $arg to $funTpe")
-          funTpe.instantiate(args.asInstanceOf[List[Type]])
-        case tpe =>
-          throw NonMethodReferenceException(s"application of args ${args.mkString} to $tpe")
+    def this(fun: TermTree, args: List[TermTree])(pos: SourcePosition) = this(fun, args)(null, pos)
+
+    def methodType(using Context): MethodType =
+      val local = _methodType
+      if local != null then local
+      else
+        val computed = fun.tpe.widenTermRef match
+          case funTpe: MethodType => funTpe
+          case funTpe             => throw NonMethodReferenceException(s"application to $funTpe")
+        _methodType = computed
+        computed
+    end methodType
+
+    private def instantiateMethodType(args: List[TermType])(using Context): TermType =
+      for arg <- args do
+        if !arg.isInstanceOf[Type] then
+          throw InvalidProgramStructureException(s"application of non-type $arg to $methodType")
+      methodType.instantiate(args.asInstanceOf[List[Type]])
+    end instantiateMethodType
 
     protected final def calculateType(using Context): TermType =
-      val original = resolveMethodType(fun.tpe, args.map(_.tpe))
+      val original = instantiateMethodType(args.map(_.tpe))
       // If the resolved method type is not methodic, then it is the final result type.
       // in this case, check the method part to see if it is a constructor selection.
       // if it is, then the result type is the type of new.
@@ -390,9 +403,21 @@ object Trees {
     end calculateType
 
     override final def withPos(pos: SourcePosition): Apply = Apply(fun, args)(pos)
+
+    // for binary compatibility
+    protected[tastyquery] def copy(fun: TermTree, args: List[TermTree])(pos: SourcePosition): Apply =
+      new Apply(fun, args)(pos)
   end Apply
 
   object Apply:
+    def apply(fun: TermTree, args: List[TermTree])(pos: SourcePosition): Apply =
+      new Apply(fun, args)(null, pos)
+
+    def forSignaturePolymorphic(fun: TermTree, methodType: MethodType, args: List[TermTree])(
+      pos: SourcePosition
+    ): Apply =
+      new Apply(fun, args)(methodType, pos)
+
     /** Compute the type of a fully-applied `New` node, if it is indeed one.
       *
       * When the receiver of a constructor application is a `New` node, the

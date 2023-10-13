@@ -184,8 +184,30 @@ private[reader] object ClassfileParser {
     val innerClassesStrict = optInnerClasses.map(readInnerClasses).getOrElse(InnerClasses.Empty)
     given InnerClasses = innerClassesStrict
 
+    /* Does this class contain signature-polymorphic methods?
+     *
+     * See https://scala-lang.org/files/archive/spec/3.4/06-expressions.html#signature-polymorphic-methods
+     */
+    val clsContainsSigPoly: Boolean =
+      classOwner == rctx.javaLangInvokePackage
+        && (cls.name == tpnme.MethodHandle || cls.name == tpnme.VarHandle)
+
+    /* Is the member with the given baseFlags and access flags signature-polymorphic?
+     *
+     * We cheat a little bit here compared to the spec: we do not test whether
+     * the method as *only* a varargs parameter. This is fine because
+     * MethodHandle and VarHandle do not contain any native method with varargs
+     * and also other arguments. We check that after the fact (see
+     * `if sym.isSignaturePolymorphicMethod` down below).
+     */
+    def isSignaturePolymorphic(baseFlags: FlagSet, access: AccessFlags): Boolean =
+      clsContainsSigPoly && baseFlags.is(Method) && access.isNativeVarargsIfMethod
+
     def createMember(name: SimpleName, baseFlags: FlagSet, access: AccessFlags): TermSymbol =
-      val flags = baseFlags | access.toFlags | JavaDefined
+      val flags0 = baseFlags | access.toFlags | JavaDefined
+      val flags =
+        if isSignaturePolymorphic(baseFlags, access) then flags0 | SignaturePolymorphic
+        else flags0
       val owner = if flags.is(Flags.Static) then moduleClass else cls
       val sym = TermSymbol.create(name, owner).withFlags(flags, privateWithin(access))
       sym.setAnnotations(Nil) // TODO Read Java annotations on fields and methods
@@ -248,6 +270,18 @@ private[reader] object ClassfileParser {
         else if sym.isMethod && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
         else parsedType
       sym.withDeclaredType(adaptedType)
+
+      // Verify after the fact that we don't mark signature-polymorphic methods that should not be
+      if sym.isSignaturePolymorphicMethod then
+        adaptedType match
+          case adaptedType: MethodType if adaptedType.paramNames.sizeIs == 1 =>
+            () // OK
+          case _ =>
+            throw AssertionError(
+              s"Found a method that would be signature-polymorphic but it has more than one argument: " +
+                s"${cls.name}.${sym.name}: ${adaptedType.showBasic}"
+            )
+    end for
 
     for sym <- allRegisteredSymbols do
       sym.checkCompleted()
