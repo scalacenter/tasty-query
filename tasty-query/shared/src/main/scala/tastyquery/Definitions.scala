@@ -441,6 +441,13 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   private[tastyquery] lazy val PolyFunctionClass = scalaPackage.optionalClass("PolyFunction")
 
+  private[tastyquery] def isPolyFunctionSub(tpe: Type): Boolean =
+    PolyFunctionClass.exists(cls => tpe.baseType(cls).isDefined)
+
+  private[tastyquery] def isPolyFunctionSub(prefix: Prefix): Boolean = prefix match
+    case tpe: Type => isPolyFunctionSub(tpe)
+    case _         => false
+
   private[tastyquery] object PolyFunctionType:
     def unapply(tpe: TermRefinement): Option[MethodicType] =
       PolyFunctionClass match

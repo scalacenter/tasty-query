@@ -6,7 +6,7 @@ class SpecialFunctionTypes:
   def contextFunctionResult(s: String): String ?=> Int = summon[String].toInt
 
   def polyFunction(t: (Int, String), f: [T] => T => Option[T]): (Option[Int], Option[String]) =
-    ???
+    (f(t._1), f(t._2))
 
   def calls(): Unit =
     contextFunction {
