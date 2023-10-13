@@ -203,6 +203,10 @@ private[tastyquery] object Subtyping:
       isSubType(tp1, tp2.bounds.low)
         || level4(tp1, tp2)
 
+    case tp2: TypeParamRef =>
+      isSubType(tp1, tp2.bounds.low)
+        || level4(tp1, tp2)
+
     case tp2: AppliedType =>
       compareAppliedType2(tp1, tp2)
 
@@ -430,6 +434,9 @@ private[tastyquery] object Subtyping:
       else false
 
     case tp1: TypeRef =>
+      isSubType(tp1.bounds.high, tp2)
+
+    case tp1: TypeParamRef =>
       isSubType(tp1.bounds.high, tp2)
 
     case tp1: AppliedType =>

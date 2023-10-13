@@ -939,6 +939,65 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertNeitherSubtype(ConcreteSimplePathsChildClass.staticRef, refinedSomeOtherPolyMethodType)
   }
 
+  testWithContext("dependent-class-type-parameters") {
+    val GenericClassWithTypeParamDependenciesClass =
+      ctx.findTopLevelClass("simple_trees.GenericClassWithTypeParamDependencies")
+
+    val List(a, b, c, d) = GenericClassWithTypeParamDependenciesClass.typeParams: @unchecked
+
+    assertEquiv(a.localRef, a.localRef)
+    assertEquiv(b.localRef, b.localRef)
+
+    assertStrictSubtype(b.localRef, a.localRef)
+    assertStrictSubtype(c.localRef, a.localRef)
+    assertNeitherSubtype(a.localRef, d.localRef)
+
+    assertStrictSubtype(c.localRef, b.localRef)
+    assertStrictSubtype(d.localRef, b.localRef)
+
+    assertNeitherSubtype(c.localRef, d.localRef)
+  }
+
+  testWithContext("dependent-method-type-parameters") {
+    val GenericMethodWithTypeParamDependenciesClass =
+      ctx.findTopLevelClass("simple_trees.GenericMethodWithTypeParamDependencies")
+
+    val foo = GenericMethodWithTypeParamDependenciesClass.findNonOverloadedDecl(termName("foo"))
+    val DefDef(_, Right(typeParams) :: Left(Nil) :: Nil, _, _, _$1) = foo.tree.get: @unchecked
+
+    locally {
+      val List(a, b, c, d) = typeParams.map(_.symbol): @unchecked
+
+      assertEquiv(a.localRef, a.localRef)
+      assertEquiv(b.localRef, b.localRef)
+
+      assertStrictSubtype(b.localRef, a.localRef)
+      assertStrictSubtype(c.localRef, a.localRef)
+      assertNeitherSubtype(a.localRef, d.localRef)
+
+      assertStrictSubtype(c.localRef, b.localRef)
+      assertStrictSubtype(d.localRef, b.localRef)
+
+      assertNeitherSubtype(c.localRef, d.localRef)
+    }
+
+    locally {
+      val List(a, b, c, d) = foo.declaredType.asInstanceOf[PolyType].paramRefs: @unchecked
+
+      assertEquiv(a, a)
+      assertEquiv(b, b)
+
+      assertStrictSubtype(b, a)
+      assertStrictSubtype(c, a)
+      assertNeitherSubtype(a, d)
+
+      assertStrictSubtype(c, b)
+      assertStrictSubtype(d, b)
+
+      assertNeitherSubtype(c, d)
+    }
+  }
+
   testWithContext("intersection-types") {
     assertStrictSubtype(Types.AndType.make(defn.IntType, defn.StringType), defn.IntType).withRef[Int & String, Int]
 
