@@ -404,6 +404,13 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     val takeEmptyTupleSig = TuplesClass.findNonOverloadedDecl(termName("takeEmptyTuple"))
     assertSigned(takeEmptyTupleSig, "(scala.Tuple$package.EmptyTuple):scala.Unit")
 
+    val takeConcreteGenTuple = TuplesClass.findNonOverloadedDecl(termName("takeConcreteGenTuple"))
+    assertSigned(takeConcreteGenTuple, "(scala.Product):scala.Unit")
+
+    val takeConcreteGenTupleThroughMatch =
+      TuplesClass.findNonOverloadedDecl(termName("takeConcreteGenTupleThroughMatch"))
+    assertSigned(takeConcreteGenTupleThroughMatch, "(scala.Product):scala.Unit")
+
     val TupleClass = ctx.findTopLevelClass("scala.Tuple")
 
     val colonStar = TupleClass.findNonOverloadedDecl(termName(":*"))
@@ -434,6 +441,16 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
 
     assert(clue(fooMethod.signature) == clue(expectedSig))
     assert(clue(fooSelect.symbol) == clue(fooMethod))
+  }
+
+  testWithContext("context function types") {
+    val SpecialFunctionTypesClass = ctx.findTopLevelClass("simple_trees.SpecialFunctionTypes")
+
+    val contextFunction = SpecialFunctionTypesClass.findNonOverloadedDecl(termName("contextFunction"))
+    assertSigned(contextFunction, "(scala.Function1):scala.Unit")
+
+    val contextFunctionResult = SpecialFunctionTypesClass.findNonOverloadedDecl(termName("contextFunctionResult"))
+    assertSigned(contextFunctionResult, "(java.lang.String):scala.Function1")
   }
 
 end SignatureSuite
