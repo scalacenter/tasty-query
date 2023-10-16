@@ -453,4 +453,11 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(contextFunctionResult, "(java.lang.String):scala.Function1")
   }
 
+  testWithContext("poly function types") {
+    val SpecialFunctionTypesClass = ctx.findTopLevelClass("simple_trees.SpecialFunctionTypes")
+
+    val polyFunction = SpecialFunctionTypesClass.findNonOverloadedDecl(termName("polyFunction"))
+    assertSigned(polyFunction, "(scala.Tuple2,scala.Function1):scala.Tuple2")
+  }
+
 end SignatureSuite

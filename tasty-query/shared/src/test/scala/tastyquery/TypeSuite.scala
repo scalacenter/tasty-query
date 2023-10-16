@@ -3046,7 +3046,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
   testWithContext("all-symbol-resolutions") {
     /* Test that we can resolve the `.symbol` of all the `Ident`s and `Select`s
-     * within the test-sources.
+     * within the test-sources and standard library.
      */
 
     var successCount = 0
@@ -3085,37 +3085,25 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       }.traverse(tree)
     end walkTree
 
+    // Ignore LazyVals.scala because it contains references to sun.misc, which is not in java.base
+    val RuntimeLazyValsClass = ctx.findTopLevelModuleClass("scala.runtime.LazyVals")
+
     def walk(pkg: PackageSymbol): Unit =
       for sym <- pkg.declarations do
         sym match
-          case sym: PackageSymbol => walk(sym)
-          case sym: ClassSymbol   => sym.tree.foreach(walkTree(_))
-          case _                  => ()
+          case sym: PackageSymbol                              => walk(sym)
+          case sym: ClassSymbol if sym != RuntimeLazyValsClass => sym.tree.foreach(walkTree(_))
+          case _                                               => ()
     end walk
 
-    val testSourcesPackages = List(
-      "companions",
-      "crosspackagetasty",
-      "empty_class",
-      "imported_files",
-      "imports",
-      "inheritance",
-      "javacompat",
-      "javadefined",
-      "mixjavascala",
-      "scala2compat",
-      "simple_trees",
-      "subtyping",
-      "synthetics"
-    )
-    for testSourcesPackage <- testSourcesPackages do walk(ctx.findPackage(testSourcesPackage))
+    walk(defn.RootPackage)
 
     val errors = errorsBuilder.result()
     if errors.nonEmpty then
-      fail(errors.mkString("Could not resolved the `symbol` of some trees in the test-sources:\n", "\n", "\n"))
+      fail(errors.mkString("Could not resolve the `symbol` of some trees on the classpath:\n", "\n", "\n"))
 
-    // As of this writing, there were 1201 successes
-    assert(clue(successCount) > 1000)
+    // As of this writing, there were 15293 successes
+    assert(clue(successCount) > 15000)
   }
 
   testWithContext("signature-polymorphic-methods") {

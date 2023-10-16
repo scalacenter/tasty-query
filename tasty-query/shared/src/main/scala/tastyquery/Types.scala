@@ -324,7 +324,7 @@ object Types {
     private[tastyquery] def resolveMember(name: Name)(using Context): ResolveMemberResult
 
     final def lookupMember(name: Name)(using Context): Option[NamedType] =
-      resolveMember(name) match
+      TermRef.resolvePolyFunctionApply(this, name, resolveMember(name)) match
         case ResolveMemberResult.NotFound =>
           None
         case resolved: ResolveMemberResult.TermMember =>
@@ -1061,7 +1061,7 @@ object Types {
         case name: TermName =>
           prefix match
             case prefix: NonEmptyPrefix =>
-              prefix.resolveMember(name) match
+              TermRef.resolvePolyFunctionApply(prefix, name, prefix.resolveMember(name)) match
                 case ResolveMemberResult.TermMember(symbols, tpe, isStable) if symbols.nonEmpty =>
                   storeResolved(symbols.head, tpe, isStable)
                 case _ =>
@@ -1136,6 +1136,30 @@ object Types {
 
     private[Types] def fromResolved(prefix: NonEmptyPrefix, resolved: ResolveMemberResult.TermMember): TermRef =
       new TermRef(prefix, resolved)
+
+    private[Types] def resolvePolyFunctionApply(
+      prefix: NonEmptyPrefix,
+      name: Name,
+      resolved: ResolveMemberResult.TermMember
+    )(using Context): ResolveMemberResult.TermMember =
+      if resolved.symbols.nonEmpty || !defn.isPolyFunctionSub(prefix) then resolved
+      else
+        (name, resolved.tpe) match
+          case (SignedName(nme.m_apply, _, nme.m_apply), tpe: MethodicType) =>
+            val functionClass = defn.PolyFunctionType.functionClassOf(tpe)
+            val applyMethod = functionClass.findNonOverloadedDecl(nme.m_apply)
+            ResolveMemberResult.TermMember(applyMethod :: Nil, tpe, resolved.isStable)
+          case _ =>
+            resolved
+    end resolvePolyFunctionApply
+
+    private[Types] def resolvePolyFunctionApply(prefix: NonEmptyPrefix, name: Name, resolved: ResolveMemberResult)(
+      using Context
+    ): ResolveMemberResult =
+      resolved match
+        case resolved: ResolveMemberResult.TermMember => resolvePolyFunctionApply(prefix, name, resolved)
+        case _                                        => resolved
+    end resolvePolyFunctionApply
 
     private[tastyquery] def resolveLookupIn(designator: LookupIn)(using Context): TermSymbol =
       val cls = designator.ownerRef.classSymbol.getOrElse {
