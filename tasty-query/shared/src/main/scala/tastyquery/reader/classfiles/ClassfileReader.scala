@@ -432,6 +432,8 @@ private[classfiles] object ClassfileReader {
           */
         def isVarargsIfMethod: Boolean = isSet(Tags.Varargs)
 
+        def isNativeVarargsIfMethod: Boolean = isVarargsIfMethod && isSet(Tags.Native)
+
         def toFlags: FlagSet =
           var flags = EmptyFlagSet
           if isSet(Tags.Private) then flags |= Private
@@ -451,6 +453,7 @@ private[classfiles] object ClassfileReader {
         inline val Static = 0x0008
         inline val Final = 0x0010
         inline val Varargs = 0x0080
+        inline val Native = 0x0100
         inline val Interface = 0x0200
         inline val Abstract = 0x0400
         inline val Synthetic = 0x1000

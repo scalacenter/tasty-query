@@ -19,6 +19,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val scalaPackage = RootPackage.getPackageDeclOrCreate(nme.scalaPackageName)
   private val javaPackage = RootPackage.getPackageDeclOrCreate(nme.javaPackageName)
   val javaLangPackage = javaPackage.getPackageDeclOrCreate(nme.langPackageName)
+  private[tastyquery] val javaLangInvokePackage = javaLangPackage.getPackageDeclOrCreate(termName("invoke"))
 
   private val scalaAnnotationPackage =
     scalaPackage.getPackageDeclOrCreate(termName("annotation"))

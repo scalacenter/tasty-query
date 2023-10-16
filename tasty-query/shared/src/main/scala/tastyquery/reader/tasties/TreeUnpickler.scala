@@ -890,6 +890,18 @@ private[tasties] class TreeUnpickler private (
       val fn = readTerm
       val args = readTerms(end)
       Apply(fn, args)(spn)
+    case APPLYsigpoly =>
+      val spn = span
+      reader.readByte()
+      val end = reader.readEnd()
+      val fn = readTerm
+      val methodType = readTypeOrMethodic() match
+        case methodType: MethodType =>
+          methodType
+        case methodType =>
+          throw TastyFormatException(s"Illegal method type $methodType for APPLYsigpoly $posErrorMsg")
+      val args = readTerms(end)
+      Apply.forSignaturePolymorphic(fn, methodType, args)(spn)
     case NAMEDARG =>
       val spn = span
       reader.readByte()

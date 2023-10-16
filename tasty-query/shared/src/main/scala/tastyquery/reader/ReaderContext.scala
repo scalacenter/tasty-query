@@ -14,6 +14,7 @@ private[reader] final class ReaderContext(underlying: Context):
   def RootPackage: PackageSymbol = underlying.defn.RootPackage
   def EmptyPackage: PackageSymbol = underlying.defn.EmptyPackage
   def javaLangPackage: PackageSymbol = underlying.defn.javaLangPackage
+  def javaLangInvokePackage: PackageSymbol = underlying.defn.javaLangInvokePackage
   def scalaPackage: PackageSymbol = underlying.defn.scalaPackage
 
   def NothingType: NothingType = underlying.defn.NothingType

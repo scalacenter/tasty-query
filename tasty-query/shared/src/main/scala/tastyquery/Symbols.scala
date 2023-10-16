@@ -624,6 +624,13 @@ object Symbols {
       */
     final def isStableMember(using Context): Boolean =
       !flags.isAnyOf(Method | Mutable) && !declaredType.isInstanceOf[ByNameType]
+
+    /** Is this term symbol a signature-polymorphic method?
+      *
+      * See https://scala-lang.org/files/archive/spec/3.4/06-expressions.html#signature-polymorphic-methods
+      */
+    final def isSignaturePolymorphicMethod: Boolean =
+      flags.is(SignaturePolymorphic)
   end TermSymbol
 
   object TermSymbol:
@@ -1195,7 +1202,7 @@ object Symbols {
         case Some(overloads) =>
           overloads.find {
             case decl: TermSymbol =>
-              overloaded == decl.signedName
+              overloaded == decl.signedName || decl.isSignaturePolymorphicMethod
             case _ =>
               false
           }
