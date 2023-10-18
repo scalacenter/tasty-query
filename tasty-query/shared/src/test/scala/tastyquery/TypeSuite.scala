@@ -3156,4 +3156,33 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     checkTypes(findCall("mhUnit"), List(defn.StringType), defn.UnitType)
     checkTypes(findCall("mhObj"), List(defn.StringType), defn.AnyType)
   }
+
+  testWithContext("java-shadowing-inner-class") {
+    val JavaShadowingClassParentClass = ctx.findTopLevelClass("javadefined.JavaShadowingClassParent")
+    val JavaShadowingClassChildClass = ctx.findTopLevelClass("javadefined.JavaShadowingClassChild")
+
+    val ParentInnerClass = JavaShadowingClassParentClass.findDecl(typeName("InnerClass")).asClass
+    val ChildInnerClass = JavaShadowingClassChildClass.findDecl(typeName("InnerClass")).asClass
+    assert(clue(ParentInnerClass) != clue(ChildInnerClass))
+
+    val JavaClassShadowingClass = ctx.findTopLevelClass("simple_trees.JavaClassShadowing")
+
+    val testSym = JavaClassShadowingClass.findNonOverloadedDecl(termName("test"))
+    val useParentInnerSym = JavaClassShadowingClass.findNonOverloadedDecl(termName("useParentInner"))
+    val useChildInnerSym = JavaClassShadowingClass.findNonOverloadedDecl(termName("useChildInner"))
+
+    val DefDef(_, _, _, Some(body), _) = testSym.tree.get: @unchecked
+
+    val parentInnerSym = findTree(body) { case ValDef(SimpleName("parentInner"), _, _, sym) =>
+      sym
+    }
+    assert(clue(parentInnerSym.localRef.underlying).isRef(ParentInnerClass))
+    assert(!clue(parentInnerSym.localRef.underlying).isRef(ChildInnerClass))
+
+    val childInnerSym = findTree(body) { case ValDef(SimpleName("childInner"), _, _, sym) =>
+      sym
+    }
+    assert(!clue(childInnerSym.localRef.underlying).isRef(ParentInnerClass))
+    assert(clue(childInnerSym.localRef.underlying).isRef(ChildInnerClass))
+  }
 }
