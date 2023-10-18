@@ -1484,21 +1484,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val optBaseType = origType.baseType(IterableOpsClass) // this used to cause an infinite recursion
     assert(optBaseType.isDefined)
 
-    extension (tpe: TypeOrWildcard)
-      def andParts: List[Type] = tpe match
-        case tpe: AndType       => tpe.parts
-        case tpe: Type          => tpe :: Nil
-        case _: WildcardTypeArg => Nil
-
-    // sc.IterableOps[scala.Int, (... & sci.List), sci.List[scala.Int]]
+    // sc.IterableOps[scala.Int, sci.List, sci.List[scala.Int]]
     assert(
       optBaseType.get.isApplied(
         _.isRef(IterableOpsClass),
-        List(
-          _.isRef(defn.IntClass),
-          _.andParts.exists(_.isRef(ListClass)),
-          _.isApplied(_.isRef(ListClass), List(_.isRef(defn.IntClass)))
-        )
+        List(_.isRef(defn.IntClass), _.isRef(ListClass), _.isApplied(_.isRef(ListClass), List(_.isRef(defn.IntClass))))
       )
     )
 
