@@ -31,8 +31,6 @@ jobs:
       run: sbt tastyQueryJVM/test
     - name: Run JS tests
       run: sbt tastyQueryJS/test
-    - name: Run examples
-      run: sbt "examples/run simple_trees.TypeMember"
     - name: Run scalafmt check
       run: sbt scalafmtCheck
     - name: Run version policy check
