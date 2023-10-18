@@ -1182,6 +1182,8 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     val GenIterableClass = ctx.findTopLevelClass("scala.collection.Iterable")
     val ImmutableIterableClass = ctx.findTopLevelClass("scala.collection.immutable.Iterable")
     val MutableIterableClass = ctx.findTopLevelClass("scala.collection.mutable.Iterable")
+    val MapClass = ctx.findTopLevelClass("scala.collection.Map")
+    val ImmutableMapClass = ctx.findTopLevelClass("scala.collection.immutable.Map")
 
     // No withRef's because these are not proper types
 
@@ -1191,6 +1193,13 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     assertStrictSubtype(MutableIterableClass.staticRef, GenIterableClass.staticRef)
 
     assertNeitherSubtype(ImmutableIterableClass.staticRef, MutableIterableClass.staticRef)
+
+    assertEquiv(ListClass.staticRef, ListClass.staticRef)
+    assertStrictSubtype(ListClass.staticRef, defn.SeqTypeUnapplied)
+    assertNeitherSubtype(ListClass.staticRef, OptionClass.staticRef)
+
+    assertStrictSubtype(ImmutableMapClass.staticRef, MapClass.staticRef)
+    assertNeitherSubtype(ImmutableMapClass.staticRef, GenIterableClass.staticRef)
   }
 
   testWithContext("annotated-types") {
