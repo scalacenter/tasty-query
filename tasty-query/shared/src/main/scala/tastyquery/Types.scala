@@ -145,7 +145,7 @@ object Types {
         val suffix = "[]" * dimensions
         val baseName = base.cls.signatureName
         val suffixedLast = baseName.path.last match
-          case TypeName(SuffixedName(NameTags.OBJECTCLASS, baseModuleName)) =>
+          case TypeName(ObjectClassName(baseModuleName)) =>
             baseModuleName.asSimpleName.append(suffix).withObjectSuffix.toTypeName
           case last: TypeName =>
             last.toTermName.asSimpleName.append(suffix).toTypeName

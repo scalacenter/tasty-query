@@ -179,28 +179,25 @@ object Names {
     def toDebugString: String = toString
 
     def decode: Name = this match
-      case name: SimpleName                         => termName(NameTransformer.decode(name.name))
-      case SuffixedName(NameTags.OBJECTCLASS, name) => name.decode.toTermName.withObjectSuffix
-      case name: TypeName                           => name.toTermName.decode.toTypeName
-      case _                                        => this // TODO: add more cases
+      case name: SimpleName      => termName(NameTransformer.decode(name.name))
+      case ObjectClassName(name) => name.decode.toTermName.withObjectSuffix
+      case name: TypeName        => name.toTermName.decode.toTypeName
+      case _                     => this // TODO: add more cases
   }
 
   abstract class TermName extends Name {
-    def tag: Int
-
     override def toTermName: TermName = this
 
     override lazy val toTypeName: TypeName = TypeName(this)
 
-    def withObjectSuffix: SuffixedName = SuffixedName(NameTags.OBJECTCLASS, this)
+    def withObjectSuffix: ObjectClassName = ObjectClassName(this)
+
     def stripObjectSuffix: TermName = this match
-      case SuffixedName(NameTags.OBJECTCLASS, rest) => rest
-      case _                                        => this
+      case ObjectClassName(rest) => rest
+      case _                     => this
   }
 
   final case class SimpleName(name: String) extends TermName {
-    override def tag: Int = NameTags.UTF8
-
     override def asSimpleName: SimpleName = this
 
     override def toString: String = name
@@ -224,8 +221,6 @@ object Names {
 
   final case class SignedName(override val underlying: TermName, sig: Signature, target: TermName)
       extends DerivedName(underlying) {
-    override def tag: Int = NameTags.SIGNED
-
     override def toString: String = s"$underlying[with sig $sig @$target]"
 
     override def toDebugString: String =
@@ -237,41 +232,42 @@ object Names {
       SignedName(underlying, sig, underlying)
   end SignedName
 
-  final case class ExpandedName(override val tag: Int, prefix: TermName, name: SimpleName) extends DerivedName(prefix) {
-    def separator: String = tag match {
-      case NameTags.EXPANDED     => "$$"
-      case NameTags.EXPANDPREFIX => "$"
-    }
-
+  final case class ExpandedName(prefix: TermName, name: SimpleName) extends DerivedName(prefix) {
     override def toDebugString: String =
-      s"${prefix.toDebugString}[Expanded $separator $name]"
+      s"${prefix.toDebugString}[Expanded $$$$ $name]"
 
-    override def toString: String = s"$prefix$separator$name"
+    override def toString: String = s"$prefix$$$$$name"
   }
 
-  final case class PrefixedName(override val tag: Int, override val underlying: TermName)
-      extends DerivedName(underlying) {
-    override def toString: String = tag match {
-      case NameTags.SUPERACCESSOR  => s"super$underlying"
-      case NameTags.INLINEACCESSOR => s"inline$underlying"
-    }
+  final case class ExpandPrefixName(prefix: TermName, name: SimpleName) extends DerivedName(prefix) {
+    override def toDebugString: String =
+      s"${prefix.toDebugString}[ExpandPrefix $$ $name]"
 
-    override def toDebugString: String = tag match
-      case NameTags.SUPERACCESSOR  => s"<super:${underlying.toDebugString}>"
-      case NameTags.INLINEACCESSOR => s"<inline:${underlying.toDebugString}>"
+    override def toString: String = s"$prefix$$$name"
   }
 
-  final case class SuffixedName(override val tag: Int, override val underlying: TermName)
-      extends DerivedName(underlying) {
-    override def toString: String = tag match {
-      case NameTags.BODYRETAINER => s"<bodyretainer$underlying>" // probably wrong but print something without crashing
-      case NameTags.OBJECTCLASS  => underlying.toString
-    }
+  final case class SuperAccessorName(override val underlying: TermName) extends DerivedName(underlying) {
+    override def toString: String = s"super$underlying"
 
-    override def toDebugString: String = tag match {
-      case NameTags.BODYRETAINER => s"<bodyretainer:$underlying>"
-      case NameTags.OBJECTCLASS  => s"${underlying.toDebugString}[$$]"
-    }
+    override def toDebugString: String = s"<super:${underlying.toDebugString}>"
+  }
+
+  final case class InlineAccessorName(override val underlying: TermName) extends DerivedName(underlying) {
+    override def toString: String = s"inline$underlying"
+
+    override def toDebugString: String = s"<inline:${underlying.toDebugString}>"
+  }
+
+  final case class BodyRetainerName(override val underlying: TermName) extends DerivedName(underlying) {
+    override def toString: String = s"<bodyretainer$underlying>" // probably wrong but print something without crashing
+
+    override def toDebugString: String = s"<bodyretainer:$underlying>"
+  }
+
+  final case class ObjectClassName(override val underlying: TermName) extends DerivedName(underlying) {
+    override def toString: String = underlying.toString
+
+    override def toDebugString: String = s"${underlying.toDebugString}[$$]"
   }
 
   abstract class NumberedName(underlying: TermName, num: Int) extends DerivedName(underlying)
@@ -279,8 +275,6 @@ object Names {
   // TODO: factor out the separators
   final case class UniqueName(separator: String, override val underlying: TermName, num: Int)
       extends NumberedName(underlying, num) {
-    override def tag: Int = NameTags.UNIQUE
-
     override def toString: String = s"$underlying$separator$num"
 
     override def toDebugString: String = s"${underlying.toDebugString}[unique $separator $num]"
@@ -289,8 +283,6 @@ object Names {
   // can't instantiate directly, might have to nest the other way
   final case class DefaultGetterName(override val underlying: TermName, num: Int)
       extends NumberedName(underlying, num) {
-    override def tag: Int = NameTags.DEFAULTGETTER
-
     override def toString: String = s"$underlying$$default$$${num + 1}"
 
     override def toDebugString: String = s"${underlying.toDebugString}[default $num]"
@@ -305,17 +297,15 @@ object Names {
 
     override def toDebugString: String = s"${toTermName.toDebugString}/T"
 
-    def wrapsObjectName: Boolean = toTermName match
-      case SuffixedName(NameTags.OBJECTCLASS, _) => true
-      case _                                     => false
+    def wrapsObjectName: Boolean = toTermName.isInstanceOf[ObjectClassName]
 
     def companionName: TypeName = toTermName match
-      case SuffixedName(NameTags.OBJECTCLASS, clsName) => clsName.toTypeName
-      case name                                        => name.withObjectSuffix.toTypeName
+      case ObjectClassName(clsName) => clsName.toTypeName
+      case name                     => name.withObjectSuffix.toTypeName
 
     def sourceObjectName: SimpleName = toTermName match
-      case SuffixedName(NameTags.OBJECTCLASS, objName) => objName.asSimpleName
-      case name                                        => name.asSimpleName
+      case ObjectClassName(objName) => objName.asSimpleName
+      case name                     => name.asSimpleName
 
     private[tastyquery] def isPackageObjectClassName: Boolean =
       wrapsObjectName && toTermName.stripObjectSuffix.asSimpleName.isPackageObjectName

@@ -706,8 +706,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(classConstMatch)(clue(tree)))
 
     val classDefMatch: StructureCheck = {
-      case ClassDef(TypeName(SuffixedName(NameTags.OBJECTCLASS, SimpleName("ScalaObject"))), _, symbol)
-          if symbol.isModuleClass =>
+      case ClassDef(TypeName(ObjectClassName(SimpleName("ScalaObject"))), _, symbol) if symbol.isModuleClass =>
     }
     assert(containsSubtree(classDefMatch)(clue(tree)))
   }
@@ -2101,7 +2100,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val packageVal: StructureCheck = {
       case ValDef(
             SimpleName("toplevelEmptyPackage$package"),
-            TypeIdent(TypeName(SuffixedName(NameTags.OBJECTCLASS, SimpleName("toplevelEmptyPackage$package")))),
+            TypeIdent(TypeName(ObjectClassName(SimpleName("toplevelEmptyPackage$package")))),
             _,
             _
           ) =>

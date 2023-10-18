@@ -103,8 +103,10 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
         val qual = readFullyQualifiedName()
         val item = readName()
         FullyQualifiedName(qual.path :+ item)
-      case NameTags.EXPANDED | NameTags.EXPANDPREFIX =>
-        new ExpandedName(tag, readName(), readName().asSimpleName)
+      case NameTags.EXPANDED =>
+        ExpandedName(readName(), readName().asSimpleName)
+      case NameTags.EXPANDPREFIX =>
+        ExpandPrefixName(readName(), readName().asSimpleName)
       case NameTags.UNIQUE =>
         val separator = readName().toString
         val num = readNat()
@@ -120,10 +122,12 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
         val paramsSig = reader.until(end)(readParamSig())
         val sig = Signature(paramsSig, result)
         new SignedName(original, sig, target)
-      case NameTags.SUPERACCESSOR | NameTags.INLINEACCESSOR =>
-        new PrefixedName(tag, readName())
+      case NameTags.SUPERACCESSOR =>
+        SuperAccessorName(readName())
+      case NameTags.INLINEACCESSOR =>
+        InlineAccessorName(readName())
       case NameTags.BODYRETAINER =>
-        new SuffixedName(tag, readName())
+        BodyRetainerName(readName())
       case NameTags.OBJECTCLASS =>
         readEitherName() match
           case simple: TermName              => simple.withObjectSuffix
