@@ -176,8 +176,6 @@ object Names {
     final def isTypeName: Boolean = this.isInstanceOf[TypeName]
     final def isTermName: Boolean = !isTypeName
 
-    def isEmpty: Boolean
-
     def toDebugString: String = toString
 
     def decode: Name = this match
@@ -205,8 +203,6 @@ object Names {
 
     override def asSimpleName: SimpleName = this
 
-    override def isEmpty: Boolean = name.length == 0
-
     override def toString: String = name
 
     def prepend(s: String): SimpleName =
@@ -224,8 +220,6 @@ object Names {
       s"$this is not a simple " +
         s"name"
     )
-
-    override def isEmpty: Boolean = false
   }
 
   final case class SignedName(override val underlying: TermName, sig: Signature, target: TermName)
@@ -306,8 +300,6 @@ object Names {
     override def toTypeName: TypeName = this
 
     override def asSimpleName: SimpleName = toTermName.asSimpleName
-
-    override def isEmpty: Boolean = toTermName.isEmpty
 
     override def toString: String = toTermName.toString
 
