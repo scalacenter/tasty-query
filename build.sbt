@@ -186,16 +186,6 @@ lazy val tastyQuery =
       jsEnv := new NodeJSEnv(NodeJSEnv.Config().withArgs(List("--enable-source-maps"))),
     )
 
-lazy val examples = project
-  .in(file("examples"))
-  .dependsOn(tastyQuery.jvm)
-  .settings(
-    commonSettings,
-    publish / skip := true,
-    fork := true,
-    envVars ++= (tastyQuery.jvm / Test / envVars).value,
-  )
-
 def patchTastyCoreSource(lines: List[String]): List[String] = {
   val importStatement = raw"""(?s)(^ *import .+\.)_$$""".r
   for (line <- lines) yield {
