@@ -265,7 +265,7 @@ object Names {
   }
 
   final case class ObjectClassName(override val underlying: TermName) extends DerivedName(underlying) {
-    override def toString: String = underlying.toString
+    override def toString: String = underlying.toString + "$"
 
     override def toDebugString: String = s"${underlying.toDebugString}[$$]"
   }
