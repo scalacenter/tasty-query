@@ -166,7 +166,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val fooMethod = SubClass.findMember(name"foo")
     assert(clue(fooMethod.owner) == ChildClass)
 
-    val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.fullName))
+    val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.signatureName))
     val getFooMethod = SubClass.findMember(getFooName)
     assert(clue(getFooMethod.owner) == ParentClass)
 
@@ -193,7 +193,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val barMethod = SubWithMixinClass.findMember(name"bar")
     assert(clue(barMethod.owner) == SubMixinClass)
 
-    val getBarName = SignedName(termName("getBar"), Signature(Nil, defn.ObjectClass.fullName))
+    val getBarName = SignedName(termName("getBar"), Signature(Nil, defn.ObjectClass.signatureName))
     val getBarMethod = SubWithMixinClass.findMember(getBarName)
     assert(clue(getBarMethod.owner) == MixinClass)
 
@@ -214,7 +214,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val fooMethod = SubClass.findMember(name"foo")
     assert(clue(fooMethod.owner) == ChildClass)
 
-    val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.fullName))
+    val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.signatureName))
     val getFooMethod = SubClass.findMember(getFooName)
     assert(clue(getFooMethod.owner) == ParentClass)
 
