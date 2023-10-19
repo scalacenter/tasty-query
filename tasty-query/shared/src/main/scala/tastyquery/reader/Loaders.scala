@@ -52,7 +52,9 @@ private[tastyquery] object Loaders {
         else dotSeparated.split('.').toList.map(termName(_))
       PackageFullName(parts)
 
-    private def topLevelSymbolNameToRootName(name: Name): SimpleName = name.toTermName match
+    private def topLevelSymbolNameToRootName(name: Name): SimpleName = name match
+      case TypeName(underlying) =>
+        topLevelSymbolNameToRootName(underlying)
       case ObjectClassName(objName) =>
         objName
       case name: SimpleName =>

@@ -1788,7 +1788,7 @@ object Types {
         else if params.headOption.exists(_.isGivenOrUsing) then ContextualMethodType
         else MethodType
 
-      companion(params.map(_.name.toTermName))(
+      companion(params.map(_.name))(
         tl => params.map(p => tl.integrate(params, paramInfo(p))),
         tl => tl.integrate(params, resultType).asInstanceOf[TypeOrMethodic]
       )

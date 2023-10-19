@@ -216,6 +216,16 @@ private[pickles] class PickleReader {
     val storedWhileReadingOwner = entries(storeInEntriesAt)
     if storedWhileReadingOwner != null then return storedWhileReadingOwner.asInstanceOf[MaybeExternalSymbol]
 
+    extension (n: Name)
+      def toTermName: TermName = n match
+        case n: TermName => n
+        case n: TypeName => n.toTermName
+
+      def toTypeName: TypeName = n match
+        case n: TypeName => n
+        case n: TermName => n.toTypeName
+    end extension
+
     val pickleFlags = readPickleFlags(name1.isTypeName)
     val flags0 = pickleFlagsToFlags(pickleFlags)
     val name =

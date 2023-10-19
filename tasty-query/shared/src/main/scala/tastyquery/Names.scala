@@ -168,12 +168,6 @@ object Names {
 
   sealed abstract class Name derives CanEqual {
 
-    /** This name converted to a type name */
-    def toTypeName: TypeName
-
-    /** This name converted to a term name */
-    def toTermName: TermName
-
     /** This name downcasted to a simple term name */
     def asSimpleName: SimpleName
 
@@ -185,14 +179,12 @@ object Names {
     def decode: Name = this match
       case name: SimpleName      => termName(NameTransformer.decode(name.name))
       case ObjectClassName(name) => name.decode.asInstanceOf[SimpleName].withObjectSuffix
-      case name: TypeName        => name.toTermName.decode.toTypeName
+      case name: TypeName        => name.toTermName.decode.asInstanceOf[TermName].toTypeName
       case _                     => this // TODO: add more cases
   }
 
   abstract class TermName extends Name {
-    override def toTermName: TermName = this
-
-    override lazy val toTypeName: TypeName = TypeName(this)
+    final lazy val toTypeName: TypeName = TypeName(this)
   }
 
   sealed trait SignatureNameItem extends TermName
@@ -292,9 +284,7 @@ object Names {
     override def toDebugString: String = s"${underlying.toDebugString}[default $num]"
   }
 
-  final case class TypeName(override val toTermName: TermName) extends Name {
-    override def toTypeName: TypeName = this
-
+  final case class TypeName(val toTermName: TermName) extends Name {
     override def asSimpleName: SimpleName = toTermName.asSimpleName
 
     override def toString: String = toTermName.toString
