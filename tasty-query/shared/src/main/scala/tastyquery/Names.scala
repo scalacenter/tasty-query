@@ -183,7 +183,7 @@ object Names {
       case _                     => this // TODO: add more cases
   }
 
-  abstract class TermName extends Name {
+  sealed abstract class TermName extends Name {
     final lazy val toTypeName: TypeName = TypeName(this)
   }
 
@@ -206,7 +206,7 @@ object Names {
       name == "package" || name.endsWith(str.topLevelSuffix)
   }
 
-  abstract class DerivedName(val underlying: TermName) extends TermName {
+  sealed abstract class DerivedName(val underlying: TermName) extends TermName {
     override def asSimpleName: SimpleName = throw new UnsupportedOperationException(
       s"$this is not a simple " +
         s"name"
@@ -266,19 +266,16 @@ object Names {
     override def toDebugString: String = s"${underlying.toDebugString}[$$]"
   }
 
-  abstract class NumberedName(underlying: TermName, num: Int) extends DerivedName(underlying)
-
   // TODO: factor out the separators
   final case class UniqueName(separator: String, override val underlying: TermName, num: Int)
-      extends NumberedName(underlying, num) {
+      extends DerivedName(underlying) {
     override def toString: String = s"$underlying$separator$num"
 
     override def toDebugString: String = s"${underlying.toDebugString}[unique $separator $num]"
   }
 
   // can't instantiate directly, might have to nest the other way
-  final case class DefaultGetterName(override val underlying: TermName, num: Int)
-      extends NumberedName(underlying, num) {
+  final case class DefaultGetterName(override val underlying: TermName, num: Int) extends DerivedName(underlying) {
     override def toString: String = s"$underlying$$default$$${num + 1}"
 
     override def toDebugString: String = s"${underlying.toDebugString}[default $num]"

@@ -1118,7 +1118,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val Apply(fun @ Select(qual, methodName), List(arg)) = body: @unchecked
 
     assert(clue(qual.tpe).isApplied(_.isRef(GenClass), List(_.isRef(defn.IntClass))))
-    methodName match {
+    (methodName: @unchecked) match {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"method")
     }
     (fun.tpe.widenTermRef: @unchecked) match {
@@ -1140,7 +1140,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val Apply(tapp @ TypeApply(fun @ Select(qual, methodName), List(targ)), List(arg)) = body: @unchecked
 
     assert(clue(qual.tpe).isOfClass(GenMethod))
-    methodName match {
+    (methodName: @unchecked) match {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"identity")
     }
     (tapp.tpe.widenTermRef: @unchecked) match {
