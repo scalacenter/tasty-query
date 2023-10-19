@@ -1012,28 +1012,28 @@ object Symbols {
       * and evidence suggests that it does not.
       */
     private[tastyquery] final def signatureName: FullyQualifiedName =
-      def computeErasedName(owner: Symbol, name: TypeName): FullyQualifiedName = owner match
+      def computeErasedName(owner: Symbol, name: TermName): FullyQualifiedName = owner match
         case owner: PackageSymbol =>
           val ownerFullName = owner.fullName
-          if name == tpnme.runtimeNothing && ownerFullName == FullyQualifiedName.scalaRuntimePackageName then
-            FullyQualifiedName(nme.scalaPackageName :: tpnme.Nothing :: Nil)
+          if name == nme.runtimeNothing && ownerFullName == FullyQualifiedName.scalaRuntimePackageName then
+            FullyQualifiedName(nme.scalaPackageName :: nme.Nothing :: Nil)
           else ownerFullName.select(name)
 
         case owner: ClassSymbol =>
-          owner.signatureName.mapLast(_.toTermName).select(name)
+          owner.signatureName.select(name)
 
         case owner: TermOrTypeSymbol =>
           // Replace non-class non-package owners by simple `_$`
-          val filledName =
-            if name.wrapsObjectName then name.sourceObjectName.prepend("_$").withObjectSuffix.toTypeName
-            else name.toTermName.asSimpleName.prepend("_$").toTypeName
+          val filledName = name match
+            case ObjectClassName(underlying) => ObjectClassName(underlying.asSimpleName.prepend("_$"))
+            case _                           => name.asSimpleName.prepend("_$")
           computeErasedName(owner.owner, filledName)
       end computeErasedName
 
       val local = mySignatureName
       if local != null then local
       else
-        val computed = computeErasedName(owner, name)
+        val computed = computeErasedName(owner, name.toTermName)
         mySignatureName = computed
         computed
     end signatureName

@@ -75,6 +75,10 @@ object Names {
 
     val EmptyTuple: SimpleName = termName("EmptyTuple")
 
+    // For signatures
+    private[tastyquery] val Nothing: SimpleName = termName("Nothing")
+    private[tastyquery] val runtimeNothing: SimpleName = termName("Nothing$")
+
     val m_== : SimpleName = termName("==")
     val m_!= : SimpleName = termName("!=")
     val m_## : SimpleName = termName("##")

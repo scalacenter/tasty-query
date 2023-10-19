@@ -87,7 +87,7 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
     if (ref < 0)
       ParamSig.TypeLen(ref.abs)
     else
-      ParamSig.Term(nameAtRef.fullyQualified(new NameRef(ref)).mapLast(_.toTypeName))
+      ParamSig.Term(nameAtRef.fullyQualified(new NameRef(ref)))
   }
 
   private def readNameContents(): nameAtRef.EitherName = {
@@ -118,7 +118,7 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
       case NameTags.SIGNED | NameTags.TARGETSIGNED =>
         val original = readName()
         val target = if (tag == NameTags.TARGETSIGNED) readName() else original
-        val result = readFullyQualifiedName().mapLast(_.toTypeName)
+        val result = readFullyQualifiedName()
         val paramsSig = reader.until(end)(readParamSig())
         val sig = Signature(paramsSig, result)
         new SignedName(original, sig, target)

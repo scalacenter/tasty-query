@@ -145,11 +145,9 @@ object Types {
         val suffix = "[]" * dimensions
         val baseName = base.cls.signatureName
         val suffixedLast = baseName.path.last match
-          case TypeName(ObjectClassName(baseModuleName)) =>
-            baseModuleName.asSimpleName.append(suffix).withObjectSuffix.toTypeName
-          case last: TypeName =>
-            last.toTermName.asSimpleName.append(suffix).toTypeName
-          case last: TermName =>
+          case ObjectClassName(baseModuleName) =>
+            baseModuleName.asSimpleName.append(suffix).withObjectSuffix
+          case last =>
             last.asSimpleName.append(suffix)
         FullyQualifiedName(baseName.path.init :+ suffixedLast)
     end toSigFullName
