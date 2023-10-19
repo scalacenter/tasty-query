@@ -102,15 +102,15 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
   }
 
   testWithContext("package-full-names", "simple_trees.nested.InNestedPackage") {
-    assert(clue(defn.RootPackage.fullName) == FullyQualifiedName.rootPackageName)
-    assert(clue(defn.EmptyPackage.fullName) == FullyQualifiedName.rootPackageName)
-    assert(clue(defn.scalaPackage.fullName) == FullyQualifiedName.scalaPackageName)
+    assert(clue(defn.RootPackage.fullName) == PackageFullName.rootPackageName)
+    assert(clue(defn.EmptyPackage.fullName) == PackageFullName.rootPackageName)
+    assert(clue(defn.scalaPackage.fullName) == PackageFullName.scalaPackageName)
 
     val simpleTreesPackage = ctx.findPackage("simple_trees")
-    assert(clue(simpleTreesPackage.fullName) == FullyQualifiedName(List(termName("simple_trees"))))
+    assert(clue(simpleTreesPackage.fullName) == PackageFullName(List(termName("simple_trees"))))
 
     val nestedPackage = ctx.findPackage("simple_trees.nested")
-    assert(clue(nestedPackage.fullName) == FullyQualifiedName(List(termName("simple_trees"), termName("nested"))))
+    assert(clue(nestedPackage.fullName) == PackageFullName(List(termName("simple_trees"), termName("nested"))))
   }
 
   testWithContext("basic-symbol-structure-nested", "simple_trees.nested.InNestedPackage") {

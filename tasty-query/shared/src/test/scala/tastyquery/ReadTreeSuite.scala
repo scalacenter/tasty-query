@@ -108,7 +108,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     */
   private object ty:
     object PackageRef:
-      def unapply(tpe: Types.PackageRef): Some[FullyQualifiedName] = Some(tpe.fullyQualifiedName)
+      def unapply(tpe: Types.PackageRef): Some[PackageFullName] = Some(tpe.fullyQualifiedName)
 
     object AppliedType:
       def unapply(tpe: Types.AppliedType): (Type, List[TypeOrWildcard]) = (tpe.tycon, tpe.args)
@@ -172,7 +172,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             New(
               TypeWrapper(
                 TypeRefInternal(
-                  ty.PackageRef(FullyQualifiedName(List(SimpleName("java"), SimpleName("lang")))),
+                  ty.PackageRef(PackageFullName(List(SimpleName("java"), SimpleName("lang")))),
                   TypeName(SimpleName("Object"))
                 )
               )
@@ -948,7 +948,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                   Some(
                     TypeWrapper(
                       TypeRefInternal(
-                        ty.PackageRef(FullyQualifiedName(List(SimpleName("java"), SimpleName("lang")))),
+                        ty.PackageRef(PackageFullName(List(SimpleName("java"), SimpleName("lang")))),
                         TypeName(SimpleName("Runnable"))
                       )
                     )
@@ -1479,7 +1479,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 /* This should be a PackageRef for scala.util, but since it is not
                  * available on the restricted classpath, it becomes a TermRef instead.
                  */
-                TermRefInternal(ty.PackageRef(FullyQualifiedName.scalaPackageName), SimpleName("util")),
+                TermRefInternal(ty.PackageRef(PackageFullName.scalaPackageName), SimpleName("util")),
                 TypeName(SimpleName("Random"))
               )
             ),
@@ -1490,9 +1490,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                   New(
                     SelectTypeTree(
                       // Same as above
-                      TypeWrapper(
-                        TermRefInternal(ty.PackageRef(FullyQualifiedName.scalaPackageName), SimpleName("util"))
-                      ),
+                      TypeWrapper(TermRefInternal(ty.PackageRef(PackageFullName.scalaPackageName), SimpleName("util"))),
                       TypeName(SimpleName("Random"))
                     )
                   ),

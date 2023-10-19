@@ -7,11 +7,11 @@ import tastyquery.Types.*
 
 object Signatures:
   enum ParamSig:
-    case Term(typ: FullyQualifiedName)
+    case Term(typ: SignatureName)
     case TypeLen(len: Int)
   end ParamSig
 
-  final case class Signature(paramsSig: List[ParamSig], resSig: FullyQualifiedName) derives CanEqual:
+  final case class Signature(paramsSig: List[ParamSig], resSig: SignatureName) derives CanEqual:
     def toDebugString = paramsSig.map {
       case ParamSig.Term(typ)    => typ.toDebugString
       case ParamSig.TypeLen(len) => len.toString

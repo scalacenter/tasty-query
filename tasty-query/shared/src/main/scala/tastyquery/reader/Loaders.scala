@@ -18,13 +18,14 @@ import tastyquery.reader.tasties.TastyUnpickler
 
 private[tastyquery] object Loaders {
 
-  class MissingTopLevelTasty(root: Loader.Root) extends Exception(s"Missing TASTy for ${root.fullName}")
-  class UnexpectedTasty(root: Loader.Root) extends Exception(s"Unexpected TASTy for ${root.fullName}")
+  class MissingTopLevelTasty(root: Loader.Root) extends Exception(s"Missing TASTy for $root")
+  class UnexpectedTasty(root: Loader.Root) extends Exception(s"Unexpected TASTy for $root")
 
   object Loader:
     private[Loaders] case class Root private[Loaders] (pkg: PackageSymbol, rootName: SimpleName):
-      def fullName: FullyQualifiedName =
-        pkg.fullName.select(rootName)
+      override def toString(): String =
+        if pkg.isRootPackage || pkg.name == nme.EmptyPackageName then rootName.toString
+        else pkg.displayFullName + "." + rootName.toString
   end Loader
 
   class Loader(val classpath: Classpath) {
@@ -45,11 +46,11 @@ private[tastyquery] object Loaders {
     private val roots: mutable.Map[PackageSymbol, mutable.Map[SimpleName, Entry]] = mutable.HashMap.empty
     private var topLevelTastys: Map[Loader.Root, List[Tree]] = Map.empty
 
-    private def toPackageName(dotSeparated: String): FullyQualifiedName =
+    private def toPackageName(dotSeparated: String): PackageFullName =
       val parts =
         if dotSeparated.isEmpty() then nme.EmptyPackageName :: Nil
         else dotSeparated.split('.').toList.map(termName(_))
-      FullyQualifiedName(parts)
+      PackageFullName(parts)
 
     /** If this is a root symbol, lookup possible top level tasty trees associated with it. */
     private[tastyquery] def topLevelTasty(rootSymbol: Symbol)(using Context): Option[List[Tree]] =

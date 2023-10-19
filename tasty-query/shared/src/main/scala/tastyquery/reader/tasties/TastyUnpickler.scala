@@ -30,7 +30,7 @@ private[reader] object TastyUnpickler {
   }
 
   final class NameTable {
-    private[TastyUnpickler] type EitherName = TermName | FullyQualifiedName
+    private[TastyUnpickler] type EitherName = TermName | SignatureName
 
     private val names = new mutable.ArrayBuffer[EitherName]
 
@@ -43,23 +43,42 @@ private[reader] object TastyUnpickler {
       apply(ref) match
         case name: TermName =>
           name
-        case name: FullyQualifiedName =>
+        case name: SignatureName =>
           throw TastyFormatException(s"Expected TermName but got ${name.toDebugString}")
 
-    def fullyQualified(ref: NameRef): FullyQualifiedName =
-      apply(ref) match
-        case name: FullyQualifiedName =>
-          name.path match
-            case nme.RootPackageName :: Nil =>
-              FullyQualifiedName.rootPackageName
-            case _ =>
-              name
-        case nme.RootPackageName =>
-          FullyQualifiedName.rootPackageName
-        case name: TermName =>
-          FullyQualifiedName(name :: Nil)
-  }
+    def packageFullName(ref: NameRef): PackageFullName =
+      def invalid(actualDebugString: String): Nothing =
+        throw TastyFormatException(s"Excepted a package full name but got $actualDebugString")
 
+      apply(ref) match
+        case name: SignatureName =>
+          name.items match
+            case nme.RootPackageName :: Nil =>
+              PackageFullName.rootPackageName
+            case items =>
+              val path = items.map {
+                case simpleName: SimpleName => simpleName
+                case _: ObjectClassName     => invalid(name.toDebugString)
+              }
+              PackageFullName(path)
+        case nme.RootPackageName =>
+          PackageFullName.rootPackageName
+        case name: SimpleName =>
+          PackageFullName(name :: Nil)
+        case name: TermName =>
+          invalid(name.toDebugString)
+    end packageFullName
+
+    def signatureName(ref: NameRef): SignatureName =
+      apply(ref) match
+        case name: SignatureName =>
+          name
+        case name: SignatureNameItem =>
+          SignatureName(name :: Nil)
+        case name: TermName =>
+          throw TastyFormatException(s"Expected a signature name but got ${name.toDebugString}")
+    end signatureName
+  }
 }
 
 private[reader] class TastyUnpickler(reader: TastyReader) {
@@ -76,7 +95,16 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
 
   private def readName(): TermName = nameAtRef.simple(readNameRef())
 
-  private def readFullyQualifiedName(): FullyQualifiedName = nameAtRef.fullyQualified(readNameRef())
+  private def readSignatureNameItem(): SignatureNameItem = readName() match
+    case name: SignatureNameItem =>
+      name
+    case name =>
+      throw TastyFormatException(s"Expected a signature name item but got ${name.toDebugString}")
+  end readSignatureNameItem
+
+  private def readPackageFullName(): PackageFullName = nameAtRef.packageFullName(readNameRef())
+
+  private def readSignatureName(): SignatureName = nameAtRef.signatureName(readNameRef())
 
   private def readEitherName(): nameAtRef.EitherName = nameAtRef(readNameRef())
 
@@ -87,7 +115,7 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
     if (ref < 0)
       ParamSig.TypeLen(ref.abs)
     else
-      ParamSig.Term(nameAtRef.fullyQualified(new NameRef(ref)))
+      ParamSig.Term(nameAtRef.signatureName(new NameRef(ref)))
   }
 
   private def readNameContents(): nameAtRef.EitherName = {
@@ -100,9 +128,9 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
         reader.goto(end)
         termName(UTF8Utils.decode(bytes, start.index, length))
       case NameTags.QUALIFIED =>
-        val qual = readFullyQualifiedName()
-        val item = readName()
-        FullyQualifiedName(qual.path :+ item)
+        val qual = readSignatureName()
+        val item = readSignatureNameItem()
+        qual.appendItem(item)
       case NameTags.EXPANDED =>
         ExpandedName(readName(), readName().asSimpleName)
       case NameTags.EXPANDPREFIX =>
@@ -118,7 +146,7 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
       case NameTags.SIGNED | NameTags.TARGETSIGNED =>
         val original = readName()
         val target = if (tag == NameTags.TARGETSIGNED) readName() else original
-        val result = readFullyQualifiedName()
+        val result = readSignatureName()
         val paramsSig = reader.until(end)(readParamSig())
         val sig = Signature(paramsSig, result)
         new SignedName(original, sig, target)
@@ -130,8 +158,8 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
         BodyRetainerName(readName())
       case NameTags.OBJECTCLASS =>
         readEitherName() match
-          case simple: TermName              => simple.withObjectSuffix
-          case qualified: FullyQualifiedName => qualified.mapLast(_.asSimpleName.withObjectSuffix)
+          case simple: TermName     => simple.withObjectSuffix
+          case SignatureName(items) => SignatureName(items.init :+ items.last.withObjectSuffix)
       case _ => throw TastyFormatException(s"unexpected tag: $tag")
     }
     assert(reader.currentAddr == end, s"bad name $result $start ${reader.currentAddr} $end")

@@ -931,7 +931,7 @@ object Symbols {
       mutable.HashMap[Name, mutable.HashSet[TermOrTypeSymbol]]()
 
     // Cache fields
-    private var mySignatureName: FullyQualifiedName | Null = null
+    private var mySignatureName: SignatureName | Null = null
     private var myAppliedRef: Type | Null = null
     private var mySelfType: Type | Null = null
     private var myLinearization: List[ClassSymbol] | Null = null
@@ -1018,16 +1018,16 @@ object Symbols {
       * Moreover, there does not seem to be any code that actually drops package objects,
       * and evidence suggests that it does not.
       */
-    private[tastyquery] final def signatureName: FullyQualifiedName =
-      def computeErasedName(owner: Symbol, name: TermName): FullyQualifiedName = owner match
+    private[tastyquery] final def signatureName: SignatureName =
+      def computeErasedName(owner: Symbol, name: SignatureNameItem): SignatureName = owner match
         case owner: PackageSymbol =>
           val ownerFullName = owner.fullName
-          if name == nme.runtimeNothing && ownerFullName == FullyQualifiedName.scalaRuntimePackageName then
-            FullyQualifiedName(nme.scalaPackageName :: nme.Nothing :: Nil)
-          else ownerFullName.select(name)
+          if name == nme.runtimeNothing && ownerFullName == PackageFullName.scalaRuntimePackageName then
+            SignatureName(nme.scalaPackageName :: nme.Nothing :: Nil)
+          else SignatureName(ownerFullName.path :+ name)
 
         case owner: ClassSymbol =>
-          owner.signatureName.select(name)
+          owner.signatureName.appendItem(name)
 
         case owner: TermOrTypeSymbol =>
           // Replace non-class non-package owners by simple `_$`
@@ -1040,7 +1040,7 @@ object Symbols {
       val local = mySignatureName
       if local != null then local
       else
-        val computed = computeErasedName(owner, name.toTermName)
+        val computed = computeErasedName(owner, name.toTermName.asInstanceOf[SignatureNameItem])
         mySignatureName = computed
         computed
     end signatureName
@@ -1696,11 +1696,11 @@ object Symbols {
     this.withFlags(EmptyFlagSet, None)
     this.setAnnotations(Nil)
 
-    private lazy val _fullName: FullyQualifiedName =
-      if owner == null || name == nme.EmptyPackageName then FullyQualifiedName.rootPackageName
+    private lazy val _fullName: PackageFullName =
+      if owner == null || name == nme.EmptyPackageName then PackageFullName.rootPackageName
       else owner.fullName.select(name)
 
-    final def fullName: FullyQualifiedName = _fullName
+    final def fullName: PackageFullName = _fullName
 
     private[tastyquery] def getPackageDeclOrCreate(name: SimpleName): PackageSymbol =
       getPackageDecl(name).getOrElse {

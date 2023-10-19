@@ -136,20 +136,20 @@ object Types {
       case classRef: ClassRef             => ArrayTypeRef(classRef, 1)
       case ArrayTypeRef(base, dimensions) => ArrayTypeRef(base, dimensions + 1)
 
-    /** The `FullyQualifiedName` for this `ErasedTypeRef` as found in the `TermSig`s of `Signature`s. */
-    def toSigFullName: FullyQualifiedName = this match
+    /** The `SignatureName` for this `ErasedTypeRef` as found in the `TermSig`s of `Signature`s. */
+    def toSigFullName: SignatureName = this match
       case ClassRef(cls) =>
         cls.signatureName
 
       case ArrayTypeRef(base, dimensions) =>
         val suffix = "[]" * dimensions
         val baseName = base.cls.signatureName
-        val suffixedLast = baseName.path.last match
+        val suffixedLast = baseName.items.last match
           case ObjectClassName(baseModuleName) =>
             baseModuleName.asSimpleName.append(suffix).withObjectSuffix
-          case last =>
-            last.asSimpleName.append(suffix)
-        FullyQualifiedName(baseName.path.init :+ suffixedLast)
+          case last: SimpleName =>
+            last.append(suffix)
+        SignatureName(baseName.items.init :+ suffixedLast)
     end toSigFullName
   end ErasedTypeRef
 
@@ -1178,7 +1178,7 @@ object Types {
       with TermReferenceType {
     private[tastyquery] type ThisTypeMappableType = PackageRef
 
-    def fullyQualifiedName: FullyQualifiedName = symbol.fullName
+    def fullyQualifiedName: PackageFullName = symbol.fullName
 
     @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
     def widen(using Context): PackageRef = this

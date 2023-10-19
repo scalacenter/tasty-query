@@ -83,7 +83,7 @@ private[tasties] class TreeUnpickler private (
         val end = reader.readEnd()
         val sym = readPotentiallyShared({
           assert(reader.readByte() == TERMREFpkg, posErrorMsg)
-          rctx.findPackageFromRootOrCreate(readFullyQualifiedName)
+          rctx.findPackageFromRootOrCreate(readPackageFullName())
         })
         reader.until(end)(createSymbols(owner = sym))
       case TYPEDEF =>
@@ -422,7 +422,7 @@ private[tasties] class TreeUnpickler private (
 
   def readName: TermName = nameAtRef.simple(reader.readNameRef())
 
-  def readFullyQualifiedName: FullyQualifiedName = nameAtRef.fullyQualified(reader.readNameRef())
+  def readPackageFullName(): PackageFullName = nameAtRef.packageFullName(reader.readNameRef())
 
   def readSignedName(): SignedName = readName.asInstanceOf[SignedName]
 
@@ -436,7 +436,7 @@ private[tasties] class TreeUnpickler private (
       val packageEnd = reader.readEnd()
       val pid = readPotentiallyShared({
         assert(reader.readByte() == TERMREFpkg, posErrorMsg)
-        rctx.findPackageFromRootOrCreate(readFullyQualifiedName)
+        rctx.findPackageFromRootOrCreate(readPackageFullName())
       })
       PackageDef(pid, reader.until(packageEnd)(readTopLevelStat))(spn)
     case _ => readStat
@@ -1078,7 +1078,7 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       val tpe = readPackageRef()
       val simpleName = tpe match
-        case tpe: PackageRef => tpe.fullyQualifiedName.sourceName.asSimpleName
+        case tpe: PackageRef => tpe.fullyQualifiedName.simpleName
         case tpe: TermRef    => tpe.name // fallback for incomplete or invalid programs
       Ident(simpleName)(tpe)(span)
     case TERMREFdirect =>
@@ -1162,8 +1162,7 @@ private[tasties] class TreeUnpickler private (
 
   /** Reads a package reference, with a fallback on faked term references. */
   private def readPackageRef(): TermReferenceType =
-    // readFullyQualifiedName only reads TermName's in paths, so the cast is OK
-    val path = readFullyQualifiedName.path.asInstanceOf[List[TermName]]
+    val path = readPackageFullName().path
     rctx.createPackageSelection(path)
   end readPackageRef
 

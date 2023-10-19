@@ -201,7 +201,9 @@ object Names {
       case _                     => this
   }
 
-  final case class SimpleName(name: String) extends TermName {
+  sealed trait SignatureNameItem extends TermName
+
+  final case class SimpleName(name: String) extends TermName with SignatureNameItem {
     override def asSimpleName: SimpleName = this
 
     override def toString: String = name
@@ -268,7 +270,9 @@ object Names {
     override def toDebugString: String = s"<bodyretainer:$underlying>"
   }
 
-  final case class ObjectClassName(override val underlying: TermName) extends DerivedName(underlying) {
+  final case class ObjectClassName(override val underlying: TermName)
+      extends DerivedName(underlying)
+      with SignatureNameItem {
     override def toString: String = underlying.toString + "$"
 
     override def toDebugString: String = s"${underlying.toDebugString}[$$]"
@@ -315,35 +319,41 @@ object Names {
       wrapsObjectName && toTermName.stripObjectSuffix.asSimpleName.isPackageObjectName
   }
 
-  final case class FullyQualifiedName(path: List[Name]):
+  final case class PackageFullName(path: List[SimpleName]):
     override def toString(): String =
       path.mkString(".")
 
+    // for consistency with other name types, but it is always the same as toString() here
     def toDebugString: String =
-      path.map(_.toDebugString).mkString(".")
+      toString()
 
-    def select(name: Name): FullyQualifiedName = FullyQualifiedName(path :+ name)
+    def select(subPackage: SimpleName): PackageFullName =
+      PackageFullName(path :+ subPackage)
 
-    def mapLast(op: Name => Name): FullyQualifiedName =
-      FullyQualifiedName(path.init :+ op(path.last))
-
-    private[tastyquery] def sourceName: Name = path match
+    private[tastyquery] def simpleName: SimpleName = path match
       case Nil  => nme.RootPackageName
       case path => path.last
+  end PackageFullName
 
-    def mapLastOption(op: Name => Name): FullyQualifiedName =
-      if path.isEmpty then this
-      else mapLast(op)
-  end FullyQualifiedName
-
-  object FullyQualifiedName:
-    val rootPackageName = FullyQualifiedName(Nil)
-    val emptyPackageName = FullyQualifiedName(nme.EmptyPackageName :: Nil)
-    val scalaPackageName = FullyQualifiedName(nme.scalaPackageName :: Nil)
-    val javaLangPackageName = FullyQualifiedName(nme.javaPackageName :: nme.langPackageName :: Nil)
-    val scalaRuntimePackageName = FullyQualifiedName(nme.scalaPackageName :: nme.runtimePackageName :: Nil)
+  object PackageFullName:
+    val rootPackageName = PackageFullName(Nil)
+    val emptyPackageName = PackageFullName(nme.EmptyPackageName :: Nil)
+    val scalaPackageName = PackageFullName(nme.scalaPackageName :: Nil)
+    val javaLangPackageName = PackageFullName(nme.javaPackageName :: nme.langPackageName :: Nil)
+    val scalaRuntimePackageName = PackageFullName(nme.scalaPackageName :: nme.runtimePackageName :: Nil)
 
     private[tastyquery] val scalaAnnotationInternalPackage =
-      FullyQualifiedName(nme.scalaPackageName :: termName("annotation") :: termName("internal") :: Nil)
-  end FullyQualifiedName
+      PackageFullName(nme.scalaPackageName :: termName("annotation") :: termName("internal") :: Nil)
+  end PackageFullName
+
+  final case class SignatureName(items: List[SignatureNameItem]):
+    override def toString(): String =
+      items.mkString(".")
+
+    def toDebugString: String =
+      items.map(_.toDebugString).mkString(".")
+
+    def appendItem(item: SignatureNameItem): SignatureName =
+      SignatureName(items :+ item)
+  end SignatureName
 }
