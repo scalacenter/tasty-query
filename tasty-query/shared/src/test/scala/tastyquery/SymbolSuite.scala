@@ -101,6 +101,18 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     assertContainsExactly(ctx.findPackage("empty_class"), Set(tname"EmptyClass"))
   }
 
+  testWithContext("package-full-names", "simple_trees.nested.InNestedPackage") {
+    assert(clue(defn.RootPackage.fullName) == FullyQualifiedName.rootPackageName)
+    assert(clue(defn.EmptyPackage.fullName) == FullyQualifiedName.rootPackageName)
+    assert(clue(defn.scalaPackage.fullName) == FullyQualifiedName.scalaPackageName)
+
+    val simpleTreesPackage = ctx.findPackage("simple_trees")
+    assert(clue(simpleTreesPackage.fullName) == FullyQualifiedName(List(termName("simple_trees"))))
+
+    val nestedPackage = ctx.findPackage("simple_trees.nested")
+    assert(clue(nestedPackage.fullName) == FullyQualifiedName(List(termName("simple_trees"), termName("nested"))))
+  }
+
   testWithContext("basic-symbol-structure-nested", "simple_trees.nested.InNestedPackage") {
     ctx.findTopLevelClass("simple_trees.nested.InNestedPackage")
     // InNestedPackage is the only declaration in the simple_trees.nested package
@@ -145,15 +157,15 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
     val InNestedPackageClass = ctx.findTopLevelClass("simple_trees.nested.InNestedPackage")
 
-    assert(InNestedPackageClass.fullName.toString == "simple_trees.nested.InNestedPackage")
+    assert(InNestedPackageClass.displayFullName == "simple_trees.nested.InNestedPackage")
 
     val simpleTreesPkg = ctx.findPackage("simple_trees")
 
-    assert(simpleTreesPkg.fullName.toString == "simple_trees")
+    assert(simpleTreesPkg.displayFullName == "simple_trees")
 
     val (simpleTreesNestedPkg: PackageSymbol) = simpleTreesPkg.getDecl(name"nested").get: @unchecked
 
-    assert(simpleTreesNestedPkg.fullName.toString == "simple_trees.nested")
+    assert(simpleTreesNestedPkg.displayFullName == "simple_trees.nested")
 
     assert(simpleTreesPkg.getDecl(name"nested") == Some(simpleTreesNestedPkg))
   }

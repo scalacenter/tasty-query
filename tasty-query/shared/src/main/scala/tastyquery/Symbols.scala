@@ -179,14 +179,21 @@ object Symbols {
         throw AssertionError(s"Cannot construct static owner prefix for non-static-owner symbol $this")
     end staticOwnerPrefix
 
-    private def nameWithPrefix(addPrefix: Symbol => Boolean): FullyQualifiedName =
-      if isPackage && (owner == null || name == nme.EmptyPackageName) then FullyQualifiedName.rootPackageName
-      else
-        val pre = owner
-        if pre != null && addPrefix(pre) then pre.nameWithPrefix(addPrefix).mapLastOption(_.toTermName).select(name)
-        else FullyQualifiedName(name :: Nil)
-
-    final def fullName: FullyQualifiedName = nameWithPrefix(_.isStatic)
+    /** A full name of this symbol for display purposes, such as debugging or error messages.
+      *
+      * `displayFullName` must not be used to identify symbols, as it is not unique.
+      */
+    final def displayFullName: String = this match
+      case sym: PackageSymbol =>
+        if sym.isRootPackage then "_root_"
+        else if sym.name == nme.EmptyPackageName then "<empty>"
+        else sym.fullName.toString()
+      case sym: TermOrTypeSymbol =>
+        val owner = sym.owner
+        if owner.name == nme.EmptyPackageName then name.toString()
+        else if owner.isStatic then owner.displayFullName + "." + name.toString()
+        else name.toString()
+    end displayFullName
 
     final def isType: Boolean = this.isInstanceOf[TypeSymbol]
     final def isTerm: Boolean = this.isInstanceOf[TermSymbol]
@@ -1688,6 +1695,12 @@ object Symbols {
 
     this.withFlags(EmptyFlagSet, None)
     this.setAnnotations(Nil)
+
+    private lazy val _fullName: FullyQualifiedName =
+      if owner == null || name == nme.EmptyPackageName then FullyQualifiedName.rootPackageName
+      else owner.fullName.select(name)
+
+    final def fullName: FullyQualifiedName = _fullName
 
     private[tastyquery] def getPackageDeclOrCreate(name: SimpleName): PackageSymbol =
       getPackageDecl(name).getOrElse {

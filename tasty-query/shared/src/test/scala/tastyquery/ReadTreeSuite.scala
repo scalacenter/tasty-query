@@ -58,8 +58,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   private object SymbolWithName:
     def unapply(sym: Symbol): Some[sym.ThisNameType] = Some(sym.name)
 
-  private object SymbolWithFullName:
-    def unapplySeq(sym: Symbol): Option[List[Name]] = Some(sym.fullName.path)
+  private object PackageWithFullName:
+    def unapplySeq(sym: PackageSymbol): Option[List[Name]] = Some(sym.fullName.path)
 
   private object ScalaPackageRef:
     def unapply(tree: PackageRef): Boolean = tree.fullyQualifiedName.path == List(termName("scala"))
@@ -255,7 +255,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val nestedPackages: StructureCheck = {
       case PackageDef(
             SymbolWithName(SimpleName("simple_trees")),
-            List(PackageDef(SymbolWithFullName(SimpleName("simple_trees"), SimpleName("nested")), _))
+            List(PackageDef(PackageWithFullName(SimpleName("simple_trees"), SimpleName("nested")), _))
           ) =>
     }
 
@@ -264,7 +264,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
 
   testUnpickleTopLevel("qualified-nested-package", "simple_trees.nested.InQualifiedNestedPackage") { tree =>
     val packageCheck: StructureCheck = {
-      case PackageDef(SymbolWithFullName(SimpleName("simple_trees"), SimpleName("nested")), _) =>
+      case PackageDef(PackageWithFullName(SimpleName("simple_trees"), SimpleName("nested")), _) =>
     }
 
     assert(containsSubtree(packageCheck)(clue(tree)))

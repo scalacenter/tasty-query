@@ -287,7 +287,7 @@ private[classfiles] object JavaSignatures:
       referenceType(null)
 
     def cookFailure(tname: TypeName, reason: String): Nothing =
-      val path = if !isClass then s"${member.owner.fullName}#${member.name}" else member.fullName
+      val path = if !isClass then s"${member.owner.displayFullName}#${member.name}" else member.displayFullName
       throw ClassfileFormatException(
         s"could not resolve type parameter `$tname` in signature `$signature` of $path because $reason"
       )
