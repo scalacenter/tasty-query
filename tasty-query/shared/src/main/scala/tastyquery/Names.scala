@@ -165,9 +165,6 @@ object Names {
     termName(s).withObjectSuffix.toTypeName
 
   sealed abstract class Name derives CanEqual {
-    final def isTypeName: Boolean = this.isInstanceOf[TypeName]
-    final def isTermName: Boolean = !isTypeName
-
     def toDebugString: String = toString
   }
 

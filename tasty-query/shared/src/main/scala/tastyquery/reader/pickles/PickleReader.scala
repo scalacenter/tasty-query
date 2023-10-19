@@ -234,7 +234,7 @@ private[pickles] class PickleReader {
 
     extension (n: TermName) def asSimpleName: SimpleName = n.asInstanceOf[SimpleName]
 
-    val pickleFlags = readPickleFlags(name1.isTypeName)
+    val pickleFlags = readPickleFlags(name1.isInstanceOf[TypeName])
     val flags0 = pickleFlagsToFlags(pickleFlags)
     val name =
       if pickleFlags.isType && flags0.is(Module) then name1.toTermName.asSimpleName.withObjectSuffix.toTypeName
