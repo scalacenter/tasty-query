@@ -226,6 +226,8 @@ private[pickles] class PickleReader {
         case n: TermName => n.toTypeName
     end extension
 
+    extension (n: TermName) def asSimpleName: SimpleName = n.asInstanceOf[SimpleName]
+
     val pickleFlags = readPickleFlags(name1.isTypeName)
     val flags0 = pickleFlagsToFlags(pickleFlags)
     val name =

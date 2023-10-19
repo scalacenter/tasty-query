@@ -95,6 +95,13 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
 
   private def readName(): TermName = nameAtRef.simple(readNameRef())
 
+  private def readSimpleName(): SimpleName = readName() match
+    case name: SimpleName =>
+      name
+    case name =>
+      throw TastyFormatException(s"Expected a simple name but got ${name.toDebugString}")
+  end readSimpleName
+
   private def readSignatureNameItem(): SignatureNameItem = readName() match
     case name: SignatureNameItem =>
       name
@@ -132,9 +139,9 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
         val item = readSignatureNameItem()
         qual.appendItem(item)
       case NameTags.EXPANDED =>
-        ExpandedName(readName(), readName().asSimpleName)
+        ExpandedName(readName(), readSimpleName())
       case NameTags.EXPANDPREFIX =>
-        ExpandPrefixName(readName(), readName().asSimpleName)
+        ExpandPrefixName(readName(), readSimpleName())
       case NameTags.UNIQUE =>
         val separator = readName().toString
         val num = readNat()

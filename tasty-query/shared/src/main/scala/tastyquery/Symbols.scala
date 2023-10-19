@@ -1032,8 +1032,8 @@ object Symbols {
         case owner: TermOrTypeSymbol =>
           // Replace non-class non-package owners by simple `_$`
           val filledName = name match
-            case ObjectClassName(underlying) => ObjectClassName(underlying.asSimpleName.prepend("_$"))
-            case _                           => name.asSimpleName.prepend("_$")
+            case ObjectClassName(underlying) => ObjectClassName(underlying.prepend("_$"))
+            case name: SimpleName            => name.prepend("_$")
           computeErasedName(owner.owner, filledName)
       end computeErasedName
 

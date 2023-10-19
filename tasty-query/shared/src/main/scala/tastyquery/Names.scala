@@ -167,10 +167,6 @@ object Names {
     termName(s).withObjectSuffix.toTypeName
 
   sealed abstract class Name derives CanEqual {
-
-    /** This name downcasted to a simple term name */
-    def asSimpleName: SimpleName
-
     final def isTypeName: Boolean = this.isInstanceOf[TypeName]
     final def isTermName: Boolean = !isTypeName
 
@@ -190,8 +186,6 @@ object Names {
   sealed trait SignatureNameItem extends TermName
 
   final case class SimpleName(name: String) extends TermName with SignatureNameItem {
-    override def asSimpleName: SimpleName = this
-
     override def toString: String = name
 
     def prepend(s: String): SimpleName =
@@ -206,12 +200,7 @@ object Names {
       name == "package" || name.endsWith(str.topLevelSuffix)
   }
 
-  sealed abstract class DerivedName(val underlying: TermName) extends TermName {
-    override def asSimpleName: SimpleName = throw new UnsupportedOperationException(
-      s"$this is not a simple " +
-        s"name"
-    )
-  }
+  sealed abstract class DerivedName(val underlying: TermName) extends TermName
 
   final case class SignedName(override val underlying: TermName, sig: Signature, target: TermName)
       extends DerivedName(underlying) {
@@ -282,8 +271,6 @@ object Names {
   }
 
   final case class TypeName(val toTermName: TermName) extends Name {
-    override def asSimpleName: SimpleName = toTermName.asSimpleName
-
     override def toString: String = toTermName.toString
 
     override def toDebugString: String = s"${toTermName.toDebugString}/T"

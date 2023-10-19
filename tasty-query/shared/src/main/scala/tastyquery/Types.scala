@@ -146,7 +146,7 @@ object Types {
         val baseName = base.cls.signatureName
         val suffixedLast = baseName.items.last match
           case ObjectClassName(baseModuleName) =>
-            baseModuleName.asSimpleName.append(suffix).withObjectSuffix
+            baseModuleName.append(suffix).withObjectSuffix
           case last: SimpleName =>
             last.append(suffix)
         SignatureName(baseName.items.init :+ suffixedLast)
@@ -959,9 +959,9 @@ object Types {
   object NamedType {
 
     private[tastyquery] def possibleSelFromPackage(prefix: NonEmptyPrefix, name: TermName): TermReferenceType =
-      prefix match
-        case prefix: PackageRef if name.isInstanceOf[SimpleName] =>
-          prefix.symbol.getPackageDecl(name.asSimpleName) match
+      (prefix, name) match
+        case (prefix: PackageRef, name: SimpleName) =>
+          prefix.symbol.getPackageDecl(name) match
             case Some(nested) => nested.packageRef
             case _            => TermRef(prefix, name)
         case _ =>
