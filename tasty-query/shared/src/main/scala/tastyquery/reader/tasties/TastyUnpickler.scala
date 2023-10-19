@@ -158,8 +158,14 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
         BodyRetainerName(readName())
       case NameTags.OBJECTCLASS =>
         readEitherName() match
-          case simple: TermName     => simple.withObjectSuffix
-          case SignatureName(items) => SignatureName(items.init :+ items.last.withObjectSuffix)
+          case simple: SimpleName =>
+            simple.withObjectSuffix
+          case SignatureName(items) =>
+            items.last match
+              case last: SimpleName => SignatureName(items.init :+ last.withObjectSuffix)
+              case last             => throw TastyFormatException(s"Invalid OBJECTCLASS of ${last.toDebugString}")
+          case other: TermName =>
+            throw TastyFormatException(s"Invalid OBJECTCLASS of ${other.toDebugString}")
       case _ => throw TastyFormatException(s"unexpected tag: $tag")
     }
     assert(reader.currentAddr == end, s"bad name $result $start ${reader.currentAddr} $end")

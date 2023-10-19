@@ -184,7 +184,7 @@ object Names {
 
     def decode: Name = this match
       case name: SimpleName      => termName(NameTransformer.decode(name.name))
-      case ObjectClassName(name) => name.decode.toTermName.withObjectSuffix
+      case ObjectClassName(name) => name.decode.asInstanceOf[SimpleName].withObjectSuffix
       case name: TypeName        => name.toTermName.decode.toTypeName
       case _                     => this // TODO: add more cases
   }
@@ -193,12 +193,6 @@ object Names {
     override def toTermName: TermName = this
 
     override lazy val toTypeName: TypeName = TypeName(this)
-
-    def withObjectSuffix: ObjectClassName = ObjectClassName(this)
-
-    def stripObjectSuffix: TermName = this match
-      case ObjectClassName(rest) => rest
-      case _                     => this
   }
 
   sealed trait SignatureNameItem extends TermName
@@ -213,6 +207,8 @@ object Names {
 
     def append(s: String): SimpleName =
       termName(name + s)
+
+    def withObjectSuffix: ObjectClassName = ObjectClassName(this)
 
     private[tastyquery] def isPackageObjectName: Boolean =
       name == "package" || name.endsWith(str.topLevelSuffix)
@@ -270,7 +266,7 @@ object Names {
     override def toDebugString: String = s"<bodyretainer:$underlying>"
   }
 
-  final case class ObjectClassName(override val underlying: TermName)
+  final case class ObjectClassName(override val underlying: SimpleName)
       extends DerivedName(underlying)
       with SignatureNameItem {
     override def toString: String = underlying.toString + "$"
@@ -309,14 +305,17 @@ object Names {
 
     def companionName: TypeName = toTermName match
       case ObjectClassName(clsName) => clsName.toTypeName
-      case name                     => name.withObjectSuffix.toTypeName
+      case name: SimpleName         => name.withObjectSuffix.toTypeName
+      case _                        => throw IllegalArgumentException(s"Illegal class name $toDebugString")
 
     def sourceObjectName: SimpleName = toTermName match
-      case ObjectClassName(objName) => objName.asSimpleName
-      case name                     => name.asSimpleName
+      case ObjectClassName(objName) => objName
+      case name: SimpleName         => name
+      case _                        => throw IllegalArgumentException(s"Illegal class name $toDebugString")
 
-    private[tastyquery] def isPackageObjectClassName: Boolean =
-      wrapsObjectName && toTermName.stripObjectSuffix.asSimpleName.isPackageObjectName
+    private[tastyquery] def isPackageObjectClassName: Boolean = toTermName match
+      case ObjectClassName(objName) => objName.isPackageObjectName
+      case _                        => false
   }
 
   final case class PackageFullName(path: List[SimpleName]):

@@ -219,7 +219,7 @@ private[pickles] class PickleReader {
     val pickleFlags = readPickleFlags(name1.isTypeName)
     val flags0 = pickleFlagsToFlags(pickleFlags)
     val name =
-      if pickleFlags.isType && flags0.is(Module) then name1.toTermName.withObjectSuffix.toTypeName
+      if pickleFlags.isType && flags0.is(Module) then name1.toTermName.asSimpleName.withObjectSuffix.toTypeName
       else if flags0.is(Method) && (name1 == Scala2Constructor || name1 == Scala2TraitConstructor) then nme.Constructor
       else name1
 
@@ -341,7 +341,7 @@ private[pickles] class PickleReader {
         val ownerPrefix = owner.asInstanceOf[DeclaringSymbol] match
           case owner: PackageSymbol => owner.packageRef
           case owner: ClassSymbol   => owner.thisType
-        sym.withDeclaredType(TypeRef(ownerPrefix, sym.name.withObjectSuffix.toTypeName))
+        sym.withDeclaredType(TypeRef(ownerPrefix, sym.name.asSimpleName.withObjectSuffix.toTypeName))
         sym
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)

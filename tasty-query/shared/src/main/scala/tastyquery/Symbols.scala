@@ -1781,7 +1781,7 @@ object Symbols {
       myDeclarations.valuesIterator.collect {
         case cls: ClassSymbol if cls.name.isPackageObjectClassName => cls
       }.toList
-        .sortBy(_.name.toTermName.stripObjectSuffix.asSimpleName) // sort for determinism
+        .sortBy(_.name.toString) // sort for determinism
     end computeAllPackageObjectDecls
   }
 
