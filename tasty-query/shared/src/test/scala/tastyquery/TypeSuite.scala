@@ -512,9 +512,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val mapSym = RangeClass.findNonOverloadedDecl(name"map")
       val pt = mapSym.declaredType.asInstanceOf[PolyType]
       val mt = pt.resultType.asInstanceOf[MethodType]
-      assertEquals(List[TypeName](name"B".toTypeName), pt.paramNames, clue(pt.paramNames))
+      assertEquals(List[TypeName](typeName("B")), pt.paramNames, clue(pt.paramNames))
       assert(pt.paramTypeBounds.sizeIs == 1)
-      assertEquals(List[TermName](name"f"), mt.paramNames, clue(mt.paramNames))
+      assertEquals(List[TermName](termName("f")), mt.paramNames, clue(mt.paramNames))
       assert(mt.paramTypes.sizeIs == 1)
       assert(
         mt.paramTypes.head.isApplied(_.isRef(Function1Class), List(_.isRef(defn.IntClass), _ => true)),
