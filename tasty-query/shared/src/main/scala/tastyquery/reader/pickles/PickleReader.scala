@@ -1,7 +1,9 @@
 package tastyquery.reader.pickles
 
 import scala.annotation.switch
+
 import scala.collection.mutable
+import scala.reflect.NameTransformer
 
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
@@ -93,6 +95,13 @@ private[pickles] class PickleReader {
     }
   }
 
+  private def decodeName(name: Name): Name = name match
+    case name: SimpleName      => termName(NameTransformer.decode(name.name))
+    case ObjectClassName(name) => decodeName(name).asInstanceOf[SimpleName].withObjectSuffix
+    case name: TypeName        => decodeName(name.toTermName).asInstanceOf[TermName].toTypeName
+    case _                     => name // TODO: add more cases
+  end decodeName
+
   def readLocalSymbolRef()(using ReaderContext, PklStream, Entries, Index): Symbol =
     readMaybeExternalSymbolRef() match
       case sym: Symbol => sym
@@ -150,7 +159,7 @@ private[pickles] class PickleReader {
       entries(storeInEntriesAt) = result
 
     def readExtSymbol(): MaybeExternalSymbol =
-      val name = readNameRef().decode
+      val name = decodeName(readNameRef())
       val owner = if (atEnd) rctx.RootPackage else readMaybeExternalSymbolRef()
       name match
         case nme.RootName | nme.RootPackageName =>
@@ -178,10 +187,7 @@ private[pickles] class PickleReader {
     }
 
     // symbols that were pickled with Pickler.writeSymInfo
-    val nameref = pkl.readNat()
-    val name0 = at(nameref)(readName())
-
-    val name1 = name0.decode match
+    val name1 = decodeName(readNameRef()) match
       case SimpleName(MangledDefaultGetterNameRegex(underlyingStr, indexStr)) =>
         DefaultGetterName(termName(underlyingStr), indexStr.toInt - 1)
       case decoded =>

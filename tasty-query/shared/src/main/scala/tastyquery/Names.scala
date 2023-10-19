@@ -4,8 +4,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import dotty.tools.tasty.TastyFormat.NameTags
 
-import scala.reflect.NameTransformer
-
 import scala.annotation.targetName
 
 import scala.jdk.CollectionConverters.*
@@ -171,12 +169,6 @@ object Names {
     final def isTermName: Boolean = !isTypeName
 
     def toDebugString: String = toString
-
-    def decode: Name = this match
-      case name: SimpleName      => termName(NameTransformer.decode(name.name))
-      case ObjectClassName(name) => name.decode.asInstanceOf[SimpleName].withObjectSuffix
-      case name: TypeName        => name.toTermName.decode.asInstanceOf[TermName].toTypeName
-      case _                     => this // TODO: add more cases
   }
 
   sealed abstract class TermName extends Name {
