@@ -99,17 +99,9 @@ object Names {
     val TupleCons: SimpleTypeName = typeName("*:")
     val Enum: SimpleTypeName = typeName("Enum")
 
-    @deprecated("you probably meant the term name `nme.EmptyTuple` instead", since = "0.8.3")
-    val EmptyTuple: SimpleTypeName = typeName("EmptyTuple")
-
     val RefinedClassMagic: SimpleTypeName = typeName("<refinement>")
     val RepeatedParamClassMagic: SimpleTypeName = typeName("<repeated>")
     val FromJavaObjectAliasMagic: SimpleTypeName = typeName("<FromJavaObject>")
-
-    val scala2PackageObjectClass: ObjectClassTypeName = termName("package").withObjectSuffix.toTypeName
-
-    private[tastyquery] val runtimeNothing: SimpleTypeName = typeName("Nothing$")
-    private[tastyquery] val runtimeBoxedUnit: SimpleTypeName = typeName("BoxedUnit")
 
     private[tastyquery] val internalRepeatedAnnot: SimpleTypeName = typeName("Repeated")
 
