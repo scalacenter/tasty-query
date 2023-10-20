@@ -162,7 +162,7 @@ private[tastyquery] object Loaders {
     private[tastyquery] def loadAllRoots(pkg: PackageSymbol)(using Context): Unit =
       for
         entries <- roots.remove(pkg)
-        (rootName, entry) <- IArray.from(entries).sortBy(_(0)) // sort for determinism.
+        (rootName, entry) <- IArray.from(entries).sortBy(_(0).name) // sort for determinism.
       do completeRoot(Loader.Root(pkg, rootName), entry)
     end loadAllRoots
 
@@ -170,7 +170,8 @@ private[tastyquery] object Loaders {
     private[tastyquery] def loadAllPackageObjectRoots(pkg: PackageSymbol)(using Context): Unit =
       roots.get(pkg) match
         case Some(entries) =>
-          val candidateNames = entries.keysIterator.filter(_.isPackageObjectName).toList.sorted // sort for determinism
+          val candidateNames =
+            entries.keysIterator.filter(_.isPackageObjectName).toList.sortBy(_.name) // sort for determinism
           for
             rootName <- candidateNames
             entry <- entries.remove(rootName)

@@ -27,8 +27,6 @@ private[tastyquery] object NameCache {
 
 object Names {
 
-  given Ordering[SimpleName] = Ordering.by(_.name)
-
   object nme {
     val EmptyTermName: SimpleName = termName("")
     val RootName: SimpleName = termName("<root>")
