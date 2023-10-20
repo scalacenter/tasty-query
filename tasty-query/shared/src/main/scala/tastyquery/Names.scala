@@ -52,18 +52,13 @@ object Names {
   }
 
   object nme {
-
-    /** The term name represented by the empty string */
-    val EmptySimpleName: SimpleName = termName("")
-    val EmptyTermName: SimpleName = EmptySimpleName
-    val EmptyTypeName: TypeName = EmptyTermName.toTypeName
+    val EmptyTermName: SimpleName = termName("")
     val RootName: SimpleName = termName("<root>")
     val RootPackageName: SimpleName = termName("_root_")
     val EmptyPackageName: SimpleName = termName("<empty>")
     val Constructor: SimpleName = termName("<init>")
     val Wildcard: SimpleName = termName("_")
     val WildcardSequence: SimpleName = termName("_*")
-    val RefinementClass = typeName("<refinement>")
 
     val specialOpsPackageName: SimpleName = termName("<special-ops>")
     val scalaPackageName: SimpleName = termName("scala")
@@ -97,6 +92,7 @@ object Names {
   }
 
   object tpnme {
+    val EmptyTypeName: TypeName = typeName("")
     val Wildcard: TypeName = typeName("_")
 
     val Any: TypeName = typeName("Any")

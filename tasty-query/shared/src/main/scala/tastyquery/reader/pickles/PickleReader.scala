@@ -476,7 +476,7 @@ private[pickles] class PickleReader {
       val tag = pkl.readByte().toInt
       assert(tag == CLASSsym)
       pkl.readNat() // read length
-      val result = readNameRef() == nme.RefinementClass
+      val result = readNameRef() == tpnme.RefinedClassMagic
       result
     }
 
