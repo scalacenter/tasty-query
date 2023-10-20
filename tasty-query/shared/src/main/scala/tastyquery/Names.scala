@@ -189,10 +189,7 @@ object Names {
       name == "package" || name.endsWith(str.topLevelSuffix)
   }
 
-  sealed abstract class DerivedName(val underlying: TermName) extends TermName
-
-  final case class SignedName(override val underlying: TermName, sig: Signature, target: TermName)
-      extends DerivedName(underlying) {
+  final case class SignedName(underlying: TermName, sig: Signature, target: TermName) extends TermName {
     override def toString: String = s"$underlying[with sig $sig @$target]"
 
     override def toDebugString: String =
@@ -204,41 +201,39 @@ object Names {
       SignedName(underlying, sig, underlying)
   end SignedName
 
-  final case class ExpandedName(prefix: TermName, name: SimpleName) extends DerivedName(prefix) {
+  final case class ExpandedName(prefix: TermName, name: SimpleName) extends TermName {
     override def toDebugString: String =
       s"${prefix.toDebugString}[Expanded $$$$ $name]"
 
     override def toString: String = s"$prefix$$$$$name"
   }
 
-  final case class ExpandPrefixName(prefix: TermName, name: SimpleName) extends DerivedName(prefix) {
+  final case class ExpandPrefixName(prefix: TermName, name: SimpleName) extends TermName {
     override def toDebugString: String =
       s"${prefix.toDebugString}[ExpandPrefix $$ $name]"
 
     override def toString: String = s"$prefix$$$name"
   }
 
-  final case class SuperAccessorName(override val underlying: TermName) extends DerivedName(underlying) {
+  final case class SuperAccessorName(underlying: TermName) extends TermName {
     override def toString: String = s"super$underlying"
 
     override def toDebugString: String = s"<super:${underlying.toDebugString}>"
   }
 
-  final case class InlineAccessorName(override val underlying: TermName) extends DerivedName(underlying) {
+  final case class InlineAccessorName(underlying: TermName) extends TermName {
     override def toString: String = s"inline$underlying"
 
     override def toDebugString: String = s"<inline:${underlying.toDebugString}>"
   }
 
-  final case class BodyRetainerName(override val underlying: TermName) extends DerivedName(underlying) {
+  final case class BodyRetainerName(underlying: TermName) extends TermName {
     override def toString: String = s"<bodyretainer$underlying>" // probably wrong but print something without crashing
 
     override def toDebugString: String = s"<bodyretainer:$underlying>"
   }
 
-  final case class ObjectClassName private[Names] (override val underlying: SimpleName)
-      extends DerivedName(underlying)
-      with SignatureNameItem {
+  final case class ObjectClassName private[Names] (underlying: SimpleName) extends TermName with SignatureNameItem {
     override def toString: String = underlying.toString + "$"
 
     override def toDebugString: String = s"${underlying.toDebugString}[$$]"
@@ -247,16 +242,14 @@ object Names {
       underlying.toTypeName.withObjectSuffix
   }
 
-  // TODO: factor out the separators
-  final case class UniqueName(override val underlying: TermName, separator: String, num: Int)
-      extends DerivedName(underlying) {
+  final case class UniqueName(underlying: TermName, separator: String, num: Int) extends TermName {
     override def toString: String = s"$underlying$separator$num"
 
     override def toDebugString: String = s"${underlying.toDebugString}[unique $separator $num]"
   }
 
   // can't instantiate directly, might have to nest the other way
-  final case class DefaultGetterName(override val underlying: TermName, num: Int) extends DerivedName(underlying) {
+  final case class DefaultGetterName(underlying: TermName, num: Int) extends TermName {
     override def toString: String = s"$underlying$$default$$${num + 1}"
 
     override def toDebugString: String = s"${underlying.toDebugString}[default $num]"
