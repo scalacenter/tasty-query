@@ -221,7 +221,7 @@ object Symbols {
         case null                   => ""
       val kind = this match
         case _: PackageSymbol  => "package "
-        case self: ClassSymbol => if self.name.wrapsObjectName then "object class " else "class "
+        case self: ClassSymbol => if self.name.isObjectClassTypeName then "object class " else "class "
         case _                 => if isFlagsInitialized && flags.is(Module) then "object " else ""
       s"symbol[$kind$ownerPrefix$name]"
     }

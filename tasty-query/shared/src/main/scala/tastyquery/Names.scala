@@ -262,7 +262,7 @@ object Names {
   sealed trait ClassTypeName extends TypeName:
     def toTermName: SignatureNameItem
 
-    def wrapsObjectName: Boolean = this.isInstanceOf[ObjectClassTypeName]
+    def isObjectClassTypeName: Boolean = this.isInstanceOf[ObjectClassTypeName]
 
     def companionName: ClassTypeName = this match
       case ObjectClassTypeName(clsName) => clsName
