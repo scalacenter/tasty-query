@@ -160,7 +160,7 @@ private[pickles] class PickleReader {
       val name = decodeName(readNameRef())
       val owner = if (atEnd) rctx.RootPackage else readMaybeExternalSymbolRef()
       name match
-        case nme.RootName | nme.RootPackageName =>
+        case nme.RootName | nme.UserLandRootPackageName =>
           rctx.RootPackage
         case _ =>
           def defaultRef = ExternalSymbolRef(owner, name)

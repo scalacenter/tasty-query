@@ -30,7 +30,7 @@ object Names {
   object nme {
     val EmptyTermName: SimpleName = termName("")
     val RootName: SimpleName = termName("<root>")
-    val RootPackageName: SimpleName = termName("_root_")
+    val UserLandRootPackageName: SimpleName = termName("_root_")
     val EmptyPackageName: SimpleName = termName("<empty>")
     val Constructor: SimpleName = termName("<init>")
     val Wildcard: SimpleName = termName("_")
@@ -291,7 +291,7 @@ object Names {
       PackageFullName(path :+ subPackage)
 
     private[tastyquery] def simpleName: SimpleName = path match
-      case Nil  => nme.RootPackageName
+      case Nil  => nme.UserLandRootPackageName
       case path => path.last
   end PackageFullName
 
