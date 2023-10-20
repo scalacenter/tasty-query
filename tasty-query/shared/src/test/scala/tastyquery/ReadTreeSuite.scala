@@ -1606,7 +1606,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     // A[_], i.e. A >: Nothing <: [X] =>> Any
     val typeLambda: StructureCheck = {
       case TypeParam(SimpleTypeName("A"), InferredTypeBoundsTree(RealTypeBounds(nothing, tl: TypeLambda)), _)
-          if tl.paramNames == List(TypeName(UniqueName("_$", nme.EmptyTermName, 1)))
+          if tl.paramNames == List(TypeName(UniqueName(nme.EmptyTermName, "_$", 1)))
             && typeLambdaResultIsAny.isDefinedAt(tl.resultType) =>
     }
     assert(containsSubtree(typeLambda)(clue(tree)))

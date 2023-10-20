@@ -147,7 +147,7 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
         val num = readNat()
         val originals = reader.until(end)(readName())
         val original = if (originals.isEmpty) nme.EmptyTermName else originals.head
-        new UniqueName(separator, original, num)
+        new UniqueName(original, separator, num)
       case NameTags.DEFAULTGETTER =>
         new DefaultGetterName(readName(), readNat())
       case NameTags.SIGNED | NameTags.TARGETSIGNED =>

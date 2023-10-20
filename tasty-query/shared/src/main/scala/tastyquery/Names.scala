@@ -243,7 +243,7 @@ object Names {
   }
 
   // TODO: factor out the separators
-  final case class UniqueName(separator: String, override val underlying: TermName, num: Int)
+  final case class UniqueName(override val underlying: TermName, separator: String, num: Int)
       extends DerivedName(underlying) {
     override def toString: String = s"$underlying$separator$num"
 
