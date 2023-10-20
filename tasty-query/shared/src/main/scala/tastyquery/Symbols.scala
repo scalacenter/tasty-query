@@ -653,6 +653,9 @@ object Symbols {
     type DefiningTreeType <: TypeDef | TypeTreeBind
     type MatchingSymbolType = TypeSymbol
 
+    if name.toTermName.isInstanceOf[UniqueName] && !this.isInstanceOf[LocalTypeParamSymbol] then
+      throw UnsupportedOperationException(s"${this.displayFullName: @unchecked} -- ${name.toDebugString}")
+
     override final def localRef: TypeRef =
       super.localRef.asTypeRef
 
@@ -910,7 +913,9 @@ object Symbols {
     def declarations(using Context): List[DeclType]
   }
 
-  final class ClassSymbol private (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner) with DeclaringSymbol {
+  final class ClassSymbol private (override val name: ClassTypeName, owner: Symbol)
+      extends TypeSymbol(name, owner)
+      with DeclaringSymbol {
     type DefiningTreeType = ClassDef
     type DeclType = TermOrTypeSymbol
 
@@ -1032,7 +1037,7 @@ object Symbols {
         case owner: TermOrTypeSymbol =>
           // Replace non-class non-package owners by simple `_$`
           val filledName = name match
-            case ObjectClassName(underlying) => ObjectClassName(underlying.prepend("_$"))
+            case ObjectClassName(underlying) => underlying.prepend("_$").withObjectSuffix
             case name: SimpleName            => name.prepend("_$")
           computeErasedName(owner.owner, filledName)
       end computeErasedName
@@ -1660,10 +1665,10 @@ object Symbols {
   }
 
   object ClassSymbol:
-    private[tastyquery] def create(name: TypeName, owner: Symbol): ClassSymbol =
+    private[tastyquery] def create(name: ClassTypeName, owner: Symbol): ClassSymbol =
       owner.addDeclIfDeclaringSym(ClassSymbol(name, owner))
 
-    private[tastyquery] def createNotDeclaration(name: TypeName, owner: Symbol): ClassSymbol =
+    private[tastyquery] def createNotDeclaration(name: ClassTypeName, owner: Symbol): ClassSymbol =
       ClassSymbol(name, owner)
 
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, objectType: TypeRef, flags: FlagSet): ClassSymbol =

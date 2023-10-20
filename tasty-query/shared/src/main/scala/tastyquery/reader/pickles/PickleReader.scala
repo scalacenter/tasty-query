@@ -83,9 +83,9 @@ private[pickles] class PickleReader {
   private def atNoCache[T <: AnyRef](i: Int)(op: PklStream ?=> T)(using PklStream, Entries, Index): T =
     pkl.unsafeFork(index(i))(op)
 
-  def readNameRef()(using PklStream, Entries, Index): Name = at(pkl.readNat())(readName())
+  def readNameRef()(using PklStream, Entries, Index): SimpleName | SimpleTypeName = at(pkl.readNat())(readName())
 
-  def readName()(using PklStream): Name = {
+  def readName()(using PklStream): SimpleName | SimpleTypeName = {
     val tag = pkl.readByte()
     val len = pkl.readNat()
     tag match {
@@ -95,11 +95,9 @@ private[pickles] class PickleReader {
     }
   }
 
-  private def decodeName(name: Name): Name = name match
-    case name: SimpleName      => termName(NameTransformer.decode(name.name))
-    case ObjectClassName(name) => decodeName(name).asInstanceOf[SimpleName].withObjectSuffix
-    case name: TypeName        => decodeName(name.toTermName).asInstanceOf[TermName].toTypeName
-    case _                     => name // TODO: add more cases
+  private def decodeName(name: SimpleName | SimpleTypeName): Name = name match
+    case name: SimpleName     => termName(NameTransformer.decode(name.name))
+    case name: SimpleTypeName => typeName(NameTransformer.decode(name.name))
   end decodeName
 
   def readLocalSymbolRef()(using ReaderContext, PklStream, Entries, Index): Symbol =
@@ -291,7 +289,7 @@ private[pickles] class PickleReader {
             sym.setDeclaredBounds(bounds)
         sym
       case CLASSsym =>
-        val tname = name.toTypeName
+        val tname = name.toTypeName.asInstanceOf[ClassTypeName]
         val cls =
           if tname == tpnme.RefinedClassMagic then
             ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, Scala2Defined)
@@ -895,10 +893,10 @@ private[reader] object PickleReader {
     def readEnd(): Int = readNat() + in.readIndex
     def atOffset(offset: Int): Boolean = in.readIndex == offset
 
-    def readTermName(length: Int): TermName =
+    def readTermName(length: Int): SimpleName =
       termName(UTF8Utils.decode(in.bytes, in.readIndex, length))
 
-    def readTypeName(length: Int): TypeName =
+    def readTypeName(length: Int): SimpleTypeName =
       typeName(UTF8Utils.decode(in.bytes, in.readIndex, length))
 
     final inline def unsafeFork[T](offset: Int)(inline op: PklStream ?=> T): T = {

@@ -92,7 +92,7 @@ private[tasties] class TreeUnpickler private (
         val tag = reader.nextByte
         val sym =
           if tag == TEMPLATE then
-            val cls = ClassSymbol.create(name, owner)
+            val cls = ClassSymbol.create(name.asInstanceOf[ClassTypeName], owner)
             owner match
               case owner: PackageSymbol => caches.declaredTopLevelClasses += (owner, name) -> cls
               case _                    => ()
@@ -121,7 +121,7 @@ private[tasties] class TreeUnpickler private (
         val end = reader.readEnd()
         val name = readName
         val sym =
-          if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(name.toTypeName, owner)
+          if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(toTypeName(name), owner)
           else TermSymbol.create(name, owner)
         caches.registerSym(start, sym)
         sym.setFlags(Case)
@@ -422,7 +422,16 @@ private[tasties] class TreeUnpickler private (
 
   def readName: TermName = nameAtRef.simple(reader.readNameRef())
 
-  def readTypeName(): TypeName = readName.toTypeName
+  def readTypeName(): TypeName = toTypeName(readName)
+
+  private def toTypeName(name: TermName): TypeName = name match
+    case name: SignatureNameItem =>
+      name.toTypeName
+    case UniqueName(underlying, separator, num) =>
+      UniqueTypeName(toTypeName(underlying), separator, num)
+    case _ =>
+      throw TastyFormatException(s"Cannot convert ${name.toDebugString} into a type name")
+  end toTypeName
 
   def readPackageFullName(): PackageFullName = nameAtRef.packageFullName(reader.readNameRef())
 
@@ -1304,7 +1313,7 @@ private[tasties] class TreeUnpickler private (
       if tagFollowShared == TYPEBOUNDS then
         // Type refinement with a type member of the form `Underlying { type refinementName <:> TypeBounds }`
         val refinedMemberBounds = readTypeBounds
-        TypeRefinement(underlying, refinementName.toTypeName, refinedMemberBounds)
+        TypeRefinement(underlying, toTypeName(refinementName), refinedMemberBounds)
       else
         // Type refinement with a term member of the form `Underlying { val/def refinementName: Type }`
         val refinedMemberType = readTypeOrMethodic()

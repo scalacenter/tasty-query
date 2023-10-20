@@ -43,12 +43,6 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
       case _                          => None
   end SimpleIdent
 
-  private object SimpleTypeName:
-    def unapply(name: TypeName): Option[String] = name match
-      case TypeName(SimpleName(nameStr)) => Some(nameStr)
-      case _                             => None
-  end SimpleTypeName
-
   private object SimpleTypeIdent:
     def unapply(ident: TypeIdent): Option[String] = ident match
       case TypeIdent(SimpleTypeName(nameStr)) => Some(nameStr)
@@ -700,7 +694,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(classConstMatch)(clue(tree)))
 
     val classDefMatch: StructureCheck = {
-      case ClassDef(TypeName(ObjectClassName(SimpleName("ScalaObject"))), _, symbol) if symbol.isModuleClass =>
+      case ClassDef(ObjectClassTypeName(SimpleTypeName("ScalaObject")), _, symbol) if symbol.isModuleClass =>
     }
     assert(containsSubtree(classDefMatch)(clue(tree)))
   }
@@ -1606,7 +1600,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     // A[_], i.e. A >: Nothing <: [X] =>> Any
     val typeLambda: StructureCheck = {
       case TypeParam(SimpleTypeName("A"), InferredTypeBoundsTree(RealTypeBounds(nothing, tl: TypeLambda)), _)
-          if tl.paramNames == List(TypeName(UniqueName(nme.EmptyTermName, "_$", 1)))
+          if tl.paramNames == List(UniqueTypeName(tpnme.EmptyTypeName, "_$", 1))
             && typeLambdaResultIsAny.isDefinedAt(tl.resultType) =>
     }
     assert(containsSubtree(typeLambda)(clue(tree)))
@@ -1665,7 +1659,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     // A[X] <: List[X], i.e. A >: Nothing <: [X] =>> List[X]
     val typeLambda: StructureCheck = {
       case TypeParam(SimpleTypeName("A"), InferredTypeBoundsTree(RealTypeBounds(nothing, tl: TypeLambda)), _)
-          if tl.paramNames == List(TypeName(SimpleName("X"))) && typeLambdaResultIsListOf.isDefinedAt(tl.resultType) =>
+          if tl.paramNames == List(typeName("X")) && typeLambdaResultIsListOf.isDefinedAt(tl.resultType) =>
     }
     assert(containsSubtree(typeLambda)(clue(tree)))
   }
@@ -2067,7 +2061,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     val packageVal: StructureCheck = {
       case ValDef(
             SimpleName("toplevelEmptyPackage$package"),
-            TypeIdent(TypeName(ObjectClassName(SimpleName("toplevelEmptyPackage$package")))),
+            TypeIdent(ObjectClassTypeName(SimpleTypeName("toplevelEmptyPackage$package"))),
             _,
             _
           ) =>

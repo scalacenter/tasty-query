@@ -417,7 +417,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val List(Right(List(typeXDef)), _) = castMatchResultWithBindDef.paramLists: @unchecked
     val typeXSym = typeXDef.symbol
 
-    val tTypeCaptureSym = findTree(castMatchResultWithBindDef) { case TypeTreeBind(TypeName(SimpleName("t")), _, sym) =>
+    val tTypeCaptureSym = findTree(castMatchResultWithBindDef) { case TypeTreeBind(SimpleTypeName("t"), _, sym) =>
       sym
     }
 

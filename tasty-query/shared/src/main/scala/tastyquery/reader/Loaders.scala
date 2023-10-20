@@ -53,8 +53,8 @@ private[tastyquery] object Loaders {
       PackageFullName(parts)
 
     private def topLevelSymbolNameToRootName(name: Name): SimpleName = name match
-      case TypeName(underlying) =>
-        topLevelSymbolNameToRootName(underlying)
+      case name: TypeName =>
+        topLevelSymbolNameToRootName(name.toTermName)
       case ObjectClassName(objName) =>
         objName
       case name: SimpleName =>
