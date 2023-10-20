@@ -322,10 +322,6 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     cls
   end createSpecialPolyClass
 
-  val ByNameParamClass2x: ClassSymbol =
-    createSpecialPolyClass(tpnme.ByNameParamClassMagic, Covariant, _ => List(AnyType))
-      .withSpecialErasure(() => ErasedTypeRef.ClassRef(Function0Class))
-
   val RepeatedParamClass: ClassSymbol =
     createSpecialPolyClass(tpnme.RepeatedParamClassMagic, Covariant, tp => List(ObjectType, SeqTypeOf(tp)))
       .withSpecialErasure(() => ErasedTypeRef.ClassRef(SeqClass))

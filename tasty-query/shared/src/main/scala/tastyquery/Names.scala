@@ -27,34 +27,10 @@ private[tastyquery] object NameCache {
 
 object Names {
 
-  given Ordering[SimpleName] = Ordering.by(_.name)
-
-  object str {
-    val topLevelSuffix = "$package"
-    val SuperAccessorPrefix: String = "super$"
-    val InlineAccessorPrefix: String = "inline$"
-    val BodyRetainerSuffix: String = "$retainedBody"
-  }
-
-  object attr {
-    val TASTY = termName("TASTY")
-    val Scala = termName("Scala")
-    val ScalaSig = termName("ScalaSig")
-    val InnerClasses = termName("InnerClasses")
-    val RuntimeVisibleAnnotations = termName("RuntimeVisibleAnnotations") // RetentionPolicy.RUNTIME
-    val RuntimeInvisibleAnnotations = termName("RuntimeInvisibleAnnotations") // RetentionPolicy.CLASS
-    val Signature = termName("Signature")
-  }
-
-  object annot {
-    val ScalaSignature = termName("Lscala/reflect/ScalaSignature;")
-    val ScalaLongSignature = termName("Lscala/reflect/ScalaLongSignature;")
-  }
-
   object nme {
     val EmptyTermName: SimpleName = termName("")
     val RootName: SimpleName = termName("<root>")
-    val RootPackageName: SimpleName = termName("_root_")
+    val UserLandRootPackageName: SimpleName = termName("_root_")
     val EmptyPackageName: SimpleName = termName("<empty>")
     val Constructor: SimpleName = termName("<init>")
     val Wildcard: SimpleName = termName("_")
@@ -64,7 +40,6 @@ object Names {
     val scalaPackageName: SimpleName = termName("scala")
     val javaPackageName: SimpleName = termName("java")
     val langPackageName: SimpleName = termName("lang")
-    val runtimePackageName: SimpleName = termName("runtime")
 
     val EmptyTuple: SimpleName = termName("EmptyTuple")
 
@@ -123,18 +98,9 @@ object Names {
     val TupleCons: SimpleTypeName = typeName("*:")
     val Enum: SimpleTypeName = typeName("Enum")
 
-    @deprecated("you probably meant the term name `nme.EmptyTuple` instead", since = "0.8.3")
-    val EmptyTuple: SimpleTypeName = typeName("EmptyTuple")
-
     val RefinedClassMagic: SimpleTypeName = typeName("<refinement>")
-    val ByNameParamClassMagic: SimpleTypeName = typeName("<byname>")
     val RepeatedParamClassMagic: SimpleTypeName = typeName("<repeated>")
     val FromJavaObjectAliasMagic: SimpleTypeName = typeName("<FromJavaObject>")
-
-    val scala2PackageObjectClass: ObjectClassTypeName = termName("package").withObjectSuffix.toTypeName
-
-    private[tastyquery] val runtimeNothing: SimpleTypeName = typeName("Nothing$")
-    private[tastyquery] val runtimeBoxedUnit: SimpleTypeName = typeName("BoxedUnit")
 
     private[tastyquery] val internalRepeatedAnnot: SimpleTypeName = typeName("Repeated")
 
@@ -186,7 +152,7 @@ object Names {
       termName(name + s)
 
     private[tastyquery] def isPackageObjectName: Boolean =
-      name == "package" || name.endsWith(str.topLevelSuffix)
+      name == "package" || name.endsWith("$package")
   }
 
   final case class SignedName(underlying: TermName, sig: Signature, target: TermName) extends TermName {
@@ -316,7 +282,7 @@ object Names {
       PackageFullName(path :+ subPackage)
 
     private[tastyquery] def simpleName: SimpleName = path match
-      case Nil  => nme.RootPackageName
+      case Nil  => nme.UserLandRootPackageName
       case path => path.last
   end PackageFullName
 
@@ -325,7 +291,9 @@ object Names {
     val emptyPackageName = PackageFullName(nme.EmptyPackageName :: Nil)
     val scalaPackageName = PackageFullName(nme.scalaPackageName :: Nil)
     val javaLangPackageName = PackageFullName(nme.javaPackageName :: nme.langPackageName :: Nil)
-    val scalaRuntimePackageName = PackageFullName(nme.scalaPackageName :: nme.runtimePackageName :: Nil)
+
+    private[tastyquery] val scalaRuntimePackageName =
+      PackageFullName(nme.scalaPackageName :: termName("runtime") :: Nil)
 
     private[tastyquery] val scalaAnnotationInternalPackage =
       PackageFullName(nme.scalaPackageName :: termName("annotation") :: termName("internal") :: Nil)

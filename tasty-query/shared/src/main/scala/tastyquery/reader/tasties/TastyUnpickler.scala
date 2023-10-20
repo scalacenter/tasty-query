@@ -53,7 +53,7 @@ private[reader] object TastyUnpickler {
       apply(ref) match
         case name: SignatureName =>
           name.items match
-            case nme.RootPackageName :: Nil =>
+            case nme.UserLandRootPackageName :: Nil =>
               PackageFullName.rootPackageName
             case items =>
               val path = items.map {
@@ -61,7 +61,7 @@ private[reader] object TastyUnpickler {
                 case _: ObjectClassName     => invalid(name.toDebugString)
               }
               PackageFullName(path)
-        case nme.RootPackageName =>
+        case nme.UserLandRootPackageName =>
           PackageFullName.rootPackageName
         case name: SimpleName =>
           PackageFullName(name :: Nil)
