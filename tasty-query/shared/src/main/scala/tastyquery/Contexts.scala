@@ -72,7 +72,7 @@ object Contexts {
         throw new UnknownClasspathEntry(entry)
       }
 
-    def findPackageFromRoot(fullyQualifiedName: FullyQualifiedName): PackageSymbol =
+    def findPackageFromRoot(fullyQualifiedName: PackageFullName): PackageSymbol =
       @tailrec
       def rec(owner: PackageSymbol, path: List[Name]): PackageSymbol =
         path match
@@ -111,7 +111,7 @@ object Contexts {
     end findSymbolFromRoot
 
     def findPackage(fullyQualifiedName: String): PackageSymbol =
-      findPackageFromRoot(FullyQualifiedName(fullyQualifiedName.split('.').toList.map(termName(_))))
+      findPackageFromRoot(PackageFullName(fullyQualifiedName.split('.').toList.map(termName(_))))
 
     def findTopLevelClass(fullyQualifiedName: String): ClassSymbol =
       val (pkg, nameStr) = splitPackageAndName(fullyQualifiedName)
@@ -200,11 +200,11 @@ object Contexts {
     private def splitPackageAndName(fullyQualifiedName: String): (PackageSymbol, String) =
       fullyQualifiedName.split('.').toList match
         case name :: Nil => (EmptyPackage, name)
-        case path        => (findPackageFromRoot(FullyQualifiedName(path.init.map(termName(_)))), path.last)
+        case path        => (findPackageFromRoot(PackageFullName(path.init.map(termName(_)))), path.last)
 
-    private[tastyquery] def findPackageFromRootOrCreate(fullyQualifiedName: FullyQualifiedName): PackageSymbol =
+    private[tastyquery] def findPackageFromRootOrCreate(fullyQualifiedName: PackageFullName): PackageSymbol =
       fullyQualifiedName.path.foldLeft(RootPackage) { (owner, name) =>
-        owner.getPackageDeclOrCreate(name.asSimpleName)
+        owner.getPackageDeclOrCreate(name)
       }
   }
 }

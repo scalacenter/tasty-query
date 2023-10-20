@@ -67,7 +67,7 @@ object Annotations:
           else
             tpe.prefix match
               case pkg: PackageRef =>
-                if pkg.fullyQualifiedName == FullyQualifiedName.scalaAnnotationInternalPackage then Some(pkg)
+                if pkg.fullyQualifiedName == PackageFullName.scalaAnnotationInternalPackage then Some(pkg)
                 else None
               case _ =>
                 None

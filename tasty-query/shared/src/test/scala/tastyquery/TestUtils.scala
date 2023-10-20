@@ -9,9 +9,9 @@ import tastyquery.Trees.*
 object TestUtils:
   extension (sc: StringContext)
     def name(): SimpleName =
-      SimpleName(sc.parts.mkString)
-    def tname(): TypeName =
-      TypeName(SimpleName(sc.parts.mkString))
+      termName(sc.parts.mkString)
+    def tname(): SimpleTypeName =
+      typeName(sc.parts.mkString)
 
   def findLocalValDef(body: Tree, name: TermName): TermSymbol =
     findTree(body) {

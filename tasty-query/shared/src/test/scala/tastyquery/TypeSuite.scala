@@ -417,7 +417,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val List(Right(List(typeXDef)), _) = castMatchResultWithBindDef.paramLists: @unchecked
     val typeXSym = typeXDef.symbol
 
-    val tTypeCaptureSym = findTree(castMatchResultWithBindDef) { case TypeTreeBind(TypeName(SimpleName("t")), _, sym) =>
+    val tTypeCaptureSym = findTree(castMatchResultWithBindDef) { case TypeTreeBind(SimpleTypeName("t"), _, sym) =>
       sym
     }
 
@@ -512,9 +512,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val mapSym = RangeClass.findNonOverloadedDecl(name"map")
       val pt = mapSym.declaredType.asInstanceOf[PolyType]
       val mt = pt.resultType.asInstanceOf[MethodType]
-      assertEquals(List[TypeName](name"B".toTypeName), pt.paramNames, clue(pt.paramNames))
+      assertEquals(List[TypeName](typeName("B")), pt.paramNames, clue(pt.paramNames))
       assert(pt.paramTypeBounds.sizeIs == 1)
-      assertEquals(List[TermName](name"f"), mt.paramNames, clue(mt.paramNames))
+      assertEquals(List[TermName](termName("f")), mt.paramNames, clue(mt.paramNames))
       assert(mt.paramTypes.sizeIs == 1)
       assert(
         mt.paramTypes.head.isApplied(_.isRef(Function1Class), List(_.isRef(defn.IntClass), _ => true)),
@@ -1118,7 +1118,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val Apply(fun @ Select(qual, methodName), List(arg)) = body: @unchecked
 
     assert(clue(qual.tpe).isApplied(_.isRef(GenClass), List(_.isRef(defn.IntClass))))
-    methodName match {
+    (methodName: @unchecked) match {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"method")
     }
     (fun.tpe.widenTermRef: @unchecked) match {
@@ -1140,7 +1140,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val Apply(tapp @ TypeApply(fun @ Select(qual, methodName), List(targ)), List(arg)) = body: @unchecked
 
     assert(clue(qual.tpe).isOfClass(GenMethod))
-    methodName match {
+    (methodName: @unchecked) match {
       case SignedName(_, _, simpleName) => assertEquals(simpleName, name"identity")
     }
     (tapp.tpe.widenTermRef: @unchecked) match {

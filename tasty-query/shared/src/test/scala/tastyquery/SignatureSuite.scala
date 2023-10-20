@@ -88,7 +88,7 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     val TreeMap = ctx.findTopLevelClass("java.util.TreeMap")
 
     val getFirstEntry = TreeMap.findNonOverloadedDecl(name"getFirstEntry")
-    assertSigned(getFirstEntry, "():java.util.TreeMap.Entry")
+    assertSigned(getFirstEntry, "():java.util.TreeMap$.Entry")
   }
 
   testWithContext("Java bounded generic") {
@@ -402,7 +402,7 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(takeStarColonSig, "(scala.Product):scala.Unit")
 
     val takeEmptyTupleSig = TuplesClass.findNonOverloadedDecl(termName("takeEmptyTuple"))
-    assertSigned(takeEmptyTupleSig, "(scala.Tuple$package.EmptyTuple):scala.Unit")
+    assertSigned(takeEmptyTupleSig, "(scala.Tuple$package$.EmptyTuple$):scala.Unit")
 
     val takeConcreteGenTuple = TuplesClass.findNonOverloadedDecl(termName("takeConcreteGenTuple"))
     assertSigned(takeConcreteGenTuple, "(scala.Product):scala.Unit")
@@ -433,7 +433,7 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     val fooMethod = findTree(methodBody) { case DefDef(SimpleName("foo"), _, _, _, sym) =>
       sym
     }
-    assertSigned(fooMethod, "(simple_trees.LocalObject._$MyLocalObject):simple_trees.LocalObject._$MyLocalObject")
+    assertSigned(fooMethod, "(simple_trees.LocalObject._$MyLocalObject$):simple_trees.LocalObject._$MyLocalObject$")
 
     val (fooSelect, expectedSig) = findTree(methodBody) {
       case Apply(select @ Select(This(_), SignedName(SimpleName("foo"), sig, _)), _) => (select, sig)

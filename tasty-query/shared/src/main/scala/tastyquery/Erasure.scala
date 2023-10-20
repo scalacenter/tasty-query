@@ -239,8 +239,11 @@ private[tastyquery] object Erasure:
     * - subtypes <= supertypes
     *
     * Since this isn't enough to order to unrelated classes, we use
-    * lexicographic ordering of the class symbol full name as a tie-breaker.
-    * This ensure that `A <= B && B <= A` iff `A =:= B`.
+    * lexicographic ordering of the class symbol's signature name as a
+    * tie-breaker. This ensure that `A <= B && B <= A` iff `A =:= B`.
+    *
+    * Note that dotc uses the class symbol's `fullName`. Our `signatureName` is
+    * precisely what corresponds to dotc's `fullName`, as a requirement.
     *
     * @see erasedGlb
     */
@@ -248,7 +251,7 @@ private[tastyquery] object Erasure:
     def compareClasses(cls1: ClassSymbol, cls2: ClassSymbol): Int =
       if cls1.isSubClass(cls2) then -1
       else if cls2.isSubClass(cls1) then 1
-      else cls1.fullName.toString.compareTo(cls2.fullName.toString)
+      else cls1.signatureName.toString.compareTo(cls2.signatureName.toString)
     end compareClasses
 
     (tp1, tp2) match

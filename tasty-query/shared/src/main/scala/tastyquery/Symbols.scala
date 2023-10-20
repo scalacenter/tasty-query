@@ -179,14 +179,21 @@ object Symbols {
         throw AssertionError(s"Cannot construct static owner prefix for non-static-owner symbol $this")
     end staticOwnerPrefix
 
-    private def nameWithPrefix(addPrefix: Symbol => Boolean): FullyQualifiedName =
-      if isPackage && (owner == null || name == nme.EmptyPackageName) then FullyQualifiedName.rootPackageName
-      else
-        val pre = owner
-        if pre != null && addPrefix(pre) then pre.nameWithPrefix(addPrefix).mapLastOption(_.toTermName).select(name)
-        else FullyQualifiedName(name :: Nil)
-
-    final def fullName: FullyQualifiedName = nameWithPrefix(_.isStatic)
+    /** A full name of this symbol for display purposes, such as debugging or error messages.
+      *
+      * `displayFullName` must not be used to identify symbols, as it is not unique.
+      */
+    final def displayFullName: String = this match
+      case sym: PackageSymbol =>
+        if sym.isRootPackage then "_root_"
+        else if sym.name == nme.EmptyPackageName then "<empty>"
+        else sym.fullName.toString()
+      case sym: TermOrTypeSymbol =>
+        val owner = sym.owner
+        if owner.name == nme.EmptyPackageName then name.toString()
+        else if owner.isStatic then owner.displayFullName + "." + name.toString()
+        else name.toString()
+    end displayFullName
 
     final def isType: Boolean = this.isInstanceOf[TypeSymbol]
     final def isTerm: Boolean = this.isInstanceOf[TermSymbol]
@@ -213,9 +220,9 @@ object Symbols {
         case owner: Symbol          => s"${owner.name}>"
         case null                   => ""
       val kind = this match
-        case _: PackageSymbol => "package "
-        case _: ClassSymbol   => if name.toTypeName.wrapsObjectName then "object class " else "class "
-        case _                => if isFlagsInitialized && flags.is(Module) then "object " else ""
+        case _: PackageSymbol  => "package "
+        case self: ClassSymbol => if self.name.isObjectClassTypeName then "object class " else "class "
+        case _                 => if isFlagsInitialized && flags.is(Module) then "object " else ""
       s"symbol[$kind$ownerPrefix$name]"
     }
     def toDebugString = toString
@@ -646,6 +653,9 @@ object Symbols {
     type DefiningTreeType <: TypeDef | TypeTreeBind
     type MatchingSymbolType = TypeSymbol
 
+    if name.toTermName.isInstanceOf[UniqueName] && !this.isInstanceOf[LocalTypeParamSymbol] then
+      throw UnsupportedOperationException(s"${this.displayFullName: @unchecked} -- ${name.toDebugString}")
+
     override final def localRef: TypeRef =
       super.localRef.asTypeRef
 
@@ -903,7 +913,9 @@ object Symbols {
     def declarations(using Context): List[DeclType]
   }
 
-  final class ClassSymbol private (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner) with DeclaringSymbol {
+  final class ClassSymbol private (override val name: ClassTypeName, owner: Symbol)
+      extends TypeSymbol(name, owner)
+      with DeclaringSymbol {
     type DefiningTreeType = ClassDef
     type DeclType = TermOrTypeSymbol
 
@@ -924,7 +936,7 @@ object Symbols {
       mutable.HashMap[Name, mutable.HashSet[TermOrTypeSymbol]]()
 
     // Cache fields
-    private var mySignatureName: FullyQualifiedName | Null = null
+    private var mySignatureName: SignatureName | Null = null
     private var myAppliedRef: Type | Null = null
     private var mySelfType: Type | Null = null
     private var myLinearization: List[ClassSymbol] | Null = null
@@ -1011,29 +1023,29 @@ object Symbols {
       * Moreover, there does not seem to be any code that actually drops package objects,
       * and evidence suggests that it does not.
       */
-    private[tastyquery] final def signatureName: FullyQualifiedName =
-      def computeErasedName(owner: Symbol, name: TypeName): FullyQualifiedName = owner match
+    private[tastyquery] final def signatureName: SignatureName =
+      def computeErasedName(owner: Symbol, name: SignatureNameItem): SignatureName = owner match
         case owner: PackageSymbol =>
           val ownerFullName = owner.fullName
-          if name == tpnme.runtimeNothing && ownerFullName == FullyQualifiedName.scalaRuntimePackageName then
-            FullyQualifiedName(nme.scalaPackageName :: tpnme.Nothing :: Nil)
-          else ownerFullName.select(name)
+          if name == nme.runtimeNothing && ownerFullName == PackageFullName.scalaRuntimePackageName then
+            SignatureName(nme.scalaPackageName :: nme.Nothing :: Nil)
+          else SignatureName(ownerFullName.path :+ name)
 
         case owner: ClassSymbol =>
-          owner.signatureName.mapLast(_.toTermName).select(name)
+          owner.signatureName.appendItem(name)
 
         case owner: TermOrTypeSymbol =>
           // Replace non-class non-package owners by simple `_$`
-          val filledName =
-            if name.wrapsObjectName then name.sourceObjectName.prepend("_$").withObjectSuffix.toTypeName
-            else name.toTermName.asSimpleName.prepend("_$").toTypeName
+          val filledName = name match
+            case ObjectClassName(underlying) => underlying.prepend("_$").withObjectSuffix
+            case name: SimpleName            => name.prepend("_$")
           computeErasedName(owner.owner, filledName)
       end computeErasedName
 
       val local = mySignatureName
       if local != null then local
       else
-        val computed = computeErasedName(owner, name)
+        val computed = computeErasedName(owner, name.toTermName.asInstanceOf[SignatureNameItem])
         mySignatureName = computed
         computed
     end signatureName
@@ -1653,10 +1665,10 @@ object Symbols {
   }
 
   object ClassSymbol:
-    private[tastyquery] def create(name: TypeName, owner: Symbol): ClassSymbol =
+    private[tastyquery] def create(name: ClassTypeName, owner: Symbol): ClassSymbol =
       owner.addDeclIfDeclaringSym(ClassSymbol(name, owner))
 
-    private[tastyquery] def createNotDeclaration(name: TypeName, owner: Symbol): ClassSymbol =
+    private[tastyquery] def createNotDeclaration(name: ClassTypeName, owner: Symbol): ClassSymbol =
       ClassSymbol(name, owner)
 
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, objectType: TypeRef, flags: FlagSet): ClassSymbol =
@@ -1688,6 +1700,12 @@ object Symbols {
 
     this.withFlags(EmptyFlagSet, None)
     this.setAnnotations(Nil)
+
+    private lazy val _fullName: PackageFullName =
+      if owner == null || name == nme.EmptyPackageName then PackageFullName.rootPackageName
+      else owner.fullName.select(name)
+
+    final def fullName: PackageFullName = _fullName
 
     private[tastyquery] def getPackageDeclOrCreate(name: SimpleName): PackageSymbol =
       getPackageDecl(name).getOrElse {
@@ -1768,7 +1786,7 @@ object Symbols {
       myDeclarations.valuesIterator.collect {
         case cls: ClassSymbol if cls.name.isPackageObjectClassName => cls
       }.toList
-        .sortBy(_.name.toTermName.stripObjectSuffix.asSimpleName) // sort for determinism
+        .sortBy(_.name.toString) // sort for determinism
     end computeAllPackageObjectDecls
   }
 

@@ -42,7 +42,7 @@ private[reader] final class ReaderContext(underlying: Context):
 
   def uninitializedMethodTermRef: TermRef = underlying.defn.uninitializedMethodTermRef
 
-  def findPackageFromRootOrCreate(fullyQualifiedName: FullyQualifiedName): PackageSymbol =
+  def findPackageFromRootOrCreate(fullyQualifiedName: PackageFullName): PackageSymbol =
     underlying.findPackageFromRootOrCreate(fullyQualifiedName)
 
   /** Reads a package reference, with a fallback on faked term references.

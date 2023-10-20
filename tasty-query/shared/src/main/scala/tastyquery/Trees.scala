@@ -148,7 +148,7 @@ object Trees {
   ) extends Tree(pos) {
 
     /** It's a `given` selector */
-    val isGiven: Boolean = imported.name.isEmpty
+    val isGiven: Boolean = imported.name == nme.EmptyTermName
 
     /** It's a `given` or `_` selector */
     val isWildcard: Boolean = isGiven || imported.name == nme.Wildcard

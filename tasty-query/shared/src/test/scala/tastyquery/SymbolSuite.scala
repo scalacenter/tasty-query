@@ -101,6 +101,18 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     assertContainsExactly(ctx.findPackage("empty_class"), Set(tname"EmptyClass"))
   }
 
+  testWithContext("package-full-names", "simple_trees.nested.InNestedPackage") {
+    assert(clue(defn.RootPackage.fullName) == PackageFullName.rootPackageName)
+    assert(clue(defn.EmptyPackage.fullName) == PackageFullName.rootPackageName)
+    assert(clue(defn.scalaPackage.fullName) == PackageFullName.scalaPackageName)
+
+    val simpleTreesPackage = ctx.findPackage("simple_trees")
+    assert(clue(simpleTreesPackage.fullName) == PackageFullName(List(termName("simple_trees"))))
+
+    val nestedPackage = ctx.findPackage("simple_trees.nested")
+    assert(clue(nestedPackage.fullName) == PackageFullName(List(termName("simple_trees"), termName("nested"))))
+  }
+
   testWithContext("basic-symbol-structure-nested", "simple_trees.nested.InNestedPackage") {
     ctx.findTopLevelClass("simple_trees.nested.InNestedPackage")
     // InNestedPackage is the only declaration in the simple_trees.nested package
@@ -145,15 +157,15 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
     val InNestedPackageClass = ctx.findTopLevelClass("simple_trees.nested.InNestedPackage")
 
-    assert(InNestedPackageClass.fullName.toString == "simple_trees.nested.InNestedPackage")
+    assert(InNestedPackageClass.displayFullName == "simple_trees.nested.InNestedPackage")
 
     val simpleTreesPkg = ctx.findPackage("simple_trees")
 
-    assert(simpleTreesPkg.fullName.toString == "simple_trees")
+    assert(simpleTreesPkg.displayFullName == "simple_trees")
 
     val (simpleTreesNestedPkg: PackageSymbol) = simpleTreesPkg.getDecl(name"nested").get: @unchecked
 
-    assert(simpleTreesNestedPkg.fullName.toString == "simple_trees.nested")
+    assert(simpleTreesNestedPkg.displayFullName == "simple_trees.nested")
 
     assert(simpleTreesPkg.getDecl(name"nested") == Some(simpleTreesNestedPkg))
   }
@@ -166,7 +178,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val fooMethod = SubClass.findMember(name"foo")
     assert(clue(fooMethod.owner) == ChildClass)
 
-    val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.fullName))
+    val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.signatureName))
     val getFooMethod = SubClass.findMember(getFooName)
     assert(clue(getFooMethod.owner) == ParentClass)
 
@@ -193,7 +205,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val barMethod = SubWithMixinClass.findMember(name"bar")
     assert(clue(barMethod.owner) == SubMixinClass)
 
-    val getBarName = SignedName(termName("getBar"), Signature(Nil, defn.ObjectClass.fullName))
+    val getBarName = SignedName(termName("getBar"), Signature(Nil, defn.ObjectClass.signatureName))
     val getBarMethod = SubWithMixinClass.findMember(getBarName)
     assert(clue(getBarMethod.owner) == MixinClass)
 
@@ -214,7 +226,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     val fooMethod = SubClass.findMember(name"foo")
     assert(clue(fooMethod.owner) == ChildClass)
 
-    val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.fullName))
+    val getFooName = SignedName(termName("getFoo"), Signature(Nil, defn.ObjectClass.signatureName))
     val getFooMethod = SubClass.findMember(getFooName)
     assert(clue(getFooMethod.owner) == ParentClass)
 

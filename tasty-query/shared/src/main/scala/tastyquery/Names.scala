@@ -4,8 +4,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import dotty.tools.tasty.TastyFormat.NameTags
 
-import scala.reflect.NameTransformer
-
 import scala.annotation.targetName
 
 import scala.jdk.CollectionConverters.*
@@ -54,18 +52,13 @@ object Names {
   }
 
   object nme {
-
-    /** The term name represented by the empty string */
-    val EmptySimpleName: SimpleName = termName("")
-    val EmptyTermName: SimpleName = EmptySimpleName
-    val EmptyTypeName: TypeName = EmptyTermName.toTypeName
+    val EmptyTermName: SimpleName = termName("")
     val RootName: SimpleName = termName("<root>")
     val RootPackageName: SimpleName = termName("_root_")
     val EmptyPackageName: SimpleName = termName("<empty>")
     val Constructor: SimpleName = termName("<init>")
     val Wildcard: SimpleName = termName("_")
     val WildcardSequence: SimpleName = termName("_*")
-    val RefinementClass = typeName("<refinement>")
 
     val specialOpsPackageName: SimpleName = termName("<special-ops>")
     val scalaPackageName: SimpleName = termName("scala")
@@ -74,6 +67,10 @@ object Names {
     val runtimePackageName: SimpleName = termName("runtime")
 
     val EmptyTuple: SimpleName = termName("EmptyTuple")
+
+    // For signatures
+    private[tastyquery] val Nothing: SimpleName = termName("Nothing")
+    private[tastyquery] val runtimeNothing: SimpleName = termName("Nothing$")
 
     val m_== : SimpleName = termName("==")
     val m_!= : SimpleName = termName("!=")
@@ -95,60 +92,63 @@ object Names {
   }
 
   object tpnme {
-    val Any: TypeName = typeName("Any")
-    val AnyVal: TypeName = typeName("AnyVal")
-    val Nothing: TypeName = typeName("Nothing")
-    val Null: TypeName = typeName("Null")
+    val EmptyTypeName: SimpleTypeName = typeName("")
+    val Wildcard: SimpleTypeName = typeName("_")
 
-    val Array: TypeName = typeName("Array")
-    val Seq: TypeName = typeName("Seq")
+    val Any: SimpleTypeName = typeName("Any")
+    val AnyVal: SimpleTypeName = typeName("AnyVal")
+    val Nothing: SimpleTypeName = typeName("Nothing")
+    val Null: SimpleTypeName = typeName("Null")
 
-    val Unit: TypeName = typeName("Unit")
-    val Boolean: TypeName = typeName("Boolean")
-    val Char: TypeName = typeName("Char")
-    val Byte: TypeName = typeName("Byte")
-    val Short: TypeName = typeName("Short")
-    val Int: TypeName = typeName("Int")
-    val Long: TypeName = typeName("Long")
-    val Float: TypeName = typeName("Float")
-    val Double: TypeName = typeName("Double")
+    val Array: SimpleTypeName = typeName("Array")
+    val Seq: SimpleTypeName = typeName("Seq")
 
-    val String: TypeName = typeName("String")
-    val Class: TypeName = typeName("Class")
-    val Object: TypeName = typeName("Object")
+    val Unit: SimpleTypeName = typeName("Unit")
+    val Boolean: SimpleTypeName = typeName("Boolean")
+    val Char: SimpleTypeName = typeName("Char")
+    val Byte: SimpleTypeName = typeName("Byte")
+    val Short: SimpleTypeName = typeName("Short")
+    val Int: SimpleTypeName = typeName("Int")
+    val Long: SimpleTypeName = typeName("Long")
+    val Float: SimpleTypeName = typeName("Float")
+    val Double: SimpleTypeName = typeName("Double")
 
-    val Product: TypeName = typeName("Product")
-    val Tuple: TypeName = typeName("Tuple")
-    val NonEmptyTuple: TypeName = typeName("NonEmptyTuple")
-    val TupleCons: TypeName = typeName("*:")
-    val Enum: TypeName = typeName("Enum")
+    val String: SimpleTypeName = typeName("String")
+    val Class: SimpleTypeName = typeName("Class")
+    val Object: SimpleTypeName = typeName("Object")
+
+    val Product: SimpleTypeName = typeName("Product")
+    val Tuple: SimpleTypeName = typeName("Tuple")
+    val NonEmptyTuple: SimpleTypeName = typeName("NonEmptyTuple")
+    val TupleCons: SimpleTypeName = typeName("*:")
+    val Enum: SimpleTypeName = typeName("Enum")
 
     @deprecated("you probably meant the term name `nme.EmptyTuple` instead", since = "0.8.3")
-    val EmptyTuple: TypeName = typeName("EmptyTuple")
+    val EmptyTuple: SimpleTypeName = typeName("EmptyTuple")
 
-    val RefinedClassMagic: TypeName = typeName("<refinement>")
-    val ByNameParamClassMagic: TypeName = typeName("<byname>")
-    val RepeatedParamClassMagic: TypeName = typeName("<repeated>")
-    val FromJavaObjectAliasMagic: TypeName = typeName("<FromJavaObject>")
+    val RefinedClassMagic: SimpleTypeName = typeName("<refinement>")
+    val ByNameParamClassMagic: SimpleTypeName = typeName("<byname>")
+    val RepeatedParamClassMagic: SimpleTypeName = typeName("<repeated>")
+    val FromJavaObjectAliasMagic: SimpleTypeName = typeName("<FromJavaObject>")
 
-    val scala2PackageObjectClass: TypeName = termName("package").withObjectSuffix.toTypeName
+    val scala2PackageObjectClass: ObjectClassTypeName = termName("package").withObjectSuffix.toTypeName
 
-    private[tastyquery] val runtimeNothing: TypeName = typeName("Nothing$")
-    private[tastyquery] val runtimeBoxedUnit: TypeName = typeName("BoxedUnit")
+    private[tastyquery] val runtimeNothing: SimpleTypeName = typeName("Nothing$")
+    private[tastyquery] val runtimeBoxedUnit: SimpleTypeName = typeName("BoxedUnit")
 
-    private[tastyquery] val internalRepeatedAnnot: TypeName = typeName("Repeated")
+    private[tastyquery] val internalRepeatedAnnot: SimpleTypeName = typeName("Repeated")
 
-    private[tastyquery] val scala2LocalChild: TypeName = typeName("<local child>")
-    private[tastyquery] val scala2ByName: TypeName = typeName("<byname>")
+    private[tastyquery] val scala2LocalChild: SimpleTypeName = typeName("<local child>")
+    private[tastyquery] val scala2ByName: SimpleTypeName = typeName("<byname>")
 
-    private[tastyquery] val PredefModule: TypeName = moduleClassName("Predef")
+    private[tastyquery] val PredefModule: ObjectClassTypeName = moduleClassName("Predef")
 
-    private[tastyquery] val MethodHandle: TypeName = typeName("MethodHandle")
-    private[tastyquery] val VarHandle: TypeName = typeName("VarHandle")
+    private[tastyquery] val MethodHandle: SimpleTypeName = typeName("MethodHandle")
+    private[tastyquery] val VarHandle: SimpleTypeName = typeName("VarHandle")
   }
 
   /** Create a type name from a string */
-  def typeName(s: String): TypeName =
+  def typeName(s: String): SimpleTypeName =
     termName(s).toTypeName
 
   /** Create a term name from a string.
@@ -159,55 +159,25 @@ object Names {
     NameCache.cache(SimpleName(s))
 
   /** Creates a type name for a module class from a string. */
-  def moduleClassName(s: String): TypeName =
+  def moduleClassName(s: String): ObjectClassTypeName =
     termName(s).withObjectSuffix.toTypeName
 
   sealed abstract class Name derives CanEqual {
-
-    /** This name converted to a type name */
-    def toTypeName: TypeName
-
-    /** This name converted to a term name */
-    def toTermName: TermName
-
-    /** This name downcasted to a simple term name */
-    def asSimpleName: SimpleName
-
-    final def isTypeName: Boolean = this.isInstanceOf[TypeName]
-    final def isTermName: Boolean = !isTypeName
-
-    def isEmpty: Boolean
-
     def toDebugString: String = toString
-
-    def decode: Name = this match
-      case name: SimpleName                         => termName(NameTransformer.decode(name.name))
-      case SuffixedName(NameTags.OBJECTCLASS, name) => name.decode.toTermName.withObjectSuffix
-      case name: TypeName                           => name.toTermName.decode.toTypeName
-      case _                                        => this // TODO: add more cases
   }
 
-  abstract class TermName extends Name {
-    def tag: Int
+  sealed abstract class TermName extends Name
 
-    override def toTermName: TermName = this
+  sealed trait SignatureNameItem extends TermName:
+    def toTypeName: ClassTypeName
+  end SignatureNameItem
 
-    override lazy val toTypeName: TypeName = TypeName(this)
-
-    def withObjectSuffix: SuffixedName = SuffixedName(NameTags.OBJECTCLASS, this)
-    def stripObjectSuffix: TermName = this match
-      case SuffixedName(NameTags.OBJECTCLASS, rest) => rest
-      case _                                        => this
-  }
-
-  final case class SimpleName(name: String) extends TermName {
-    override def tag: Int = NameTags.UTF8
-
-    override def asSimpleName: SimpleName = this
-
-    override def isEmpty: Boolean = name.length == 0
-
+  final case class SimpleName(name: String) extends TermName with SignatureNameItem {
     override def toString: String = name
+
+    lazy val toTypeName: SimpleTypeName = SimpleTypeName(name)(this)
+
+    lazy val withObjectSuffix: ObjectClassName = ObjectClassName(this)
 
     def prepend(s: String): SimpleName =
       termName(s + name)
@@ -219,19 +189,7 @@ object Names {
       name == "package" || name.endsWith(str.topLevelSuffix)
   }
 
-  abstract class DerivedName(val underlying: TermName) extends TermName {
-    override def asSimpleName: SimpleName = throw new UnsupportedOperationException(
-      s"$this is not a simple " +
-        s"name"
-    )
-
-    override def isEmpty: Boolean = false
-  }
-
-  final case class SignedName(override val underlying: TermName, sig: Signature, target: TermName)
-      extends DerivedName(underlying) {
-    override def tag: Int = NameTags.SIGNED
-
+  final case class SignedName(underlying: TermName, sig: Signature, target: TermName) extends TermName {
     override def toString: String = s"$underlying[with sig $sig @$target]"
 
     override def toDebugString: String =
@@ -243,121 +201,144 @@ object Names {
       SignedName(underlying, sig, underlying)
   end SignedName
 
-  final case class ExpandedName(override val tag: Int, prefix: TermName, name: SimpleName) extends DerivedName(prefix) {
-    def separator: String = tag match {
-      case NameTags.EXPANDED     => "$$"
-      case NameTags.EXPANDPREFIX => "$"
-    }
-
+  final case class ExpandedName(prefix: TermName, name: SimpleName) extends TermName {
     override def toDebugString: String =
-      s"${prefix.toDebugString}[Expanded $separator $name]"
+      s"${prefix.toDebugString}[Expanded $$$$ $name]"
 
-    override def toString: String = s"$prefix$separator$name"
+    override def toString: String = s"$prefix$$$$$name"
   }
 
-  final case class PrefixedName(override val tag: Int, override val underlying: TermName)
-      extends DerivedName(underlying) {
-    override def toString: String = tag match {
-      case NameTags.SUPERACCESSOR  => s"super$underlying"
-      case NameTags.INLINEACCESSOR => s"inline$underlying"
-    }
+  final case class ExpandPrefixName(prefix: TermName, name: SimpleName) extends TermName {
+    override def toDebugString: String =
+      s"${prefix.toDebugString}[ExpandPrefix $$ $name]"
 
-    override def toDebugString: String = tag match
-      case NameTags.SUPERACCESSOR  => s"<super:${underlying.toDebugString}>"
-      case NameTags.INLINEACCESSOR => s"<inline:${underlying.toDebugString}>"
+    override def toString: String = s"$prefix$$$name"
   }
 
-  final case class SuffixedName(override val tag: Int, override val underlying: TermName)
-      extends DerivedName(underlying) {
-    override def toString: String = tag match {
-      case NameTags.BODYRETAINER => s"<bodyretainer$underlying>" // probably wrong but print something without crashing
-      case NameTags.OBJECTCLASS  => underlying.toString
-    }
+  final case class SuperAccessorName(underlying: TermName) extends TermName {
+    override def toString: String = s"super$underlying"
 
-    override def toDebugString: String = tag match {
-      case NameTags.BODYRETAINER => s"<bodyretainer:$underlying>"
-      case NameTags.OBJECTCLASS  => s"${underlying.toDebugString}[$$]"
-    }
+    override def toDebugString: String = s"<super:${underlying.toDebugString}>"
   }
 
-  abstract class NumberedName(underlying: TermName, num: Int) extends DerivedName(underlying)
+  final case class InlineAccessorName(underlying: TermName) extends TermName {
+    override def toString: String = s"inline$underlying"
 
-  // TODO: factor out the separators
-  final case class UniqueName(separator: String, override val underlying: TermName, num: Int)
-      extends NumberedName(underlying, num) {
-    override def tag: Int = NameTags.UNIQUE
+    override def toDebugString: String = s"<inline:${underlying.toDebugString}>"
+  }
 
+  final case class BodyRetainerName(underlying: TermName) extends TermName {
+    override def toString: String = s"<bodyretainer$underlying>" // probably wrong but print something without crashing
+
+    override def toDebugString: String = s"<bodyretainer:$underlying>"
+  }
+
+  final case class ObjectClassName private[Names] (underlying: SimpleName) extends TermName with SignatureNameItem {
+    override def toString: String = underlying.toString + "$"
+
+    override def toDebugString: String = s"${underlying.toDebugString}[$$]"
+
+    override lazy val toTypeName: ObjectClassTypeName =
+      underlying.toTypeName.withObjectSuffix
+  }
+
+  final case class UniqueName(underlying: TermName, separator: String, num: Int) extends TermName {
     override def toString: String = s"$underlying$separator$num"
 
     override def toDebugString: String = s"${underlying.toDebugString}[unique $separator $num]"
   }
 
   // can't instantiate directly, might have to nest the other way
-  final case class DefaultGetterName(override val underlying: TermName, num: Int)
-      extends NumberedName(underlying, num) {
-    override def tag: Int = NameTags.DEFAULTGETTER
-
+  final case class DefaultGetterName(underlying: TermName, num: Int) extends TermName {
     override def toString: String = s"$underlying$$default$$${num + 1}"
 
     override def toDebugString: String = s"${underlying.toDebugString}[default $num]"
   }
 
-  final case class TypeName(override val toTermName: TermName) extends Name {
-    override def toTypeName: TypeName = this
+  sealed abstract class TypeName extends Name:
+    def toTermName: TermName
+  end TypeName
 
-    override def asSimpleName: SimpleName = toTermName.asSimpleName
+  sealed trait ClassTypeName extends TypeName:
+    def toTermName: SignatureNameItem
 
-    override def isEmpty: Boolean = toTermName.isEmpty
+    def isObjectClassTypeName: Boolean = this.isInstanceOf[ObjectClassTypeName]
 
-    override def toString: String = toTermName.toString
+    def companionName: ClassTypeName = this match
+      case ObjectClassTypeName(clsName) => clsName
+      case name: SimpleTypeName         => name.withObjectSuffix
 
-    override def toDebugString: String = s"${toTermName.toDebugString}/T"
+    def sourceObjectName: SimpleName = this match
+      case ObjectClassTypeName(objName) => objName.toTermName
+      case name: SimpleTypeName         => name.toTermName
 
-    def wrapsObjectName: Boolean = toTermName match
-      case SuffixedName(NameTags.OBJECTCLASS, _) => true
-      case _                                     => false
+    private[tastyquery] def isPackageObjectClassName: Boolean = this match
+      case ObjectClassTypeName(objName) => objName.toTermName.isPackageObjectName
+      case _                            => false
+  end ClassTypeName
 
-    def companionName: TypeName = toTermName match
-      case SuffixedName(NameTags.OBJECTCLASS, clsName) => clsName.toTypeName
-      case name                                        => name.withObjectSuffix.toTypeName
+  final case class SimpleTypeName private[Names] (name: String)(val toTermName: SimpleName)
+      extends TypeName
+      with ClassTypeName:
+    override def toString(): String = name
 
-    def sourceObjectName: SimpleName = toTermName match
-      case SuffixedName(NameTags.OBJECTCLASS, objName) => objName.asSimpleName
-      case name                                        => name.asSimpleName
+    override def toDebugString: String = s"$name/T"
 
-    private[tastyquery] def isPackageObjectClassName: Boolean =
-      wrapsObjectName && toTermName.stripObjectSuffix.asSimpleName.isPackageObjectName
-  }
+    lazy val withObjectSuffix: ObjectClassTypeName = ObjectClassTypeName(this)
+  end SimpleTypeName
 
-  final case class FullyQualifiedName(path: List[Name]):
+  final case class ObjectClassTypeName private[Names] (underlying: SimpleTypeName) extends TypeName with ClassTypeName:
+    override def toString(): String = s"$underlying$$"
+
+    override def toDebugString: String = s"${underlying.toDebugString}[$$]"
+
+    override lazy val toTermName: ObjectClassName =
+      underlying.toTermName.withObjectSuffix
+  end ObjectClassTypeName
+
+  final case class UniqueTypeName(base: TypeName, separator: String, num: Int) extends TypeName:
+    override def toString(): String = s"$base$separator$num"
+
+    override def toDebugString: String = s"${base.toDebugString}[unique $separator $num]"
+
+    def toTermName: UniqueName = UniqueName(base.toTermName, separator, num)
+  end UniqueTypeName
+
+  final case class PackageFullName(path: List[SimpleName]):
     override def toString(): String =
       path.mkString(".")
 
+    // for consistency with other name types, but it is always the same as toString() here
     def toDebugString: String =
-      path.map(_.toDebugString).mkString(".")
+      toString()
 
-    def select(name: Name): FullyQualifiedName = FullyQualifiedName(path :+ name)
+    def select(subPackage: SimpleName): PackageFullName =
+      PackageFullName(path :+ subPackage)
 
-    def mapLast(op: Name => Name): FullyQualifiedName =
-      FullyQualifiedName(path.init :+ op(path.last))
-
-    private[tastyquery] def sourceName: Name = path match
+    private[tastyquery] def simpleName: SimpleName = path match
       case Nil  => nme.RootPackageName
       case path => path.last
+  end PackageFullName
 
-    def mapLastOption(op: Name => Name): FullyQualifiedName =
-      if path.isEmpty then this
-      else mapLast(op)
-  end FullyQualifiedName
-
-  object FullyQualifiedName:
-    val rootPackageName = FullyQualifiedName(Nil)
-    val emptyPackageName = FullyQualifiedName(nme.EmptyPackageName :: Nil)
-    val scalaPackageName = FullyQualifiedName(nme.scalaPackageName :: Nil)
-    val javaLangPackageName = FullyQualifiedName(nme.javaPackageName :: nme.langPackageName :: Nil)
-    val scalaRuntimePackageName = FullyQualifiedName(nme.scalaPackageName :: nme.runtimePackageName :: Nil)
+  object PackageFullName:
+    val rootPackageName = PackageFullName(Nil)
+    val emptyPackageName = PackageFullName(nme.EmptyPackageName :: Nil)
+    val scalaPackageName = PackageFullName(nme.scalaPackageName :: Nil)
+    val javaLangPackageName = PackageFullName(nme.javaPackageName :: nme.langPackageName :: Nil)
+    val scalaRuntimePackageName = PackageFullName(nme.scalaPackageName :: nme.runtimePackageName :: Nil)
 
     private[tastyquery] val scalaAnnotationInternalPackage =
-      FullyQualifiedName(nme.scalaPackageName :: termName("annotation") :: termName("internal") :: Nil)
-  end FullyQualifiedName
+      PackageFullName(nme.scalaPackageName :: termName("annotation") :: termName("internal") :: Nil)
+  end PackageFullName
+
+  final case class SignatureName(items: List[SignatureNameItem]):
+    override def toString(): String =
+      items.mkString(".")
+
+    def toDebugString: String =
+      items.map(_.toDebugString).mkString(".")
+
+    def appendItem(item: SignatureNameItem): SignatureName =
+      SignatureName(items :+ item)
+  end SignatureName
 }

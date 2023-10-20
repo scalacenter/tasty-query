@@ -96,7 +96,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   // Magic symbols that are not found on the classpath, but rather created by hand
 
-  private def createSpecialClass(name: TypeName, parents: List[Type], flags: FlagSet): ClassSymbol =
+  private def createSpecialClass(name: SimpleTypeName, parents: List[Type], flags: FlagSet): ClassSymbol =
     val cls = ClassSymbol.create(name, scalaPackage)
     cls.withTypeParams(Nil)
     cls.withParentsDirect(parents)
@@ -302,7 +302,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   end createPredefMagicMethods
 
   private def createSpecialPolyClass(
-    name: TypeName,
+    name: SimpleTypeName,
     paramFlags: FlagSet,
     parentConstrs: Type => List[Type]
   ): ClassSymbol =

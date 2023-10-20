@@ -25,7 +25,7 @@ private[classfiles] final class ClassfileReader private () {
   }
 
   private def rootName(classOwner: DeclaringSymbol, classRoot: ClassData): String =
-    s"${classOwner.fullName}.${classRoot.binaryName}"
+    s"${classOwner.displayFullName}.${classRoot.binaryName}"
 
   private def acceptMagicNumber(classOwner: DeclaringSymbol, classRoot: ClassData)(using DataStream): Unit = {
     val magic = data.readU4()

@@ -136,22 +136,20 @@ object Types {
       case classRef: ClassRef             => ArrayTypeRef(classRef, 1)
       case ArrayTypeRef(base, dimensions) => ArrayTypeRef(base, dimensions + 1)
 
-    /** The `FullyQualifiedName` for this `ErasedTypeRef` as found in the `TermSig`s of `Signature`s. */
-    def toSigFullName: FullyQualifiedName = this match
+    /** The `SignatureName` for this `ErasedTypeRef` as found in the `TermSig`s of `Signature`s. */
+    def toSigFullName: SignatureName = this match
       case ClassRef(cls) =>
         cls.signatureName
 
       case ArrayTypeRef(base, dimensions) =>
         val suffix = "[]" * dimensions
         val baseName = base.cls.signatureName
-        val suffixedLast = baseName.path.last match
-          case TypeName(SuffixedName(NameTags.OBJECTCLASS, baseModuleName)) =>
-            baseModuleName.asSimpleName.append(suffix).withObjectSuffix.toTypeName
-          case last: TypeName =>
-            last.toTermName.asSimpleName.append(suffix).toTypeName
-          case last: TermName =>
-            last.asSimpleName.append(suffix)
-        FullyQualifiedName(baseName.path.init :+ suffixedLast)
+        val suffixedLast = baseName.items.last match
+          case ObjectClassName(baseModuleName) =>
+            baseModuleName.append(suffix).withObjectSuffix
+          case last: SimpleName =>
+            last.append(suffix)
+        SignatureName(baseName.items.init :+ suffixedLast)
     end toSigFullName
   end ErasedTypeRef
 
@@ -961,9 +959,9 @@ object Types {
   object NamedType {
 
     private[tastyquery] def possibleSelFromPackage(prefix: NonEmptyPrefix, name: TermName): TermReferenceType =
-      prefix match
-        case prefix: PackageRef if name.isInstanceOf[SimpleName] =>
-          prefix.symbol.getPackageDecl(name.asSimpleName) match
+      (prefix, name) match
+        case (prefix: PackageRef, name: SimpleName) =>
+          prefix.symbol.getPackageDecl(name) match
             case Some(nested) => nested.packageRef
             case _            => TermRef(prefix, name)
         case _ =>
@@ -1180,7 +1178,7 @@ object Types {
       with TermReferenceType {
     private[tastyquery] type ThisTypeMappableType = PackageRef
 
-    def fullyQualifiedName: FullyQualifiedName = symbol.fullName
+    def fullyQualifiedName: PackageFullName = symbol.fullName
 
     @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
     def widen(using Context): PackageRef = this
@@ -1790,7 +1788,7 @@ object Types {
         else if params.headOption.exists(_.isGivenOrUsing) then ContextualMethodType
         else MethodType
 
-      companion(params.map(_.name.toTermName))(
+      companion(params.map(_.name))(
         tl => params.map(p => tl.integrate(params, paramInfo(p))),
         tl => tl.integrate(params, resultType).asInstanceOf[TypeOrMethodic]
       )

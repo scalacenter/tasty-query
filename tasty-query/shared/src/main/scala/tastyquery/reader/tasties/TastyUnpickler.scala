@@ -30,7 +30,7 @@ private[reader] object TastyUnpickler {
   }
 
   final class NameTable {
-    private[TastyUnpickler] type EitherName = TermName | FullyQualifiedName
+    private[TastyUnpickler] type EitherName = TermName | SignatureName
 
     private val names = new mutable.ArrayBuffer[EitherName]
 
@@ -43,23 +43,42 @@ private[reader] object TastyUnpickler {
       apply(ref) match
         case name: TermName =>
           name
-        case name: FullyQualifiedName =>
+        case name: SignatureName =>
           throw TastyFormatException(s"Expected TermName but got ${name.toDebugString}")
 
-    def fullyQualified(ref: NameRef): FullyQualifiedName =
-      apply(ref) match
-        case name: FullyQualifiedName =>
-          name.path match
-            case nme.RootPackageName :: Nil =>
-              FullyQualifiedName.rootPackageName
-            case _ =>
-              name
-        case nme.RootPackageName =>
-          FullyQualifiedName.rootPackageName
-        case name: TermName =>
-          FullyQualifiedName(name :: Nil)
-  }
+    def packageFullName(ref: NameRef): PackageFullName =
+      def invalid(actualDebugString: String): Nothing =
+        throw TastyFormatException(s"Excepted a package full name but got $actualDebugString")
 
+      apply(ref) match
+        case name: SignatureName =>
+          name.items match
+            case nme.RootPackageName :: Nil =>
+              PackageFullName.rootPackageName
+            case items =>
+              val path = items.map {
+                case simpleName: SimpleName => simpleName
+                case _: ObjectClassName     => invalid(name.toDebugString)
+              }
+              PackageFullName(path)
+        case nme.RootPackageName =>
+          PackageFullName.rootPackageName
+        case name: SimpleName =>
+          PackageFullName(name :: Nil)
+        case name: TermName =>
+          invalid(name.toDebugString)
+    end packageFullName
+
+    def signatureName(ref: NameRef): SignatureName =
+      apply(ref) match
+        case name: SignatureName =>
+          name
+        case name: SignatureNameItem =>
+          SignatureName(name :: Nil)
+        case name: TermName =>
+          throw TastyFormatException(s"Expected a signature name but got ${name.toDebugString}")
+    end signatureName
+  }
 }
 
 private[reader] class TastyUnpickler(reader: TastyReader) {
@@ -76,7 +95,23 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
 
   private def readName(): TermName = nameAtRef.simple(readNameRef())
 
-  private def readFullyQualifiedName(): FullyQualifiedName = nameAtRef.fullyQualified(readNameRef())
+  private def readSimpleName(): SimpleName = readName() match
+    case name: SimpleName =>
+      name
+    case name =>
+      throw TastyFormatException(s"Expected a simple name but got ${name.toDebugString}")
+  end readSimpleName
+
+  private def readSignatureNameItem(): SignatureNameItem = readName() match
+    case name: SignatureNameItem =>
+      name
+    case name =>
+      throw TastyFormatException(s"Expected a signature name item but got ${name.toDebugString}")
+  end readSignatureNameItem
+
+  private def readPackageFullName(): PackageFullName = nameAtRef.packageFullName(readNameRef())
+
+  private def readSignatureName(): SignatureName = nameAtRef.signatureName(readNameRef())
 
   private def readEitherName(): nameAtRef.EitherName = nameAtRef(readNameRef())
 
@@ -87,7 +122,7 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
     if (ref < 0)
       ParamSig.TypeLen(ref.abs)
     else
-      ParamSig.Term(nameAtRef.fullyQualified(new NameRef(ref)).mapLast(_.toTypeName))
+      ParamSig.Term(nameAtRef.signatureName(new NameRef(ref)))
   }
 
   private def readNameContents(): nameAtRef.EitherName = {
@@ -100,34 +135,44 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
         reader.goto(end)
         termName(UTF8Utils.decode(bytes, start.index, length))
       case NameTags.QUALIFIED =>
-        val qual = readFullyQualifiedName()
-        val item = readName()
-        FullyQualifiedName(qual.path :+ item)
-      case NameTags.EXPANDED | NameTags.EXPANDPREFIX =>
-        new ExpandedName(tag, readName(), readName().asSimpleName)
+        val qual = readSignatureName()
+        val item = readSignatureNameItem()
+        qual.appendItem(item)
+      case NameTags.EXPANDED =>
+        ExpandedName(readName(), readSimpleName())
+      case NameTags.EXPANDPREFIX =>
+        ExpandPrefixName(readName(), readSimpleName())
       case NameTags.UNIQUE =>
         val separator = readName().toString
         val num = readNat()
         val originals = reader.until(end)(readName())
         val original = if (originals.isEmpty) nme.EmptyTermName else originals.head
-        new UniqueName(separator, original, num)
+        new UniqueName(original, separator, num)
       case NameTags.DEFAULTGETTER =>
         new DefaultGetterName(readName(), readNat())
       case NameTags.SIGNED | NameTags.TARGETSIGNED =>
         val original = readName()
         val target = if (tag == NameTags.TARGETSIGNED) readName() else original
-        val result = readFullyQualifiedName().mapLast(_.toTypeName)
+        val result = readSignatureName()
         val paramsSig = reader.until(end)(readParamSig())
         val sig = Signature(paramsSig, result)
         new SignedName(original, sig, target)
-      case NameTags.SUPERACCESSOR | NameTags.INLINEACCESSOR =>
-        new PrefixedName(tag, readName())
+      case NameTags.SUPERACCESSOR =>
+        SuperAccessorName(readName())
+      case NameTags.INLINEACCESSOR =>
+        InlineAccessorName(readName())
       case NameTags.BODYRETAINER =>
-        new SuffixedName(tag, readName())
+        BodyRetainerName(readName())
       case NameTags.OBJECTCLASS =>
         readEitherName() match
-          case simple: TermName              => simple.withObjectSuffix
-          case qualified: FullyQualifiedName => qualified.mapLast(_.asSimpleName.withObjectSuffix)
+          case simple: SimpleName =>
+            simple.withObjectSuffix
+          case SignatureName(items) =>
+            items.last match
+              case last: SimpleName => SignatureName(items.init :+ last.withObjectSuffix)
+              case last             => throw TastyFormatException(s"Invalid OBJECTCLASS of ${last.toDebugString}")
+          case other: TermName =>
+            throw TastyFormatException(s"Invalid OBJECTCLASS of ${other.toDebugString}")
       case _ => throw TastyFormatException(s"unexpected tag: $tag")
     }
     assert(reader.currentAddr == end, s"bad name $result $start ${reader.currentAddr} $end")

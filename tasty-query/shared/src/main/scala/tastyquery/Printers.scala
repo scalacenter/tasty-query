@@ -205,11 +205,6 @@ private[tastyquery] object Printers:
 
     def print(name: Name): Unit =
       print(name.toString())
-      name match
-        case TypeName(SuffixedName(NameTags.OBJECTCLASS, rest)) =>
-          print("$")
-        case _ =>
-          ()
     end print
 
     def print(constant: Constant): Unit =

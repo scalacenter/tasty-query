@@ -1,7 +1,9 @@
 package tastyquery.reader.pickles
 
 import scala.annotation.switch
+
 import scala.collection.mutable
+import scala.reflect.NameTransformer
 
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
@@ -81,9 +83,9 @@ private[pickles] class PickleReader {
   private def atNoCache[T <: AnyRef](i: Int)(op: PklStream ?=> T)(using PklStream, Entries, Index): T =
     pkl.unsafeFork(index(i))(op)
 
-  def readNameRef()(using PklStream, Entries, Index): Name = at(pkl.readNat())(readName())
+  def readNameRef()(using PklStream, Entries, Index): SimpleName | SimpleTypeName = at(pkl.readNat())(readName())
 
-  def readName()(using PklStream): Name = {
+  def readName()(using PklStream): SimpleName | SimpleTypeName = {
     val tag = pkl.readByte()
     val len = pkl.readNat()
     tag match {
@@ -92,6 +94,11 @@ private[pickles] class PickleReader {
       case _        => errorBadSignature("bad name tag: " + tag)
     }
   }
+
+  private def decodeName(name: SimpleName | SimpleTypeName): Name = name match
+    case name: SimpleName     => termName(NameTransformer.decode(name.name))
+    case name: SimpleTypeName => typeName(NameTransformer.decode(name.name))
+  end decodeName
 
   def readLocalSymbolRef()(using ReaderContext, PklStream, Entries, Index): Symbol =
     readMaybeExternalSymbolRef() match
@@ -150,7 +157,7 @@ private[pickles] class PickleReader {
       entries(storeInEntriesAt) = result
 
     def readExtSymbol(): MaybeExternalSymbol =
-      val name = readNameRef().decode
+      val name = decodeName(readNameRef())
       val owner = if (atEnd) rctx.RootPackage else readMaybeExternalSymbolRef()
       name match
         case nme.RootName | nme.RootPackageName =>
@@ -178,10 +185,7 @@ private[pickles] class PickleReader {
     }
 
     // symbols that were pickled with Pickler.writeSymInfo
-    val nameref = pkl.readNat()
-    val name0 = at(nameref)(readName())
-
-    val name1 = name0.decode match
+    val name1 = decodeName(readNameRef()) match
       case SimpleName(MangledDefaultGetterNameRegex(underlyingStr, indexStr)) =>
         DefaultGetterName(termName(underlyingStr), indexStr.toInt - 1)
       case decoded =>
@@ -216,10 +220,22 @@ private[pickles] class PickleReader {
     val storedWhileReadingOwner = entries(storeInEntriesAt)
     if storedWhileReadingOwner != null then return storedWhileReadingOwner.asInstanceOf[MaybeExternalSymbol]
 
-    val pickleFlags = readPickleFlags(name1.isTypeName)
+    extension (n: Name)
+      def toTermName: TermName = n match
+        case n: TermName => n
+        case n: TypeName => n.toTermName
+
+      def toTypeName: TypeName = n match
+        case n: TypeName => n
+        case n: TermName => n.toTypeName
+    end extension
+
+    extension (n: TermName) def asSimpleName: SimpleName = n.asInstanceOf[SimpleName]
+
+    val pickleFlags = readPickleFlags(name1.isInstanceOf[TypeName])
     val flags0 = pickleFlagsToFlags(pickleFlags)
     val name =
-      if pickleFlags.isType && flags0.is(Module) then name1.toTermName.withObjectSuffix.toTypeName
+      if pickleFlags.isType && flags0.is(Module) then name1.toTermName.asSimpleName.withObjectSuffix.toTypeName
       else if flags0.is(Method) && (name1 == Scala2Constructor || name1 == Scala2TraitConstructor) then nme.Constructor
       else name1
 
@@ -273,7 +289,7 @@ private[pickles] class PickleReader {
             sym.setDeclaredBounds(bounds)
         sym
       case CLASSsym =>
-        val tname = name.toTypeName
+        val tname = name.toTypeName.asInstanceOf[ClassTypeName]
         val cls =
           if tname == tpnme.RefinedClassMagic then
             ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, Scala2Defined)
@@ -341,7 +357,7 @@ private[pickles] class PickleReader {
         val ownerPrefix = owner.asInstanceOf[DeclaringSymbol] match
           case owner: PackageSymbol => owner.packageRef
           case owner: ClassSymbol   => owner.thisType
-        sym.withDeclaredType(TypeRef(ownerPrefix, sym.name.withObjectSuffix.toTypeName))
+        sym.withDeclaredType(TypeRef(ownerPrefix, sym.name.asSimpleName.withObjectSuffix.toTypeName))
         sym
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
@@ -458,7 +474,7 @@ private[pickles] class PickleReader {
       val tag = pkl.readByte().toInt
       assert(tag == CLASSsym)
       pkl.readNat() // read length
-      val result = readNameRef() == nme.RefinementClass
+      val result = readNameRef() == tpnme.RefinedClassMagic
       result
     }
 
@@ -877,10 +893,10 @@ private[reader] object PickleReader {
     def readEnd(): Int = readNat() + in.readIndex
     def atOffset(offset: Int): Boolean = in.readIndex == offset
 
-    def readTermName(length: Int): TermName =
+    def readTermName(length: Int): SimpleName =
       termName(UTF8Utils.decode(in.bytes, in.readIndex, length))
 
-    def readTypeName(length: Int): TypeName =
+    def readTypeName(length: Int): SimpleTypeName =
       typeName(UTF8Utils.decode(in.bytes, in.readIndex, length))
 
     final inline def unsafeFork[T](offset: Int)(inline op: PklStream ?=> T): T = {
