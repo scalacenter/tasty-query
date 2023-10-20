@@ -40,7 +40,6 @@ object Names {
     val scalaPackageName: SimpleName = termName("scala")
     val javaPackageName: SimpleName = termName("java")
     val langPackageName: SimpleName = termName("lang")
-    val runtimePackageName: SimpleName = termName("runtime")
 
     val EmptyTuple: SimpleName = termName("EmptyTuple")
 
@@ -292,7 +291,9 @@ object Names {
     val emptyPackageName = PackageFullName(nme.EmptyPackageName :: Nil)
     val scalaPackageName = PackageFullName(nme.scalaPackageName :: Nil)
     val javaLangPackageName = PackageFullName(nme.javaPackageName :: nme.langPackageName :: Nil)
-    val scalaRuntimePackageName = PackageFullName(nme.scalaPackageName :: nme.runtimePackageName :: Nil)
+
+    private[tastyquery] val scalaRuntimePackageName =
+      PackageFullName(nme.scalaPackageName :: termName("runtime") :: Nil)
 
     private[tastyquery] val scalaAnnotationInternalPackage =
       PackageFullName(nme.scalaPackageName :: termName("annotation") :: termName("internal") :: Nil)
