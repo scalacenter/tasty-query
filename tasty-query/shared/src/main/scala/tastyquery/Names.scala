@@ -97,6 +97,8 @@ object Names {
   }
 
   object tpnme {
+    val Wildcard: TypeName = typeName("_")
+
     val Any: TypeName = typeName("Any")
     val AnyVal: TypeName = typeName("AnyVal")
     val Nothing: TypeName = typeName("Nothing")
