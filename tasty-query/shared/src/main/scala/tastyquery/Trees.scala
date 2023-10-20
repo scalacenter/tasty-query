@@ -139,7 +139,7 @@ object Trees {
   }
 
   /** An identifier appearing in an `import` clause; it has no type. */
-  final case class ImportIdent(name: TermName)(pos: SourcePosition) extends Tree(pos) {
+  final case class ImportIdent(name: UnsignedTermName)(pos: SourcePosition) extends Tree(pos) {
     override final def withPos(pos: SourcePosition): ImportIdent = ImportIdent(name)(pos)
   }
 
@@ -154,10 +154,10 @@ object Trees {
     val isWildcard: Boolean = isGiven || imported.name == nme.Wildcard
 
     /** The imported name, EmptyTermName if it's a given selector */
-    val name: TermName = imported.name
+    val name: UnsignedTermName = imported.name
 
     /** The renamed part (which might be `_`), if present, or `name`, if missing */
-    val rename: TermName = renamed match {
+    val rename: UnsignedTermName = renamed match {
       case Some(ImportIdent(rename)) => rename
       case None                      => name
     }
@@ -222,7 +222,7 @@ object Trees {
   }
 
   sealed abstract class ValOrDefDef()(pos: SourcePosition) extends StatementTree(pos) with DefTree:
-    val name: TermName
+    val name: UnsignedTermName
 
     val symbol: TermSymbol
 
@@ -230,13 +230,14 @@ object Trees {
   end ValOrDefDef
 
   /** mods val name: tpt = rhs */
-  final case class ValDef(name: TermName, tpt: TypeTree, rhs: Option[TermTree], symbol: TermSymbol)(pos: SourcePosition)
-      extends ValOrDefDef()(pos) {
+  final case class ValDef(name: UnsignedTermName, tpt: TypeTree, rhs: Option[TermTree], symbol: TermSymbol)(
+    pos: SourcePosition
+  ) extends ValOrDefDef()(pos) {
     override final def withPos(pos: SourcePosition): ValDef = ValDef(name, tpt, rhs, symbol)(pos)
   }
 
   /** Self type definition `name: tpt =>`. */
-  final case class SelfDef(name: TermName, tpt: TypeTree)(pos: SourcePosition) extends Tree(pos):
+  final case class SelfDef(name: UnsignedTermName, tpt: TypeTree)(pos: SourcePosition) extends Tree(pos):
     override def withPos(pos: SourcePosition): SelfDef = SelfDef(name, tpt)(pos)
   end SelfDef
 
@@ -260,7 +261,7 @@ object Trees {
 
   /** mods def name[tparams](vparams_1)...(vparams_n): tpt = rhs */
   final case class DefDef(
-    name: TermName,
+    name: UnsignedTermName,
     paramLists: List[ParamsClause],
     resultTpt: TypeTree,
     rhs: Option[TermTree],
@@ -288,7 +289,8 @@ object Trees {
   end TermReferenceTree
 
   /** name */
-  final case class Ident(name: TermName)(tpe: TermReferenceType)(pos: SourcePosition) extends TermReferenceTree(pos):
+  final case class Ident(name: UnsignedTermName)(tpe: TermReferenceType)(pos: SourcePosition)
+      extends TermReferenceTree(pos):
     override protected def computeAsTypePrefix: NonEmptyPrefix = tpe
 
     protected final def calculateType(using Context): TermReferenceType = tpe
@@ -515,7 +517,7 @@ object Trees {
   }
 
   /** name = arg, in a parameter list */
-  final case class NamedArg(name: Name, arg: TermTree)(pos: SourcePosition) extends TermTree(pos) {
+  final case class NamedArg(name: UnsignedTermName, arg: TermTree)(pos: SourcePosition) extends TermTree(pos) {
     protected final def calculateType(using Context): TermType =
       arg.tpe
 
@@ -624,7 +626,7 @@ object Trees {
   end TypeTest
 
   /** pattern in {@link Unapply} */
-  final case class Bind(name: Name, body: PatternTree, symbol: TermSymbol)(pos: SourcePosition)
+  final case class Bind(name: UnsignedTermName, body: PatternTree, symbol: TermSymbol)(pos: SourcePosition)
       extends PatternTree(pos)
       with DefTree {
     override final def withPos(pos: SourcePosition): Bind = Bind(name, body, symbol)(pos)

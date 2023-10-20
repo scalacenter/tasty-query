@@ -103,7 +103,7 @@ private[tasties] class TreeUnpickler private (
         reader.until(end)(createSymbols(owner = sym))
       case DEFDEF | VALDEF | PARAM =>
         val end = reader.readEnd()
-        val name = readName
+        val name = readUnsignedName()
         val sym = TermSymbol.create(name, owner)
         caches.registerSym(start, sym)
         readSymbolModifiers(sym, tag, end)
@@ -119,7 +119,7 @@ private[tasties] class TreeUnpickler private (
         reader.until(end)(createSymbols(owner = sym))
       case BIND =>
         val end = reader.readEnd()
-        val name = readName
+        val name = readUnsignedName()
         val sym =
           if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(toTypeName(name), owner)
           else TermSymbol.create(name, owner)
@@ -164,7 +164,7 @@ private[tasties] class TreeUnpickler private (
         reader.until(end)(createSymbols(owner))
       case SELECTin =>
         val end = reader.readEnd()
-        readName
+        readPossiblySignedName()
         reader.until(end)(createSymbols(owner))
       case RETURN | SELECTouter =>
         val end = reader.readEnd()
@@ -420,11 +420,22 @@ private[tasties] class TreeUnpickler private (
       read
     }
 
-  def readName: TermName = nameAtRef.simple(reader.readNameRef())
+  def readPossiblySignedName(): TermName = nameAtRef.simple(reader.readNameRef())
 
-  def readTypeName(): TypeName = toTypeName(readName)
+  def readUnsignedName(): UnsignedTermName = readPossiblySignedName() match
+    case name: UnsignedTermName =>
+      name
+    case name: SignedName =>
+      throw TastyFormatException(s"Expected an unsigned name but got ${name.toDebugString}")
+  end readUnsignedName
 
-  private def toTypeName(name: TermName): TypeName = name match
+  def extractUnsignedName(name: TermName): UnsignedTermName = name match
+    case name: UnsignedTermName     => name
+    case SignedName(unsigned, _, _) => unsigned
+
+  def readTypeName(): TypeName = toTypeName(readUnsignedName())
+
+  private def toTypeName(name: UnsignedTermName): TypeName = name match
     case name: SignatureNameItem =>
       name.toTypeName
     case UniqueName(underlying, separator, num) =>
@@ -435,7 +446,7 @@ private[tasties] class TreeUnpickler private (
 
   def readPackageFullName(): PackageFullName = nameAtRef.packageFullName(reader.readNameRef())
 
-  def readSignedName(): SignedName = readName.asInstanceOf[SignedName]
+  def readSignedName(): SignedName = readPossiblySignedName().asInstanceOf[SignedName]
 
   private def readTopLevelStat(using SourceFile): TopLevelTree =
     maybeAdjustSourceFileIn(doReadTopLevelStat())
@@ -465,13 +476,13 @@ private[tasties] class TreeUnpickler private (
         assert(reader.nextByte == IMPORTED, posErrorMsg)
         val nameSpan = span
         reader.readByte()
-        val name = ImportIdent(readName)(nameSpan)
+        val name = ImportIdent(readUnsignedName())(nameSpan)
         // IMPORTED can be followed by RENAMED or BOUNDED
         reader.nextByte match {
           case RENAMED =>
             val renamedSpan = span
             reader.readByte()
-            val renamed = ImportIdent(readName)(renamedSpan)
+            val renamed = ImportIdent(readUnsignedName())(renamedSpan)
             ImportSelector(name, Some(renamed), bound = None)(nameSpan.union(renamedSpan))
           case BOUNDED =>
             reader.readByte()
@@ -727,7 +738,7 @@ private[tasties] class TreeUnpickler private (
 
       val spn = span
       reader.readByte()
-      val name = readName
+      val name = readUnsignedName()
       val tpt = readTypeTree
       Some(SelfDef(name, tpt)(tpt.pos))
     }
@@ -741,7 +752,7 @@ private[tasties] class TreeUnpickler private (
     val symbol = caches.getSymbol[TermSymbol](start)
     val tag = reader.readByte()
     val end = reader.readEnd()
-    val name = readName
+    val name = readUnsignedName()
     // Only for DefDef, but reading works for empty lists
     val params = readAllParams
     val tpt = readTypeTree
@@ -795,7 +806,7 @@ private[tasties] class TreeUnpickler private (
     symbol.withTree(tree)
     tree
 
-  private def makeIdent(name: TermName, tpe: TermType, pos: SourcePosition): Ident =
+  private def makeIdent(name: UnsignedTermName, tpe: TermType, pos: SourcePosition): Ident =
     val tpe1 = tpe match
       case tpe: TermReferenceType => tpe
       case _ => throw TastyFormatException(s"unexpected type $tpe for Ident name $name at $pos in $posErrorMsg")
@@ -809,7 +820,7 @@ private[tasties] class TreeUnpickler private (
     case IDENT =>
       val spn = span
       reader.readByte()
-      val name = readName
+      val name = readUnsignedName()
       val typ = readTermType()
       if name == nme.Wildcard || name == nme.WildcardSequence then WildcardPattern(typ.requireType)(spn)
       else ExprPattern(makeIdent(name, typ, spn))(spn)
@@ -825,7 +836,7 @@ private[tasties] class TreeUnpickler private (
       val start = reader.currentAddr
       reader.readByte()
       val end = reader.readEnd()
-      val name = readName
+      val name = readUnsignedName()
       val typ = readTrueType()
       val body = readPattern
       val symbol = caches.getSymbol[TermSymbol](start)
@@ -866,7 +877,7 @@ private[tasties] class TreeUnpickler private (
       maybeAdjustSourceFileIn {
         val spn = span
         reader.readByte()
-        val name = readName
+        val name = readUnsignedName()
         val typ = readTermType()
         val typ1 =
           if name == nme.Wildcard then rctx.uninitializedMethodTermRef
@@ -884,7 +895,7 @@ private[tasties] class TreeUnpickler private (
     case IDENT =>
       val spn = span
       reader.readByte()
-      val name = readName
+      val name = readUnsignedName()
       val typ = readTermType()
       val typ1 =
         if name == nme.Wildcard then
@@ -916,7 +927,7 @@ private[tasties] class TreeUnpickler private (
     case NAMEDARG =>
       val spn = span
       reader.readByte()
-      NamedArg(readName, readTerm)(spn)
+      NamedArg(readUnsignedName(), readTerm)(spn)
     case TYPEAPPLY =>
       val spn = span
       reader.readByte()
@@ -926,7 +937,7 @@ private[tasties] class TreeUnpickler private (
     case SELECT =>
       val spn = span
       reader.readByte()
-      val name = readName
+      val name = readPossiblySignedName()
       val qual = readTerm
       Select(qual, name)(selectOwner = None)(spn)
     case SELECTouter =>
@@ -1081,16 +1092,16 @@ private[tasties] class TreeUnpickler private (
     case TERMREF =>
       val spn = span
       reader.readByte()
-      val name = readName
+      val name = readPossiblySignedName()
       val prefix = readNonEmptyPrefix()
-      Ident(name)(TermRef(prefix, name))(spn)
+      Ident(extractUnsignedName(name))(TermRef(prefix, name))(spn)
     case TERMREFpkg =>
       val spn = span
       reader.readByte()
       val tpe = readPackageRef()
       val simpleName = tpe match
         case tpe: PackageRef => tpe.fullyQualifiedName.simpleName
-        case tpe: TermRef    => tpe.name // fallback for incomplete or invalid programs
+        case tpe: TermRef    => extractUnsignedName(tpe.name) // fallback for incomplete or invalid programs
       Ident(simpleName)(tpe)(span)
     case TERMREFdirect =>
       val spn = span
@@ -1108,10 +1119,10 @@ private[tasties] class TreeUnpickler private (
       val spn = span
       reader.readByte()
       reader.readEnd()
-      val name = readName
+      val name = readPossiblySignedName()
       val prefix = readNonEmptyPrefix()
       val ownerRef = readTypeRef()
-      Ident(name)(TermRef(prefix, LookupIn(ownerRef, name)))(spn)
+      Ident(extractUnsignedName(name))(TermRef(prefix, LookupIn(ownerRef, name)))(spn)
     case SHAREDtype =>
       val spn = span
       reader.readByte()
@@ -1232,12 +1243,12 @@ private[tasties] class TreeUnpickler private (
       readPackageRef()
     case TERMREF =>
       reader.readByte()
-      val name = readName
+      val name = readPossiblySignedName()
       TermRef(readNonEmptyPrefix(), name)
     case TERMREFin =>
       reader.readByte()
       reader.readEnd()
-      val name = readName
+      val name = readPossiblySignedName()
       val prefix = readNonEmptyPrefix()
       val ownerRef = readTypeRef()
       TermRef(prefix, LookupIn(ownerRef, name))
@@ -1260,7 +1271,7 @@ private[tasties] class TreeUnpickler private (
       }
       // Skip IDENTtpt tag and name
       reader.readByte()
-      readName
+      readTypeName()
       // Type of QUALTHIS is ThisType for the type reference, which is the type of the IDENTtpt
       ThisType(readTrueType().asInstanceOf[TypeRef])
     case SUPERtype =>
@@ -1296,7 +1307,7 @@ private[tasties] class TreeUnpickler private (
         else if flags.is(Given) then ContextualMethodType
         else MethodType
       }
-      readLambdaType(companionOp, () => readName, _.readTrueType(), _.readTypeOrMethodic())
+      readLambdaType(companionOp, () => readUnsignedName(), _.readTrueType(), _.readTypeOrMethodic())
     case TYPELAMBDAtype =>
       readLambdaType(_ => TypeLambda, () => readTypeName(), _.readTypeBounds, _.readTrueType())
     case PARAMtype =>
@@ -1308,7 +1319,7 @@ private[tasties] class TreeUnpickler private (
     case REFINEDtype =>
       reader.readByte()
       val end = reader.readEnd()
-      val refinementName = readName
+      val refinementName = readUnsignedName()
       val underlying = readTrueType()
       if tagFollowShared == TYPEBOUNDS then
         // Type refinement with a type member of the form `Underlying { type refinementName <:> TypeBounds }`
@@ -1546,7 +1557,7 @@ private[tasties] class TreeUnpickler private (
     case SELECT =>
       val spn = span
       reader.readByte()
-      val name = readName
+      val name = readPossiblySignedName()
       val qual = readTerm
       TermRefTypeTree(qual, name)(spn)
     case SELECTtpt =>
@@ -1664,7 +1675,7 @@ private[tasties] class TreeUnpickler private (
     case DOUBLEconst =>
       Constant(java.lang.Double.longBitsToDouble(reader.readLongInt()))
     case STRINGconst =>
-      Constant(readName.toString)
+      Constant(readUnsignedName().toString)
     case NULLconst =>
       Constant(null)
     case CLASSconst =>

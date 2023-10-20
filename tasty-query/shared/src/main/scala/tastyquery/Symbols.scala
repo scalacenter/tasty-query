@@ -67,7 +67,7 @@ import tastyquery.reader.Loaders.Loader
 object Symbols {
 
   sealed abstract class Symbol protected (val owner: Symbol | Null) {
-    type ThisNameType <: Name
+    type ThisNameType <: UnsignedName
     type DefiningTreeType <: DefTree
 
     val name: ThisNameType
@@ -434,8 +434,8 @@ object Symbols {
     end matchingSymbol
   end TermOrTypeSymbol
 
-  final class TermSymbol private (val name: TermName, owner: Symbol) extends TermOrTypeSymbol(owner):
-    type ThisNameType = TermName
+  final class TermSymbol private (val name: UnsignedTermName, owner: Symbol) extends TermOrTypeSymbol(owner):
+    type ThisNameType = UnsignedTermName
     type DefiningTreeType = ValOrDefDef | Bind
     type MatchingSymbolType = TermSymbol
 
@@ -444,7 +444,7 @@ object Symbols {
 
     // Cache fields
     private var mySignature: Signature | Null = null
-    private var myTargetName: TermName | Null = null
+    private var myTargetName: UnsignedTermName | Null = null
     private var mySignedName: TermName | Null = null
     private var myParamRefss: List[Either[List[TermParamRef], List[TypeParamRef]]] | Null = null
 
@@ -561,7 +561,7 @@ object Symbols {
         sig
     end signature
 
-    final def targetName(using Context): TermName =
+    final def targetName(using Context): UnsignedTermName =
       val local = myTargetName
       if local != null then local
       else
@@ -570,7 +570,7 @@ object Symbols {
         computed
     end targetName
 
-    private def computeTargetName()(using Context): TermName =
+    private def computeTargetName()(using Context): UnsignedTermName =
       if annotations.isEmpty then name
       else
         defn.targetNameAnnotClass match
@@ -641,10 +641,10 @@ object Symbols {
   end TermSymbol
 
   object TermSymbol:
-    private[tastyquery] def create(name: TermName, owner: Symbol): TermSymbol =
+    private[tastyquery] def create(name: UnsignedTermName, owner: Symbol): TermSymbol =
       owner.addDeclIfDeclaringSym(TermSymbol(name, owner))
 
-    private[tastyquery] def createNotDeclaration(name: TermName, owner: Symbol): TermSymbol =
+    private[tastyquery] def createNotDeclaration(name: UnsignedTermName, owner: Symbol): TermSymbol =
       TermSymbol(name, owner)
   end TermSymbol
 
@@ -932,8 +932,8 @@ object Symbols {
     private var myScala2SealedChildren: Option[List[Symbol | Scala2ExternalSymRef]] = None
 
     // DeclaringSymbol-related fields
-    private val myDeclarations: mutable.HashMap[Name, mutable.HashSet[TermOrTypeSymbol]] =
-      mutable.HashMap[Name, mutable.HashSet[TermOrTypeSymbol]]()
+    private val myDeclarations: mutable.HashMap[UnsignedName, mutable.HashSet[TermOrTypeSymbol]] =
+      mutable.HashMap[UnsignedName, mutable.HashSet[TermOrTypeSymbol]]()
 
     // Cache fields
     private var mySignatureName: SignatureName | Null = null
@@ -1191,15 +1191,14 @@ object Symbols {
     @deprecated("use getAllOverloadedDecls", "0.4.0")
     final def getDecls(name: Name)(using Context): List[TermOrTypeSymbol] =
       name match
-        case name: SignedName => getDecl(name).toList
-        case name: TermName   => getAllOverloadedDecls(name)
-        case name             => getDecl(name).toList
+        case name: UnsignedTermName => getAllOverloadedDecls(name)
+        case name                   => getDecl(name).toList
 
     final def getDecl(name: Name)(using Context): Option[TermOrTypeSymbol] =
       name match
         case overloaded: SignedName =>
           distinguishOverloaded(overloaded)
-        case name =>
+        case name: UnsignedName =>
           myDeclarations.get(name) match
             case Some(decls) =>
               decls.find {
@@ -1255,24 +1254,16 @@ object Symbols {
       *
       * If there is no declaration with the given unsigned name, this method
       * returns `Nil`.
-      *
-      * @throws java.lang.IllegalArgumentException
-      *   if the provided `name` is a [[Names.SignedName]]
       */
-    final def getAllOverloadedDecls(name: TermName)(using Context): List[TermSymbol] =
-      name match
-        case name: SignedName => throw IllegalArgumentException(s"Illegal SignedName argument: $name")
-        case _                => myDeclarations.get(name).fold(Nil)(_.toList.map(_.asTerm))
-    end getAllOverloadedDecls
+    final def getAllOverloadedDecls(name: UnsignedTermName)(using Context): List[TermSymbol] =
+      myDeclarations.get(name).fold(Nil)(_.toList.map(_.asTerm))
 
     /** Returns a list of all the overloaded declarations with the given unsigned name.
       *
       * @throws tastyquery.Exceptions.MemberNotFoundException
       *   if there is no declaration with the given unsigned name
-      * @throws java.lang.IllegalArgumentException
-      *   if the provided `name` is a [[Names.SignedName]]
       */
-    final def findAllOverloadedDecls(name: TermName)(using Context): List[TermSymbol] =
+    final def findAllOverloadedDecls(name: UnsignedTermName)(using Context): List[TermSymbol] =
       getAllOverloadedDecls(name) match
         case Nil   => throw MemberNotFoundException(this, name)
         case decls => decls
@@ -1282,29 +1273,22 @@ object Symbols {
       *
       * If there are multiple or no overload with the given unsigned name, this
       * method returns `None`.
-      *
-      * @throws java.lang.IllegalArgumentException
-      *   if the provided `name` is a [[Names.SignedName]]
       */
-    final def getNonOverloadedDecl(name: TermName)(using Context): Option[TermSymbol] =
+    final def getNonOverloadedDecl(name: UnsignedTermName)(using Context): Option[TermSymbol] =
       myDeclarations.get(name) match
         case Some(decls) =>
           if decls.sizeIs == 1 then Some(decls.head.asTerm)
           else None
         case None =>
-          name match
-            case _: SignedName => throw IllegalArgumentException(s"Illegal SignedName argument: $name")
-            case _             => None
+          None
     end getNonOverloadedDecl
 
     /** Convenience method to find a non-overloaded decl from its unsigned name.
       *
       * @throws tastyquery.Exceptions.MemberNotFoundException
       *   if there are multiple or no overload with the given unsigned name
-      * @throws java.lang.IllegalArgumentException
-      *   if the provided `name` is a [[Names.SignedName]]
       */
-    final def findNonOverloadedDecl(name: TermName)(using Context): TermSymbol =
+    final def findNonOverloadedDecl(name: UnsignedTermName)(using Context): TermSymbol =
       getNonOverloadedDecl(name).getOrElse {
         throw MemberNotFoundException(this, name, s"Multiple overloads or no overload of '$name' in $this")
       }
@@ -1692,7 +1676,7 @@ object Symbols {
 
     // DeclaringSymbol-related fields
     private var rootsInitialized: Boolean = false
-    private val myDeclarations = mutable.HashMap[Name, Symbol]()
+    private val myDeclarations = mutable.HashMap[UnsignedName, Symbol]()
 
     // Cache fields
     val packageRef: PackageRef = new PackageRef(this)
@@ -1757,12 +1741,15 @@ object Symbols {
         ctx.classloader.scanPackage(this)
         rootsInitialized = true
 
-    final def getDecl(name: Name)(using Context): Option[Symbol] =
-      myDeclarations.get(name).orElse {
-        ensureRootsInitialized()
-        if ctx.classloader.loadRoot(this, name) then myDeclarations.get(name)
-        else None
-      }
+    final def getDecl(name: Name)(using Context): Option[Symbol] = name match
+      case name: UnsignedName =>
+        myDeclarations.get(name).orElse {
+          ensureRootsInitialized()
+          if ctx.classloader.loadRoot(this, name) then myDeclarations.get(name)
+          else None
+        }
+      case _: SignedName =>
+        None
     end getDecl
 
     final def declarations(using Context): List[Symbol] =

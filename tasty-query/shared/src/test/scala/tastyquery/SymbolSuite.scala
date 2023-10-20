@@ -33,7 +33,7 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
 
   def assertContainsExactly(
     owner: DeclaringSymbol,
-    expectedDeclNames: Set[Name]
+    expectedDeclNames: Set[UnsignedName]
   )(using Context, munit.Location): Unit = {
     val decls = owner.declarations
     val actualDeclNames = decls.map(_.name).toSet
