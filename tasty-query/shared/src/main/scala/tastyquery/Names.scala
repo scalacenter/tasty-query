@@ -103,7 +103,6 @@ object Names {
     val EmptyTuple: SimpleTypeName = typeName("EmptyTuple")
 
     val RefinedClassMagic: SimpleTypeName = typeName("<refinement>")
-    val ByNameParamClassMagic: SimpleTypeName = typeName("<byname>")
     val RepeatedParamClassMagic: SimpleTypeName = typeName("<repeated>")
     val FromJavaObjectAliasMagic: SimpleTypeName = typeName("<FromJavaObject>")
 
