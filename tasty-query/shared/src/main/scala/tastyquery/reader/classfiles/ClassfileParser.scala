@@ -19,6 +19,7 @@ import tastyquery.reader.pickles.{Unpickler, PickleReader}
 
 import ClassfileReader.*
 import ClassfileReader.Access.AccessFlags
+import Constants.*
 
 private[reader] object ClassfileParser {
   private val javaLangObjectBinaryName = termName("java/lang/Object")

@@ -29,28 +29,6 @@ object Names {
 
   given Ordering[SimpleName] = Ordering.by(_.name)
 
-  object str {
-    val topLevelSuffix = "$package"
-    val SuperAccessorPrefix: String = "super$"
-    val InlineAccessorPrefix: String = "inline$"
-    val BodyRetainerSuffix: String = "$retainedBody"
-  }
-
-  object attr {
-    val TASTY = termName("TASTY")
-    val Scala = termName("Scala")
-    val ScalaSig = termName("ScalaSig")
-    val InnerClasses = termName("InnerClasses")
-    val RuntimeVisibleAnnotations = termName("RuntimeVisibleAnnotations") // RetentionPolicy.RUNTIME
-    val RuntimeInvisibleAnnotations = termName("RuntimeInvisibleAnnotations") // RetentionPolicy.CLASS
-    val Signature = termName("Signature")
-  }
-
-  object annot {
-    val ScalaSignature = termName("Lscala/reflect/ScalaSignature;")
-    val ScalaLongSignature = termName("Lscala/reflect/ScalaLongSignature;")
-  }
-
   object nme {
     val EmptyTermName: SimpleName = termName("")
     val RootName: SimpleName = termName("<root>")
@@ -186,7 +164,7 @@ object Names {
       termName(name + s)
 
     private[tastyquery] def isPackageObjectName: Boolean =
-      name == "package" || name.endsWith(str.topLevelSuffix)
+      name == "package" || name.endsWith("$package")
   }
 
   final case class SignedName(underlying: TermName, sig: Signature, target: TermName) extends TermName {

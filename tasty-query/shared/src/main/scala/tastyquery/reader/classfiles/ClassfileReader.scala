@@ -14,6 +14,7 @@ import tastyquery.reader.pickles.ByteCodecs
 
 import ClassfileReader.*
 import ClassfileReader.Access.*
+import Constants.*
 
 private[classfiles] final class ClassfileReader private () {
 
