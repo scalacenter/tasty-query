@@ -108,7 +108,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   private def createSpecialMethod(
     owner: ClassSymbol,
-    name: TermName,
+    name: UnsignedTermName,
     tpe: TypeOrMethodic,
     flags: FlagSet = EmptyFlagSet
   ): TermSymbol =

@@ -95,7 +95,7 @@ private[pickles] class PickleReader {
     }
   }
 
-  private def decodeName(name: SimpleName | SimpleTypeName): Name = name match
+  private def decodeName(name: SimpleName | SimpleTypeName): SimpleName | SimpleTypeName = name match
     case name: SimpleName     => termName(NameTransformer.decode(name.name))
     case name: SimpleTypeName => typeName(NameTransformer.decode(name.name))
   end decodeName
@@ -185,7 +185,7 @@ private[pickles] class PickleReader {
     }
 
     // symbols that were pickled with Pickler.writeSymInfo
-    val name1 = decodeName(readNameRef()) match
+    val name1: SimpleTypeName | UnsignedTermName = decodeName(readNameRef()) match
       case SimpleName(MangledDefaultGetterNameRegex(underlyingStr, indexStr)) =>
         DefaultGetterName(termName(underlyingStr), indexStr.toInt - 1)
       case decoded =>
@@ -220,21 +220,22 @@ private[pickles] class PickleReader {
     val storedWhileReadingOwner = entries(storeInEntriesAt)
     if storedWhileReadingOwner != null then return storedWhileReadingOwner.asInstanceOf[MaybeExternalSymbol]
 
-    extension (n: Name)
-      def toTermName: TermName = n match
-        case n: TermName => n
-        case n: TypeName => n.toTermName
+    extension (n: ClassTypeName | UnsignedTermName)
+      def toTermName: UnsignedTermName = n match
+        case n: UnsignedTermName => n
+        case n: ClassTypeName    => n.toTermName
 
-      def toTypeName: TypeName = n match
-        case n: TypeName => n
-        case n: TermName => n.toTypeName
+      def toTypeName: ClassTypeName = n match
+        case n: ClassTypeName     => n
+        case n: SignatureNameItem => n.toTypeName
+        case _                    => errorBadSignature(s"cannot convert ${n.toDebugString} to a type name")
     end extension
 
     extension (n: TermName) def asSimpleName: SimpleName = n.asInstanceOf[SimpleName]
 
     val pickleFlags = readPickleFlags(name1.isInstanceOf[TypeName])
     val flags0 = pickleFlagsToFlags(pickleFlags)
-    val name =
+    val name: ClassTypeName | UnsignedTermName =
       if pickleFlags.isType && flags0.is(Module) then name1.toTermName.asSimpleName.withObjectSuffix.toTypeName
       else if flags0.is(Method) && (name1 == Scala2Constructor || name1 == Scala2TraitConstructor) then nme.Constructor
       else name1

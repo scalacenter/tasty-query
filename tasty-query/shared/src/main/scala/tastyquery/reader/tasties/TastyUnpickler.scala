@@ -95,6 +95,13 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
 
   private def readName(): TermName = nameAtRef.simple(readNameRef())
 
+  private def readUnsignedName(): UnsignedTermName = readName() match
+    case name: UnsignedTermName =>
+      name
+    case name: SignedName =>
+      throw TastyFormatException(s"Expected an unsigned name item but got ${name.toDebugString}")
+  end readUnsignedName
+
   private def readSimpleName(): SimpleName = readName() match
     case name: SimpleName =>
       name
@@ -139,30 +146,30 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
         val item = readSignatureNameItem()
         qual.appendItem(item)
       case NameTags.EXPANDED =>
-        ExpandedName(readName(), readSimpleName())
+        ExpandedName(readUnsignedName(), readSimpleName())
       case NameTags.EXPANDPREFIX =>
-        ExpandPrefixName(readName(), readSimpleName())
+        ExpandPrefixName(readUnsignedName(), readSimpleName())
       case NameTags.UNIQUE =>
         val separator = readName().toString
         val num = readNat()
-        val originals = reader.until(end)(readName())
+        val originals = reader.until(end)(readUnsignedName())
         val original = if (originals.isEmpty) nme.EmptyTermName else originals.head
         new UniqueName(original, separator, num)
       case NameTags.DEFAULTGETTER =>
-        new DefaultGetterName(readName(), readNat())
+        new DefaultGetterName(readUnsignedName(), readNat())
       case NameTags.SIGNED | NameTags.TARGETSIGNED =>
-        val original = readName()
-        val target = if (tag == NameTags.TARGETSIGNED) readName() else original
+        val original = readUnsignedName()
+        val target = if (tag == NameTags.TARGETSIGNED) readUnsignedName() else original
         val result = readSignatureName()
         val paramsSig = reader.until(end)(readParamSig())
         val sig = Signature(paramsSig, result)
         new SignedName(original, sig, target)
       case NameTags.SUPERACCESSOR =>
-        SuperAccessorName(readName())
+        SuperAccessorName(readUnsignedName())
       case NameTags.INLINEACCESSOR =>
-        InlineAccessorName(readName())
+        InlineAccessorName(readUnsignedName())
       case NameTags.BODYRETAINER =>
-        BodyRetainerName(readName())
+        BodyRetainerName(readUnsignedName())
       case NameTags.OBJECTCLASS =>
         readEitherName() match
           case simple: SimpleName =>

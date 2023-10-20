@@ -16,7 +16,7 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
   def assertSigned(sym: TermSymbol, expectedSignature: String)(using Context, Location): Unit =
     assertSigned(sym, expectedSignature, sym.name)
 
-  def assertSigned(sym: TermSymbol, expectedSignature: String, expectedTargetName: TermName)(
+  def assertSigned(sym: TermSymbol, expectedSignature: String, expectedTargetName: UnsignedTermName)(
     using Context,
     Location
   ): Unit =
@@ -29,7 +29,7 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
   def assertNotSigned(sym: TermSymbol, expectedSignature: String)(using Context, Location): Unit =
     assertNotSigned(sym, expectedSignature, sym.name)
 
-  def assertNotSigned(sym: TermSymbol, expectedSignature: String, expectedTargetName: TermName)(
+  def assertNotSigned(sym: TermSymbol, expectedSignature: String, expectedTargetName: UnsignedTermName)(
     using Context,
     Location
   ): Unit =

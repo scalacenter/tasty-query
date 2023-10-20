@@ -553,7 +553,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val BagOfJavaDefinitionsClassMod = ctx.findTopLevelModuleClass("javadefined.BagOfJavaDefinitions")
     val javadefinedPackage = ctx.findPackage("javadefined")
 
-    def testDef(name: TermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
+    def testDef(name: UnsignedTermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
       op(BagOfJavaDefinitionsClassMod.findNonOverloadedDecl(name))
 
     def assertJavaPublic(sym: TermOrTypeSymbol)(using munit.Location) =
@@ -593,7 +593,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def assertPrivateWithin(sym: TermOrTypeSymbol, expected: DeclaringSymbol)(using munit.Location) =
       assert(!clue(sym.isPrivate) && clue(sym.visibility) == clue(Visibility.ScopedPrivate(expected)))
 
-    def testDef(name: TermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
+    def testDef(name: UnsignedTermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
       op(BagOfJavaDefinitionsClass.findNonOverloadedDecl(name))
 
     testDef(name"x") { x =>
@@ -706,7 +706,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val JavaInterface2 = ctx.findTopLevelClass("javadefined.JavaInterface2")
     val ExceptionClass = ctx.findTopLevelClass("java.lang.Exception")
 
-    def testDef(name: TermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
+    def testDef(name: UnsignedTermName)(op: munit.Location ?=> TermSymbol => Unit)(using munit.Location): Unit =
       op(BagOfGenJavaDefinitionsClass.findNonOverloadedDecl(name))
 
     extension (tpe: TypeMappable)

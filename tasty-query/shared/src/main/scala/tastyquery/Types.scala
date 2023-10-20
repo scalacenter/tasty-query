@@ -878,7 +878,7 @@ object Types {
     protected type AnyDesignatorType = TermOrTypeSymbol | Name | LookupIn | LookupTypeIn | Scala2ExternalSymRef
 
     type ThisName <: Name
-    type ThisSymbolType <: TermOrTypeSymbol { type ThisNameType = ThisName }
+    type ThisSymbolType <: TermOrTypeSymbol { type ThisNameType <: ThisName }
     type ThisNamedType >: this.type <: NamedType
     protected type ThisDesignatorType >: ThisSymbolType <: AnyDesignatorType
 
@@ -1626,7 +1626,7 @@ object Types {
   }
 
   sealed trait TermLambdaType extends LambdaType:
-    type ThisName = TermName
+    type ThisName = UnsignedTermName
     type PInfo = Type
     type This >: this.type <: TermLambdaType & ResultType
     type ParamRefType = TermParamRef
@@ -1669,7 +1669,7 @@ object Types {
       Substituters.substLocalParams(bounds, tparams, paramRefs)
   end TypeLambdaType
 
-  final class MethodType private[Types] (val companion: MethodTypeCompanion, val paramNames: List[TermName])(
+  final class MethodType private[Types] (val companion: MethodTypeCompanion, val paramNames: List[UnsignedTermName])(
     @constructorOnly paramTypesExp: MethodType => List[Type],
     @constructorOnly resultTypeExp: MethodType => TypeOrMethodic
   ) extends MethodicType
@@ -1736,9 +1736,9 @@ object Types {
   end MethodType
 
   sealed abstract class MethodTypeCompanion(private[Types] val stringPrefix: String)
-      extends LambdaTypeCompanion[TermName, Type, TypeOrMethodic, MethodType]:
+      extends LambdaTypeCompanion[UnsignedTermName, Type, TypeOrMethodic, MethodType]:
     def apply(
-      paramNames: List[TermName]
+      paramNames: List[UnsignedTermName]
     )(paramInfosExp: MethodType => List[Type], resultTypeExp: MethodType => TypeOrMethodic): MethodType =
       new MethodType(this, paramNames)(paramInfosExp, resultTypeExp)
   end MethodTypeCompanion
@@ -2030,11 +2030,11 @@ object Types {
   final class TermRefinement(
     val parent: Type,
     val isStable: Boolean,
-    val refinedName: TermName,
+    val refinedName: UnsignedTermName,
     val refinedType: TypeOrMethodic
   ) extends RefinedType:
     @deprecated("use the overload with an explicit isStable argument", since = "0.7.4")
-    def this(parent: Type, refinedName: TermName, refinedType: Type) =
+    def this(parent: Type, refinedName: UnsignedTermName, refinedType: Type) =
       this(parent, isStable = false, refinedName, refinedType)
 
     // Cache fields
@@ -2098,7 +2098,7 @@ object Types {
 
     private[tastyquery] final def derivedTermRefinement(
       parent: Type,
-      refinedName: TermName,
+      refinedName: UnsignedTermName,
       refinedType: TypeOrMethodic
     ): Type =
       if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedType eq this.refinedType)) this
