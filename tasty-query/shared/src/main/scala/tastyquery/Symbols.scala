@@ -533,7 +533,7 @@ object Symbols {
       require(isStatic, s"Cannot construct a staticRef for non-static symbol $this")
       TermRef(owner.staticOwnerPrefix, this)
 
-    private[tastyquery] final def declaredTypeAsSeenFrom(prefix: Prefix)(using Context): TypeOrMethodic =
+    final def typeAsSeenFrom(prefix: Prefix)(using Context): TypeOrMethodic =
       declaredType.asSeenFrom(prefix, owner)
 
     private def isConstructor: Boolean =
@@ -595,10 +595,10 @@ object Symbols {
       if candidates.isEmpty then None
       else
         val site = siteClass.thisType
-        val targetType = this.declaredTypeAsSeenFrom(site)
+        val targetType = this.typeAsSeenFrom(site)
         candidates.find { candidate =>
           // TODO Also check targetName here
-          candidate.declaredTypeAsSeenFrom(site).matches(targetType)
+          candidate.typeAsSeenFrom(site).matches(targetType)
         }
     end matchingDecl
 
@@ -658,7 +658,7 @@ object Symbols {
 
     def declaredBounds: TypeBounds
 
-    private[tastyquery] final def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
+    final def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
       def default: TypeBounds =
         declaredBounds.mapBounds(_.asSeenFrom(prefix, owner))
 
@@ -1466,7 +1466,7 @@ object Symbols {
     private[tastyquery] def resolveMember(name: Name, pre: NonEmptyPrefix)(using Context): ResolveMemberResult =
       findMember(pre, name) match
         case Some(sym: TermSymbol) =>
-          ResolveMemberResult.TermMember(sym :: Nil, sym.declaredTypeAsSeenFrom(pre), sym.isStableMember)
+          ResolveMemberResult.TermMember(sym :: Nil, sym.typeAsSeenFrom(pre), sym.isStableMember)
         case Some(sym: ClassSymbol) =>
           ResolveMemberResult.ClassMember(sym)
         case Some(sym: TypeSymbolWithBounds) =>
@@ -1490,7 +1490,7 @@ object Symbols {
                 && decl.needsSignature
                 && name.sig.paramsCorrespond(decl.signature)
             if matches then
-              val tpe = decl.declaredTypeAsSeenFrom(pre)
+              val tpe = decl.typeAsSeenFrom(pre)
               if typePredicate(tpe) then return ResolveMemberResult.TermMember(decl :: Nil, tpe, decl.isStableMember)
             end if
             overloadsRest = overloadsRest.tail

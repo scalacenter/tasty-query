@@ -1023,7 +1023,7 @@ object Types {
         myIsStable = isStable
 
       def storeSymbol(sym: TermSymbol): Unit =
-        storeResolved(sym, sym.declaredTypeAsSeenFrom(prefix), sym.isStableMember)
+        storeResolved(sym, sym.typeAsSeenFrom(prefix), sym.isStableMember)
 
       designator match
         case sym: TermSymbol =>
@@ -1161,11 +1161,7 @@ object Types {
     private[tastyquery] final def resolveMember(name: Name)(using Context): ResolveMemberResult =
       def makeResult(sym: TermOrTypeSymbol, prefixForAsSeenFrom: Prefix): ResolveMemberResult = sym match
         case sym: TermSymbol =>
-          ResolveMemberResult.TermMember(
-            sym :: Nil,
-            sym.declaredTypeAsSeenFrom(prefixForAsSeenFrom),
-            sym.isStableMember
-          )
+          ResolveMemberResult.TermMember(sym :: Nil, sym.typeAsSeenFrom(prefixForAsSeenFrom), sym.isStableMember)
         case sym: ClassSymbol =>
           ResolveMemberResult.ClassMember(sym)
         case sym: TypeSymbolWithBounds =>
