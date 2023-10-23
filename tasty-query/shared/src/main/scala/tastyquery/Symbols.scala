@@ -147,13 +147,6 @@ object Symbols {
       if isFlagsInitialized then myFlags
       else throw IllegalStateException(s"flags of $this have not been initialized")
 
-    @deprecated("pattern-match on owner instead", since = "0.10.0")
-    final def enclosingDecl: DeclaringSymbol = owner match {
-      case owner: DeclaringSymbol => owner
-      case _: Symbol | null =>
-        assert(false, s"cannot access owner, ${this.name} is local or not declared within any scope")
-    }
-
     private[Symbols] final def addDeclIfDeclaringSym(decl: TermOrTypeSymbol): decl.type =
       this match
         case declaring: DeclaringSymbol => declaring.addDecl(decl)
@@ -666,9 +659,6 @@ object Symbols {
   sealed abstract class TypeSymbolWithBounds protected (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner):
     type DefiningTreeType <: TypeMember | TypeParam | TypeTreeBind
 
-    @deprecated("use declaredBounds instead", since = "0.9.0")
-    final def bounds: TypeBounds = declaredBounds
-
     def declaredBounds: TypeBounds
 
     private[tastyquery] final def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
@@ -742,9 +732,6 @@ object Symbols {
 
     def variance(using Context): Variance =
       declaredVariance
-
-    @deprecated("use localRef instead", since = "0.9.0")
-    final def typeRef: TypeRef = localRef
 
     /** The argument corresponding to this class type parameter as seen from prefix `pre`.
       *
@@ -889,9 +876,6 @@ object Symbols {
     type DeclType >: TermOrTypeSymbol <: Symbol
 
     private[Symbols] def addDecl(decl: DeclType): Unit
-
-    @deprecated("use ClassSymbol.getAllOverloadedDecls", "0.4.0")
-    def getDecls(name: Name)(using Context): List[DeclType]
 
     def getDecl(name: Name)(using Context): Option[DeclType]
 
@@ -1088,9 +1072,6 @@ object Symbols {
       if local == null then throw new IllegalStateException(s"givenSelfType not initialized for $this")
       else local
 
-    @deprecated("use appliedRefInsideThis instead", since = "0.9.0")
-    final def appliedRef: Type = appliedRefInsideThis
-
     final def appliedRefInsideThis: Type =
       val local = myAppliedRef
       if local != null then local
@@ -1129,10 +1110,6 @@ object Symbols {
         parent.linearization.filter(c => !lin.contains(c)) ::: lin
       }
       this :: parentsLin
-
-    @deprecated("use isSubClass instead", since = "0.9.0")
-    final def isSubclass(that: ClassSymbol)(using Context): Boolean =
-      isSubClass(that)
 
     final def isSubClass(that: ClassSymbol)(using Context): Boolean =
       linearization.contains(that)
@@ -1173,12 +1150,6 @@ object Symbols {
       val set = myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet)
       if decl.isType then assert(set.isEmpty, s"trying to add a second entry $decl for type name ${decl.name} in $this")
       set += decl
-
-    @deprecated("use getAllOverloadedDecls", "0.4.0")
-    final def getDecls(name: Name)(using Context): List[TermOrTypeSymbol] =
-      name match
-        case name: UnsignedTermName => getAllOverloadedDecls(name)
-        case name                   => getDecl(name).toList
 
     final def getDecl(name: Name)(using Context): Option[TermOrTypeSymbol] =
       name match
@@ -1717,10 +1688,6 @@ object Symbols {
     private[Symbols] final def addDecl(decl: Symbol): Unit =
       assert(!myDeclarations.contains(decl.name), s"trying to add a second entry $decl for name ${decl.name} in $this")
       myDeclarations(decl.name) = decl
-
-    @deprecated("use getDecl; members of packages are never overloaded", "0.4.0")
-    final def getDecls(name: Name)(using Context): List[Symbol] =
-      getDecl(name).toList
 
     private final def ensureRootsInitialized()(using Context): Unit =
       if !rootsInitialized then

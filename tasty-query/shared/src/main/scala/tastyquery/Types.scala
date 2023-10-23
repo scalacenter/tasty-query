@@ -154,10 +154,6 @@ object Types {
   end ErasedTypeRef
 
   object ErasedTypeRef:
-    @deprecated("use the overload that takes an explicit SourceLanguage", since = "0.7.1")
-    def erase(tpe: Type)(using Context): ErasedTypeRef =
-      erase(tpe, SourceLanguage.Scala3)
-
     def erase(tpe: Type, language: SourceLanguage)(using Context): ErasedTypeRef =
       Erasure.erase(tpe, language)
 
@@ -411,9 +407,6 @@ object Types {
   sealed abstract class TermType extends TypeMappable:
     private[tastyquery] type ThisTypeMappableType >: this.type <: TermType
 
-    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
-    def widen(using Context): TermType
-
     /** Widens `TermRef`s one level to their `underlyingOrMethodic` type.
       *
       * - If this term type is a `TermRef`, returns `this.underlyingOrMethodic`.
@@ -436,17 +429,6 @@ object Types {
     */
   sealed abstract class TypeOrMethodic extends TermType:
     private[tastyquery] type ThisTypeMappableType >: this.type <: TypeOrMethodic
-
-    /** Widen singleton types, ByNameTypes, AnnotatedTypes and RefinedTypes. */
-    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
-    final def widen(using Context): TypeOrMethodic = this match
-      case _: TypeRef        => this // fast path for most frequent case
-      case tp: TermRef       => tp.underlyingOrMethodic.widen
-      case tp: SingletonType => tp.underlying.widen
-      case tp: ByNameType    => tp.resultType.widen
-      case tp: AnnotatedType => tp.typ.widen
-      case tp: RefinedType   => tp.parent.widen
-      case tp                => tp
 
     def dealias(using Context): TypeOrMethodic
 
@@ -493,10 +475,6 @@ object Types {
     */
   sealed abstract class Type extends TypeOrMethodic with NonEmptyPrefix with TypeOrWildcard:
     private[tastyquery] type ThisTypeMappableType = Type
-
-    @deprecated("use isSubType instead", since = "0.9.0")
-    final def isSubtype(that: Type)(using Context): Boolean =
-      isSubType(that)
 
     final def isSubType(that: Type)(using Context): Boolean =
       Subtyping.isSubType(this, that)
@@ -1179,9 +1157,6 @@ object Types {
     private[tastyquery] type ThisTypeMappableType = PackageRef
 
     def fullyQualifiedName: PackageFullName = symbol.fullName
-
-    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
-    def widen(using Context): PackageRef = this
 
     private[tastyquery] final def resolveMember(name: Name)(using Context): ResolveMemberResult =
       def makeResult(sym: TermOrTypeSymbol, prefixForAsSeenFrom: Prefix): ResolveMemberResult = sym match
@@ -2033,10 +2008,6 @@ object Types {
     val refinedName: UnsignedTermName,
     val refinedType: TypeOrMethodic
   ) extends RefinedType:
-    @deprecated("use the overload with an explicit isStable argument", since = "0.7.4")
-    def this(parent: Type, refinedName: UnsignedTermName, refinedType: Type) =
-      this(parent, isStable = false, refinedName, refinedType)
-
     // Cache fields
     private[tastyquery] val isMethodic = refinedType.isInstanceOf[MethodicType]
     private var mySignedName: SignedName | Null = null

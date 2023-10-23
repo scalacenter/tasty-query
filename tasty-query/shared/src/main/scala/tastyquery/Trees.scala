@@ -52,38 +52,6 @@ object Trees {
     end computeAutoPos
 
     def withPos(pos: SourcePosition): Tree
-
-    private def subtrees: List[Tree] =
-      object collector extends TreeTraverser:
-        private val buffer = mutable.ListBuffer.empty[Tree]
-
-        def apply(tree: Tree): List[Tree] =
-          super.traverse(tree)
-          buffer.toList
-
-        override def traverse(tree: Tree): Unit =
-          buffer += tree
-      end collector
-
-      collector(this)
-    end subtrees
-
-    @deprecated("use a subclass of Traversers.TreeTraverser instead", since = "0.10.0")
-    def walkTree[R](op: Tree => R)(reduce: (R, R) => R, default: => R): R = {
-      // Apply the operation to the tree itself and all its sutbrees. Reduce the result with the given @reduce function
-      def rec(t: Tree): R = reduce(op(t), t.subtrees.map(rec).foldLeft(default)(reduce))
-      rec(this)
-    }
-
-    /* If the operation does not produce a result, simply apply it to all subtrees of the tree */
-    @deprecated("use a subclass of Traversers.TreeTraverser instead", since = "0.10.0")
-    def walkTree(op: Tree => Unit): Unit =
-      new TreeTraverser {
-        override def traverse(tree: Tree): Unit =
-          op(tree)
-          super.traverse(tree)
-      }.traverse(this)
-    end walkTree
   }
 
   sealed abstract class TopLevelTree(pos: SourcePosition) extends Tree(pos):

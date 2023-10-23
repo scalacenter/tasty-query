@@ -49,10 +49,6 @@ private[tastyquery] object Flags:
   val CaseAccessor: Flag = newFlag("CaseAccessor")
   val Contravariant: Flag = newFlag("Contravariant")
   val Covariant: Flag = newFlag("Covariant")
-
-  @deprecated("unused; use Abstract instead", since = "0.5.1")
-  val Deferred: Flag = newFlag("Deferred")
-
   val Enum: Flag = newFlag("Enum")
   val Erased: Flag = newFlag("Erased")
   val Exported: Flag = newFlag("Exported")
