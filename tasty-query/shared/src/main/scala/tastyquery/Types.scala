@@ -856,7 +856,7 @@ object Types {
     protected type AnyDesignatorType = TermOrTypeSymbol | Name | LookupIn | LookupTypeIn | Scala2ExternalSymRef
 
     type ThisName <: Name
-    type ThisSymbolType <: TermOrTypeSymbol { type ThisNameType <: ThisName }
+    type ThisSymbolType <: TermOrTypeSymbol
     type ThisNamedType >: this.type <: NamedType
     protected type ThisDesignatorType >: ThisSymbolType <: AnyDesignatorType
 

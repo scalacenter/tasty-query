@@ -67,10 +67,9 @@ import tastyquery.reader.Loaders.Loader
 object Symbols {
 
   sealed abstract class Symbol protected (val owner: Symbol | Null) {
-    type ThisNameType <: UnsignedName
     type DefiningTreeType <: DefTree
 
-    val name: ThisNameType
+    val name: UnsignedName
 
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
@@ -428,7 +427,6 @@ object Symbols {
   end TermOrTypeSymbol
 
   final class TermSymbol private (val name: UnsignedTermName, owner: Symbol) extends TermOrTypeSymbol(owner):
-    type ThisNameType = UnsignedTermName
     type DefiningTreeType = ValOrDefDef | Bind
     type MatchingSymbolType = TermSymbol
 
@@ -628,7 +626,6 @@ object Symbols {
   end TermSymbol
 
   sealed abstract class TypeSymbol protected (val name: TypeName, owner: Symbol) extends TermOrTypeSymbol(owner):
-    type ThisNameType = TypeName
     type DefiningTreeType <: TypeDef | TypeTreeBind
     type MatchingSymbolType = TypeSymbol
 
@@ -1627,7 +1624,6 @@ object Symbols {
   final class PackageSymbol private (val name: SimpleName, override val owner: PackageSymbol | Null)
       extends Symbol(owner)
       with DeclaringSymbol {
-    type ThisNameType = SimpleName
     type DefiningTreeType = Nothing
     type DeclType = Symbol
 

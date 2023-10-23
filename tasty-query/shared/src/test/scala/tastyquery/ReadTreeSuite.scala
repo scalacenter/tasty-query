@@ -50,7 +50,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   end SimpleTypeIdent
 
   private object SymbolWithName:
-    def unapply(sym: Symbol): Some[sym.ThisNameType] = Some(sym.name)
+    def unapply(sym: Symbol): Some[sym.name.type] = Some(sym.name)
 
   private object PackageWithFullName:
     def unapplySeq(sym: PackageSymbol): Option[List[Name]] = Some(sym.fullName.path)
