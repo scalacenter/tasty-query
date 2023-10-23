@@ -1257,7 +1257,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val PredefString = ctx.findStaticType("scala.Predef.String")
 
     assert(clue(PredefString).isTypeAlias)
-    assert(clue(PredefString.asInstanceOf[TypeMemberSymbol].aliasedType).isRef(defn.StringClass))
+    val TypeMemberDefinition.TypeAlias(alias) = PredefString.asInstanceOf[TypeMemberSymbol].typeDef: @unchecked
+    assert(clue(alias).isRef(defn.StringClass))
   }
 
   testWithContext("scala2-module-and-def-with-same-name") {

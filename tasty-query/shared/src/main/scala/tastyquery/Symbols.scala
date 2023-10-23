@@ -842,12 +842,6 @@ object Symbols {
       if local == null then throw IllegalStateException("$this was not assigned a definition")
       else local
 
-    final def aliasedType: Type =
-      typeDef.asInstanceOf[TypeMemberDefinition.TypeAlias].alias
-
-    private[tastyquery] def aliasedTypeAsSeenFrom(pre: Prefix)(using Context): Type =
-      aliasedType.asSeenFrom(pre, owner)
-
     final def declaredBounds: TypeBounds = typeDef match
       case TypeMemberDefinition.TypeAlias(alias)           => TypeAlias(alias)
       case TypeMemberDefinition.AbstractType(bounds)       => bounds

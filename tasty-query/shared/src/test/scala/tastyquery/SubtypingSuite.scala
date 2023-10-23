@@ -111,7 +111,14 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     ctx.findTopLevelClass("subtyping.TypesFromTASTy").findNonOverloadedDecl(termName(name)).declaredType.requireType
 
   def findTypesFromTASTyNamed(name: TypeName)(using Context): Type =
-    ctx.findTopLevelClass("subtyping.TypesFromTASTy").findDecl(name).asInstanceOf[TypeMemberSymbol].aliasedType
+    ctx
+      .findTopLevelClass("subtyping.TypesFromTASTy")
+      .findDecl(name)
+      .asInstanceOf[TypeMemberSymbol]
+      .typeDef
+      .asInstanceOf[TypeMemberDefinition.TypeAlias]
+      .alias
+  end findTypesFromTASTyNamed
 
   def findMethodicTypesFromTASTyNamed(name: String)(using Context): MethodicType =
     ctx
