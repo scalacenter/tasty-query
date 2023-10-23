@@ -617,7 +617,7 @@ object Symbols {
       flags.is(SignaturePolymorphic)
   end TermSymbol
 
-  object TermSymbol:
+  private[tastyquery] object TermSymbol:
     private[tastyquery] def create(name: UnsignedTermName, owner: Symbol): TermSymbol =
       owner.addDeclIfDeclaringSym(TermSymbol(name, owner))
 
@@ -808,7 +808,7 @@ object Symbols {
     end argForParam
   end ClassTypeParamSymbol
 
-  object ClassTypeParamSymbol:
+  private[tastyquery] object ClassTypeParamSymbol:
     private[tastyquery] def create(name: TypeName, owner: ClassSymbol): ClassTypeParamSymbol =
       ClassTypeParamSymbol(name, owner)
   end ClassTypeParamSymbol
@@ -817,7 +817,7 @@ object Symbols {
     type DefiningTreeType = TypeParam | TypeTreeBind
   end LocalTypeParamSymbol
 
-  object LocalTypeParamSymbol:
+  private[tastyquery] object LocalTypeParamSymbol:
     private[tastyquery] def create(name: TypeName, owner: Symbol): LocalTypeParamSymbol =
       LocalTypeParamSymbol(name, owner)
   end LocalTypeParamSymbol
@@ -848,7 +848,7 @@ object Symbols {
       case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds
   end TypeMemberSymbol
 
-  object TypeMemberSymbol:
+  private[tastyquery] object TypeMemberSymbol:
     private[tastyquery] def create(name: TypeName, owner: Symbol): TypeMemberSymbol =
       owner.addDeclIfDeclaringSym(TypeMemberSymbol(name, owner))
 
@@ -1606,7 +1606,7 @@ object Symbols {
     end makePolyConstructorType
   }
 
-  object ClassSymbol:
+  private[tastyquery] object ClassSymbol:
     private[tastyquery] def create(name: ClassTypeName, owner: Symbol): ClassSymbol =
       owner.addDeclIfDeclaringSym(ClassSymbol(name, owner))
 
@@ -1751,7 +1751,7 @@ object Symbols {
     end computeAllPackageObjectDecls
   }
 
-  object PackageSymbol:
+  private[tastyquery] object PackageSymbol:
     private[tastyquery] def createRoots(): (PackageSymbol, PackageSymbol) =
       val root = PackageSymbol(nme.RootName, null)
       root.rootsInitialized = true
