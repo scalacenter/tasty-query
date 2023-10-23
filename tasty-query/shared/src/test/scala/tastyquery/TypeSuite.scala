@@ -252,6 +252,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
   testWithContext("apply-overloaded-not-method") {
     val OverloadedApplyClass = ctx.findTopLevelClass("simple_trees.OverloadedApply")
+    val PredefString = ctx.findStaticType("scala.Predef.String")
 
     val callSym = OverloadedApplyClass.findNonOverloadedDecl(termName("callF"))
 
@@ -263,8 +264,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       override def traverse(tree: Tree): Unit = tree match
         case fooRef @ Select(_, SimpleName("foo")) =>
           callCount += 1
-          val fooSym = fooRef.tpe.asInstanceOf[TermRef].symbol
-          assert(clue(fooSym.paramRefss).isEmpty)
+          val fooSym = fooRef.symbol.asTerm
+          assert(clue(fooSym.declaredType).isRef(PredefString))
         case _ =>
           super.traverse(tree)
     }.traverse(callTree)
