@@ -28,5 +28,5 @@ abstract class RestrictedUnpicklingSuite extends BaseUnpicklingSuite {
   private def initRestrictedContext(rootSymbolPath: String, extraRootSymbolPaths: Seq[String]): Future[Context] =
     for classpath <- testClasspath yield
       val filtered = classpath.withFilter((rootSymbolPath :: extraRootSymbolPaths.toList).map(_.stripSuffix("$")))
-      Contexts.init(filtered)
+      Context.initialize(filtered)
 }

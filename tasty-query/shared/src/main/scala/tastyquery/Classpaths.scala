@@ -22,7 +22,7 @@ object Classpaths:
 
   /** In-memory representation of an entire classpath.
     *
-    * A [[Classpath]] can be given to [[Contexts.init]] to create a
+    * A [[Classpath]] can be given to [[Contexts.Context.initialize]] to create a
     * [[Contexts.Context]]. The latter gives semantic access to all the
     * definitions on the classpath.
     */

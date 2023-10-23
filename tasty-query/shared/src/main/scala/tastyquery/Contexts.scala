@@ -25,12 +25,16 @@ object Contexts {
   /** Standard definitions of symbols and types. */
   inline def defn(using ctx: Context): ctx.defn.type = ctx.defn
 
-  /** Creates a new [[Context]] for the given [[Classpaths.Classpath]]. */
-  def init(classpath: Classpath): Context =
-    val classloader = Loader(classpath)
-    val ctx = new Context(classloader)
-    classloader.initPackages()(using ctx)
-    ctx
+  /** Factory methods for [[Context]]. */
+  object Context:
+    /** Creates a new [[Context]] for the given [[Classpaths.Classpath]]. */
+    def initialize(classpath: Classpath): Context =
+      val classloader = Loader(classpath)
+      val ctx = new Context(classloader)
+      classloader.initPackages()(using ctx)
+      ctx
+    end initialize
+  end Context
 
   /** A semantic universe for a given [[Classpaths.Classpath]].
     *

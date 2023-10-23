@@ -40,7 +40,7 @@ object ClasspathLoaders {
     * This method will synchronously read the contents of all `.class` and
     * `.tasty` files on the classpath.
     *
-    * The resulting [[Classpaths.Classpath]] can be given to [[Contexts.init]]
+    * The resulting [[Classpaths.Classpath]] can be given to [[Contexts.Context.initialize]]
     * to create a [[Contexts.Context]]. The latter gives semantic access to all
     * the definitions on the classpath.
     *
