@@ -649,7 +649,7 @@ object Types {
       * If `this` type is already of that shape, including with the correct `base`,
       * then `this` is returned.
       */
-    final def baseType(base: ClassSymbol)(using Context): Option[Type] =
+    final def baseType(base: ClassSymbol)(using Context): Option[TypeRef | AppliedType] =
       base.baseTypeOf(this)
 
     /** Find the member of this type with the given `name` and `this` as prefix. */

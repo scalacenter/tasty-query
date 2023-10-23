@@ -759,47 +759,10 @@ object Symbols {
           }
           None
 
-        case Some(base: AndType) =>
-          (argForParam(base.first), argForParam(base.second)) match
-            case (None, tp2) =>
-              tp2
-            case (tp1, None) =>
-              tp1
-            case (Some(tp1), Some(tp2)) =>
-              val variance = this.variance.sign
-              val result: TypeOrWildcard = (tp1, tp2) match
-                case (tp1: Type, tp2: Type) if variance != 0 =>
-                  if variance > 0 then tp1 & tp2
-                  else tp1 | tp2
-                case _ =>
-                  // Compute based on bounds, instead of returning the original reference
-                  def toBounds(tp: TypeOrWildcard): TypeBounds = tp match
-                    case tp: WildcardTypeArg => tp.bounds
-                    case tp: Type            => TypeAlias(tp)
-                  val bounds1 = toBounds(tp1)
-                  val bounds2 = toBounds(tp2)
-                  val mergedBounds =
-                    if variance >= 0 then bounds1.intersect(bounds2)
-                    else bounds1.union(bounds2)
-                  mergedBounds match
-                    case TypeAlias(alias)  => alias // can happen for variance == 0 if tp1 =:= tp2
-                    case _: RealTypeBounds => WildcardTypeArg(mergedBounds)
-              end result
-              Some(result)
-          end match
+        case Some(base: TypeRef) =>
+          None
 
-        /*case base: AndOrType =>
-          var tp1 = argForParam(base.tp1)
-          var tp2 = argForParam(base.tp2)
-          val variance = this.paramVarianceSign
-          if (isBounds(tp1) || isBounds(tp2) || variance == 0) {
-            // compute argument as a type bounds instead of a point type
-            tp1 = tp1.bounds
-            tp2 = tp2.bounds
-          }
-          if (base.isAnd == variance >= 0) tp1 & tp2 else tp1 | tp2*/
-
-        case _ =>
+        case None =>
           /*if (pre.termSymbol.isPackage) argForParam(pre.select(nme.PACKAGE))
           else*/
           if (pre.isExactlyNothing) Some(pre)
