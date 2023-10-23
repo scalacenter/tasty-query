@@ -20,10 +20,10 @@ import tastyquery.reader.Loaders.Loader
 object Contexts {
 
   /** The implicitly available context. */
-  transparent inline def ctx(using ctx: Context): Context = ctx
+  inline def ctx(using ctx: Context): Context = ctx
 
   /** Standard definitions of symbols and types. */
-  transparent inline def defn(using ctx: Context): ctx.defn.type = ctx.defn
+  inline def defn(using ctx: Context): ctx.defn.type = ctx.defn
 
   /** Creates a new [[Context]] for the given [[Classpaths.Classpath]]. */
   def init(classpath: Classpath): Context =
