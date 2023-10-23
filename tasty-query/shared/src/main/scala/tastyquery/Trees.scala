@@ -939,7 +939,7 @@ object Trees {
       ExplicitTypeBoundsTree(low, high)(pos)
 
     def toTypeBounds: TypeBounds =
-      RealTypeBounds(low.toType, high.toType)
+      AbstractTypeBounds(low.toType, high.toType)
   end ExplicitTypeBoundsTree
 
   final case class TypeAliasDefinitionTree(alias: TypeTree)(pos: SourcePosition) extends TypeDefinitionTree(pos):

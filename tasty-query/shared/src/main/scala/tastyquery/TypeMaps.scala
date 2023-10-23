@@ -233,7 +233,7 @@ private[tastyquery] object TypeMaps {
     }
 
     protected def rangeToBounds(tp: TypeOrWildcard): TypeOrWildcard = tp match {
-      case Range(lo, hi) => WildcardTypeArg(RealTypeBounds(lo, hi))
+      case Range(lo, hi) => WildcardTypeArg(AbstractTypeBounds(lo, hi))
       case _             => tp
     }
 
@@ -357,7 +357,7 @@ private[tastyquery] object TypeMaps {
       else
         alias match {
           case Range(lo, hi) =>
-            if (variance > 0) RealTypeBounds(lo, hi)
+            if (variance > 0) AbstractTypeBounds(lo, hi)
             else TypeAlias(range(lo, hi))
           case _ => tp.derivedTypeAlias(alias)
         }
@@ -365,11 +365,14 @@ private[tastyquery] object TypeMaps {
     override protected def derivedWildcardTypeArg(tp: WildcardTypeArg, bounds: TypeBounds): WildcardTypeArg =
       if bounds eq tp.bounds then tp
       else if isRange(bounds.low) || isRange(bounds.high) then
-        if variance > 0 then WildcardTypeArg(RealTypeBounds(lower(bounds.low), upper(bounds.high)))
+        if variance > 0 then WildcardTypeArg(AbstractTypeBounds(lower(bounds.low), upper(bounds.high)))
         else
           // TODO This makes no sense to me; one day we'll have to find a principled solution here
           WildcardTypeArg(
-            RealTypeBounds(range(upper(bounds.low), lower(bounds.high)), range(lower(bounds.low), upper(bounds.high)))
+            AbstractTypeBounds(
+              range(upper(bounds.low), lower(bounds.high)),
+              range(lower(bounds.low), upper(bounds.high))
+            )
           )
       else tp.derivedWildcardTypeArg(bounds)
 

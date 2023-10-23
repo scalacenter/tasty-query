@@ -194,7 +194,7 @@ private[tastyquery] object Printers:
       case TypeAlias(alias) =>
         print(" = ")
         print(alias)
-      case RealTypeBounds(low, high) =>
+      case AbstractTypeBounds(low, high) =>
         if !isSyntacticNothing(low) then
           print(" >: ")
           print(low)

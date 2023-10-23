@@ -38,7 +38,7 @@ private[reader] final class ReaderContext(underlying: Context):
 
   def GenericTupleTypeOf(elementTypes: List[TypeOrWildcard]): Type = underlying.defn.GenericTupleTypeOf(elementTypes)
 
-  def NothingAnyBounds: RealTypeBounds = underlying.defn.NothingAnyBounds
+  def NothingAnyBounds: AbstractTypeBounds = underlying.defn.NothingAnyBounds
 
   def uninitializedMethodTermRef: TermRef = underlying.defn.uninitializedMethodTermRef
 

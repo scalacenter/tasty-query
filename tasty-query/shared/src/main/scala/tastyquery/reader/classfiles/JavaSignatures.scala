@@ -182,12 +182,12 @@ private[classfiles] object JavaSignatures:
           case '+' =>
             commit(1) {
               val upper = referenceType(env)
-              WildcardTypeArg(RealTypeBounds(rctx.NothingType, upper))
+              WildcardTypeArg(AbstractTypeBounds(rctx.NothingType, upper))
             }
           case '-' =>
             commit(1) {
               val lower = referenceType(env)
-              WildcardTypeArg(RealTypeBounds(lower, rctx.FromJavaObjectType))
+              WildcardTypeArg(AbstractTypeBounds(lower, rctx.FromJavaObjectType))
             }
           case _ =>
             referenceType(env)
@@ -206,7 +206,7 @@ private[classfiles] object JavaSignatures:
       else
         val allBounds = classBound ::: interfaceBounds
         val bound = if allBounds.isEmpty then rctx.AnyType else allBounds.reduceLeft(AndType(_, _))
-        RealTypeBounds(rctx.NothingType, bound)
+        AbstractTypeBounds(rctx.NothingType, bound)
 
     def typeParamsRest(env: JavaSignature): List[TypeBounds] =
       readUntil('>', typeParameter(env))

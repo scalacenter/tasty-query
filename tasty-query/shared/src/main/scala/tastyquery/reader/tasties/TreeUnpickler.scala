@@ -627,7 +627,7 @@ private[tasties] class TreeUnpickler private (
         val high = readTrueType()
         // TODO: read variance (a modifier)
         skipModifiers(end)
-        RealTypeBounds(low, high)
+        AbstractTypeBounds(low, high)
       } else {
         skipModifiers(end)
         TypeAlias(low)

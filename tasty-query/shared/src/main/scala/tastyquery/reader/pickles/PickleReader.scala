@@ -283,8 +283,8 @@ private[pickles] class PickleReader {
         sym match
           case sym: TypeMemberSymbol =>
             sym.withDefinition(bounds match
-              case bounds: RealTypeBounds => TypeMemberDefinition.AbstractType(bounds)
-              case TypeAlias(alias)       => TypeMemberDefinition.TypeAlias(alias)
+              case bounds: AbstractTypeBounds => TypeMemberDefinition.AbstractType(bounds)
+              case TypeAlias(alias)           => TypeMemberDefinition.TypeAlias(alias)
             )
           case sym: TypeParamSymbol =>
             sym.setDeclaredBounds(bounds)
@@ -635,7 +635,7 @@ private[pickles] class PickleReader {
         val lo = readTrueTypeRef()
         val hi = readTrueTypeRef()
         // TODO? createNullableTypeBounds(lo, hi)
-        WildcardTypeArg(RealTypeBounds(lo, hi))
+        WildcardTypeArg(AbstractTypeBounds(lo, hi))
       case REFINEDtpe =>
         val clazzIndex = pkl.readNat()
         val clazz = readLocalSymbolAt(clazzIndex).asClass
@@ -707,8 +707,8 @@ private[pickles] class PickleReader {
   /** Convert temp poly type to TypeLambda and leave other types alone. */
   private def translateTempPolyForTypeArg(tp: TypeOrWildcard)(using ReaderContext): TypeOrWildcard =
     translateTempPolyForTypeMember(tp) match
-      case TypeAlias(alias)       => alias
-      case bounds: RealTypeBounds => WildcardTypeArg(bounds)
+      case TypeAlias(alias)           => alias
+      case bounds: AbstractTypeBounds => WildcardTypeArg(bounds)
   end translateTempPolyForTypeArg
 
   /** Convert temp poly type to TypeLambda and leave other types alone. */
@@ -716,7 +716,7 @@ private[pickles] class PickleReader {
     case tp: WildcardTypeArg =>
       def rec(bound: Type): Type =
         translateTempPolyForTypeMember(bound).asInstanceOf[TypeAlias].alias
-      RealTypeBounds(rec(tp.bounds.low), rec(tp.bounds.high))
+      AbstractTypeBounds(rec(tp.bounds.low), rec(tp.bounds.high))
 
     case TempPolyType(tparams, restpe) =>
       val localTParams = tparams.asInstanceOf[List[LocalTypeParamSymbol]] // no class type params in type lambdas
@@ -726,7 +726,7 @@ private[pickles] class PickleReader {
             if restpe.bounds.low.isExactlyNothing then restpe.bounds.low
             else TypeLambda.fromParams(localTParams, restpe.bounds.low)
           val high = TypeLambda.fromParams(localTParams, restpe.bounds.high)
-          RealTypeBounds(low, high)
+          AbstractTypeBounds(low, high)
         case restpe: Type =>
           val alias = TypeLambda.fromParams(localTParams, restpe)
           TypeAlias(alias)

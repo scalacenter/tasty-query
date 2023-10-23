@@ -2257,7 +2257,7 @@ object Types {
     /** The non-alias type bounds type with given bounds */
     private[tastyquery] def derivedTypeBounds(low: Type, high: Type): TypeBounds =
       if ((low eq this.low) && (high eq this.high)) this
-      else RealTypeBounds(low, high)
+      else AbstractTypeBounds(low, high)
 
     final def contains(tp: TypeOrWildcard)(using Context): Boolean = tp match
       case tp: WildcardTypeArg =>
@@ -2275,22 +2275,22 @@ object Types {
     final def intersect(that: TypeBounds)(using Context): TypeBounds =
       if this.contains(that) then that
       else if that.contains(this) then this
-      else RealTypeBounds(this.low | that.low, this.high & that.high)
+      else AbstractTypeBounds(this.low | that.low, this.high & that.high)
 
     final def union(that: TypeBounds)(using Context): TypeBounds =
       if this.contains(that) then this
       else if that.contains(this) then that
-      else RealTypeBounds(this.low & that.low, this.high | that.high)
+      else AbstractTypeBounds(this.low & that.low, this.high | that.high)
 
     private[tastyquery] def mapBounds(f: Type => Type): TypeBounds = this match
-      case RealTypeBounds(low, high) => derivedTypeBounds(f(low), f(high))
-      case self @ TypeAlias(alias)   => self.derivedTypeAlias(f(alias))
+      case AbstractTypeBounds(low, high) => derivedTypeBounds(f(low), f(high))
+      case self @ TypeAlias(alias)       => self.derivedTypeAlias(f(alias))
     end mapBounds
   }
 
-  final case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high):
+  final case class AbstractTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high):
     override def toString(): String = s"TypeBounds($low, $high)"
-  end RealTypeBounds
+  end AbstractTypeBounds
 
   final case class TypeAlias(alias: Type) extends TypeBounds(alias, alias) {
     private[tastyquery] def derivedTypeAlias(alias: Type): TypeAlias =

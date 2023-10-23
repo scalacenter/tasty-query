@@ -133,7 +133,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val SingletonClass = createSpecialClass(typeName("Singleton"), AnyClass.topLevelRef :: Nil, Final)
     .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
 
-  val NothingAnyBounds = RealTypeBounds(SyntacticNothingType, AnyClass.topLevelRef)
+  val NothingAnyBounds = AbstractTypeBounds(SyntacticNothingType, AnyClass.topLevelRef)
 
   private def createSpecialTypeAlias(
     name: TypeName,
@@ -248,8 +248,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val Any_getClass =
     // def getClass[A >: this.type](): Class[? <: A]
     val tpe = PolyType(List(typeName("A")))(
-      pt => List(RealTypeBounds(AnyClass.thisType, AnyType)),
-      pt => MethodType(Nil, Nil, ClassTypeOf(WildcardTypeArg(RealTypeBounds(NothingType, pt.paramRefs.head))))
+      pt => List(AbstractTypeBounds(AnyClass.thisType, AnyType)),
+      pt => MethodType(Nil, Nil, ClassTypeOf(WildcardTypeArg(AbstractTypeBounds(NothingType, pt.paramRefs.head))))
     )
     createSpecialMethod(AnyClass, nme.m_getClass, tpe, Final)
   end Any_getClass
