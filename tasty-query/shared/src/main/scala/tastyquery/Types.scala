@@ -457,8 +457,7 @@ object Types {
     final def matches(that: TypeOrMethodic)(using Context): Boolean =
       TypeOps.matchesType(this, that)
 
-    final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): ThisTypeMappableType =
-      TypeOps.asSeenFrom(this, pre, cls)
+    def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): TypeOrMethodic
   end TypeOrMethodic
 
   /** The type of a `def` that has at least one (term or type) parameter list.
@@ -467,6 +466,8 @@ object Types {
     */
   sealed abstract class MethodicType extends TypeOrMethodic:
     def dealias(using Context): MethodicType = this
+
+    def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): MethodicType
   end MethodicType
 
   /** A type in the Scala type system.
@@ -475,6 +476,9 @@ object Types {
     */
   sealed abstract class Type extends TypeOrMethodic with NonEmptyPrefix with TypeOrWildcard:
     private[tastyquery] type ThisTypeMappableType = Type
+
+    final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): Type =
+      TypeOps.asSeenFrom(this, pre, cls)
 
     final def isSubType(that: Type)(using Context): Boolean =
       Subtyping.isSubType(this, that)
@@ -1645,6 +1649,7 @@ object Types {
     @constructorOnly resultTypeExp: MethodType => TypeOrMethodic
   ) extends MethodicType
       with TermLambdaType:
+    private[tastyquery] type ThisTypeMappableType = MethodType
     type ResultType = TypeOrMethodic
     type This = MethodType
 
@@ -1699,6 +1704,9 @@ object Types {
       typePredicate: TypeOrMethodic => Boolean
     )(using Context): ResolveMemberResult =
       throw new AssertionError(s"Cannot find member in $this")
+
+    final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): MethodType =
+      TypeOps.asSeenFrom(this, pre, cls)
 
     override def toString: String =
       val stringPrefix = companion.stringPrefix
@@ -1775,6 +1783,7 @@ object Types {
   ) extends MethodicType
       with Binders
       with TypeLambdaType {
+    private[tastyquery] type ThisTypeMappableType = PolyType
     type ResultType = TypeOrMethodic
     type This = PolyType
 
@@ -1803,6 +1812,9 @@ object Types {
       typePredicate: TypeOrMethodic => Boolean
     )(using Context): ResolveMemberResult =
       throw new AssertionError(s"Cannot find member in $this")
+
+    final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): PolyType =
+      TypeOps.asSeenFrom(this, pre, cls)
 
     override def toString: String =
       if !initialized then s"PolyType($paramNames)(<evaluating>...)"
