@@ -3,6 +3,7 @@ package tastyquery
 import scala.annotation.tailrec
 
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
@@ -129,19 +130,28 @@ private[tastyquery] object Erasure:
   end preErase
 
   private def finishErase(typeRef: ErasedTypeRef)(using Context): ErasedTypeRef =
-    def valueClass(cls: ClassSymbol): ErasedTypeRef =
-      val ctor = cls.findNonOverloadedDecl(nme.Constructor)
-      val List(Left(List(paramRef))) = ctor.paramRefss.dropWhile(_.isRight): @unchecked
-      val paramType = paramRef.underlying
-      erase(paramType, ctor.sourceLanguage)
-
     typeRef match
       case ClassRef(cls) =>
-        if cls.isDerivedValueClass then valueClass(cls)
+        if cls.isDerivedValueClass then finishEraseValueClass(cls)
         else cls.erasure
       case ArrayTypeRef(ClassRef(cls), dimensions) =>
         ArrayTypeRef(cls.erasure, dimensions)
   end finishErase
+
+  private def finishEraseValueClass(cls: ClassSymbol)(using Context): ErasedTypeRef =
+    val ctor = cls.findNonOverloadedDecl(nme.Constructor)
+
+    def illegalConstructorType(): Nothing =
+      throw InvalidProgramStructureException(s"Illegal value class constructor type ${ctor.declaredType.showBasic}")
+
+    def ctorParamType(tpe: TypeOrMethodic): Type = tpe match
+      case tpe: MethodType if tpe.paramTypes.sizeIs == 1 => tpe.paramTypes.head
+      case tpe: MethodType                               => illegalConstructorType()
+      case tpe: PolyType                                 => ctorParamType(tpe.resultType)
+      case tpe: Type                                     => illegalConstructorType()
+
+    erase(ctorParamType(ctor.declaredType), ctor.sourceLanguage)
+  end finishEraseValueClass
 
   /** The erased least upper bound of two erased types is computed as follows.
     *
