@@ -157,7 +157,6 @@ object Contexts {
         .getOrElse {
           throw MemberNotFoundException(owner, name)
         }
-        .asType
     end findStaticType
 
     def findStaticTerm(fullyQualifiedName: String): TermSymbol =
@@ -185,10 +184,9 @@ object Contexts {
             owner.getDecl(name) match
               case Some(pkg: PackageSymbol) =>
                 loop(pkg, rest)
-              case Some(moduleSymbol: TermSymbol) if moduleSymbol.isModuleVal =>
-                loop(moduleSymbol.moduleClass.get, rest)
-              case Some(sym) =>
-                throw InvalidProgramStructureException(s"$sym is not a static owner")
+              case Some(sym: TermSymbol) =>
+                if sym.isModuleVal then loop(sym.moduleClass.get, rest)
+                else throw InvalidProgramStructureException(s"$sym is not a static owner")
               case None =>
                 throw MemberNotFoundException(owner, name)
       end loop

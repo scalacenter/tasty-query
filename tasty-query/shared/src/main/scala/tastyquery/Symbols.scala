@@ -876,6 +876,16 @@ object Symbols {
 
     def getDecl(name: Name)(using Context): Option[DeclType]
 
+    def getDecl(name: TypeName)(using Context): Option[TypeSymbol]
+
+    def getDecl(name: TermName)(using Context): Option[TermSymbol | PackageSymbol]
+
+    def findDecl(name: Name)(using Context): DeclType
+
+    def findDecl(name: TypeName)(using Context): TypeSymbol
+
+    def findDecl(name: TermName)(using Context): TermSymbol | PackageSymbol
+
     /** Note: this will force all trees in a package */
     def declarations(using Context): List[DeclType]
   }
@@ -1700,6 +1710,27 @@ object Symbols {
       case _: SignedName =>
         None
     end getDecl
+
+    final def getDecl(name: TypeName)(using Context): Option[TypeSymbol] =
+      getDecl(name: Name).map(_.asType)
+
+    final def getDecl(name: TermName)(using Context): Option[TermSymbol | PackageSymbol] =
+      getDecl(name: Name).map(_.asInstanceOf[TermSymbol | PackageSymbol])
+
+    final def findDecl(name: Name)(using Context): Symbol =
+      getDecl(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
+    final def findDecl(name: TypeName)(using Context): TypeSymbol =
+      getDecl(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
+    final def findDecl(name: TermName)(using Context): TermSymbol | PackageSymbol =
+      getDecl(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
 
     final def declarations(using Context): List[Symbol] =
       ensureRootsInitialized()
