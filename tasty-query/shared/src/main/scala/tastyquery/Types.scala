@@ -859,9 +859,9 @@ object Types {
   sealed abstract class NamedType extends TypeProxy {
     protected type AnyDesignatorType = TermOrTypeSymbol | Name | LookupIn | LookupTypeIn | Scala2ExternalSymRef
 
-    type ThisName <: Name
-    type ThisSymbolType <: TermOrTypeSymbol
-    type ThisNamedType >: this.type <: NamedType
+    protected type ThisName <: Name
+    private[tastyquery] type ThisSymbolType <: TermOrTypeSymbol
+    private[tastyquery] type ThisNamedType >: this.type <: NamedType
     protected type ThisDesignatorType >: ThisSymbolType <: AnyDesignatorType
 
     val prefix: Prefix
@@ -900,7 +900,9 @@ object Types {
     /** If designator is a name, this name. Otherwise, the original name
       * of the designator symbol.
       */
-    final def name: ThisName = {
+    def name: Name
+
+    protected final def nameImpl: ThisName = {
       val local = myName
       if local == null then
         val computed = computeName
@@ -917,7 +919,7 @@ object Types {
       case designator: Scala2ExternalSymRef => designator.name
     }).asInstanceOf[ThisName]
 
-    def optSymbol(using Context): Option[ThisSymbolType]
+    def optSymbol(using Context): Option[TermOrTypeSymbol]
 
     /** A selection of the same kind, but with potentially a different prefix.
       * The following normalization is performed for type selections T#A:
@@ -991,9 +993,9 @@ object Types {
       with SingletonType
       with TermReferenceType {
 
-    type ThisName = TermName
-    type ThisSymbolType = TermSymbol
-    type ThisNamedType = TermRef
+    protected type ThisName = TermName
+    private[tastyquery] type ThisSymbolType = TermSymbol
+    private[tastyquery] type ThisNamedType = TermRef
     protected type ThisDesignatorType = TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
 
     // Cache fields
@@ -1011,6 +1013,8 @@ object Types {
 
     override def toString(): String =
       s"TermRef($prefix, $myDesignator)"
+
+    final def name: TermName = nameImpl
 
     final def symbol(using Context): TermSymbol =
       ensureResolved()
@@ -1205,10 +1209,10 @@ object Types {
     private var myDesignator: TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
   ) extends NamedType {
 
-    type ThisName = TypeName
-    type ThisSymbolType = TypeSymbol
-    type ThisNamedType = TypeRef
-    type ThisDesignatorType = TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
+    protected type ThisName = TypeName
+    private[tastyquery] type ThisSymbolType = TypeSymbol
+    private[tastyquery] type ThisNamedType = TypeRef
+    protected type ThisDesignatorType = TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
 
     // Cache fields
     private var myOptSymbol: Option[TypeSymbol] | Null = null
@@ -1226,6 +1230,8 @@ object Types {
       if optSymbol.isDefined then myDesignator = optSymbol.get
       myBounds = resolved.bounds
     end this
+
+    final def name: TypeName = nameImpl
 
     protected def designator: ThisDesignatorType = myDesignator
 
