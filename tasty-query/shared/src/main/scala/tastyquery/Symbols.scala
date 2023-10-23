@@ -446,7 +446,6 @@ object Symbols {
     private var mySignature: Signature | Null = null
     private var myTargetName: UnsignedTermName | Null = null
     private var mySignedName: TermName | Null = null
-    private var myParamRefss: List[Either[List[TermParamRef], List[TypeParamRef]]] | Null = null
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
@@ -611,19 +610,6 @@ object Symbols {
           candidate.declaredTypeAsSeenFrom(site).matches(targetType)
         }
     end matchingDecl
-
-    final def paramRefss(using Context): List[Either[List[TermParamRef], List[TypeParamRef]]] =
-      def paramssOfType(tp: TypeOrMethodic): List[Either[List[TermParamRef], List[TypeParamRef]]] = tp match
-        case mt: PolyType   => Right(mt.paramRefs) :: paramssOfType(mt.resultType)
-        case mt: MethodType => Left(mt.paramRefs) :: paramssOfType(mt.resultType)
-        case _              => Nil
-      val local = myParamRefss
-      if local != null then local
-      else
-        val refs = paramssOfType(declaredType)
-        myParamRefss = refs
-        refs
-    end paramRefss
 
     /** Is this term symbol a stable member?
       *

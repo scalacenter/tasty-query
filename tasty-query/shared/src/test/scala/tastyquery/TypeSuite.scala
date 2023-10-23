@@ -281,10 +281,6 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val NumClass = RecApplyClass.findDecl(tname"Num")
     val BoolClass = RecApplyClass.findDecl(tname"Bool")
 
-    val evalParamRefss = evalSym.paramRefss
-
-    val List(Right(List(TRef @ _)), Left(List(eRef))) = evalParamRefss: @unchecked
-
     val Some(evalTree: DefDef) = evalSym.tree: @unchecked
 
     var recCallCount = 0
