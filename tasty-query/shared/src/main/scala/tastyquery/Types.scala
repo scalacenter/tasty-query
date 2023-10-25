@@ -1551,11 +1551,6 @@ object Types {
     val paramRefs: List[ParamRefType] =
       List.tabulate(paramNames.size)(newParamRef(_): @unchecked)
 
-    final def lookupRef(name: ThisName): Option[ParamRefType] =
-      paramNames.indexOf(name) match
-        case -1    => None
-        case index => Some(paramRefs(index))
-
     def companion: LambdaTypeCompanion[ThisName, PInfo, ResultType, This]
 
     /** The type `[params := this.paramRefs] tp`, where `params` can be
@@ -1851,8 +1846,6 @@ object Types {
     def paramRefs: List[ParamRef]
 
   sealed trait TypeBinders extends ParamRefBinders:
-    def paramRefs: List[TypeParamRef]
-    def lookupRef(name: TypeName): Option[Type]
     def paramNames: List[TypeName]
     def paramTypeBounds: List[TypeBounds]
   end TypeBinders
@@ -2167,11 +2160,6 @@ object Types {
     def result: Type =
       if !initialized then throw CyclicReferenceException(s"match [$paramNames]=>???")
       myResult.nn
-
-    final def lookupRef(name: TypeName): Option[TypeParamRef] =
-      paramNames.indexOf(name) match
-        case -1    => None
-        case index => Some(paramRefs(index))
 
     /** The type `[params := this.paramRefs] tp`. */
     private def integrate(params: List[Symbol], tp: Type): Type =

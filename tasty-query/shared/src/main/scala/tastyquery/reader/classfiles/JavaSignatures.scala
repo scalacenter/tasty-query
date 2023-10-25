@@ -19,7 +19,7 @@ import ClassfileParser.{InnerClasses, Resolver}
 
 private[classfiles] object JavaSignatures:
 
-  private type JavaSignature = Null | Binders | Map[TypeName, ClassTypeParamSymbol] | mutable.ListBuffer[TypeName]
+  private type JavaSignature = Null | PolyType | Map[TypeName, ClassTypeParamSymbol] | mutable.ListBuffer[TypeName]
 
   @throws[ClassfileFormatException]
   def parseSignature(member: Symbol { val owner: Symbol }, signature: String, allRegisteredSymbols: Growable[Symbol])(
@@ -52,10 +52,10 @@ private[classfiles] object JavaSignatures:
               map.asInstanceOf[Map[TypeName, ClassTypeParamSymbol]].get(tname) match
                 case Some(sym) => Some(TypeRef(sym.owner.thisType, sym))
                 case None      => lookupTParam(member.owner)
-            case pt: TypeBinders =>
-              pt.lookupRef(tname) match
-                case ref @ Some(_) => ref
-                case _             => lookupTParam(member.owner)
+            case pt: PolyType =>
+              pt.paramNames.indexOf(tname) match
+                case -1    => lookupTParam(member.owner)
+                case index => Some(pt.paramRefs(index))
             case _ => someEmptyType // we are capturing type parameter names, we will throw away the result here.
 
       def withAddedParam(tname: TypeName): Boolean = env match
