@@ -45,18 +45,19 @@ private[classfiles] object JavaSignatures:
               case Some(ref) => Some(TypeRef(ref.owner.thisType, ref))
               case _         => lookupTParam(scope.asClass.owner)
           else cookFailure(tname, "unexpected non-class scope")
-        if env == null then lookupTParam(member.owner)
-        else
-          env match
-            case map: Map[t, s] =>
-              map.asInstanceOf[Map[TypeName, ClassTypeParamSymbol]].get(tname) match
-                case Some(sym) => Some(TypeRef(sym.owner.thisType, sym))
-                case None      => lookupTParam(member.owner)
-            case pt: PolyType =>
-              pt.paramNames.indexOf(tname) match
-                case -1    => lookupTParam(member.owner)
-                case index => Some(pt.paramRefs(index))
-            case _ => someEmptyType // we are capturing type parameter names, we will throw away the result here.
+        env match
+          case null =>
+            lookupTParam(member.owner)
+          case map: Map[t, s] =>
+            map.asInstanceOf[Map[TypeName, ClassTypeParamSymbol]].get(tname) match
+              case Some(sym) => Some(TypeRef(sym.owner.thisType, sym))
+              case None      => lookupTParam(member.owner)
+          case pt: PolyType =>
+            pt.paramNames.indexOf(tname) match
+              case -1    => lookupTParam(member.owner)
+              case index => Some(pt.paramRefs(index))
+          case env: mutable.ListBuffer[?] =>
+            someEmptyType // we are capturing type parameter names, we will throw away the result here.
 
       def withAddedParam(tname: TypeName): Boolean = env match
         case env: mutable.ListBuffer[t] =>
