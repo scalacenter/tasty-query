@@ -19,7 +19,9 @@ import ClassfileParser.{InnerClasses, Resolver}
 
 private[classfiles] object JavaSignatures:
 
-  private type JavaSignature = Null | PolyType | Map[TypeName, ClassTypeParamSymbol] | mutable.ListBuffer[TypeName]
+  private object IgnoreTParamRefs
+
+  private type JavaSignature = Null | PolyType | Map[TypeName, ClassTypeParamSymbol] | IgnoreTParamRefs.type
 
   @throws[ClassfileFormatException]
   def parseSignature(member: Symbol { val owner: Symbol }, signature: String, allRegisteredSymbols: Growable[Symbol])(
@@ -33,10 +35,8 @@ private[classfiles] object JavaSignatures:
     val isMethod = member.isTerm && member.asTerm.isMethod
 
     lazy val someEmptyType = Some(rctx.AnyType)
-    lazy val emptyTypeBounds = rctx.NothingAnyBounds
 
     extension (env: JavaSignature)
-
       def tparamRef(tname: TypeName): Some[Type] =
         def lookupTParam(scope: Symbol): Some[Type] =
           if scope.isPackage then cookFailure(tname, "no enclosing scope declares it")
@@ -56,15 +56,8 @@ private[classfiles] object JavaSignatures:
             pt.paramNames.indexOf(tname) match
               case -1    => lookupTParam(member.owner)
               case index => Some(pt.paramRefs(index))
-          case env: mutable.ListBuffer[?] =>
+          case IgnoreTParamRefs =>
             someEmptyType // we are capturing type parameter names, we will throw away the result here.
-
-      def withAddedParam(tname: TypeName): Boolean = env match
-        case env: mutable.ListBuffer[t] =>
-          env.asInstanceOf[mutable.ListBuffer[TypeName]].addOne(tname)
-          true
-        case _ => false
-
     end extension
 
     def lookahead[T](op: => T): T =
@@ -198,24 +191,25 @@ private[classfiles] object JavaSignatures:
       readUntil('>', typeArgument(env))
 
     def typeParameter(env: JavaSignature): TypeBounds =
-      val tname = identifier().toTypeName
+      identifier() // skip the name
       val classBound =
         expect(':')
         referenceTypeSignature(env).toList
       val interfaceBounds = readWhile(':', referenceType(env))
-      if env.withAddedParam(tname) then emptyTypeBounds // shortcut as we will throw away the bounds
-      else
-        val allBounds = classBound ::: interfaceBounds
-        val bound = if allBounds.isEmpty then rctx.AnyType else allBounds.reduceLeft(AndType(_, _))
-        AbstractTypeBounds(rctx.NothingType, bound)
+      val allBounds = classBound ::: interfaceBounds
+      val bound = if allBounds.isEmpty then rctx.AnyType else allBounds.reduceLeft(AndType(_, _))
+      AbstractTypeBounds(rctx.NothingType, bound)
 
     def typeParamsRest(env: JavaSignature): List[TypeBounds] =
       readUntil('>', typeParameter(env))
 
+    def typeParameterName(): TypeName =
+      val tname = identifier().toTypeName
+      readWhile(':', referenceTypeSignature(IgnoreTParamRefs)) // skip the bounds
+      tname
+
     def lookaheadTypeParamNames: List[TypeName] =
-      val tparamNameBuf = mutable.ListBuffer[TypeName]()
-      val _ = lookahead(typeParamsRest(tparamNameBuf)) // lookahead to capture type param names
-      tparamNameBuf.toList
+      lookahead(readUntil('>', typeParameterName()))
 
     def arrayType(env: JavaSignature): Option[Type] =
       if consume('[') then
