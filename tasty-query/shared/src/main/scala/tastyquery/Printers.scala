@@ -49,7 +49,7 @@ private[tastyquery] object Printers:
           print("]")
         print(".")
       case tpe: RecThis =>
-        print(tpe.binders.debugID)
+        print(tpe.binder.debugID)
         print(".")
       case prefix: Type =>
         print(prefix)

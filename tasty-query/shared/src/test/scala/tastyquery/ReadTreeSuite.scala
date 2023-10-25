@@ -995,7 +995,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               )
             ),
             _
-          ) if Seq(tref1, tref2).forall(tref => (tref.binders eq polyType) && tref.paramNum == 0) =>
+          ) if Seq(tref1, tref2).forall(tref => (tref.binder eq polyType) && tref.paramNum == 0) =>
     }
     assert(containsSubtree(polyIDMatch)(clue(tree)))
 

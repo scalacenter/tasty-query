@@ -581,10 +581,6 @@ object Types {
     private[tastyquery] final def applyIfParameterized(args: List[TypeOrWildcard])(using Context): Type =
       if (args.nonEmpty /*typeParams.nonEmpty*/ ) appliedTo(args) else this
 
-    /** Substitute bound types by some other types */
-    private[tastyquery] final def substParams(from: Binders, to: List[Type])(using Context): Type =
-      Substituters.substParams(this, from, to)
-
     /** Substitute class type params by some other types. */
     private[tastyquery] final def substClassTypeParams(from: List[ClassTypeParamSymbol], to: List[TypeOrWildcard])(
       using Context
@@ -1534,7 +1530,7 @@ object Types {
     override def toString(): String = s"ByNameType($resultType)"
   }
 
-  sealed trait LambdaType extends TypeOrMethodic with ParamRefBinders {
+  sealed trait LambdaType extends TypeOrMethodic with ParamRefBinder {
     type ThisName <: Name
     type PInfo <: Type | TypeBounds
     type ResultType <: TypeOrMethodic
@@ -1621,7 +1617,7 @@ object Types {
       paramTypes.map(Substituters.substParams(_, this, args))
   end TermLambdaType
 
-  sealed trait TypeLambdaType extends LambdaType with TypeBinders:
+  sealed trait TypeLambdaType extends LambdaType with TypeParamRefBinder:
     type ThisName = TypeName
     type PInfo = TypeBounds
     type This >: this.type <: TypeLambdaType & ResultType
@@ -1684,7 +1680,7 @@ object Types {
         def transform(tp: TypeMappable): TypeMappable = tp match
           case _ if isDependent =>
             tp
-          case tp: TermParamRef if tp.binders eq MethodType.this =>
+          case tp: TermParamRef if tp.binder eq MethodType.this =>
             isDependent = true
             tp
           case _ =>
@@ -1782,7 +1778,7 @@ object Types {
     @constructorOnly paramTypeBoundsExp: PolyType => List[TypeBounds],
     @constructorOnly resultTypeExp: PolyType => TypeOrMethodic
   ) extends MethodicType
-      with Binders
+      with TypeBinder
       with TypeLambdaType {
     private[tastyquery] type ThisTypeMappableType = PolyType
     type ResultType = TypeOrMethodic
@@ -1839,24 +1835,39 @@ object Types {
         )
   end PolyType
 
-  /** Encapsulates the binders associated with a ParamRef. */
-  sealed trait Binders
+  /** Something that binds inner `BoundType`s to its identity.
+    *
+    * Unlike other `Type`s, the reference identity of a `TypeBinder` is relevant.
+    */
+  sealed trait TypeBinder
 
-  sealed trait ParamRefBinders extends Binders:
+  /** A type binder that binds `ParamRef`s. */
+  sealed trait ParamRefBinder extends TypeBinder:
     def paramRefs: List[ParamRef]
+  end ParamRefBinder
 
-  sealed trait TypeBinders extends ParamRefBinders:
+  /** A type binder that binds `TypeParamRef`s. */
+  sealed trait TypeParamRefBinder extends ParamRefBinder:
+    def paramRefs: List[TypeParamRef]
     def paramNames: List[TypeName]
     def paramTypeBounds: List[TypeBounds]
-  end TypeBinders
+  end TypeParamRefBinder
 
+  /** A type that is bound to the identity of an enclosing `TypeBinder`. */
   sealed trait BoundType extends Type:
-    type BindersType <: Binders
-    def binders: BindersType
-    private[tastyquery] def copyBoundType(newBinders: BindersType): Type
+    type BinderType <: TypeBinder
 
+    def binder: BinderType
+
+    private[tastyquery] def copyBoundType(newBinders: BinderType): Type
+  end BoundType
+
+  /** A `TypeParamRef` or `TermParamRef`. */
   sealed trait ParamRef extends BoundType:
+    type BinderType <: ParamRefBinder
+
     def paramNum: Int
+  end ParamRef
 
   private[tastyquery] final class TypeLambdaParam(val typeLambda: TypeLambda, num: Int) extends TypeConstructorParam:
     def declaredVariance: Variance =
@@ -1928,30 +1939,30 @@ object Types {
       apply(params.map(_.name))(_ => params.map(_.declaredBounds), resultTypeExp)
   end TypeLambda
 
-  final class TypeParamRef(val binders: TypeBinders, val paramNum: Int) extends TypeProxy with ParamRef {
-    type BindersType = TypeBinders
+  final class TypeParamRef(val binder: TypeParamRefBinder, val paramNum: Int) extends TypeProxy with ParamRef {
+    type BinderType = TypeParamRefBinder
 
-    private[tastyquery] def copyBoundType(newBinders: BindersType): Type =
-      newBinders.paramRefs(paramNum)
+    private[tastyquery] def copyBoundType(newBinder: BinderType): Type =
+      newBinder.paramRefs(paramNum)
 
     override def underlying(using Context): Type = bounds.high
 
-    def paramName: TypeName = binders.paramNames(paramNum)
+    def paramName: TypeName = binder.paramNames(paramNum)
 
-    def bounds(using Context): TypeBounds = binders.paramTypeBounds(paramNum)
+    def bounds(using Context): TypeBounds = binder.paramTypeBounds(paramNum)
 
     override def toString: String = paramName.toString
   }
 
-  final class TermParamRef(val binders: TermLambdaType, val paramNum: Int) extends ParamRef with SingletonType {
-    type BindersType = TermLambdaType
+  final class TermParamRef(val binder: TermLambdaType, val paramNum: Int) extends ParamRef with SingletonType {
+    type BinderType = TermLambdaType
 
-    private[tastyquery] def copyBoundType(newBinders: BindersType): Type =
-      newBinders.paramRefs(paramNum)
+    private[tastyquery] def copyBoundType(newBinder: BinderType): Type =
+      newBinder.paramRefs(paramNum)
 
-    def underlying(using Context): Type = binders.paramInfos(paramNum)
+    def underlying(using Context): Type = binder.paramInfos(paramNum)
 
-    final def paramName: TermName = binders.paramNames(paramNum)
+    final def paramName: TermName = binder.paramNames(paramNum)
 
     override def toString(): String = paramName.toString
   }
@@ -2085,7 +2096,7 @@ object Types {
     override def toString(): String = s"TermRefinement($parent, $refinedName, $refinedType)"
   end TermRefinement
 
-  final class RecType private (parentExp: RecType => Type) extends RefinedOrRecType with Binders:
+  final class RecType private (parentExp: RecType => Type) extends RefinedOrRecType with TypeBinder:
     private var initialized = false
 
     /** Reference to this recursive type from within itself. */
@@ -2122,10 +2133,8 @@ object Types {
     end fromRefinedClassDecls
   end RecType
 
-  final class RecThis(binder: RecType) extends BoundType with SingletonType:
-    type BindersType = RecType
-
-    final def binders: BindersType = binder
+  final class RecThis(val binder: RecType) extends BoundType with SingletonType:
+    type BinderType = RecType
 
     final def copyBoundType(newBinder: RecType): Type = newBinder.recThis
 
@@ -2139,7 +2148,7 @@ object Types {
     @constructorOnly paramTypeBoundsExp: MatchTypeCase => List[TypeBounds],
     @constructorOnly patternExp: MatchTypeCase => Type,
     @constructorOnly resultTypeExp: MatchTypeCase => Type
-  ) extends TypeBinders:
+  ) extends TypeParamRefBinder:
     val paramRefs: List[TypeParamRef] =
       List.tabulate(paramNames.size)(i => TypeParamRef(this: @unchecked, i))
 
