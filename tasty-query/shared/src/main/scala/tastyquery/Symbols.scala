@@ -940,7 +940,6 @@ object Symbols {
     private[tastyquery] def isArray: Boolean = specialKind == SpecialKind.Array
     private[tastyquery] def isNull: Boolean = specialKind == SpecialKind.Null
     private[tastyquery] def isSingleton: Boolean = specialKind == SpecialKind.Singleton
-    private[tastyquery] def isRepeatedParamMagic: Boolean = specialKind == SpecialKind.RepeatedParamMagic
     private[tastyquery] def isRefinementClass: Boolean = specialKind == SpecialKind.Refinement
 
     /** Get the companion class of this class, if it exists:
@@ -1113,8 +1112,6 @@ object Symbols {
           defn.ObjectClass.erasure
         case SpecialKind.Tuple | SpecialKind.NonEmptyTuple | SpecialKind.TupleCons =>
           defn.ProductClass.erasure
-        case SpecialKind.RepeatedParamMagic =>
-          defn.SeqClass.erasure
         case SpecialKind.ContextFunctionN =>
           val correspondingFunctionNName = typeName(name.asInstanceOf[SimpleTypeName].name.stripPrefix("Context"))
           defn.scalaPackage.findDecl(correspondingFunctionNName).asClass.erasure
@@ -1607,8 +1604,7 @@ object Symbols {
       inline val ContextFunctionN = 17
       inline val TupleN = 18
       inline val JavaEnum = 19
-      inline val RepeatedParamMagic = 20
-      inline val Refinement = 21
+      inline val Refinement = 20
     end SpecialKind
 
     private def computeSpecialKind(name: ClassTypeName, owner: Symbol): SpecialKind =
@@ -1638,8 +1634,6 @@ object Symbols {
                     case tpnme.Tuple         => SpecialKind.Tuple
                     case tpnme.NonEmptyTuple => SpecialKind.NonEmptyTuple
                     case tpnme.TupleCons     => SpecialKind.TupleCons
-
-                    case tpnme.RepeatedParamClassMagic => SpecialKind.RepeatedParamMagic
 
                     case _ =>
                       if name.name.startsWith("ContextFunction") then SpecialKind.ContextFunctionN

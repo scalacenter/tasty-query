@@ -89,6 +89,11 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         case tpe: ByNameType => arg(tpe.resultType)
         case _               => false
 
+    def isRepeated(elemType: Type => Boolean)(using Context): Boolean =
+      tpe match
+        case tpe: RepeatedType => elemType(tpe.elemType)
+        case _                 => false
+
     def isArrayOf(arg: TypeOrWildcard => Boolean)(using Context): Boolean =
       isApplied(_.isTypeRefOf(defn.ArrayClass), Seq(arg))
 
@@ -1398,7 +1403,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     end assertAnnotatedSeqOfInt
 
     def assertRepeatedOfInt(tpe: TypeMappable): Unit =
-      assert(clue(tpe).isApplied(_.isRef(defn.RepeatedParamClass), List(_.isRef(defn.IntClass))))
+      assert(clue(tpe).isRepeated(_.isRef(defn.IntClass)))
 
     locally {
       val dd = getDefOf("takesVarargs")

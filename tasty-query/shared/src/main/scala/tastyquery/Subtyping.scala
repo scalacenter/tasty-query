@@ -243,6 +243,11 @@ private[tastyquery] object Subtyping:
         case tp1: ByNameType => isSubType(tp1.resultType, tp2.resultType)
         case _               => level4(tp1, tp2)
 
+    case tp2: RepeatedType =>
+      tp1 match
+        case tp1: RepeatedType => isSubType(tp1.elemType, tp2.elemType)
+        case _                 => level4(tp1, tp2)
+
     case tp2: MatchType =>
       tp2.reduced match
         case Some(reduced) => isSubType(tp1, reduced)
@@ -476,6 +481,9 @@ private[tastyquery] object Subtyping:
     case tp1: AndType =>
       // TODO Try and simplify first
       isSubType(tp1.first, tp2) || isSubType(tp1.second, tp2)
+
+    case tp1: RepeatedType =>
+      isSubType(tp1.underlying, tp2)
 
     case tp1: MatchType =>
       def isSubMatchType: Boolean = tp2 match

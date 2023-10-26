@@ -539,7 +539,7 @@ object Types {
           self.superType.typeParams
         case self: AnnotatedType =>
           self.superType.typeParams
-        case _: SingletonType | _: RefinedType | _: ByNameType | _: MatchType | _: RecType =>
+        case _: SingletonType | _: RefinedType | _: ByNameType | _: RepeatedType | _: MatchType | _: RecType =>
           // These types are always proper types
           Nil
         case _: NothingType | _: AnyKindType =>
@@ -1530,6 +1530,25 @@ object Types {
     override def toString(): String = s"ByNameType($resultType)"
   }
 
+  /** The type of a repeated parameter of the form `T*`. */
+  final class RepeatedType(val elemType: Type) extends TypeProxy:
+    private var myUnderlying: Type | Null = null
+
+    override def underlying(using Context): Type =
+      val local = myUnderlying
+      if local != null then local
+      else
+        val computed = defn.SeqTypeOf(elemType)
+        myUnderlying = computed
+        computed
+    end underlying
+
+    private[tastyquery] def derivedRepeatedType(elemType: Type): RepeatedType =
+      if elemType eq this.elemType then this else RepeatedType(elemType)
+
+    override def toString(): String = s"RepeatedType($elemType)"
+  end RepeatedType
+
   sealed trait LambdaType extends TypeOrMethodic with ParamRefBinder {
     type ThisName <: Name
     type PInfo <: Type | TypeBounds
@@ -1722,16 +1741,10 @@ object Types {
   object MethodType extends MethodTypeCompanion("MethodType"):
     /** Produce method type from parameter symbols, with special mappings for repeated
       *  and inline parameters:
-      *   - replace @repeated annotations on Seq or Array types by <repeated> types
+      *   - replace @repeated annotations on Seq or Array types by RepeatedType's
       *   - add @inlineParam to inline parameters
       */
     private[tastyquery] def fromSymbols(params: List[TermSymbol], resultType: TypeOrMethodic): MethodType = {
-      def makeRepeatedTypeOf(scalaAnnotationInternalPackageRef: PackageRef, tpe: TypeOrWildcard): AppliedType =
-        // Hack to find the PackageSymbol for `scala` without requiring a `Context`
-        val scalaPackage = scalaAnnotationInternalPackageRef.symbol.owner.nn.owner.nn
-        AppliedType(TypeRef(scalaPackage.packageRef, tpnme.RepeatedParamClassMagic), List(tpe))
-      end makeRepeatedTypeOf
-
       def annotatedToRepeated(tpe: Type): Type = tpe match
         case tpe: AnnotatedType =>
           tpe.annotation.syntacticExtractInternalRepeatedAnnot match
@@ -1739,7 +1752,7 @@ object Types {
               tpe.typ match
                 case applied: AppliedType if applied.args.sizeIs == 1 =>
                   // We're going to assume that `tycon` is indeed `Seq`, here, because we cannot afford to resolve it
-                  makeRepeatedTypeOf(scalaAnnotationInternalPackageRef, applied.args.head)
+                  RepeatedType(applied.args.head.highIfWildcard)
                 case _ =>
                   throw TastyFormatException(s"in $params, $tpe is declared repeated but is not a Seq type")
             case None =>

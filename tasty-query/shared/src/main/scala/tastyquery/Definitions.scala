@@ -60,9 +60,6 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val SeqTypeUnapplied: TypeRef = TypeRef(scalaCollectionImmutablePackage.packageRef, typeName("Seq"))
   def SeqTypeOf(tpe: TypeOrWildcard): AppliedType = AppliedType(SeqTypeUnapplied, List(tpe))
 
-  val RepeatedTypeUnapplied: TypeRef = TypeRef(scalaPackage.packageRef, tpnme.RepeatedParamClassMagic)
-  def RepeatedTypeOf(tpe: TypeOrWildcard): AppliedType = AppliedType(RepeatedTypeUnapplied, List(tpe))
-
   val IntType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Int"))
   val LongType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Long"))
   val FloatType: TypeRef = TypeRef(scalaPackage.packageRef, typeName("Float"))
@@ -297,30 +294,6 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     createSpecialMethod(cls, termName("eq"), eqNeMethodType, Inline | Final | Extension)
     createSpecialMethod(cls, termName("ne"), eqNeMethodType, Inline | Final | Extension)
   end createPredefMagicMethods
-
-  private def createSpecialPolyClass(
-    name: SimpleTypeName,
-    paramFlags: FlagSet,
-    parentConstrs: Type => List[Type]
-  ): ClassSymbol =
-    val cls = ClassSymbol.create(name, scalaPackage)
-
-    val tparam = ClassTypeParamSymbol.create(typeName("T"), cls)
-    tparam.withFlags(ClassTypeParam | paramFlags, None)
-    tparam.setDeclaredBounds(NothingAnyBounds)
-    tparam.setAnnotations(Nil)
-    tparam.checkCompleted()
-
-    cls.withTypeParams(tparam :: Nil)
-    cls.withFlags(EmptyFlagSet | Artifact, None)
-
-    val parents = parentConstrs(TypeRef(cls.thisType, tparam))
-    cls.withParentsDirect(parents)
-    cls
-  end createSpecialPolyClass
-
-  val RepeatedParamClass: ClassSymbol =
-    createSpecialPolyClass(tpnme.RepeatedParamClassMagic, Covariant, tp => List(ObjectType, SeqTypeOf(tp)))
 
   /** Creates one of the `ContextFunctionNClass` classes.
     *

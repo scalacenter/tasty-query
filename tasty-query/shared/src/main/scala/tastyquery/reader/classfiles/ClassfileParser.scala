@@ -299,7 +299,7 @@ private[reader] object ClassfileParser {
       case tpe: MethodType if tpe.paramNames.sizeIs >= 1 =>
         val patchedLast = tpe.paramTypes.last match
           case ArrayTypeExtractor(lastElemType) =>
-            rctx.RepeatedTypeOf(lastElemType)
+            RepeatedType(lastElemType.requireType)
           case _ =>
             throw ClassfileFormatException(s"Found ACC_VARARGS on $sym but its last param type was not an array: $tpe")
         tpe.derivedLambdaType(tpe.paramNames, tpe.paramTypes.init :+ patchedLast, tpe.resultType)
