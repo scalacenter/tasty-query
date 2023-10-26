@@ -426,15 +426,11 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   private[tastyquery] lazy val internalRepeatedAnnotClass = scalaAnnotationInternalPackage.optionalClass("Repeated")
 
-  def isPrimitiveValueClass(sym: ClassSymbol): Boolean =
-    sym == IntClass || sym == LongClass || sym == FloatClass || sym == DoubleClass ||
-      sym == BooleanClass || sym == ByteClass || sym == ShortClass || sym == CharClass ||
-      sym == UnitClass
+  private[tastyquery] lazy val PrimitiveValueClasses: Set[ClassSymbol] =
+    Set(UnitClass, BooleanClass, CharClass, ByteClass, ShortClass, IntClass, LongClass, FloatClass, DoubleClass)
+  end PrimitiveValueClasses
 
-  private lazy val TupleNClasses = (1 to 22).map(n => scalaPackage.requiredClass(s"Tuple$n")).toSet
-
-  def isTupleNClass(sym: ClassSymbol): Boolean =
-    sym.owner == scalaPackage && TupleNClasses.contains(sym)
+  private[tastyquery] lazy val TupleNClasses = (1 to 22).map(n => scalaPackage.requiredClass(s"Tuple$n")).toSet
 
   private[tastyquery] lazy val PolyFunctionClass = scalaPackage.optionalClass("PolyFunction")
 

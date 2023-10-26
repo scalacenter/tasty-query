@@ -177,7 +177,7 @@ private[tastyquery] object Erasure:
       case (ArrayTypeRef(ClassRef(base1), dims1), ArrayTypeRef(ClassRef(base2), dims2)) =>
         if dims1 != dims2 then erasedObject
         else if base1 == base2 then tp1
-        else if defn.isPrimitiveValueClass(base1) || defn.isPrimitiveValueClass(base2) then erasedObject
+        else if base1.isPrimitiveValueClass || base2.isPrimitiveValueClass then erasedObject
         else ArrayTypeRef(ClassRef(erasedClassRefLub(base1, base2)), dims1)
       case (ClassRef(cls1), tp2: ArrayTypeRef) =>
         if cls1 == defn.ErasedNothingClass || cls1 == defn.NullClass then tp2
@@ -286,8 +286,8 @@ private[tastyquery] object Erasure:
         1
 
       case (ClassRef(cls1), ClassRef(cls2)) =>
-        val isPrimitive1 = defn.isPrimitiveValueClass(cls1)
-        val isPrimitive2 = defn.isPrimitiveValueClass(cls2)
+        val isPrimitive1 = cls1.isPrimitiveValueClass
+        val isPrimitive2 = cls2.isPrimitiveValueClass
         if isPrimitive1 && isPrimitive2 then compareClasses(cls1, cls2)
         else if isPrimitive1 then -1
         else if isPrimitive2 then 1

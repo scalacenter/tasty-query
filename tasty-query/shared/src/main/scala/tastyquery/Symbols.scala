@@ -919,7 +919,13 @@ object Symbols {
       parents.nonEmpty && parents.head.classSymbol.exists(_ == defn.AnyValClass)
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
-      isValueClass && this != defn.AnyValClass && !defn.isPrimitiveValueClass(this)
+      isValueClass && this != defn.AnyValClass && !isPrimitiveValueClass
+
+    def isPrimitiveValueClass(using Context): Boolean =
+      owner == defn.scalaPackage && defn.PrimitiveValueClasses.contains(this)
+
+    def isTupleNClass(using Context): Boolean =
+      owner == defn.scalaPackage && defn.TupleNClasses.contains(this)
 
     private[tastyquery] def isRefinementClass: Boolean =
       name == tpnme.RefinedClassMagic
