@@ -34,7 +34,6 @@ private[reader] final class ReaderContext(underlying: Context):
   def UnitType: TypeRef = underlying.defn.UnitType
 
   def ArrayTypeOf(tpe: TypeOrWildcard): AppliedType = underlying.defn.ArrayTypeOf(tpe)
-  def RepeatedTypeOf(tpe: TypeOrWildcard): AppliedType = underlying.defn.RepeatedTypeOf(tpe)
 
   def GenericTupleTypeOf(elementTypes: List[TypeOrWildcard]): Type = underlying.defn.GenericTupleTypeOf(elementTypes)
 

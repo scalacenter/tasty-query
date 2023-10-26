@@ -356,15 +356,15 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   }
 
   testWithContext("repeated-type") {
-    assertEquiv(defn.RepeatedTypeOf(defn.IntType), defn.RepeatedTypeOf(defn.IntType))
-    assertStrictSubtype(defn.RepeatedTypeOf(defn.IntType), defn.SeqTypeOf(defn.IntType))
+    assertEquiv(RepeatedType(defn.IntType), RepeatedType(defn.IntType))
+    assertStrictSubtype(RepeatedType(defn.IntType), defn.SeqTypeOf(defn.IntType))
 
-    assertNeitherSubtype(defn.RepeatedTypeOf(defn.IntType), defn.RepeatedTypeOf(defn.StringType))
-    assertNeitherSubtype(defn.RepeatedTypeOf(defn.IntType), defn.SeqTypeOf(defn.StringType))
+    assertNeitherSubtype(RepeatedType(defn.IntType), RepeatedType(defn.StringType))
+    assertNeitherSubtype(RepeatedType(defn.IntType), defn.SeqTypeOf(defn.StringType))
 
     // Covariance
-    assertStrictSubtype(defn.RepeatedTypeOf(defn.IntType), defn.RepeatedTypeOf(defn.AnyValType))
-    assertStrictSubtype(defn.RepeatedTypeOf(defn.IntType), defn.SeqTypeOf(defn.AnyValType))
+    assertStrictSubtype(RepeatedType(defn.IntType), RepeatedType(defn.AnyValType))
+    assertStrictSubtype(RepeatedType(defn.IntType), defn.SeqTypeOf(defn.AnyValType))
   }
 
   testWithContext("polymorphic-opaque-type-alias") {

@@ -55,6 +55,8 @@ private[tastyquery] object TypeMaps {
       tp.derivedMatchType(bound, scrutinee, cases)
     protected def derivedByNameType(tp: ByNameType, restpe: Type): Type =
       tp.derivedByNameType(restpe)
+    protected def derivedRepeatedType(tp: RepeatedType, elemType: Type): Type =
+      tp.derivedRepeatedType(elemType)
     protected def derivedLambdaType(tp: LambdaType, formals: List[tp.PInfo], restpe: tp.ResultType): tp.This =
       tp.derivedLambdaType(tp.paramNames, formals, restpe)
     protected def derivedSkolemType(tp: SkolemType, tpe: Type): SkolemType =
@@ -123,6 +125,9 @@ private[tastyquery] object TypeMaps {
 
         case tp: ByNameType =>
           derivedByNameType(tp, this(tp.resultType))
+
+        case tp: RepeatedType =>
+          derivedRepeatedType(tp, this(tp.elemType))
 
         case tp: AnnotatedType =>
           derivedAnnotatedType(tp, this(tp.typ), tp.annotation) // tp.annotation.mapWith(this)

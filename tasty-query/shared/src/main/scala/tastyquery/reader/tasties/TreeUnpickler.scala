@@ -1256,7 +1256,16 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       val end = reader.readEnd()
       val tycon = readTrueType()
-      AppliedType(tycon, reader.until(end)(readTypeOrWildcard()))
+      val args = reader.until(end)(readTypeOrWildcard())
+      tycon match
+        case tycon: TypeRef if tycon.name == tpnme.RepeatedParamClassMagic && args.sizeIs == 1 =>
+          tycon.prefix match
+            case prefix: PackageRef if prefix.symbol.isScalaPackage =>
+              RepeatedType(args.head.highIfWildcard)
+            case _ =>
+              AppliedType(tycon, args)
+        case _ =>
+          AppliedType(tycon, args)
     case THIS =>
       reader.readByte()
       readTypeMappable() match

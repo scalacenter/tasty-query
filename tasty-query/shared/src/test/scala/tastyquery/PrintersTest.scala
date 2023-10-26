@@ -74,6 +74,7 @@ class PrintersTest extends UnrestrictedUnpicklingSuite:
 
     testShowBasic(defn.SeqTypeOf(defn.IntType), "scala.collection.immutable.Seq[scala.Int]")
     testShowBasic(ByNameType(defn.IntType), "=> scala.Int")
+    testShowBasic(RepeatedType(defn.IntType), "scala.Int*")
 
     testShowBasic(
       TypeLambda(List(typeName("A"), typeName("B")))(

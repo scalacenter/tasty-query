@@ -85,6 +85,9 @@ private[tastyquery] object Printers:
       case tpe: ByNameType =>
         print("=> ")
         print(tpe.resultType)
+      case tpe: RepeatedType =>
+        print(tpe.elemType)
+        print("*")
       case tpe: TypeLambda =>
         print("([")
         print(tpe.typeLambdaParams.head)

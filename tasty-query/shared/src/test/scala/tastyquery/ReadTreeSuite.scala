@@ -125,6 +125,9 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     object ByNameType:
       def unapply(tpe: Types.ByNameType): Some[Type] = Some(tpe.resultType)
 
+    object RepeatedType:
+      def unapply(tpe: Types.RepeatedType): Some[Type] = Some(tpe.elemType)
+
     object OrType:
       def unapply(tpe: Types.OrType): (Type, Type) = (tpe.first, tpe.second)
 
@@ -550,12 +553,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                   List(TypeRefInternal(_, SimpleTypeName("Any")))
                 )
               ),
-              TypeWrapper(
-                ty.AppliedType(
-                  TypeRefInternal(_, tpnme.RepeatedParamClassMagic),
-                  List(TypeRefInternal(_, SimpleTypeName("Any")))
-                )
-              )
+              TypeWrapper(ty.RepeatedType(TypeRefInternal(_, SimpleTypeName("Any"))))
             ),
             _
           ) =>
@@ -713,12 +711,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               Literal(c1) :: Literal(c2) :: Literal(c3) :: Nil,
               TypeWrapper(TypeRefInternal(ScalaPackageRef(), SimpleTypeName("Int")))
             ),
-            TypeWrapper(
-              ty.AppliedType(
-                TypeRefInternal(ScalaPackageRef(), SimpleTypeName("<repeated>")),
-                TypeRefInternal(ScalaPackageRef(), SimpleTypeName("Int")) :: Nil
-              )
-            )
+            TypeWrapper(ty.RepeatedType(TypeRefInternal(ScalaPackageRef(), SimpleTypeName("Int"))))
           ) =>
     }
     assert(containsSubtree(typedRepeated)(clue(tree)))
@@ -1684,12 +1677,6 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
           false
     end RepeatedAnnot
 
-    object RepeatedTypeRef:
-      def unapply(tree: TypeRef): Boolean = tree match
-        case TypeRefInternal(ScalaPackageRef(), tpnme.RepeatedParamClassMagic) => true
-        case _                                                                 => false
-    end RepeatedTypeRef
-
     val takesVarargs: StructureCheck = {
       case DefDef(
             SimpleName("takesVarargs"),
@@ -1738,7 +1725,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             Some(
               Apply(
                 Select(_, SignedName(SimpleName("takesVarargs"), _, _)),
-                List(Typed(SimpleIdent("xs"), TypeWrapper(ty.AppliedType(RepeatedTypeRef(), List(_)))))
+                List(Typed(SimpleIdent("xs"), TypeWrapper(ty.RepeatedType(_))))
               )
             ),
             _
@@ -1760,7 +1747,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                       List(SimpleIdent("x"), Literal(Constant(1))),
                       TypeWrapper(TypeRefInternal(_, SimpleTypeName("Int")))
                     ),
-                    TypeWrapper(ty.AppliedType(RepeatedTypeRef(), List(_)))
+                    TypeWrapper(ty.RepeatedType(_))
                   )
                 )
               )
@@ -1789,7 +1776,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             Some(
               Apply(
                 TypeApply(Select(_, SignedName(SimpleName("asList"), _, _)), _),
-                List(Typed(SimpleIdent("xs"), TypeWrapper(ty.AppliedType(RepeatedTypeRef(), List(_)))))
+                List(Typed(SimpleIdent("xs"), TypeWrapper(ty.RepeatedType(_))))
               )
             ),
             _
@@ -1811,7 +1798,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                       List(SimpleIdent("x"), Literal(Constant(1))),
                       TypeWrapper(TypeRefInternal(_, SimpleTypeName("Int")))
                     ),
-                    TypeWrapper(ty.AppliedType(RepeatedTypeRef(), List(_)))
+                    TypeWrapper(ty.RepeatedType(_))
                   )
                 )
               )

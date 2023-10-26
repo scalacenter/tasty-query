@@ -33,9 +33,6 @@ private[tastyquery] object Erasure:
     * `java.lang.Object`.
     */
   private def preErase(tpe: Type, keepUnit: Boolean)(using Context, SourceLanguage): ErasedTypeRef =
-    def hasArrayErasure(cls: ClassSymbol): Boolean =
-      cls.isArray || (cls.isRepeatedParamMagic && summon[SourceLanguage] == SourceLanguage.Java)
-
     def arrayOfBounds(bounds: TypeBounds): ErasedTypeRef =
       preErase(bounds.high, keepUnit = false) match
         case ClassRef(cls) if cls.isAny || cls.isAnyVal =>
@@ -47,7 +44,7 @@ private[tastyquery] object Erasure:
       case tpe: AppliedType =>
         tpe.tycon match
           case TypeRef.OfClass(cls) =>
-            if hasArrayErasure(cls) then
+            if cls.isArray then
               val List(targ) = tpe.args: @unchecked
               arrayOf(targ).arrayOf()
             else ClassRef(cls).arrayOf()
@@ -74,7 +71,7 @@ private[tastyquery] object Erasure:
       case tpe: AppliedType =>
         tpe.tycon match
           case TypeRef.OfClass(cls) =>
-            if hasArrayErasure(cls) then
+            if cls.isArray then
               val List(targ) = tpe.args: @unchecked
               arrayOf(targ)
             else ClassRef(cls)
@@ -121,6 +118,9 @@ private[tastyquery] object Erasure:
         preErase(tpe.parent, keepUnit)
       case _: ByNameType =>
         defn.Function0Class.erasure
+      case tpe: RepeatedType =>
+        if summon[SourceLanguage] == SourceLanguage.Java then arrayOf(tpe.elemType)
+        else defn.SeqClass.erasure
       case _: NothingType =>
         defn.ErasedNothingClass.erasure
       case _: AnyKindType =>
