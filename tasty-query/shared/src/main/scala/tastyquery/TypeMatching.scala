@@ -68,7 +68,7 @@ private[tastyquery] object TypeMatching:
   private def containsCapturesOf(pattern: TypeOrWildcard, caze: MatchTypeCase)(using Context): Boolean =
     pattern match
       case pattern: TypeParamRef =>
-        pattern.binders eq caze
+        pattern.binder eq caze
       case pattern: AppliedType =>
         pattern.args.exists(containsCapturesOf(_, caze))
       case _ =>
@@ -83,7 +83,7 @@ private[tastyquery] object TypeMatching:
     typeParamInstantiations: Array[Type | Null]
   )(using Context): Boolean =
     pattern match
-      case pattern: TypeParamRef if pattern.binders eq caze =>
+      case pattern: TypeParamRef if pattern.binder eq caze =>
         val instantiation = scrutinee match
           case scrutinee: WildcardTypeArg =>
             val bounds = scrutinee.bounds

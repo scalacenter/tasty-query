@@ -7,10 +7,12 @@ import tastyquery.TypeMaps.*
 
 private[tastyquery] object Substituters:
 
-  def substBinders(tp: TypeMappable, from: Binders, to: Binders): tp.ThisTypeMappableType =
+  def substBinders(tp: TypeMappable, from: TypeBinder, to: TypeBinder): tp.ThisTypeMappableType =
     new SubstBindingMap(from, to).apply(tp)
 
-  def substParams(tp: TypeMappable, from: Binders, to: List[TypeOrWildcard])(using Context): tp.ThisTypeMappableType =
+  def substParams(tp: TypeMappable, from: ParamRefBinder, to: List[TypeOrWildcard])(
+    using Context
+  ): tp.ThisTypeMappableType =
     new SubstParamsMap(from, to).apply(tp)
 
   def substRecThis(tp: TypeMappable, from: RecType, to: Type)(using Context): tp.ThisTypeMappableType =
@@ -36,11 +38,11 @@ private[tastyquery] object Substituters:
   def substRefinementThis(tp: TypeMappable, from: ClassSymbol, to: RecThis): tp.ThisTypeMappableType =
     new SubstRefinementThisMap(from, to).apply(tp)
 
-  final class SubstBindingMap(from: Binders, to: Binders) extends TypeMap:
+  final class SubstBindingMap(from: TypeBinder, to: TypeBinder) extends TypeMap:
     protected def transform(tp: TypeMappable): TypeMappable =
       tp match
         case tp: BoundType =>
-          if tp.binders eq from then tp.copyBoundType(to.asInstanceOf[tp.BindersType]) else tp
+          if tp.binder eq from then tp.copyBoundType(to.asInstanceOf[tp.BinderType]) else tp
         case tp: NamedType =>
           tp.prefix match
             case NoPrefix | _: PackageRef => tp
@@ -54,11 +56,12 @@ private[tastyquery] object Substituters:
     end transform
   end SubstBindingMap
 
-  private final class SubstParamsMap(from: Binders, to: List[TypeOrWildcard])(using Context) extends NormalizingTypeMap:
+  private final class SubstParamsMap(from: ParamRefBinder, to: List[TypeOrWildcard])(using Context)
+      extends NormalizingTypeMap:
     protected def transform(tp: TypeMappable): TypeMappable =
       tp match
         case tp: ParamRef =>
-          if tp.binders eq from then to(tp.paramNum) else tp
+          if tp.binder eq from then to(tp.paramNum) else tp
         case tp: NamedType =>
           tp.prefix match
             case NoPrefix | _: PackageRef => tp
@@ -76,7 +79,7 @@ private[tastyquery] object Substituters:
     protected def transform(tp: TypeMappable): TypeMappable =
       tp match
         case tp: RecThis =>
-          if tp.binders eq from then to else tp
+          if tp.binder eq from then to else tp
         case tp: NamedType =>
           tp.prefix match
             case NoPrefix | _: PackageRef => tp

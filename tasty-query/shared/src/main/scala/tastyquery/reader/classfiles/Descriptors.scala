@@ -22,8 +22,7 @@ private[classfiles] object Descriptors:
     Resolver
   ): List[Type] =
     cls.withTypeParams(Nil)
-    // !!! Cannot access `defn.ObjectClass` here, because that's a cycle when initializing defn.ObjectClass itself
-    if cls.owner == rctx.javaLangPackage && cls.name == tpnme.Object then rctx.AnyType :: rctx.MatchableType :: Nil
+    if cls.isObject then rctx.AnyType :: rctx.MatchableType :: Nil
     else
       val superRef = superClass.map(classRef).getOrElse(rctx.ObjectType)
       superRef :: interfaces.map(classRef).toList

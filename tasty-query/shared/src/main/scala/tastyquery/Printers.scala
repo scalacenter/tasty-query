@@ -49,7 +49,7 @@ private[tastyquery] object Printers:
           print("]")
         print(".")
       case tpe: RecThis =>
-        print(tpe.binders.debugID)
+        print(tpe.binder.debugID)
         print(".")
       case prefix: Type =>
         print(prefix)
@@ -194,7 +194,7 @@ private[tastyquery] object Printers:
       case TypeAlias(alias) =>
         print(" = ")
         print(alias)
-      case RealTypeBounds(low, high) =>
+      case AbstractTypeBounds(low, high) =>
         if !isSyntacticNothing(low) then
           print(" >: ")
           print(low)

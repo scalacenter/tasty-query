@@ -20,17 +20,21 @@ import tastyquery.reader.Loaders.Loader
 object Contexts {
 
   /** The implicitly available context. */
-  transparent inline def ctx(using ctx: Context): Context = ctx
+  inline def ctx(using ctx: Context): Context = ctx
 
   /** Standard definitions of symbols and types. */
-  transparent inline def defn(using ctx: Context): ctx.defn.type = ctx.defn
+  inline def defn(using ctx: Context): ctx.defn.type = ctx.defn
 
-  /** Creates a new [[Context]] for the given [[Classpaths.Classpath]]. */
-  def init(classpath: Classpath): Context =
-    val classloader = Loader(classpath)
-    val ctx = new Context(classloader)
-    classloader.initPackages()(using ctx)
-    ctx
+  /** Factory methods for [[Context]]. */
+  object Context:
+    /** Creates a new [[Context]] for the given [[Classpaths.Classpath]]. */
+    def initialize(classpath: Classpath): Context =
+      val classloader = Loader(classpath)
+      val ctx = new Context(classloader)
+      classloader.initPackages()(using ctx)
+      ctx
+    end initialize
+  end Context
 
   /** A semantic universe for a given [[Classpaths.Classpath]].
     *
@@ -157,7 +161,6 @@ object Contexts {
         .getOrElse {
           throw MemberNotFoundException(owner, name)
         }
-        .asType
     end findStaticType
 
     def findStaticTerm(fullyQualifiedName: String): TermSymbol =
@@ -185,10 +188,9 @@ object Contexts {
             owner.getDecl(name) match
               case Some(pkg: PackageSymbol) =>
                 loop(pkg, rest)
-              case Some(moduleSymbol: TermSymbol) if moduleSymbol.isModuleVal =>
-                loop(moduleSymbol.moduleClass.get, rest)
-              case Some(sym) =>
-                throw InvalidProgramStructureException(s"$sym is not a static owner")
+              case Some(sym: TermSymbol) =>
+                if sym.isModuleVal then loop(sym.moduleClass.get, rest)
+                else throw InvalidProgramStructureException(s"$sym is not a static owner")
               case None =>
                 throw MemberNotFoundException(owner, name)
       end loop

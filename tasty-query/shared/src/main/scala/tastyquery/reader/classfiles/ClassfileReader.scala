@@ -18,8 +18,6 @@ import Constants.*
 
 private[classfiles] final class ClassfileReader private () {
 
-  transparent inline def pool(using pool: ConstantPool): pool.type = pool
-
   def acceptHeader(classOwner: DeclaringSymbol, classRoot: ClassData)(using DataStream): Unit = {
     acceptMagicNumber(classOwner, classRoot)
     acceptVersion(classOwner, classRoot)
@@ -49,12 +47,11 @@ private[classfiles] final class ClassfileReader private () {
       )
   }
 
-  def readConstantPool()(using DataStream): ConstantPool = {
+  def readConstantPool()(using ds: DataStream): ConstantPool = {
     val count = data.readU2()
-    val cp = ConstantPool(count)
-    given ConstantPool = cp
+    val pool = ConstantPool(count)
     var doAdd = true
-    while doAdd do doAdd = pool.add(acceptConstantInfo())
+    while doAdd do doAdd = pool.add(acceptConstantInfo()(using ds, pool))
     pool
   }
 
@@ -148,10 +145,10 @@ private[classfiles] final class ClassfileReader private () {
   def readAccessFlags()(using DataStream): AccessFlags =
     AccessFlags.read(data.readU2())
 
-  def readThisClass()(using DataStream, ConstantPool): ConstantInfo.Class[pool.type] =
+  def readThisClass()(using ds: DataStream, pool: ConstantPool): ConstantInfo.Class[pool.type] =
     pool.cls(pool.idx(data.readU2()))
 
-  def readSuperClass()(using DataStream, ConstantPool): Option[ConstantInfo.Class[pool.type]] = {
+  def readSuperClass()(using ds: DataStream, pool: ConstantPool): Option[ConstantInfo.Class[pool.type]] = {
     val idx = data.readU2()
     val entry =
       if idx == 0 then None
@@ -159,7 +156,7 @@ private[classfiles] final class ClassfileReader private () {
     entry
   }
 
-  def readInterfaces()(using DataStream, ConstantPool): IArray[ConstantInfo.Class[pool.type]] = {
+  def readInterfaces()(using ds: DataStream, pool: ConstantPool): IArray[ConstantInfo.Class[pool.type]] = {
     val count = data.readU2()
     val interfaces =
       for i <- 0 until count yield pool.cls(pool.idx(data.readU2()))
@@ -199,7 +196,7 @@ private[classfiles] final class ClassfileReader private () {
   private def readMembers(
     isMethod: Boolean,
     op: (SimpleName, SigOrDesc, AccessFlags) => Unit
-  )(using DataStream, ConstantPool): Unit = {
+  )(using ds: DataStream, pool: ConstantPool): Unit = {
     val count = data.readU2()
     loop(count) {
       val accessFlags = readAccessFlags()
@@ -223,11 +220,11 @@ private[classfiles] final class ClassfileReader private () {
     }
   }
 
-  def readSignature(using DataStream, ConstantPool): String =
+  def readSignature(using ds: DataStream, pool: ConstantPool): String =
     val sigIdx = pool.idx(data.readU2())
     pool.utf8(sigIdx).name
 
-  def scanAttributes(onName: DataStream ?=> SimpleName => Boolean)(using DataStream, ConstantPool): Unit = {
+  def scanAttributes(onName: DataStream ?=> SimpleName => Boolean)(using ds: DataStream, pool: ConstantPool): Unit = {
     val count = data.readU2()
     loop(count) {
       val attrNameIdx = pool.idx(data.readU2())
@@ -240,7 +237,7 @@ private[classfiles] final class ClassfileReader private () {
 
   def readAnnotation(
     typeDescriptors: Set[SimpleName]
-  )(using DataStream, ConstantPool): Option[Annotation[pool.type]] = {
+  )(using ds: DataStream, pool: ConstantPool): Option[Annotation[pool.type]] = {
     // pre: we are already inside the RuntimeVisibleAnnotations attribute
 
     def skipAnnotationArgument(): Unit = {
@@ -329,7 +326,7 @@ private[classfiles] final class ClassfileReader private () {
 
   def readInnerClasses(
     op: (SimpleName, SimpleName, SimpleName, FlagSet) => Unit
-  )(using DataStream, ConstantPool): Unit = {
+  )(using ds: DataStream, pool: ConstantPool): Unit = {
     val numberOfClasses = data.readU2()
     loop(numberOfClasses) {
       val innerClassIdx = pool.idx(data.readU2())
@@ -346,7 +343,7 @@ private[classfiles] final class ClassfileReader private () {
     }
   }
 
-  private def acceptConstantInfo()(using DataStream, ConstantPool): ConstantInfo[pool.type] = {
+  private def acceptConstantInfo()(using ds: DataStream, pool: ConstantPool): ConstantInfo[pool.type] = {
     import ClassfileReader.ConstantInfo as c
     import pool.idx
     val tag = data.readU1()
@@ -537,7 +534,7 @@ private[classfiles] object ClassfileReader {
 
   case class Annotation[P <: ClassfileReader.ConstantPool](tpe: SimpleName, values: IArray[AnnotationValue[P]])
 
-  transparent inline def data(using data: DataStream): data.type = data
+  inline def data(using data: DataStream): data.type = data
 
   trait DataStream {
     def readU1(): Int

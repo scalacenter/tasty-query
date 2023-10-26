@@ -252,6 +252,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
   testWithContext("apply-overloaded-not-method") {
     val OverloadedApplyClass = ctx.findTopLevelClass("simple_trees.OverloadedApply")
+    val PredefString = ctx.findStaticType("scala.Predef.String")
 
     val callSym = OverloadedApplyClass.findNonOverloadedDecl(termName("callF"))
 
@@ -263,8 +264,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       override def traverse(tree: Tree): Unit = tree match
         case fooRef @ Select(_, SimpleName("foo")) =>
           callCount += 1
-          val fooSym = fooRef.tpe.asInstanceOf[TermRef].symbol
-          assert(clue(fooSym.paramRefss).isEmpty)
+          val fooSym = fooRef.symbol.asTerm
+          assert(clue(fooSym.declaredType).isRef(PredefString))
         case _ =>
           super.traverse(tree)
     }.traverse(callTree)
@@ -279,10 +280,6 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val ExprClass = RecApplyClass.findDecl(tname"Expr")
     val NumClass = RecApplyClass.findDecl(tname"Num")
     val BoolClass = RecApplyClass.findDecl(tname"Bool")
-
-    val evalParamRefss = evalSym.paramRefss
-
-    val List(Right(List(TRef @ _)), Left(List(eRef))) = evalParamRefss: @unchecked
 
     val Some(evalTree: DefDef) = evalSym.tree: @unchecked
 
@@ -1260,7 +1257,8 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val PredefString = ctx.findStaticType("scala.Predef.String")
 
     assert(clue(PredefString).isTypeAlias)
-    assert(clue(PredefString.asInstanceOf[TypeMemberSymbol].aliasedType).isRef(defn.StringClass))
+    val TypeMemberDefinition.TypeAlias(alias) = PredefString.asInstanceOf[TypeMemberSymbol].typeDef: @unchecked
+    assert(clue(alias).isRef(defn.StringClass))
   }
 
   testWithContext("scala2-module-and-def-with-same-name") {

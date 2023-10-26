@@ -22,7 +22,7 @@ object Classpaths:
 
   /** In-memory representation of an entire classpath.
     *
-    * A [[Classpath]] can be given to [[Contexts.init]] to create a
+    * A [[Classpath]] can be given to [[Contexts.Context.initialize]] to create a
     * [[Contexts.Context]]. The latter gives semantic access to all the
     * definitions on the classpath.
     */
@@ -84,12 +84,5 @@ object Classpaths:
       * ```
       */
     final class Entry(val packages: IArray[PackageData])
-
-    /** Creates a [[Classpath]] from a sequence of classpath entries. Each entry corresponds to a single directory
-      * or jar file, and represents the various `.class` and `.tasty` files found within it.
-      */
-    @deprecated("use Classpath(IArray.from(entries).map(Classpath.Entry(_)) instead", since = "0.5.2")
-    def from(entries: Seq[IArray[PackageData]]): Classpath =
-      Classpath(IArray.from(entries).map(Entry(_)))
   }
 end Classpaths

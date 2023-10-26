@@ -24,8 +24,8 @@ import Constants.*
 private[reader] object ClassfileParser {
   private val javaLangObjectBinaryName = termName("java/lang/Object")
 
-  transparent inline def innerClasses(using innerClasses: InnerClasses): innerClasses.type = innerClasses
-  transparent inline def resolver(using resolver: Resolver): resolver.type = resolver
+  inline def innerClasses(using innerClasses: InnerClasses): innerClasses.type = innerClasses
+  inline def resolver(using resolver: Resolver): resolver.type = resolver
 
   enum ClassKind:
     case Scala2(structure: Structure, runtimeAnnotStart: Forked[DataStream])
@@ -256,11 +256,11 @@ private[reader] object ClassfileParser {
     cls.setAnnotations(Nil) // TODO Read Java annotations on classes
     initParents()
 
-    // Intercept java.lang.Object and java.lang.String to create their magic methods
-    if cls.owner == rctx.javaLangPackage then
-      if cls.name == tpnme.Object then rctx.createObjectMagicMethods(cls)
-      else if cls.name == tpnme.String then rctx.createStringMagicMethods(cls)
-      else if cls.name == tpnme.Enum then rctx.createEnumMagicMethods(cls)
+    // Intercept special classes to create their magic methods
+    if cls.isAnySpecialClass then
+      if cls.isObject then rctx.createObjectMagicMethods(cls)
+      else if cls.isString then rctx.createStringMagicMethods(cls)
+      else if cls.isJavaEnum then rctx.createEnumMagicMethods(cls)
 
     for (sym, javaFlags, sigOrDesc) <- loadMembers() do
       val parsedType = sigOrDesc match
@@ -319,7 +319,7 @@ private[reader] object ClassfileParser {
       tpe.tycon match
         case tycon: TypeRef if tycon.name == tpnme.Array && tpe.args.sizeIs == 1 =>
           tycon.prefix match
-            case prefix: PackageRef if prefix.symbol == rctx.scalaPackage =>
+            case prefix: PackageRef if prefix.symbol.isScalaPackage =>
               Some(tpe.args.head)
             case _ =>
               None
@@ -380,7 +380,7 @@ private[reader] object ClassfileParser {
     process(structure.attributes)
   }
 
-  private def structure(reader: ClassfileReader)(using reader.ConstantPool)(using DataStream): Structure = {
+  private def structure(reader: ClassfileReader)(using pool: reader.ConstantPool)(using DataStream): Structure = {
     val access = reader.readAccessFlags()
     val thisClass = reader.readThisClass()
     val supers = data.forkAndSkip {
@@ -389,7 +389,7 @@ private[reader] object ClassfileParser {
     }
     Structure(
       access = access,
-      binaryName = reader.pool.utf8(thisClass.nameIdx),
+      binaryName = pool.utf8(thisClass.nameIdx),
       reader = reader,
       supers = supers,
       fields = reader.skipFields(),

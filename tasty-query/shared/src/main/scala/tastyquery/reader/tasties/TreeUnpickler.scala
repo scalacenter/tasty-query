@@ -627,7 +627,7 @@ private[tasties] class TreeUnpickler private (
         val high = readTrueType()
         // TODO: read variance (a modifier)
         skipModifiers(end)
-        RealTypeBounds(low, high)
+        AbstractTypeBounds(low, high)
       } else {
         skipModifiers(end)
         TypeAlias(low)
@@ -1313,7 +1313,7 @@ private[tasties] class TreeUnpickler private (
     case PARAMtype =>
       reader.readByte()
       reader.readEnd()
-      val lambda = readBindersRef[ParamRefBinders]()
+      val lambda = readBinderRef[ParamRefBinder]()
       val num = reader.readNat()
       lambda.paramRefs(num)
     case REFINEDtype =>
@@ -1335,7 +1335,7 @@ private[tasties] class TreeUnpickler private (
             val isStable = !refinedMemberType.isInstanceOf[MethodicType]
             TermRefinement(underlying, isStable, refinementName, refinedMemberType)
     case RECtype =>
-      readRegisteringBinders { register =>
+      readRegisteringBinder { register =>
         reader.readByte()
         RecType { rt =>
           register(rt)
@@ -1344,7 +1344,7 @@ private[tasties] class TreeUnpickler private (
       }
     case RECthis =>
       reader.readByte()
-      readBindersRef[RecType]().recThis
+      readBinderRef[RecType]().recThis
     case MATCHtype =>
       val start = reader.currentAddr
       reader.readByte() // tag
@@ -1368,7 +1368,7 @@ private[tasties] class TreeUnpickler private (
       throw TastyFormatException(s"Unexpected type tag ${astTagToString(tag)} $posErrorMsg")
   }
 
-  private def readRegisteringBinders[A <: Binders](body: (A => Unit) => A): A =
+  private def readRegisteringBinder[A <: TypeBinder](body: (A => Unit) => A): A =
     val start = reader.currentAddr
     caches.registeredBinders.get(start) match
       case Some(existing) =>
@@ -1376,9 +1376,9 @@ private[tasties] class TreeUnpickler private (
         existing.asInstanceOf[A]
       case None =>
         body(result => caches.registeredBinders.update(start, result))
-  end readRegisteringBinders
+  end readRegisteringBinder
 
-  private def readBindersRef[A <: Binders]()(using SourceFile, scala.reflect.Typeable[A]): A =
+  private def readBinderRef[A <: TypeBinder]()(using SourceFile, scala.reflect.Typeable[A]): A =
     /* Usually, we read references to binders while reading the target binders,
      * because references are always nested within the binders. That is the
      * fast path below.
@@ -1388,13 +1388,13 @@ private[tasties] class TreeUnpickler private (
      * binders will not be registered yet, and we need to go read them first.
      */
     val addr = reader.readAddr()
-    val binders = caches.registeredBinders.get(addr) match
-      case Some(binders) => binders // fast path
-      case None          => forkAt(addr).readTrueType()
-    binders match
-      case binders: A => binders
-      case _          => throw TastyFormatException(s"Unexpected binders type $binders ${posErrorMsg(addr)}")
-  end readBindersRef
+    val binder = caches.registeredBinders.get(addr) match
+      case Some(binder) => binder // fast path
+      case None         => forkAt(addr).readTrueType()
+    binder match
+      case binder: A => binder
+      case _         => throw TastyFormatException(s"Unexpected binder type $binder ${posErrorMsg(addr)}")
+  end readBinderRef
 
   private def readLambdaType[N <: Name, PInfo <: Type | TypeBounds, RT <: TypeOrMethodic, LT <: LambdaType](
     companionOp: FlagSet => LambdaTypeCompanion[N, PInfo, RT, LT],
@@ -1402,7 +1402,7 @@ private[tasties] class TreeUnpickler private (
     readInfo: TreeUnpickler => PInfo,
     readResultType: TreeUnpickler => RT
   ): LT =
-    readRegisteringBinders { register =>
+    readRegisteringBinder { register =>
       reader.readByte()
       val end = reader.readEnd()
 
@@ -1456,7 +1456,7 @@ private[tasties] class TreeUnpickler private (
     case TYPELAMBDAtype =>
       // This is unfortunately a lot of copy-past wrt. readLambdaType above
 
-      readRegisteringBinders { register =>
+      readRegisteringBinder { register =>
         reader.readByte()
         val end = reader.readEnd()
 
@@ -1719,7 +1719,7 @@ private[tasties] object TreeUnpickler {
 
     val definingTypeTreeCache = mutable.Map.empty[Addr, TypeTree]
 
-    val registeredBinders = mutable.Map.empty[Addr, Binders]
+    val registeredBinders = mutable.Map.empty[Addr, TypeBinder]
 
     /** The top-level classes declared in this .tasty file.
       *

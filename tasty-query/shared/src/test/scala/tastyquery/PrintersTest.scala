@@ -20,7 +20,7 @@ class PrintersTest extends UnrestrictedUnpicklingSuite:
 
     val ProductType = ProductClass.staticRef
 
-    val NullAnyRefBounds = RealTypeBounds(defn.NullType, defn.AnyRefType)
+    val NullAnyRefBounds = AbstractTypeBounds(defn.NullType, defn.AnyRefType)
 
     testShowBasic(NoPrefix, "ε") // U+03F5 Greek Small Letter Epsilon")
     testShowBasic(ctx.findPackage("scala.collection").packageRef, "scala.collection")

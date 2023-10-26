@@ -2,7 +2,7 @@ package tastyquery
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import tastyquery.Contexts.Context
+import tastyquery.Contexts.*
 
 abstract class UnrestrictedUnpicklingSuite extends BaseUnpicklingSuite {
   def testWithContext(name: String)(using munit.Location)(body: Context ?=> Unit): Unit =
@@ -11,7 +11,7 @@ abstract class UnrestrictedUnpicklingSuite extends BaseUnpicklingSuite {
   def testWithContext(options: munit.TestOptions)(using munit.Location)(body: Context ?=> Unit): Unit =
     test(options) {
       for classpath <- testClasspath yield
-        val ctx = Contexts.init(classpath)
+        val ctx = Context.initialize(classpath)
         body(using ctx)
     }
 }

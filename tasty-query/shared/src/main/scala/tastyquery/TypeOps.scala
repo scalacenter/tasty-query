@@ -180,7 +180,7 @@ private[tastyquery] object TypeOps:
       case tp: OrType =>
         // Base classes are the intersection of the operand base classes.
         // scala.Null is ignored on both sides
-        val baseClasses1 = baseClasses(tp.first).filter(_ != defn.NullClass)
+        val baseClasses1 = baseClasses(tp.first).filter(!_.isNull)
         val baseClasses1Set = baseClasses1.toSet
 
         def recur(baseClasses2: List[ClassSymbol]): List[ClassSymbol] = baseClasses2 match
@@ -196,7 +196,7 @@ private[tastyquery] object TypeOps:
             Nil
         end recur
 
-        recur(baseClasses(tp.second).filter(_ != defn.NullClass))
+        recur(baseClasses(tp.second).filter(!_.isNull))
 
       case _: AnyKindType | _: NothingType | _: TypeLambda | _: CustomTransientGroundType =>
         Nil

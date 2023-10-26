@@ -1,6 +1,6 @@
 package tastyquery
 
-import scala.annotation.tailrec
+import scala.annotation.{switch, tailrec}
 
 import scala.collection.mutable
 
@@ -67,10 +67,9 @@ import tastyquery.reader.Loaders.Loader
 object Symbols {
 
   sealed abstract class Symbol protected (val owner: Symbol | Null) {
-    type ThisNameType <: UnsignedName
     type DefiningTreeType <: DefTree
 
-    val name: ThisNameType
+    val name: UnsignedName
 
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
@@ -146,13 +145,6 @@ object Symbols {
     protected final def flags: FlagSet =
       if isFlagsInitialized then myFlags
       else throw IllegalStateException(s"flags of $this have not been initialized")
-
-    @deprecated("pattern-match on owner instead", since = "0.10.0")
-    final def enclosingDecl: DeclaringSymbol = owner match {
-      case owner: DeclaringSymbol => owner
-      case _: Symbol | null =>
-        assert(false, s"cannot access owner, ${this.name} is local or not declared within any scope")
-    }
 
     private[Symbols] final def addDeclIfDeclaringSym(decl: TermOrTypeSymbol): decl.type =
       this match
@@ -435,7 +427,6 @@ object Symbols {
   end TermOrTypeSymbol
 
   final class TermSymbol private (val name: UnsignedTermName, owner: Symbol) extends TermOrTypeSymbol(owner):
-    type ThisNameType = UnsignedTermName
     type DefiningTreeType = ValOrDefDef | Bind
     type MatchingSymbolType = TermSymbol
 
@@ -446,7 +437,6 @@ object Symbols {
     private var mySignature: Signature | Null = null
     private var myTargetName: UnsignedTermName | Null = null
     private var mySignedName: TermName | Null = null
-    private var myParamRefss: List[Either[List[TermParamRef], List[TypeParamRef]]] | Null = null
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
@@ -543,7 +533,7 @@ object Symbols {
       require(isStatic, s"Cannot construct a staticRef for non-static symbol $this")
       TermRef(owner.staticOwnerPrefix, this)
 
-    private[tastyquery] final def declaredTypeAsSeenFrom(prefix: Prefix)(using Context): TypeOrMethodic =
+    final def typeAsSeenFrom(prefix: Prefix)(using Context): TypeOrMethodic =
       declaredType.asSeenFrom(prefix, owner)
 
     private def isConstructor: Boolean =
@@ -605,25 +595,12 @@ object Symbols {
       if candidates.isEmpty then None
       else
         val site = siteClass.thisType
-        val targetType = this.declaredTypeAsSeenFrom(site)
+        val targetType = this.typeAsSeenFrom(site)
         candidates.find { candidate =>
           // TODO Also check targetName here
-          candidate.declaredTypeAsSeenFrom(site).matches(targetType)
+          candidate.typeAsSeenFrom(site).matches(targetType)
         }
     end matchingDecl
-
-    final def paramRefss(using Context): List[Either[List[TermParamRef], List[TypeParamRef]]] =
-      def paramssOfType(tp: TypeOrMethodic): List[Either[List[TermParamRef], List[TypeParamRef]]] = tp match
-        case mt: PolyType   => Right(mt.paramRefs) :: paramssOfType(mt.resultType)
-        case mt: MethodType => Left(mt.paramRefs) :: paramssOfType(mt.resultType)
-        case _              => Nil
-      val local = myParamRefss
-      if local != null then local
-      else
-        val refs = paramssOfType(declaredType)
-        myParamRefss = refs
-        refs
-    end paramRefss
 
     /** Is this term symbol a stable member?
       *
@@ -640,7 +617,7 @@ object Symbols {
       flags.is(SignaturePolymorphic)
   end TermSymbol
 
-  object TermSymbol:
+  private[tastyquery] object TermSymbol:
     private[tastyquery] def create(name: UnsignedTermName, owner: Symbol): TermSymbol =
       owner.addDeclIfDeclaringSym(TermSymbol(name, owner))
 
@@ -649,7 +626,6 @@ object Symbols {
   end TermSymbol
 
   sealed abstract class TypeSymbol protected (val name: TypeName, owner: Symbol) extends TermOrTypeSymbol(owner):
-    type ThisNameType = TypeName
     type DefiningTreeType <: TypeDef | TypeTreeBind
     type MatchingSymbolType = TypeSymbol
 
@@ -680,12 +656,9 @@ object Symbols {
   sealed abstract class TypeSymbolWithBounds protected (name: TypeName, owner: Symbol) extends TypeSymbol(name, owner):
     type DefiningTreeType <: TypeMember | TypeParam | TypeTreeBind
 
-    @deprecated("use declaredBounds instead", since = "0.9.0")
-    final def bounds: TypeBounds = declaredBounds
-
     def declaredBounds: TypeBounds
 
-    private[tastyquery] final def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
+    final def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
       def default: TypeBounds =
         declaredBounds.mapBounds(_.asSeenFrom(prefix, owner))
 
@@ -757,9 +730,6 @@ object Symbols {
     def variance(using Context): Variance =
       declaredVariance
 
-    @deprecated("use localRef instead", since = "0.9.0")
-    final def typeRef: TypeRef = localRef
-
     /** The argument corresponding to this class type parameter as seen from prefix `pre`.
       *
       * Can produce a WildcardTypeArg type if `widenAbstract` is true,
@@ -789,47 +759,10 @@ object Symbols {
           }
           None
 
-        case Some(base: AndType) =>
-          (argForParam(base.first), argForParam(base.second)) match
-            case (None, tp2) =>
-              tp2
-            case (tp1, None) =>
-              tp1
-            case (Some(tp1), Some(tp2)) =>
-              val variance = this.variance.sign
-              val result: TypeOrWildcard = (tp1, tp2) match
-                case (tp1: Type, tp2: Type) if variance != 0 =>
-                  if variance > 0 then tp1 & tp2
-                  else tp1 | tp2
-                case _ =>
-                  // Compute based on bounds, instead of returning the original reference
-                  def toBounds(tp: TypeOrWildcard): TypeBounds = tp match
-                    case tp: WildcardTypeArg => tp.bounds
-                    case tp: Type            => TypeAlias(tp)
-                  val bounds1 = toBounds(tp1)
-                  val bounds2 = toBounds(tp2)
-                  val mergedBounds =
-                    if variance >= 0 then bounds1.intersect(bounds2)
-                    else bounds1.union(bounds2)
-                  mergedBounds match
-                    case TypeAlias(alias)  => alias // can happen for variance == 0 if tp1 =:= tp2
-                    case _: RealTypeBounds => WildcardTypeArg(mergedBounds)
-              end result
-              Some(result)
-          end match
+        case Some(base: TypeRef) =>
+          None
 
-        /*case base: AndOrType =>
-          var tp1 = argForParam(base.tp1)
-          var tp2 = argForParam(base.tp2)
-          val variance = this.paramVarianceSign
-          if (isBounds(tp1) || isBounds(tp2) || variance == 0) {
-            // compute argument as a type bounds instead of a point type
-            tp1 = tp1.bounds
-            tp2 = tp2.bounds
-          }
-          if (base.isAnd == variance >= 0) tp1 & tp2 else tp1 | tp2*/
-
-        case _ =>
+        case None =>
           /*if (pre.termSymbol.isPackage) argForParam(pre.select(nme.PACKAGE))
           else*/
           if (pre.isExactlyNothing) Some(pre)
@@ -838,7 +771,7 @@ object Symbols {
     end argForParam
   end ClassTypeParamSymbol
 
-  object ClassTypeParamSymbol:
+  private[tastyquery] object ClassTypeParamSymbol:
     private[tastyquery] def create(name: TypeName, owner: ClassSymbol): ClassTypeParamSymbol =
       ClassTypeParamSymbol(name, owner)
   end ClassTypeParamSymbol
@@ -847,7 +780,7 @@ object Symbols {
     type DefiningTreeType = TypeParam | TypeTreeBind
   end LocalTypeParamSymbol
 
-  object LocalTypeParamSymbol:
+  private[tastyquery] object LocalTypeParamSymbol:
     private[tastyquery] def create(name: TypeName, owner: Symbol): LocalTypeParamSymbol =
       LocalTypeParamSymbol(name, owner)
   end LocalTypeParamSymbol
@@ -872,19 +805,13 @@ object Symbols {
       if local == null then throw IllegalStateException("$this was not assigned a definition")
       else local
 
-    final def aliasedType: Type =
-      typeDef.asInstanceOf[TypeMemberDefinition.TypeAlias].alias
-
-    private[tastyquery] def aliasedTypeAsSeenFrom(pre: Prefix)(using Context): Type =
-      aliasedType.asSeenFrom(pre, owner)
-
     final def declaredBounds: TypeBounds = typeDef match
       case TypeMemberDefinition.TypeAlias(alias)           => TypeAlias(alias)
       case TypeMemberDefinition.AbstractType(bounds)       => bounds
       case TypeMemberDefinition.OpaqueTypeAlias(bounds, _) => bounds
   end TypeMemberSymbol
 
-  object TypeMemberSymbol:
+  private[tastyquery] object TypeMemberSymbol:
     private[tastyquery] def create(name: TypeName, owner: Symbol): TypeMemberSymbol =
       owner.addDeclIfDeclaringSym(TypeMemberSymbol(name, owner))
 
@@ -904,10 +831,17 @@ object Symbols {
 
     private[Symbols] def addDecl(decl: DeclType): Unit
 
-    @deprecated("use ClassSymbol.getAllOverloadedDecls", "0.4.0")
-    def getDecls(name: Name)(using Context): List[DeclType]
-
     def getDecl(name: Name)(using Context): Option[DeclType]
+
+    def getDecl(name: TypeName)(using Context): Option[TypeSymbol]
+
+    def getDecl(name: TermName)(using Context): Option[TermSymbol | PackageSymbol]
+
+    def findDecl(name: Name)(using Context): DeclType
+
+    def findDecl(name: TypeName)(using Context): TypeSymbol
+
+    def findDecl(name: TermName)(using Context): TermSymbol | PackageSymbol
 
     /** Note: this will force all trees in a package */
     def declarations(using Context): List[DeclType]
@@ -916,10 +850,14 @@ object Symbols {
   final class ClassSymbol private (override val name: ClassTypeName, owner: Symbol)
       extends TypeSymbol(name, owner)
       with DeclaringSymbol {
+    import ClassSymbol.*
+
     type DefiningTreeType = ClassDef
     type DeclType = TermOrTypeSymbol
 
     private type SealedChild = ClassSymbol | TermSymbol
+
+    private val specialKind: SpecialKind = computeSpecialKind(name, owner)
 
     // Reference fields (checked in doCheckCompleted)
     private var myTypeParams: List[ClassTypeParamSymbol] | Null = null
@@ -928,7 +866,6 @@ object Symbols {
     private var myGivenSelfType: Option[Type] | Null = null
 
     // Optional reference fields
-    private var mySpecialErasure: Option[() => ErasedTypeRef.ClassRef] = None
     private var myScala2SealedChildren: Option[List[Symbol | Scala2ExternalSymRef]] = None
 
     // DeclaringSymbol-related fields
@@ -981,14 +918,30 @@ object Symbols {
     /** Is this a class a `transparent trait`? */
     final def isTransparentTrait: Boolean = flags.isAllOf(Trait | Transparent)
 
+    private[tastyquery] def isAnySpecialClass: Boolean = specialKind != SpecialKind.None
+
     private[tastyquery] def isValueClass(using Context): Boolean =
-      parents.nonEmpty && parents.head.classSymbol.exists(_ == defn.AnyValClass)
+      parents.nonEmpty && parents.head.classSymbol.exists(_.isAnyVal)
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
-      isValueClass && this != defn.AnyValClass && !defn.isPrimitiveValueClass(this)
+      specialKind == SpecialKind.None && isValueClass
 
-    private[tastyquery] def isRefinementClass: Boolean =
-      name == tpnme.RefinedClassMagic
+    def isPrimitiveValueClass: Boolean =
+      specialKind == SpecialKind.Unit || specialKind == SpecialKind.NonUnitPrimitive
+
+    def isTupleNClass: Boolean = specialKind == SpecialKind.TupleN
+
+    private[tastyquery] def isAny: Boolean = specialKind == SpecialKind.Any
+    private[tastyquery] def isObject: Boolean = specialKind == SpecialKind.Object
+    private[tastyquery] def isAnyVal: Boolean = specialKind == SpecialKind.AnyVal
+    private[tastyquery] def isUnit: Boolean = specialKind == SpecialKind.Unit
+    private[tastyquery] def isString: Boolean = specialKind == SpecialKind.String
+    private[tastyquery] def isJavaEnum: Boolean = specialKind == SpecialKind.JavaEnum
+    private[tastyquery] def isArray: Boolean = specialKind == SpecialKind.Array
+    private[tastyquery] def isNull: Boolean = specialKind == SpecialKind.Null
+    private[tastyquery] def isSingleton: Boolean = specialKind == SpecialKind.Singleton
+    private[tastyquery] def isRepeatedParamMagic: Boolean = specialKind == SpecialKind.RepeatedParamMagic
+    private[tastyquery] def isRefinementClass: Boolean = specialKind == SpecialKind.Refinement
 
     /** Get the companion class of this class, if it exists:
       * - for `class C` => `object class C[$]`
@@ -1102,9 +1055,6 @@ object Symbols {
       if local == null then throw new IllegalStateException(s"givenSelfType not initialized for $this")
       else local
 
-    @deprecated("use appliedRefInsideThis instead", since = "0.9.0")
-    final def appliedRef: Type = appliedRefInsideThis
-
     final def appliedRefInsideThis: Type =
       val local = myAppliedRef
       if local != null then local
@@ -1144,18 +1094,8 @@ object Symbols {
       }
       this :: parentsLin
 
-    @deprecated("use isSubClass instead", since = "0.9.0")
-    final def isSubclass(that: ClassSymbol)(using Context): Boolean =
-      isSubClass(that)
-
     final def isSubClass(that: ClassSymbol)(using Context): Boolean =
       linearization.contains(that)
-
-    private[tastyquery] final def withSpecialErasure(specialErasure: () => ErasedTypeRef.ClassRef): this.type =
-      if mySpecialErasure.isDefined then throw IllegalStateException(s"reassignment of the special erasure of $this")
-      if myErasure != null then throw IllegalStateException(s"the erasure of $this was already computed")
-      mySpecialErasure = Some(specialErasure)
-      this
 
     /** The erasure of this class; nonsensical for `scala.Array`. */
     private[tastyquery] final def erasure(using Context): ErasedTypeRef.ClassRef =
@@ -1168,17 +1108,18 @@ object Symbols {
     end erasure
 
     private def computeErasure()(using Context): ErasedTypeRef.ClassRef =
-      mySpecialErasure match
-        case Some(special) =>
-          special()
-        case None =>
-          if owner == defn.scalaPackage then
-            // The classes with special erasures that are loaded from Scala 2 pickles or .tasty files
-            name match
-              case tpnme.AnyVal                                        => defn.ObjectClass.erasure
-              case tpnme.Tuple | tpnme.NonEmptyTuple | tpnme.TupleCons => defn.ProductClass.erasure
-              case _                                                   => ErasedTypeRef.ClassRef(this)
-          else ErasedTypeRef.ClassRef(this)
+      (specialKind: @switch) match
+        case SpecialKind.Any | SpecialKind.AnyVal | SpecialKind.Matchable | SpecialKind.Singleton =>
+          defn.ObjectClass.erasure
+        case SpecialKind.Tuple | SpecialKind.NonEmptyTuple | SpecialKind.TupleCons =>
+          defn.ProductClass.erasure
+        case SpecialKind.RepeatedParamMagic =>
+          defn.SeqClass.erasure
+        case SpecialKind.ContextFunctionN =>
+          val correspondingFunctionNName = typeName(name.asInstanceOf[SimpleTypeName].name.stripPrefix("Context"))
+          defn.scalaPackage.findDecl(correspondingFunctionNName).asClass.erasure
+        case _ =>
+          ErasedTypeRef.ClassRef(this)
     end computeErasure
 
     // DeclaringSymbol implementation
@@ -1187,12 +1128,6 @@ object Symbols {
       val set = myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet)
       if decl.isType then assert(set.isEmpty, s"trying to add a second entry $decl for type name ${decl.name} in $this")
       set += decl
-
-    @deprecated("use getAllOverloadedDecls", "0.4.0")
-    final def getDecls(name: Name)(using Context): List[TermOrTypeSymbol] =
-      name match
-        case name: UnsignedTermName => getAllOverloadedDecls(name)
-        case name                   => getDecl(name).toList
 
     final def getDecl(name: Name)(using Context): Option[TermOrTypeSymbol] =
       name match
@@ -1508,7 +1443,7 @@ object Symbols {
     private[tastyquery] def resolveMember(name: Name, pre: NonEmptyPrefix)(using Context): ResolveMemberResult =
       findMember(pre, name) match
         case Some(sym: TermSymbol) =>
-          ResolveMemberResult.TermMember(sym :: Nil, sym.declaredTypeAsSeenFrom(pre), sym.isStableMember)
+          ResolveMemberResult.TermMember(sym :: Nil, sym.typeAsSeenFrom(pre), sym.isStableMember)
         case Some(sym: ClassSymbol) =>
           ResolveMemberResult.ClassMember(sym)
         case Some(sym: TypeSymbolWithBounds) =>
@@ -1532,7 +1467,7 @@ object Symbols {
                 && decl.needsSignature
                 && name.sig.paramsCorrespond(decl.signature)
             if matches then
-              val tpe = decl.declaredTypeAsSeenFrom(pre)
+              val tpe = decl.typeAsSeenFrom(pre)
               if typePredicate(tpe) then return ResolveMemberResult.TermMember(decl :: Nil, tpe, decl.isStableMember)
             end if
             overloadsRest = overloadsRest.tail
@@ -1648,7 +1583,94 @@ object Symbols {
     end makePolyConstructorType
   }
 
-  object ClassSymbol:
+  private[tastyquery] object ClassSymbol:
+    private type SpecialKind = Int
+
+    private object SpecialKind:
+      inline val None = 0
+      inline val Any = 1
+      inline val Matchable = 2
+      inline val Object = 3
+      inline val AnyVal = 4
+      inline val Unit = 5
+      inline val NonUnitPrimitive = 6
+      inline val String = 7
+      inline val Null = 8
+      inline val Singleton = 9
+      inline val Array = 10
+      inline val PolyFunction = 11
+      inline val Tuple = 12
+      inline val NonEmptyTuple = 13
+      inline val TupleCons = 14
+      inline val EmptyTuple = 15
+      inline val FunctionN = 16
+      inline val ContextFunctionN = 17
+      inline val TupleN = 18
+      inline val JavaEnum = 19
+      inline val RepeatedParamMagic = 20
+      inline val Refinement = 21
+    end SpecialKind
+
+    private def computeSpecialKind(name: ClassTypeName, owner: Symbol): SpecialKind =
+      owner match
+        case owner: PackageSymbol if owner.specialKind != SpecialKind.None =>
+          name match
+            case name: SimpleTypeName =>
+              (owner.specialKind: @switch) match
+                case PackageSymbol.SpecialKind.scala =>
+                  name match
+                    case tpnme.Any           => SpecialKind.Any
+                    case tpnme.Matchable     => SpecialKind.Matchable
+                    case tpnme.AnyVal        => SpecialKind.AnyVal
+                    case tpnme.Unit          => SpecialKind.Unit
+                    case tpnme.Boolean       => SpecialKind.NonUnitPrimitive
+                    case tpnme.Char          => SpecialKind.NonUnitPrimitive
+                    case tpnme.Byte          => SpecialKind.NonUnitPrimitive
+                    case tpnme.Short         => SpecialKind.NonUnitPrimitive
+                    case tpnme.Int           => SpecialKind.NonUnitPrimitive
+                    case tpnme.Long          => SpecialKind.NonUnitPrimitive
+                    case tpnme.Float         => SpecialKind.NonUnitPrimitive
+                    case tpnme.Double        => SpecialKind.NonUnitPrimitive
+                    case tpnme.Null          => SpecialKind.Null
+                    case tpnme.Singleton     => SpecialKind.Singleton
+                    case tpnme.Array         => SpecialKind.Array
+                    case tpnme.PolyFunction  => SpecialKind.PolyFunction
+                    case tpnme.Tuple         => SpecialKind.Tuple
+                    case tpnme.NonEmptyTuple => SpecialKind.NonEmptyTuple
+                    case tpnme.TupleCons     => SpecialKind.TupleCons
+
+                    case tpnme.RepeatedParamClassMagic => SpecialKind.RepeatedParamMagic
+
+                    case _ =>
+                      if name.name.startsWith("ContextFunction") then SpecialKind.ContextFunctionN
+                      else if name.name.startsWith("Function") then SpecialKind.FunctionN
+                      else if name.name.startsWith("Tuple") then SpecialKind.TupleN
+                      else SpecialKind.None
+                  end match
+
+                case PackageSymbol.SpecialKind.javaLang =>
+                  name match
+                    case tpnme.Object => SpecialKind.Object
+                    case tpnme.String => SpecialKind.String
+                    case tpnme.Enum   => SpecialKind.JavaEnum
+                    case _            => SpecialKind.None
+
+                case _ =>
+                  SpecialKind.None
+              end match
+
+            case ObjectClassTypeName(objName) =>
+              if owner.specialKind == PackageSymbol.SpecialKind.scala && objName.toTermName == nme.EmptyTuple then
+                SpecialKind.EmptyTuple
+              else SpecialKind.None
+          end match
+
+        case _ =>
+          if name == tpnme.RefinedClassMagic then SpecialKind.Refinement
+          else SpecialKind.None
+      end match
+    end computeSpecialKind
+
     private[tastyquery] def create(name: ClassTypeName, owner: Symbol): ClassSymbol =
       owner.addDeclIfDeclaringSym(ClassSymbol(name, owner))
 
@@ -1670,9 +1692,12 @@ object Symbols {
   final class PackageSymbol private (val name: SimpleName, override val owner: PackageSymbol | Null)
       extends Symbol(owner)
       with DeclaringSymbol {
-    type ThisNameType = SimpleName
+    import PackageSymbol.*
+
     type DefiningTreeType = Nothing
     type DeclType = Symbol
+
+    private[Symbols] val specialKind: SpecialKind = computeSpecialKind(name, owner)
 
     // DeclaringSymbol-related fields
     private var rootsInitialized: Boolean = false
@@ -1704,8 +1729,7 @@ object Symbols {
     final def isRootPackage: Boolean = owner == null
 
     /** Is this the scala package? */
-    private[tastyquery] def isScalaPackage: Boolean =
-      name == nme.scalaPackageName && owner != null && owner.isRootPackage
+    private[tastyquery] def isScalaPackage: Boolean = specialKind == SpecialKind.scala
 
     /** Gets the subpackage with the specified `name`, if it exists.
       *
@@ -1732,10 +1756,6 @@ object Symbols {
       assert(!myDeclarations.contains(decl.name), s"trying to add a second entry $decl for name ${decl.name} in $this")
       myDeclarations(decl.name) = decl
 
-    @deprecated("use getDecl; members of packages are never overloaded", "0.4.0")
-    final def getDecls(name: Name)(using Context): List[Symbol] =
-      getDecl(name).toList
-
     private final def ensureRootsInitialized()(using Context): Unit =
       if !rootsInitialized then
         ctx.classloader.scanPackage(this)
@@ -1751,6 +1771,27 @@ object Symbols {
       case _: SignedName =>
         None
     end getDecl
+
+    final def getDecl(name: TypeName)(using Context): Option[TypeSymbol] =
+      getDecl(name: Name).map(_.asType)
+
+    final def getDecl(name: TermName)(using Context): Option[TermSymbol | PackageSymbol] =
+      getDecl(name: Name).map(_.asInstanceOf[TermSymbol | PackageSymbol])
+
+    final def findDecl(name: Name)(using Context): Symbol =
+      getDecl(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
+    final def findDecl(name: TypeName)(using Context): TypeSymbol =
+      getDecl(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
+
+    final def findDecl(name: TermName)(using Context): TermSymbol | PackageSymbol =
+      getDecl(name).getOrElse {
+        throw MemberNotFoundException(this, name)
+      }
 
     final def declarations(using Context): List[Symbol] =
       ensureRootsInitialized()
@@ -1777,7 +1818,36 @@ object Symbols {
     end computeAllPackageObjectDecls
   }
 
-  object PackageSymbol:
+  private[tastyquery] object PackageSymbol:
+    private[Symbols] type SpecialKind = Int
+
+    private[Symbols] object SpecialKind:
+      inline val None = 0
+      inline val root = 1
+      inline val scala = 2
+      inline val java = 3
+      inline val javaLang = 4
+    end SpecialKind
+
+    private def computeSpecialKind(name: SimpleName, owner: PackageSymbol | Null): SpecialKind =
+      owner match
+        case owner: PackageSymbol =>
+          (owner.specialKind: @switch) match
+            case SpecialKind.root =>
+              name match
+                case nme.scalaPackageName => SpecialKind.scala
+                case nme.javaPackageName  => SpecialKind.java
+                case _                    => SpecialKind.None
+            case SpecialKind.java =>
+              name match
+                case nme.langPackageName => SpecialKind.javaLang
+                case _                   => SpecialKind.None
+            case _ =>
+              SpecialKind.None
+        case null =>
+          SpecialKind.root
+    end computeSpecialKind
+
     private[tastyquery] def createRoots(): (PackageSymbol, PackageSymbol) =
       val root = PackageSymbol(nme.RootName, null)
       root.rootsInitialized = true

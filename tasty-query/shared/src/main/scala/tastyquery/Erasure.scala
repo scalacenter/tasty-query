@@ -3,6 +3,7 @@ package tastyquery
 import scala.annotation.tailrec
 
 import tastyquery.Contexts.*
+import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
@@ -33,11 +34,11 @@ private[tastyquery] object Erasure:
     */
   private def preErase(tpe: Type, keepUnit: Boolean)(using Context, SourceLanguage): ErasedTypeRef =
     def hasArrayErasure(cls: ClassSymbol): Boolean =
-      cls == defn.ArrayClass || (cls == defn.RepeatedParamClass && summon[SourceLanguage] == SourceLanguage.Java)
+      cls.isArray || (cls.isRepeatedParamMagic && summon[SourceLanguage] == SourceLanguage.Java)
 
     def arrayOfBounds(bounds: TypeBounds): ErasedTypeRef =
       preErase(bounds.high, keepUnit = false) match
-        case ClassRef(cls) if cls == defn.AnyClass || cls == defn.AnyValClass =>
+        case ClassRef(cls) if cls.isAny || cls.isAnyVal =>
           ClassRef(defn.ObjectClass)
         case typeRef =>
           typeRef.arrayOf()
@@ -53,7 +54,7 @@ private[tastyquery] object Erasure:
           case _ =>
             arrayOf(tpe.translucentSuperType)
       case TypeRef.OfClass(cls) =>
-        if cls == defn.UnitClass then ClassRef(defn.ErasedBoxedUnitClass).arrayOf()
+        if cls.isUnit then ClassRef(defn.ErasedBoxedUnitClass).arrayOf()
         else ClassRef(cls).arrayOf()
       case tpe: TypeRef =>
         tpe.optSymbol match
@@ -80,7 +81,7 @@ private[tastyquery] object Erasure:
           case _ =>
             preErase(tpe.translucentSuperType, keepUnit)
       case TypeRef.OfClass(cls) =>
-        if !keepUnit && cls == defn.UnitClass then ClassRef(defn.ErasedBoxedUnitClass)
+        if !keepUnit && cls.isUnit then ClassRef(defn.ErasedBoxedUnitClass)
         else ClassRef(cls)
       case tpe: TypeRef =>
         tpe.optSymbol match
@@ -129,19 +130,28 @@ private[tastyquery] object Erasure:
   end preErase
 
   private def finishErase(typeRef: ErasedTypeRef)(using Context): ErasedTypeRef =
-    def valueClass(cls: ClassSymbol): ErasedTypeRef =
-      val ctor = cls.findNonOverloadedDecl(nme.Constructor)
-      val List(Left(List(paramRef))) = ctor.paramRefss.dropWhile(_.isRight): @unchecked
-      val paramType = paramRef.underlying
-      erase(paramType, ctor.sourceLanguage)
-
     typeRef match
       case ClassRef(cls) =>
-        if cls.isDerivedValueClass then valueClass(cls)
+        if cls.isDerivedValueClass then finishEraseValueClass(cls)
         else cls.erasure
       case ArrayTypeRef(ClassRef(cls), dimensions) =>
         ArrayTypeRef(cls.erasure, dimensions)
   end finishErase
+
+  private def finishEraseValueClass(cls: ClassSymbol)(using Context): ErasedTypeRef =
+    val ctor = cls.findNonOverloadedDecl(nme.Constructor)
+
+    def illegalConstructorType(): Nothing =
+      throw InvalidProgramStructureException(s"Illegal value class constructor type ${ctor.declaredType.showBasic}")
+
+    def ctorParamType(tpe: TypeOrMethodic): Type = tpe match
+      case tpe: MethodType if tpe.paramTypes.sizeIs == 1 => tpe.paramTypes.head
+      case tpe: MethodType                               => illegalConstructorType()
+      case tpe: PolyType                                 => ctorParamType(tpe.resultType)
+      case tpe: Type                                     => illegalConstructorType()
+
+    erase(ctorParamType(ctor.declaredType), ctor.sourceLanguage)
+  end finishEraseValueClass
 
   /** The erased least upper bound of two erased types is computed as follows.
     *
@@ -167,13 +177,13 @@ private[tastyquery] object Erasure:
       case (ArrayTypeRef(ClassRef(base1), dims1), ArrayTypeRef(ClassRef(base2), dims2)) =>
         if dims1 != dims2 then erasedObject
         else if base1 == base2 then tp1
-        else if defn.isPrimitiveValueClass(base1) || defn.isPrimitiveValueClass(base2) then erasedObject
+        else if base1.isPrimitiveValueClass || base2.isPrimitiveValueClass then erasedObject
         else ArrayTypeRef(ClassRef(erasedClassRefLub(base1, base2)), dims1)
       case (ClassRef(cls1), tp2: ArrayTypeRef) =>
-        if cls1 == defn.ErasedNothingClass || cls1 == defn.NullClass then tp2
+        if cls1 == defn.ErasedNothingClass || cls1.isNull then tp2
         else erasedObject
       case (tp1: ArrayTypeRef, ClassRef(cls2)) =>
-        if cls2 == defn.ErasedNothingClass || cls2 == defn.NullClass then tp1
+        if cls2 == defn.ErasedNothingClass || cls2.isNull then tp1
         else erasedObject
   end erasedLub
 
@@ -181,10 +191,10 @@ private[tastyquery] object Erasure:
     if cls1 == cls2 then cls1
     else if cls1 == defn.ErasedNothingClass then cls2
     else if cls2 == defn.ErasedNothingClass then cls1
-    else if cls1 == defn.NullClass then
+    else if cls1.isNull then
       if cls2.isSubClass(defn.ObjectClass) then cls2
       else defn.AnyClass
-    else if cls2 == defn.NullClass then
+    else if cls2.isNull then
       if cls1.isSubClass(defn.ObjectClass) then cls1
       else defn.AnyClass
     else if cls1 == defn.ErasedBoxedUnitClass || cls2 == defn.ErasedBoxedUnitClass then defn.ObjectClass
@@ -276,8 +286,8 @@ private[tastyquery] object Erasure:
         1
 
       case (ClassRef(cls1), ClassRef(cls2)) =>
-        val isPrimitive1 = defn.isPrimitiveValueClass(cls1)
-        val isPrimitive2 = defn.isPrimitiveValueClass(cls2)
+        val isPrimitive1 = cls1.isPrimitiveValueClass
+        val isPrimitive2 = cls2.isPrimitiveValueClass
         if isPrimitive1 && isPrimitive2 then compareClasses(cls1, cls2)
         else if isPrimitive1 then -1
         else if isPrimitive2 then 1

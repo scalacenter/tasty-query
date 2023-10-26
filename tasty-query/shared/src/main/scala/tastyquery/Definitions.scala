@@ -121,19 +121,16 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     sym
   end createSpecialMethod
 
-  val AnyClass = createSpecialClass(typeName("Any"), Nil, Abstract)
-    .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
+  val AnyClass = createSpecialClass(tpnme.Any, Nil, Abstract)
 
-  val MatchableClass = createSpecialClass(typeName("Matchable"), AnyClass.topLevelRef :: Nil, Trait)
-    .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
+  val MatchableClass = createSpecialClass(tpnme.Matchable, AnyClass.topLevelRef :: Nil, Trait)
 
   val NullClass =
-    createSpecialClass(typeName("Null"), AnyClass.topLevelRef :: MatchableClass.topLevelRef :: Nil, Abstract | Final)
+    createSpecialClass(tpnme.Null, AnyClass.topLevelRef :: MatchableClass.topLevelRef :: Nil, Abstract | Final)
 
-  val SingletonClass = createSpecialClass(typeName("Singleton"), AnyClass.topLevelRef :: Nil, Final)
-    .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
+  val SingletonClass = createSpecialClass(tpnme.Singleton, AnyClass.topLevelRef :: Nil, Final)
 
-  val NothingAnyBounds = RealTypeBounds(SyntacticNothingType, AnyClass.topLevelRef)
+  val NothingAnyBounds = AbstractTypeBounds(SyntacticNothingType, AnyClass.topLevelRef)
 
   private def createSpecialTypeAlias(
     name: TypeName,
@@ -248,8 +245,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   val Any_getClass =
     // def getClass[A >: this.type](): Class[? <: A]
     val tpe = PolyType(List(typeName("A")))(
-      pt => List(RealTypeBounds(AnyClass.thisType, AnyType)),
-      pt => MethodType(Nil, Nil, ClassTypeOf(WildcardTypeArg(RealTypeBounds(NothingType, pt.paramRefs.head))))
+      pt => List(AbstractTypeBounds(AnyClass.thisType, AnyType)),
+      pt => MethodType(Nil, Nil, ClassTypeOf(WildcardTypeArg(AbstractTypeBounds(NothingType, pt.paramRefs.head))))
     )
     createSpecialMethod(AnyClass, nme.m_getClass, tpe, Final)
   end Any_getClass
@@ -324,7 +321,6 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   val RepeatedParamClass: ClassSymbol =
     createSpecialPolyClass(tpnme.RepeatedParamClassMagic, Covariant, tp => List(ObjectType, SeqTypeOf(tp)))
-      .withSpecialErasure(() => ErasedTypeRef.ClassRef(SeqClass))
 
   /** Creates one of the `ContextFunctionNClass` classes.
     *
@@ -344,10 +340,6 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     cls.withParentsDirect(ObjectType :: Nil)
     cls.setAnnotations(Nil)
     cls.withGivenSelfType(None)
-
-    cls.withSpecialErasure { () =>
-      ErasedTypeRef.ClassRef(scalaPackage.requiredClass("Function" + n))
-    }
 
     val inputTypeParams = List.tabulate(n) { i =>
       ClassTypeParamSymbol
@@ -426,15 +418,11 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   private[tastyquery] lazy val internalRepeatedAnnotClass = scalaAnnotationInternalPackage.optionalClass("Repeated")
 
-  def isPrimitiveValueClass(sym: ClassSymbol): Boolean =
-    sym == IntClass || sym == LongClass || sym == FloatClass || sym == DoubleClass ||
-      sym == BooleanClass || sym == ByteClass || sym == ShortClass || sym == CharClass ||
-      sym == UnitClass
+  private[tastyquery] lazy val PrimitiveValueClasses: Set[ClassSymbol] =
+    Set(UnitClass, BooleanClass, CharClass, ByteClass, ShortClass, IntClass, LongClass, FloatClass, DoubleClass)
+  end PrimitiveValueClasses
 
-  private lazy val TupleNClasses = (1 to 22).map(n => scalaPackage.requiredClass(s"Tuple$n")).toSet
-
-  def isTupleNClass(sym: ClassSymbol): Boolean =
-    sym.owner == scalaPackage && TupleNClasses.contains(sym)
+  private[tastyquery] lazy val TupleNClasses = (1 to 22).map(n => scalaPackage.requiredClass(s"Tuple$n")).toSet
 
   private[tastyquery] lazy val PolyFunctionClass = scalaPackage.optionalClass("PolyFunction")
 

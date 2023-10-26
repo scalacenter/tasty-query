@@ -111,7 +111,14 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
     ctx.findTopLevelClass("subtyping.TypesFromTASTy").findNonOverloadedDecl(termName(name)).declaredType.requireType
 
   def findTypesFromTASTyNamed(name: TypeName)(using Context): Type =
-    ctx.findTopLevelClass("subtyping.TypesFromTASTy").findDecl(name).asInstanceOf[TypeMemberSymbol].aliasedType
+    ctx
+      .findTopLevelClass("subtyping.TypesFromTASTy")
+      .findDecl(name)
+      .asInstanceOf[TypeMemberSymbol]
+      .typeDef
+      .asInstanceOf[TypeMemberDefinition.TypeAlias]
+      .alias
+  end findTypesFromTASTyNamed
 
   def findMethodicTypesFromTASTyNamed(name: String)(using Context): MethodicType =
     ctx
@@ -731,12 +738,12 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       TypeRefinement(SimplePathsClass.staticRef, typeName(name), TypeAlias(alias))
 
     def refineTypeBound(name: String, high: Type): Type =
-      TypeRefinement(SimplePathsClass.staticRef, typeName(name), RealTypeBounds(defn.NothingType, high))
+      TypeRefinement(SimplePathsClass.staticRef, typeName(name), AbstractTypeBounds(defn.NothingType, high))
 
     def refinePolyTypeBound(name: String, high: Type): Type =
       val polyLow = TypeLambda(List(typeName("X")), List(defn.NothingAnyBounds), defn.NothingType)
       val polyHigh = TypeLambda(List(typeName("X")), List(defn.NothingAnyBounds), high)
-      TypeRefinement(SimplePathsClass.staticRef, typeName(name), RealTypeBounds(polyLow, polyHigh))
+      TypeRefinement(SimplePathsClass.staticRef, typeName(name), AbstractTypeBounds(polyLow, polyHigh))
 
     def refineTerm(name: String, tpe: TypeOrMethodic, isStable: Boolean = false): Type =
       TermRefinement(SimplePathsClass.staticRef, isStable, termName(name), tpe)
@@ -1058,13 +1065,15 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
   }
 
   testWithContext("wildcard-type-bounds") {
-    val seqOfWildcardProduct = mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, ProductClass.staticRef)))
-    val seqOfWildcardList = mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, listOf(defn.AnyType))))
-    val seqOfWildcardOption = mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, optionOf(defn.AnyType))))
+    val seqOfWildcardProduct =
+      mutableSeqOf(WildcardTypeArg(AbstractTypeBounds(defn.NothingType, ProductClass.staticRef)))
+    val seqOfWildcardList = mutableSeqOf(WildcardTypeArg(AbstractTypeBounds(defn.NothingType, listOf(defn.AnyType))))
+    val seqOfWildcardOption =
+      mutableSeqOf(WildcardTypeArg(AbstractTypeBounds(defn.NothingType, optionOf(defn.AnyType))))
 
     assertEquiv(
       seqOfWildcardProduct,
-      mutableSeqOf(WildcardTypeArg(RealTypeBounds(defn.NothingType, ProductClass.staticRef)))
+      mutableSeqOf(WildcardTypeArg(AbstractTypeBounds(defn.NothingType, ProductClass.staticRef)))
     ).withRef[mutable.Seq[? <: Product], mutable.Seq[? <: Product]]
 
     assertNeitherSubtype(seqOfWildcardProduct, seqOfWildcardList)
@@ -1128,7 +1137,7 @@ class SubtypingSuite extends UnrestrictedUnpicklingSuite:
       PolyType(List(typeName("F"), typeName("T")))(
         pt =>
           List(
-            RealTypeBounds(
+            AbstractTypeBounds(
               TypeLambda(List(typeName("X")))(tl => List(defn.NothingAnyBounds), tl => defn.NothingType),
               TypeLambda(List(typeName("X")))(tl => List(defn.NothingAnyBounds), tl => defn.AnyType)
             ),

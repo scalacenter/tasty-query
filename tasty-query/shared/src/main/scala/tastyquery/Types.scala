@@ -154,10 +154,6 @@ object Types {
   end ErasedTypeRef
 
   object ErasedTypeRef:
-    @deprecated("use the overload that takes an explicit SourceLanguage", since = "0.7.1")
-    def erase(tpe: Type)(using Context): ErasedTypeRef =
-      erase(tpe, SourceLanguage.Scala3)
-
     def erase(tpe: Type, language: SourceLanguage)(using Context): ErasedTypeRef =
       Erasure.erase(tpe, language)
 
@@ -411,9 +407,6 @@ object Types {
   sealed abstract class TermType extends TypeMappable:
     private[tastyquery] type ThisTypeMappableType >: this.type <: TermType
 
-    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
-    def widen(using Context): TermType
-
     /** Widens `TermRef`s one level to their `underlyingOrMethodic` type.
       *
       * - If this term type is a `TermRef`, returns `this.underlyingOrMethodic`.
@@ -436,17 +429,6 @@ object Types {
     */
   sealed abstract class TypeOrMethodic extends TermType:
     private[tastyquery] type ThisTypeMappableType >: this.type <: TypeOrMethodic
-
-    /** Widen singleton types, ByNameTypes, AnnotatedTypes and RefinedTypes. */
-    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
-    final def widen(using Context): TypeOrMethodic = this match
-      case _: TypeRef        => this // fast path for most frequent case
-      case tp: TermRef       => tp.underlyingOrMethodic.widen
-      case tp: SingletonType => tp.underlying.widen
-      case tp: ByNameType    => tp.resultType.widen
-      case tp: AnnotatedType => tp.typ.widen
-      case tp: RefinedType   => tp.parent.widen
-      case tp                => tp
 
     def dealias(using Context): TypeOrMethodic
 
@@ -475,8 +457,7 @@ object Types {
     final def matches(that: TypeOrMethodic)(using Context): Boolean =
       TypeOps.matchesType(this, that)
 
-    final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): ThisTypeMappableType =
-      TypeOps.asSeenFrom(this, pre, cls)
+    def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): TypeOrMethodic
   end TypeOrMethodic
 
   /** The type of a `def` that has at least one (term or type) parameter list.
@@ -485,6 +466,8 @@ object Types {
     */
   sealed abstract class MethodicType extends TypeOrMethodic:
     def dealias(using Context): MethodicType = this
+
+    def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): MethodicType
   end MethodicType
 
   /** A type in the Scala type system.
@@ -494,9 +477,8 @@ object Types {
   sealed abstract class Type extends TypeOrMethodic with NonEmptyPrefix with TypeOrWildcard:
     private[tastyquery] type ThisTypeMappableType = Type
 
-    @deprecated("use isSubType instead", since = "0.9.0")
-    final def isSubtype(that: Type)(using Context): Boolean =
-      isSubType(that)
+    final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): Type =
+      TypeOps.asSeenFrom(this, pre, cls)
 
     final def isSubType(that: Type)(using Context): Boolean =
       Subtyping.isSubType(this, that)
@@ -599,10 +581,6 @@ object Types {
     private[tastyquery] final def applyIfParameterized(args: List[TypeOrWildcard])(using Context): Type =
       if (args.nonEmpty /*typeParams.nonEmpty*/ ) appliedTo(args) else this
 
-    /** Substitute bound types by some other types */
-    private[tastyquery] final def substParams(from: Binders, to: List[Type])(using Context): Type =
-      Substituters.substParams(this, from, to)
-
     /** Substitute class type params by some other types. */
     private[tastyquery] final def substClassTypeParams(from: List[ClassTypeParamSymbol], to: List[TypeOrWildcard])(
       using Context
@@ -667,7 +645,7 @@ object Types {
       * If `this` type is already of that shape, including with the correct `base`,
       * then `this` is returned.
       */
-    final def baseType(base: ClassSymbol)(using Context): Option[Type] =
+    final def baseType(base: ClassSymbol)(using Context): Option[TypeRef | AppliedType] =
       base.baseTypeOf(this)
 
     /** Find the member of this type with the given `name` and `this` as prefix. */
@@ -877,9 +855,9 @@ object Types {
   sealed abstract class NamedType extends TypeProxy {
     protected type AnyDesignatorType = TermOrTypeSymbol | Name | LookupIn | LookupTypeIn | Scala2ExternalSymRef
 
-    type ThisName <: Name
-    type ThisSymbolType <: TermOrTypeSymbol { type ThisNameType <: ThisName }
-    type ThisNamedType >: this.type <: NamedType
+    protected type ThisName <: Name
+    private[tastyquery] type ThisSymbolType <: TermOrTypeSymbol
+    private[tastyquery] type ThisNamedType >: this.type <: NamedType
     protected type ThisDesignatorType >: ThisSymbolType <: AnyDesignatorType
 
     val prefix: Prefix
@@ -918,7 +896,9 @@ object Types {
     /** If designator is a name, this name. Otherwise, the original name
       * of the designator symbol.
       */
-    final def name: ThisName = {
+    def name: Name
+
+    protected final def nameImpl: ThisName = {
       val local = myName
       if local == null then
         val computed = computeName
@@ -935,7 +915,7 @@ object Types {
       case designator: Scala2ExternalSymRef => designator.name
     }).asInstanceOf[ThisName]
 
-    def optSymbol(using Context): Option[ThisSymbolType]
+    def optSymbol(using Context): Option[TermOrTypeSymbol]
 
     /** A selection of the same kind, but with potentially a different prefix.
       * The following normalization is performed for type selections T#A:
@@ -1009,9 +989,9 @@ object Types {
       with SingletonType
       with TermReferenceType {
 
-    type ThisName = TermName
-    type ThisSymbolType = TermSymbol
-    type ThisNamedType = TermRef
+    protected type ThisName = TermName
+    private[tastyquery] type ThisSymbolType = TermSymbol
+    private[tastyquery] type ThisNamedType = TermRef
     protected type ThisDesignatorType = TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
 
     // Cache fields
@@ -1030,6 +1010,8 @@ object Types {
     override def toString(): String =
       s"TermRef($prefix, $myDesignator)"
 
+    final def name: TermName = nameImpl
+
     final def symbol(using Context): TermSymbol =
       ensureResolved()
       mySymbol.nn
@@ -1045,7 +1027,7 @@ object Types {
         myIsStable = isStable
 
       def storeSymbol(sym: TermSymbol): Unit =
-        storeResolved(sym, sym.declaredTypeAsSeenFrom(prefix), sym.isStableMember)
+        storeResolved(sym, sym.typeAsSeenFrom(prefix), sym.isStableMember)
 
       designator match
         case sym: TermSymbol =>
@@ -1180,17 +1162,10 @@ object Types {
 
     def fullyQualifiedName: PackageFullName = symbol.fullName
 
-    @deprecated("use widenTermRef or your own computation instead, depending on the use case", since = "0.9.0")
-    def widen(using Context): PackageRef = this
-
     private[tastyquery] final def resolveMember(name: Name)(using Context): ResolveMemberResult =
       def makeResult(sym: TermOrTypeSymbol, prefixForAsSeenFrom: Prefix): ResolveMemberResult = sym match
         case sym: TermSymbol =>
-          ResolveMemberResult.TermMember(
-            sym :: Nil,
-            sym.declaredTypeAsSeenFrom(prefixForAsSeenFrom),
-            sym.isStableMember
-          )
+          ResolveMemberResult.TermMember(sym :: Nil, sym.typeAsSeenFrom(prefixForAsSeenFrom), sym.isStableMember)
         case sym: ClassSymbol =>
           ResolveMemberResult.ClassMember(sym)
         case sym: TypeSymbolWithBounds =>
@@ -1230,10 +1205,10 @@ object Types {
     private var myDesignator: TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
   ) extends NamedType {
 
-    type ThisName = TypeName
-    type ThisSymbolType = TypeSymbol
-    type ThisNamedType = TypeRef
-    type ThisDesignatorType = TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
+    protected type ThisName = TypeName
+    private[tastyquery] type ThisSymbolType = TypeSymbol
+    private[tastyquery] type ThisNamedType = TypeRef
+    protected type ThisDesignatorType = TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
 
     // Cache fields
     private var myOptSymbol: Option[TypeSymbol] | Null = null
@@ -1251,6 +1226,8 @@ object Types {
       if optSymbol.isDefined then myDesignator = optSymbol.get
       myBounds = resolved.bounds
     end this
+
+    final def name: TypeName = nameImpl
 
     protected def designator: ThisDesignatorType = myDesignator
 
@@ -1553,7 +1530,7 @@ object Types {
     override def toString(): String = s"ByNameType($resultType)"
   }
 
-  sealed trait LambdaType extends TypeOrMethodic with ParamRefBinders {
+  sealed trait LambdaType extends TypeOrMethodic with ParamRefBinder {
     type ThisName <: Name
     type PInfo <: Type | TypeBounds
     type ResultType <: TypeOrMethodic
@@ -1569,11 +1546,6 @@ object Types {
 
     val paramRefs: List[ParamRefType] =
       List.tabulate(paramNames.size)(newParamRef(_): @unchecked)
-
-    final def lookupRef(name: ThisName): Option[ParamRefType] =
-      paramNames.indexOf(name) match
-        case -1    => None
-        case index => Some(paramRefs(index))
 
     def companion: LambdaTypeCompanion[ThisName, PInfo, ResultType, This]
 
@@ -1645,7 +1617,7 @@ object Types {
       paramTypes.map(Substituters.substParams(_, this, args))
   end TermLambdaType
 
-  sealed trait TypeLambdaType extends LambdaType with TypeBinders:
+  sealed trait TypeLambdaType extends LambdaType with TypeParamRefBinder:
     type ThisName = TypeName
     type PInfo = TypeBounds
     type This >: this.type <: TypeLambdaType & ResultType
@@ -1674,6 +1646,7 @@ object Types {
     @constructorOnly resultTypeExp: MethodType => TypeOrMethodic
   ) extends MethodicType
       with TermLambdaType:
+    private[tastyquery] type ThisTypeMappableType = MethodType
     type ResultType = TypeOrMethodic
     type This = MethodType
 
@@ -1707,7 +1680,7 @@ object Types {
         def transform(tp: TypeMappable): TypeMappable = tp match
           case _ if isDependent =>
             tp
-          case tp: TermParamRef if tp.binders eq MethodType.this =>
+          case tp: TermParamRef if tp.binder eq MethodType.this =>
             isDependent = true
             tp
           case _ =>
@@ -1728,6 +1701,9 @@ object Types {
       typePredicate: TypeOrMethodic => Boolean
     )(using Context): ResolveMemberResult =
       throw new AssertionError(s"Cannot find member in $this")
+
+    final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): MethodType =
+      TypeOps.asSeenFrom(this, pre, cls)
 
     override def toString: String =
       val stringPrefix = companion.stringPrefix
@@ -1802,8 +1778,9 @@ object Types {
     @constructorOnly paramTypeBoundsExp: PolyType => List[TypeBounds],
     @constructorOnly resultTypeExp: PolyType => TypeOrMethodic
   ) extends MethodicType
-      with Binders
+      with TypeBinder
       with TypeLambdaType {
+    private[tastyquery] type ThisTypeMappableType = PolyType
     type ResultType = TypeOrMethodic
     type This = PolyType
 
@@ -1833,6 +1810,9 @@ object Types {
     )(using Context): ResolveMemberResult =
       throw new AssertionError(s"Cannot find member in $this")
 
+    final def asSeenFrom(pre: Prefix, cls: Symbol)(using Context): PolyType =
+      TypeOps.asSeenFrom(this, pre, cls)
+
     override def toString: String =
       if !initialized then s"PolyType($paramNames)(<evaluating>...)"
       else s"PolyType($paramNames)($myBounds, $myRes)"
@@ -1855,26 +1835,39 @@ object Types {
         )
   end PolyType
 
-  /** Encapsulates the binders associated with a ParamRef. */
-  sealed trait Binders
+  /** Something that binds inner `BoundType`s to its identity.
+    *
+    * Unlike other `Type`s, the reference identity of a `TypeBinder` is relevant.
+    */
+  sealed trait TypeBinder
 
-  sealed trait ParamRefBinders extends Binders:
+  /** A type binder that binds `ParamRef`s. */
+  sealed trait ParamRefBinder extends TypeBinder:
     def paramRefs: List[ParamRef]
+  end ParamRefBinder
 
-  sealed trait TypeBinders extends ParamRefBinders:
+  /** A type binder that binds `TypeParamRef`s. */
+  sealed trait TypeParamRefBinder extends ParamRefBinder:
     def paramRefs: List[TypeParamRef]
-    def lookupRef(name: TypeName): Option[Type]
     def paramNames: List[TypeName]
     def paramTypeBounds: List[TypeBounds]
-  end TypeBinders
+  end TypeParamRefBinder
 
+  /** A type that is bound to the identity of an enclosing `TypeBinder`. */
   sealed trait BoundType extends Type:
-    type BindersType <: Binders
-    def binders: BindersType
-    private[tastyquery] def copyBoundType(newBinders: BindersType): Type
+    type BinderType <: TypeBinder
 
+    def binder: BinderType
+
+    private[tastyquery] def copyBoundType(newBinders: BinderType): Type
+  end BoundType
+
+  /** A `TypeParamRef` or `TermParamRef`. */
   sealed trait ParamRef extends BoundType:
+    type BinderType <: ParamRefBinder
+
     def paramNum: Int
+  end ParamRef
 
   private[tastyquery] final class TypeLambdaParam(val typeLambda: TypeLambda, num: Int) extends TypeConstructorParam:
     def declaredVariance: Variance =
@@ -1946,30 +1939,30 @@ object Types {
       apply(params.map(_.name))(_ => params.map(_.declaredBounds), resultTypeExp)
   end TypeLambda
 
-  final class TypeParamRef(val binders: TypeBinders, val paramNum: Int) extends TypeProxy with ParamRef {
-    type BindersType = TypeBinders
+  final class TypeParamRef(val binder: TypeParamRefBinder, val paramNum: Int) extends TypeProxy with ParamRef {
+    type BinderType = TypeParamRefBinder
 
-    private[tastyquery] def copyBoundType(newBinders: BindersType): Type =
-      newBinders.paramRefs(paramNum)
+    private[tastyquery] def copyBoundType(newBinder: BinderType): Type =
+      newBinder.paramRefs(paramNum)
 
     override def underlying(using Context): Type = bounds.high
 
-    def paramName: TypeName = binders.paramNames(paramNum)
+    def paramName: TypeName = binder.paramNames(paramNum)
 
-    def bounds(using Context): TypeBounds = binders.paramTypeBounds(paramNum)
+    def bounds(using Context): TypeBounds = binder.paramTypeBounds(paramNum)
 
     override def toString: String = paramName.toString
   }
 
-  final class TermParamRef(val binders: TermLambdaType, val paramNum: Int) extends ParamRef with SingletonType {
-    type BindersType = TermLambdaType
+  final class TermParamRef(val binder: TermLambdaType, val paramNum: Int) extends ParamRef with SingletonType {
+    type BinderType = TermLambdaType
 
-    private[tastyquery] def copyBoundType(newBinders: BindersType): Type =
-      newBinders.paramRefs(paramNum)
+    private[tastyquery] def copyBoundType(newBinder: BinderType): Type =
+      newBinder.paramRefs(paramNum)
 
-    def underlying(using Context): Type = binders.paramInfos(paramNum)
+    def underlying(using Context): Type = binder.paramInfos(paramNum)
 
-    final def paramName: TermName = binders.paramNames(paramNum)
+    final def paramName: TermName = binder.paramNames(paramNum)
 
     override def toString(): String = paramName.toString
   }
@@ -2033,10 +2026,6 @@ object Types {
     val refinedName: UnsignedTermName,
     val refinedType: TypeOrMethodic
   ) extends RefinedType:
-    @deprecated("use the overload with an explicit isStable argument", since = "0.7.4")
-    def this(parent: Type, refinedName: UnsignedTermName, refinedType: Type) =
-      this(parent, isStable = false, refinedName, refinedType)
-
     // Cache fields
     private[tastyquery] val isMethodic = refinedType.isInstanceOf[MethodicType]
     private var mySignedName: SignedName | Null = null
@@ -2107,7 +2096,7 @@ object Types {
     override def toString(): String = s"TermRefinement($parent, $refinedName, $refinedType)"
   end TermRefinement
 
-  final class RecType private (parentExp: RecType => Type) extends RefinedOrRecType with Binders:
+  final class RecType private (parentExp: RecType => Type) extends RefinedOrRecType with TypeBinder:
     private var initialized = false
 
     /** Reference to this recursive type from within itself. */
@@ -2144,10 +2133,8 @@ object Types {
     end fromRefinedClassDecls
   end RecType
 
-  final class RecThis(binder: RecType) extends BoundType with SingletonType:
-    type BindersType = RecType
-
-    final def binders: BindersType = binder
+  final class RecThis(val binder: RecType) extends BoundType with SingletonType:
+    type BinderType = RecType
 
     final def copyBoundType(newBinder: RecType): Type = newBinder.recThis
 
@@ -2161,7 +2148,7 @@ object Types {
     @constructorOnly paramTypeBoundsExp: MatchTypeCase => List[TypeBounds],
     @constructorOnly patternExp: MatchTypeCase => Type,
     @constructorOnly resultTypeExp: MatchTypeCase => Type
-  ) extends TypeBinders:
+  ) extends TypeParamRefBinder:
     val paramRefs: List[TypeParamRef] =
       List.tabulate(paramNames.size)(i => TypeParamRef(this: @unchecked, i))
 
@@ -2182,11 +2169,6 @@ object Types {
     def result: Type =
       if !initialized then throw CyclicReferenceException(s"match [$paramNames]=>???")
       myResult.nn
-
-    final def lookupRef(name: TypeName): Option[TypeParamRef] =
-      paramNames.indexOf(name) match
-        case -1    => None
-        case index => Some(paramRefs(index))
 
     /** The type `[params := this.paramRefs] tp`. */
     private def integrate(params: List[Symbol], tp: Type): Type =
@@ -2272,7 +2254,7 @@ object Types {
     /** The non-alias type bounds type with given bounds */
     private[tastyquery] def derivedTypeBounds(low: Type, high: Type): TypeBounds =
       if ((low eq this.low) && (high eq this.high)) this
-      else RealTypeBounds(low, high)
+      else AbstractTypeBounds(low, high)
 
     final def contains(tp: TypeOrWildcard)(using Context): Boolean = tp match
       case tp: WildcardTypeArg =>
@@ -2290,22 +2272,22 @@ object Types {
     final def intersect(that: TypeBounds)(using Context): TypeBounds =
       if this.contains(that) then that
       else if that.contains(this) then this
-      else RealTypeBounds(this.low | that.low, this.high & that.high)
+      else AbstractTypeBounds(this.low | that.low, this.high & that.high)
 
     final def union(that: TypeBounds)(using Context): TypeBounds =
       if this.contains(that) then this
       else if that.contains(this) then that
-      else RealTypeBounds(this.low & that.low, this.high | that.high)
+      else AbstractTypeBounds(this.low & that.low, this.high | that.high)
 
     private[tastyquery] def mapBounds(f: Type => Type): TypeBounds = this match
-      case RealTypeBounds(low, high) => derivedTypeBounds(f(low), f(high))
-      case self @ TypeAlias(alias)   => self.derivedTypeAlias(f(alias))
+      case AbstractTypeBounds(low, high) => derivedTypeBounds(f(low), f(high))
+      case self @ TypeAlias(alias)       => self.derivedTypeAlias(f(alias))
     end mapBounds
   }
 
-  final case class RealTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high):
+  final case class AbstractTypeBounds(override val low: Type, override val high: Type) extends TypeBounds(low, high):
     override def toString(): String = s"TypeBounds($low, $high)"
-  end RealTypeBounds
+  end AbstractTypeBounds
 
   final case class TypeAlias(alias: Type) extends TypeBounds(alias, alias) {
     private[tastyquery] def derivedTypeAlias(alias: Type): TypeAlias =
