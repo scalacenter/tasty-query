@@ -121,17 +121,14 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     sym
   end createSpecialMethod
 
-  val AnyClass = createSpecialClass(typeName("Any"), Nil, Abstract)
-    .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
+  val AnyClass = createSpecialClass(tpnme.Any, Nil, Abstract)
 
-  val MatchableClass = createSpecialClass(typeName("Matchable"), AnyClass.topLevelRef :: Nil, Trait)
-    .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
+  val MatchableClass = createSpecialClass(tpnme.Matchable, AnyClass.topLevelRef :: Nil, Trait)
 
   val NullClass =
-    createSpecialClass(typeName("Null"), AnyClass.topLevelRef :: MatchableClass.topLevelRef :: Nil, Abstract | Final)
+    createSpecialClass(tpnme.Null, AnyClass.topLevelRef :: MatchableClass.topLevelRef :: Nil, Abstract | Final)
 
-  val SingletonClass = createSpecialClass(typeName("Singleton"), AnyClass.topLevelRef :: Nil, Final)
-    .withSpecialErasure(() => ErasedTypeRef.ClassRef(ObjectClass))
+  val SingletonClass = createSpecialClass(tpnme.Singleton, AnyClass.topLevelRef :: Nil, Final)
 
   val NothingAnyBounds = AbstractTypeBounds(SyntacticNothingType, AnyClass.topLevelRef)
 
@@ -324,7 +321,6 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   val RepeatedParamClass: ClassSymbol =
     createSpecialPolyClass(tpnme.RepeatedParamClassMagic, Covariant, tp => List(ObjectType, SeqTypeOf(tp)))
-      .withSpecialErasure(() => ErasedTypeRef.ClassRef(SeqClass))
 
   /** Creates one of the `ContextFunctionNClass` classes.
     *
@@ -344,10 +340,6 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     cls.withParentsDirect(ObjectType :: Nil)
     cls.setAnnotations(Nil)
     cls.withGivenSelfType(None)
-
-    cls.withSpecialErasure { () =>
-      ErasedTypeRef.ClassRef(scalaPackage.requiredClass("Function" + n))
-    }
 
     val inputTypeParams = List.tabulate(n) { i =>
       ClassTypeParamSymbol

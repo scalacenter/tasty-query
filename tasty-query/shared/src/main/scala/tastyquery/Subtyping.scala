@@ -193,8 +193,8 @@ private[tastyquery] object Subtyping:
       val tparams2 = cls2.typeParams
       if tparams2.isEmpty then
         if tp1.isLambdaSub then false // should be tp1.hasHigherKind, but the scalalib does not like that
-        else if cls2 == defn.AnyClass then true
-        else if cls2 == defn.SingletonClass && isSingleton(tp1) then true
+        else if cls2.isAny then true
+        else if cls2.isSingleton && isSingleton(tp1) then true
         else level3WithBaseType(tp1, tp2, cls2)
       else if tp1.isLambdaSub then isSubType(tp1, etaExpand(tp2, tparams2))
       else level4(tp1, tp2)
@@ -323,7 +323,7 @@ private[tastyquery] object Subtyping:
         else
           tycon2.optSymbol match
             case Some(cls2: ClassSymbol) =>
-              (defn.hasGenericTuples && cls2.isTupleNClass && isSubType(tp1, defn.GenericTupleTypeOf(tp2.args)))
+              (cls2.isTupleNClass && defn.hasGenericTuples && isSubType(tp1, defn.GenericTupleTypeOf(tp2.args)))
                 || level3WithBaseType(tp1, tp2, cls2)
             case Some(sym2: TypeMemberSymbol) if sym2.isTypeAlias =>
               isSubType(tp1, tp2.superType)
@@ -430,7 +430,7 @@ private[tastyquery] object Subtyping:
 
   private def level4(tp1: Type, tp2: Type)(using Context): Boolean = tp1 match
     case TypeRef.OfClass(cls1) =>
-      if cls1 == defn.NullClass then isNullable(tp2)
+      if cls1.isNull then isNullable(tp2)
       else false
 
     case tp1: TypeRef =>
@@ -514,7 +514,7 @@ private[tastyquery] object Subtyping:
 
   private def isNullable(tp: Type)(using Context): Boolean = tp match
     case TypeRef.OfClass(cls) =>
-      !cls.isValueClass && !cls.isModuleClass && cls != defn.SingletonClass
+      !cls.isValueClass && !cls.isModuleClass && !cls.isSingleton
     case tp: TypeRef =>
       false
     case tp: TermRef =>

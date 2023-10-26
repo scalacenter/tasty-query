@@ -1,6 +1,6 @@
 package tastyquery
 
-import scala.annotation.tailrec
+import scala.annotation.{switch, tailrec}
 
 import scala.collection.mutable
 
@@ -850,10 +850,14 @@ object Symbols {
   final class ClassSymbol private (override val name: ClassTypeName, owner: Symbol)
       extends TypeSymbol(name, owner)
       with DeclaringSymbol {
+    import ClassSymbol.*
+
     type DefiningTreeType = ClassDef
     type DeclType = TermOrTypeSymbol
 
     private type SealedChild = ClassSymbol | TermSymbol
+
+    private val specialKind: SpecialKind = computeSpecialKind(name, owner)
 
     // Reference fields (checked in doCheckCompleted)
     private var myTypeParams: List[ClassTypeParamSymbol] | Null = null
@@ -862,7 +866,6 @@ object Symbols {
     private var myGivenSelfType: Option[Type] | Null = null
 
     // Optional reference fields
-    private var mySpecialErasure: Option[() => ErasedTypeRef.ClassRef] = None
     private var myScala2SealedChildren: Option[List[Symbol | Scala2ExternalSymRef]] = None
 
     // DeclaringSymbol-related fields
@@ -915,20 +918,30 @@ object Symbols {
     /** Is this a class a `transparent trait`? */
     final def isTransparentTrait: Boolean = flags.isAllOf(Trait | Transparent)
 
+    private[tastyquery] def isAnySpecialClass: Boolean = specialKind != SpecialKind.None
+
     private[tastyquery] def isValueClass(using Context): Boolean =
-      parents.nonEmpty && parents.head.classSymbol.exists(_ == defn.AnyValClass)
+      parents.nonEmpty && parents.head.classSymbol.exists(_.isAnyVal)
 
     private[tastyquery] def isDerivedValueClass(using Context): Boolean =
-      isValueClass && this != defn.AnyValClass && !isPrimitiveValueClass
+      specialKind == SpecialKind.None && isValueClass
 
-    def isPrimitiveValueClass(using Context): Boolean =
-      owner == defn.scalaPackage && defn.PrimitiveValueClasses.contains(this)
+    def isPrimitiveValueClass: Boolean =
+      specialKind == SpecialKind.Unit || specialKind == SpecialKind.NonUnitPrimitive
 
-    def isTupleNClass(using Context): Boolean =
-      owner == defn.scalaPackage && defn.TupleNClasses.contains(this)
+    def isTupleNClass: Boolean = specialKind == SpecialKind.TupleN
 
-    private[tastyquery] def isRefinementClass: Boolean =
-      name == tpnme.RefinedClassMagic
+    private[tastyquery] def isAny: Boolean = specialKind == SpecialKind.Any
+    private[tastyquery] def isObject: Boolean = specialKind == SpecialKind.Object
+    private[tastyquery] def isAnyVal: Boolean = specialKind == SpecialKind.AnyVal
+    private[tastyquery] def isUnit: Boolean = specialKind == SpecialKind.Unit
+    private[tastyquery] def isString: Boolean = specialKind == SpecialKind.String
+    private[tastyquery] def isJavaEnum: Boolean = specialKind == SpecialKind.JavaEnum
+    private[tastyquery] def isArray: Boolean = specialKind == SpecialKind.Array
+    private[tastyquery] def isNull: Boolean = specialKind == SpecialKind.Null
+    private[tastyquery] def isSingleton: Boolean = specialKind == SpecialKind.Singleton
+    private[tastyquery] def isRepeatedParamMagic: Boolean = specialKind == SpecialKind.RepeatedParamMagic
+    private[tastyquery] def isRefinementClass: Boolean = specialKind == SpecialKind.Refinement
 
     /** Get the companion class of this class, if it exists:
       * - for `class C` => `object class C[$]`
@@ -1084,12 +1097,6 @@ object Symbols {
     final def isSubClass(that: ClassSymbol)(using Context): Boolean =
       linearization.contains(that)
 
-    private[tastyquery] final def withSpecialErasure(specialErasure: () => ErasedTypeRef.ClassRef): this.type =
-      if mySpecialErasure.isDefined then throw IllegalStateException(s"reassignment of the special erasure of $this")
-      if myErasure != null then throw IllegalStateException(s"the erasure of $this was already computed")
-      mySpecialErasure = Some(specialErasure)
-      this
-
     /** The erasure of this class; nonsensical for `scala.Array`. */
     private[tastyquery] final def erasure(using Context): ErasedTypeRef.ClassRef =
       val local = myErasure
@@ -1101,17 +1108,18 @@ object Symbols {
     end erasure
 
     private def computeErasure()(using Context): ErasedTypeRef.ClassRef =
-      mySpecialErasure match
-        case Some(special) =>
-          special()
-        case None =>
-          if owner == defn.scalaPackage then
-            // The classes with special erasures that are loaded from Scala 2 pickles or .tasty files
-            name match
-              case tpnme.AnyVal                                        => defn.ObjectClass.erasure
-              case tpnme.Tuple | tpnme.NonEmptyTuple | tpnme.TupleCons => defn.ProductClass.erasure
-              case _                                                   => ErasedTypeRef.ClassRef(this)
-          else ErasedTypeRef.ClassRef(this)
+      (specialKind: @switch) match
+        case SpecialKind.Any | SpecialKind.AnyVal | SpecialKind.Matchable | SpecialKind.Singleton =>
+          defn.ObjectClass.erasure
+        case SpecialKind.Tuple | SpecialKind.NonEmptyTuple | SpecialKind.TupleCons =>
+          defn.ProductClass.erasure
+        case SpecialKind.RepeatedParamMagic =>
+          defn.SeqClass.erasure
+        case SpecialKind.ContextFunctionN =>
+          val correspondingFunctionNName = typeName(name.asInstanceOf[SimpleTypeName].name.stripPrefix("Context"))
+          defn.scalaPackage.findDecl(correspondingFunctionNName).asClass.erasure
+        case _ =>
+          ErasedTypeRef.ClassRef(this)
     end computeErasure
 
     // DeclaringSymbol implementation
@@ -1576,6 +1584,93 @@ object Symbols {
   }
 
   private[tastyquery] object ClassSymbol:
+    private type SpecialKind = Int
+
+    private object SpecialKind:
+      inline val None = 0
+      inline val Any = 1
+      inline val Matchable = 2
+      inline val Object = 3
+      inline val AnyVal = 4
+      inline val Unit = 5
+      inline val NonUnitPrimitive = 6
+      inline val String = 7
+      inline val Null = 8
+      inline val Singleton = 9
+      inline val Array = 10
+      inline val PolyFunction = 11
+      inline val Tuple = 12
+      inline val NonEmptyTuple = 13
+      inline val TupleCons = 14
+      inline val EmptyTuple = 15
+      inline val FunctionN = 16
+      inline val ContextFunctionN = 17
+      inline val TupleN = 18
+      inline val JavaEnum = 19
+      inline val RepeatedParamMagic = 20
+      inline val Refinement = 21
+    end SpecialKind
+
+    private def computeSpecialKind(name: ClassTypeName, owner: Symbol): SpecialKind =
+      owner match
+        case owner: PackageSymbol if owner.specialKind != SpecialKind.None =>
+          name match
+            case name: SimpleTypeName =>
+              (owner.specialKind: @switch) match
+                case PackageSymbol.SpecialKind.scala =>
+                  name match
+                    case tpnme.Any           => SpecialKind.Any
+                    case tpnme.Matchable     => SpecialKind.Matchable
+                    case tpnme.AnyVal        => SpecialKind.AnyVal
+                    case tpnme.Unit          => SpecialKind.Unit
+                    case tpnme.Boolean       => SpecialKind.NonUnitPrimitive
+                    case tpnme.Char          => SpecialKind.NonUnitPrimitive
+                    case tpnme.Byte          => SpecialKind.NonUnitPrimitive
+                    case tpnme.Short         => SpecialKind.NonUnitPrimitive
+                    case tpnme.Int           => SpecialKind.NonUnitPrimitive
+                    case tpnme.Long          => SpecialKind.NonUnitPrimitive
+                    case tpnme.Float         => SpecialKind.NonUnitPrimitive
+                    case tpnme.Double        => SpecialKind.NonUnitPrimitive
+                    case tpnme.Null          => SpecialKind.Null
+                    case tpnme.Singleton     => SpecialKind.Singleton
+                    case tpnme.Array         => SpecialKind.Array
+                    case tpnme.PolyFunction  => SpecialKind.PolyFunction
+                    case tpnme.Tuple         => SpecialKind.Tuple
+                    case tpnme.NonEmptyTuple => SpecialKind.NonEmptyTuple
+                    case tpnme.TupleCons     => SpecialKind.TupleCons
+
+                    case tpnme.RepeatedParamClassMagic => SpecialKind.RepeatedParamMagic
+
+                    case _ =>
+                      if name.name.startsWith("ContextFunction") then SpecialKind.ContextFunctionN
+                      else if name.name.startsWith("Function") then SpecialKind.FunctionN
+                      else if name.name.startsWith("Tuple") then SpecialKind.TupleN
+                      else SpecialKind.None
+                  end match
+
+                case PackageSymbol.SpecialKind.javaLang =>
+                  name match
+                    case tpnme.Object => SpecialKind.Object
+                    case tpnme.String => SpecialKind.String
+                    case tpnme.Enum   => SpecialKind.JavaEnum
+                    case _            => SpecialKind.None
+
+                case _ =>
+                  SpecialKind.None
+              end match
+
+            case ObjectClassTypeName(objName) =>
+              if owner.specialKind == PackageSymbol.SpecialKind.scala && objName.toTermName == nme.EmptyTuple then
+                SpecialKind.EmptyTuple
+              else SpecialKind.None
+          end match
+
+        case _ =>
+          if name == tpnme.RefinedClassMagic then SpecialKind.Refinement
+          else SpecialKind.None
+      end match
+    end computeSpecialKind
+
     private[tastyquery] def create(name: ClassTypeName, owner: Symbol): ClassSymbol =
       owner.addDeclIfDeclaringSym(ClassSymbol(name, owner))
 
@@ -1597,8 +1692,12 @@ object Symbols {
   final class PackageSymbol private (val name: SimpleName, override val owner: PackageSymbol | Null)
       extends Symbol(owner)
       with DeclaringSymbol {
+    import PackageSymbol.*
+
     type DefiningTreeType = Nothing
     type DeclType = Symbol
+
+    private[Symbols] val specialKind: SpecialKind = computeSpecialKind(name, owner)
 
     // DeclaringSymbol-related fields
     private var rootsInitialized: Boolean = false
@@ -1630,8 +1729,7 @@ object Symbols {
     final def isRootPackage: Boolean = owner == null
 
     /** Is this the scala package? */
-    private[tastyquery] def isScalaPackage: Boolean =
-      name == nme.scalaPackageName && owner != null && owner.isRootPackage
+    private[tastyquery] def isScalaPackage: Boolean = specialKind == SpecialKind.scala
 
     /** Gets the subpackage with the specified `name`, if it exists.
       *
@@ -1721,6 +1819,35 @@ object Symbols {
   }
 
   private[tastyquery] object PackageSymbol:
+    private[Symbols] type SpecialKind = Int
+
+    private[Symbols] object SpecialKind:
+      inline val None = 0
+      inline val root = 1
+      inline val scala = 2
+      inline val java = 3
+      inline val javaLang = 4
+    end SpecialKind
+
+    private def computeSpecialKind(name: SimpleName, owner: PackageSymbol | Null): SpecialKind =
+      owner match
+        case owner: PackageSymbol =>
+          (owner.specialKind: @switch) match
+            case SpecialKind.root =>
+              name match
+                case nme.scalaPackageName => SpecialKind.scala
+                case nme.javaPackageName  => SpecialKind.java
+                case _                    => SpecialKind.None
+            case SpecialKind.java =>
+              name match
+                case nme.langPackageName => SpecialKind.javaLang
+                case _                   => SpecialKind.None
+            case _ =>
+              SpecialKind.None
+        case null =>
+          SpecialKind.root
+    end computeSpecialKind
+
     private[tastyquery] def createRoots(): (PackageSymbol, PackageSymbol) =
       val root = PackageSymbol(nme.RootName, null)
       root.rootsInitialized = true

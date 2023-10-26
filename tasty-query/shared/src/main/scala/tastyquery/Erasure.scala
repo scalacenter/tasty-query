@@ -34,11 +34,11 @@ private[tastyquery] object Erasure:
     */
   private def preErase(tpe: Type, keepUnit: Boolean)(using Context, SourceLanguage): ErasedTypeRef =
     def hasArrayErasure(cls: ClassSymbol): Boolean =
-      cls == defn.ArrayClass || (cls == defn.RepeatedParamClass && summon[SourceLanguage] == SourceLanguage.Java)
+      cls.isArray || (cls.isRepeatedParamMagic && summon[SourceLanguage] == SourceLanguage.Java)
 
     def arrayOfBounds(bounds: TypeBounds): ErasedTypeRef =
       preErase(bounds.high, keepUnit = false) match
-        case ClassRef(cls) if cls == defn.AnyClass || cls == defn.AnyValClass =>
+        case ClassRef(cls) if cls.isAny || cls.isAnyVal =>
           ClassRef(defn.ObjectClass)
         case typeRef =>
           typeRef.arrayOf()
@@ -54,7 +54,7 @@ private[tastyquery] object Erasure:
           case _ =>
             arrayOf(tpe.translucentSuperType)
       case TypeRef.OfClass(cls) =>
-        if cls == defn.UnitClass then ClassRef(defn.ErasedBoxedUnitClass).arrayOf()
+        if cls.isUnit then ClassRef(defn.ErasedBoxedUnitClass).arrayOf()
         else ClassRef(cls).arrayOf()
       case tpe: TypeRef =>
         tpe.optSymbol match
@@ -81,7 +81,7 @@ private[tastyquery] object Erasure:
           case _ =>
             preErase(tpe.translucentSuperType, keepUnit)
       case TypeRef.OfClass(cls) =>
-        if !keepUnit && cls == defn.UnitClass then ClassRef(defn.ErasedBoxedUnitClass)
+        if !keepUnit && cls.isUnit then ClassRef(defn.ErasedBoxedUnitClass)
         else ClassRef(cls)
       case tpe: TypeRef =>
         tpe.optSymbol match
@@ -180,10 +180,10 @@ private[tastyquery] object Erasure:
         else if base1.isPrimitiveValueClass || base2.isPrimitiveValueClass then erasedObject
         else ArrayTypeRef(ClassRef(erasedClassRefLub(base1, base2)), dims1)
       case (ClassRef(cls1), tp2: ArrayTypeRef) =>
-        if cls1 == defn.ErasedNothingClass || cls1 == defn.NullClass then tp2
+        if cls1 == defn.ErasedNothingClass || cls1.isNull then tp2
         else erasedObject
       case (tp1: ArrayTypeRef, ClassRef(cls2)) =>
-        if cls2 == defn.ErasedNothingClass || cls2 == defn.NullClass then tp1
+        if cls2 == defn.ErasedNothingClass || cls2.isNull then tp1
         else erasedObject
   end erasedLub
 
@@ -191,10 +191,10 @@ private[tastyquery] object Erasure:
     if cls1 == cls2 then cls1
     else if cls1 == defn.ErasedNothingClass then cls2
     else if cls2 == defn.ErasedNothingClass then cls1
-    else if cls1 == defn.NullClass then
+    else if cls1.isNull then
       if cls2.isSubClass(defn.ObjectClass) then cls2
       else defn.AnyClass
-    else if cls2 == defn.NullClass then
+    else if cls2.isNull then
       if cls1.isSubClass(defn.ObjectClass) then cls1
       else defn.AnyClass
     else if cls1 == defn.ErasedBoxedUnitClass || cls2 == defn.ErasedBoxedUnitClass then defn.ObjectClass

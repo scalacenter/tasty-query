@@ -71,6 +71,7 @@ object Names {
     val Wildcard: SimpleTypeName = typeName("_")
 
     val Any: SimpleTypeName = typeName("Any")
+    val Matchable: SimpleTypeName = typeName("Matchable")
     val AnyVal: SimpleTypeName = typeName("AnyVal")
     val Nothing: SimpleTypeName = typeName("Nothing")
     val Null: SimpleTypeName = typeName("Null")
@@ -97,6 +98,9 @@ object Names {
     val NonEmptyTuple: SimpleTypeName = typeName("NonEmptyTuple")
     val TupleCons: SimpleTypeName = typeName("*:")
     val Enum: SimpleTypeName = typeName("Enum")
+
+    val PolyFunction: SimpleTypeName = typeName("PolyFunction")
+    val Singleton: SimpleTypeName = typeName("Singleton")
 
     val RefinedClassMagic: SimpleTypeName = typeName("<refinement>")
     val RepeatedParamClassMagic: SimpleTypeName = typeName("<repeated>")
