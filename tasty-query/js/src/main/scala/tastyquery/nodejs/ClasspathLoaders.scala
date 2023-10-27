@@ -31,7 +31,7 @@ object ClasspathLoaders:
     * to create a [[Contexts.Context]]. The latter gives semantic access to all
     * the definitions on the classpath.
     *
-    * @note the resulting [[Classpaths.Classpath.Entry Classpath.Entry]] entries of
+    * @note the resulting [[Classpaths.ClasspathEntry ClasspathEntry]] entries of
     *       the returned [[Classpaths.Classpath]] correspond to the elements of `classpath`.
     */
   def read(classpath: List[String])(using ExecutionContext): Future[Classpath] =
@@ -55,28 +55,28 @@ object ClasspathLoaders:
         }
       }
 
-    def makeEntry(allFiles: Seq[FileContent]): Classpath.Entry =
+    def makeEntry(entryDebugPath: String, allFiles: Seq[FileContent]): ClasspathEntry =
       val packageDatas = allFiles
-        .groupMap[String, ClassData | TastyData](_.packagePath) { fileContent =>
+        .groupMap[String, InMemory.ClassData](_.packagePath) { fileContent =>
           val isClassFile = fileContent.name.endsWith(".class")
           val binaryName =
             if isClassFile then fileContent.name.stripSuffix(".class")
             else fileContent.name.stripSuffix(".tasty")
-          if isClassFile then ClassData(binaryName, fileContent.debugPath, fileContent.content)
-          else TastyData(binaryName, fileContent.debugPath, fileContent.content)
+          if isClassFile then InMemory.ClassData(fileContent.debugPath, binaryName, None, Some(fileContent.content))
+          else InMemory.ClassData(fileContent.debugPath, binaryName, Some(fileContent.content), None)
         }
-        .map { (packagePath, classAndTastys) =>
+        .map { (packagePath, allClassDatas) =>
+          val packageDebugPath = entryDebugPath + ":" + packagePath
           val packageName = packagePath.replace('/', '.').nn
-          val (classes, tastys) = classAndTastys.partitionMap {
-            case classData: ClassData => Left(classData)
-            case tastyData: TastyData => Right(tastyData)
-          }
-          PackageData(packageName, IArray.from(classes.sortBy(_.binaryName)), IArray.from(tastys.sortBy(_.binaryName)))
+          val mergedClassDatas =
+            allClassDatas.groupMapReduce(_.binaryName)(identity)(_.combineWith(_)).valuesIterator.toList
+          InMemory.PackageData(packageDebugPath, packageName, mergedClassDatas)
         }
-      Classpath.Entry(IArray.from(packageDatas))
+        .toList
+      InMemory.ClasspathEntry(entryDebugPath, packageDatas)
     end makeEntry
 
-    for allEntries <- allEntriesFuture yield Classpath(IArray.from(allEntries).map(makeEntry))
+    for allEntries <- allEntriesFuture yield classpath.lazyZip(allEntries).map(makeEntry(_, _))
   end read
 
   private def fromDirectory(dir: String, relPath: String)(implicit ec: ExecutionContext): Future[Seq[FileContent]] =

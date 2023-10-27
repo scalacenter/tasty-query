@@ -555,7 +555,7 @@ private[classfiles] object ClassfileReader {
   }
 
   def unpickle[T](classRoot: ClassData)(op: ClassfileReader => DataStream ?=> T): T =
-    ClassfileBuffer.Root(classRoot.bytes, 0).use { s ?=>
+    ClassfileBuffer.Root(classRoot.readClassFileBytes(), 0).use { s ?=>
       op(ClassfileReader())
     }
 }

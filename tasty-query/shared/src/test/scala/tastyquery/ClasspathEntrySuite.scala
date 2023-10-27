@@ -1,16 +1,17 @@
 package tastyquery
 
-import Contexts.*
-import Symbols.*
+import tastyquery.Classpaths.*
+import tastyquery.Contexts.*
+import tastyquery.Symbols.*
 
 import tastyquery.testutil.TestPlatform
-import tastyquery.Classpaths.Classpath
 
 class ClasspathEntrySuite extends UnrestrictedUnpicklingSuite:
 
-  def scala3ClasspathEntry(using Context) = ctx.classloader.classpath.entries(TestPlatform.scala3ClasspathIndex)
+  def scala3ClasspathEntry(using Context): ClasspathEntry =
+    ctx.classloader.classpath(TestPlatform.scala3ClasspathIndex)
 
-  def lookupSyms(entry: Classpath.Entry)(using Context): IArray[Symbol] =
+  def lookupSyms(entry: ClasspathEntry)(using Context): IArray[Symbol] =
     IArray.from(ctx.findSymbolsByClasspathEntry(entry))
 
   testWithContext("scala-library-by-entry") {

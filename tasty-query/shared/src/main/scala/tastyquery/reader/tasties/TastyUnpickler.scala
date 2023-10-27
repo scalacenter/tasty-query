@@ -85,9 +85,9 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
 
   import reader.*
 
-  def this(bytes: Array[Byte]) =
+  def this(bytes: IArray[Byte]) =
     // ok to use as Array because TastyReader is readOnly
-    this(new TastyReader(bytes))
+    this(new TastyReader(bytes.unsafeArray))
 
   private val sectionReader = new mutable.HashMap[String, TastyReader]
   val nameAtRef: NameTable = new NameTable

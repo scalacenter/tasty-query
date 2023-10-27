@@ -71,7 +71,7 @@ object Contexts {
       sourceFiles.getOrElseUpdate(path, new SourceFile(path))
 
     /** For a given classpath entry, return a lazy view over all the roots covered by the entry. */
-    def findSymbolsByClasspathEntry(entry: Classpath.Entry): Iterable[TermOrTypeSymbol] =
+    def findSymbolsByClasspathEntry(entry: ClasspathEntry): Iterable[TermOrTypeSymbol] =
       classloader.lookupByEntry(entry).getOrElse {
         throw new UnknownClasspathEntry(entry)
       }

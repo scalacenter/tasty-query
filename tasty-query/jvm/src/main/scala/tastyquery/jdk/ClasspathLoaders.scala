@@ -16,10 +16,6 @@ import tastyquery.Classpaths.*
   */
 object ClasspathLoaders {
 
-  private given Ordering[ClassData] = Ordering.by(_.binaryName)
-  private given Ordering[TastyData] = Ordering.by(_.binaryName)
-  private given Ordering[PackageData] = Ordering.by(_.dotSeparatedName)
-
   private enum FileKind(val ext: String):
     case Class extends FileKind("class")
     case Tasty extends FileKind("tasty")
@@ -44,7 +40,7 @@ object ClasspathLoaders {
     * to create a [[Contexts.Context]]. The latter gives semantic access to all
     * the definitions on the classpath.
     *
-    * @note the resulting [[Classpaths.Classpath.Entry Classpath.Entry]] entries of
+    * @note the resulting [[Classpaths.ClasspathEntry ClasspathEntry]] entries of
     *       the returned [[Classpaths.Classpath]] correspond to the elements of `classpath`.
     */
   def read(classpath: List[Path]): Classpath =
@@ -70,36 +66,40 @@ object ClasspathLoaders {
       classFile.replace('/', '.').nn.replace('\\', '.').nn
     end binaryName
 
-    def compressPackageData(data: List[(String, ClassData | TastyData)]): IArray[PackageData] =
-      val groupedPackages = IArray.from(data).groupMap((pkg, _) => pkg)((_, data) => data)
-      val pkgs = groupedPackages.map { (pkg, classAndTastys) =>
-        val (classes, tastys) = classAndTastys.partitionMap {
-          case classData: ClassData => Left(classData)
-          case tastyData: TastyData => Right(tastyData)
-        }
-        PackageData(pkg, classes.sorted, tastys.sorted)
-      }
-      IArray.from(pkgs).sorted
+    def compressPackageData(
+      entryDebugString: String,
+      data: List[(String, InMemory.ClassData)]
+    ): List[InMemory.PackageData] =
+      val groupedPackages = data.groupMap((pkg, _) => pkg)((_, data) => data)
+      groupedPackages.map { (packageName, allClassDatas) =>
+        val packageDebugString = entryDebugString + ":" + packageName
+        val mergedClassDatas =
+          allClassDatas.groupMapReduce(_.binaryName)(identity)(_.combineWith(_)).valuesIterator.toList
+        InMemory.PackageData(packageDebugString, packageName, mergedClassDatas)
+      }.toList
     end compressPackageData
 
-    def toEntry(entry: ClasspathEntry): Classpath.Entry =
+    def toEntry(entryDebugString: String, entry: ClasspathEntryKind): InMemory.ClasspathEntry =
       val map = entry.walkFiles(kinds.toSeq*) { (kind, fileWithExt, path, bytes) =>
         val (s"$file.${kind.`ext`}") = fileWithExt: @unchecked
         val bin = binaryName(file)
         val (packageName, simpleName) = classAndPackage(bin)
         kind match {
           case FileKind.Class =>
-            packageName -> ClassData(simpleName, path, bytes)
+            packageName -> InMemory.ClassData(path, simpleName, None, Some(bytes))
           case FileKind.Tasty =>
-            packageName -> TastyData(simpleName, path, bytes)
+            packageName -> InMemory.ClassData(path, simpleName, Some(bytes), None)
         }
       }
-      val packageDatas =
-        compressPackageData(map.get(FileKind.Class).getOrElse(Nil) ++ map.get(FileKind.Tasty).getOrElse(Nil))
-      Classpath.Entry(packageDatas)
+      val packageDatas: List[InMemory.PackageData] =
+        compressPackageData(
+          entryDebugString,
+          map.get(FileKind.Class).getOrElse(Nil) ++ map.get(FileKind.Tasty).getOrElse(Nil)
+        )
+      InMemory.ClasspathEntry(entryDebugString, packageDatas)
     end toEntry
 
-    Classpath(classpathToEntries(classpath).map(toEntry))
+    classpathToEntries(classpath).map(toEntry)
   end read
 
   private def loadBytes(fileStream: InputStream): IArray[Byte] = {
@@ -113,16 +113,18 @@ object ClasspathLoaders {
     IArray.from(bytes.toByteArray().nn)
   }
 
-  private def classpathToEntries(classpath: List[Path]): IArray[ClasspathEntry] =
-    for e <- IArray.from(classpath)
-    yield
-      if Files.exists(e) then
-        if Files.isDirectory(e) then ClasspathEntry.Directory(e)
-        else if e.getFileName().toString().endsWith(".jar") then ClasspathEntry.Jar(e)
-        else throw IllegalArgumentException("Illegal classpath entry: " + e)
-      else ClasspathEntry.Empty
+  private def classpathToEntries(classpath: List[Path]): List[(String, ClasspathEntryKind)] =
+    for e <- classpath yield
+      val entryKind =
+        if Files.exists(e) then
+          if Files.isDirectory(e) then ClasspathEntryKind.Directory(e)
+          else if e.getFileName().toString().endsWith(".jar") then ClasspathEntryKind.Jar(e)
+          else throw IllegalArgumentException("Illegal classpath entry: " + e)
+        else ClasspathEntryKind.Empty
+      e.toString() -> entryKind
+  end classpathToEntries
 
-  private enum ClasspathEntry {
+  private enum ClasspathEntryKind {
     case Jar(path: Path)
     case Directory(path: Path)
     case Empty
@@ -191,7 +193,7 @@ object ClasspathLoaders {
               }
           }.toMap
 
-        case ClasspathEntry.Empty => Map.empty
+        case Empty => Map.empty
       }
   }
 

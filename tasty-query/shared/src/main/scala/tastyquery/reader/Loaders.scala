@@ -33,14 +33,14 @@ private[tastyquery] object Loaders {
     given Resolver = Resolver()
 
     private enum Entry:
-      case ClassAndTasty(classData: ClassData, tastyData: TastyData)
-      case TastyOnly(tastyData: TastyData)
-      case ClassOnly(classData: ClassData, inners: IArray[ClassData])
+      case ClassAndTasty(classData: ClassData)
+      case TastyOnly(classData: ClassData)
+      case ClassOnly(classData: ClassData, inners: List[ClassData])
 
-    private type ByEntryMap = Map[Classpath.Entry, IArray[(PackageSymbol, IArray[SimpleName])]]
+    private type ByEntryMap = Map[ClasspathEntry, IArray[(PackageSymbol, IArray[SimpleName])]]
 
     private var searched = false
-    private var packages: Map[PackageSymbol, IArray[PackageData]] = compiletime.uninitialized
+    private var packages: Map[PackageSymbol, List[PackageData]] = compiletime.uninitialized
     private var _hasGenericTuples: Boolean = compiletime.uninitialized
     private var byEntry: ByEntryMap | Null = null
     private val roots: mutable.Map[PackageSymbol, mutable.Map[SimpleName, Entry]] = mutable.HashMap.empty
@@ -83,13 +83,13 @@ private[tastyquery] object Loaders {
       doCompleteRoot(root, entry)(using ReaderContext(ctx))
 
     private def doCompleteRoot(root: Loader.Root, entry: Entry)(using ReaderContext): Unit =
-      def innerClassLookup(nested: IArray[ClassData]): Map[SimpleName, ClassData] =
+      def innerClassLookup(nested: List[ClassData]): Map[SimpleName, ClassData] =
         val mkBinaryName: String => SimpleName =
           if root.pkg == rctx.EmptyPackage then termName(_)
           else
             val pre = root.pkg.fullName.path.mkString("/")
             bin => termName(s"$pre/$bin")
-        Map.from(nested.view.map(c => mkBinaryName(c.binaryName) -> c))
+        nested.iterator.map(c => mkBinaryName(c.binaryName) -> c).toMap
       end innerClassLookup
 
       def inspectClass(root: Loader.Root, classData: ClassData, entry: Entry): Unit =
@@ -106,22 +106,22 @@ private[tastyquery] object Loaders {
               case _ => throw UnexpectedTasty(root)
           case ClassKind.TASTy =>
             entry match
-              case Entry.ClassAndTasty(_, tasty) =>
+              case Entry.ClassAndTasty(classData) =>
                 // TODO: verify UUID of tasty matches classfile, then parse symbols
-                enterTasty(root, tasty)
+                enterTasty(root, classData)
               case _ => throw MissingTopLevelTasty(root)
           case ClassKind.Artifact =>
             () // no initialisation step to take
       end inspectClass
 
-      def enterTasty(root: Loader.Root, tastyData: TastyData): Unit =
-        // TODO: test reading tree from dependency not directly queried??
-        val unpickler = TastyUnpickler(Array.from(tastyData.bytes))
+      def enterTasty(root: Loader.Root, classData: ClassData): Unit =
+        val unpickler = TastyUnpickler(classData.readTastyFileBytes())
+        val debugPath = classData.toString()
         val trees = unpickler
           .unpickle(
-            tastyData.debugPath,
+            debugPath,
             TastyUnpickler.TreeSectionUnpickler(
-              unpickler.unpickle(tastyData.debugPath, new TastyUnpickler.PositionSectionUnpickler)
+              unpickler.unpickle(debugPath, new TastyUnpickler.PositionSectionUnpickler)
             )
           )
           .get
@@ -155,7 +155,7 @@ private[tastyquery] object Loaders {
           inspectClass(root, entry.classData, entry)
         case entry: Entry.TastyOnly =>
           // Tested in `SymbolSuite`, `ReadTreeSuite`, these do not need to see class files.
-          enterTasty(root, entry.tastyData)
+          enterTasty(root, entry.classData)
     end doCompleteRoot
 
     /** Loads all the roots of the given `pkg`. */
@@ -211,31 +211,29 @@ private[tastyquery] object Loaders {
       def binaryNameToRootName(binaryName: String): SimpleName =
         termName(NameTransformer.decode(binaryName))
 
-      if data.classes.isEmpty then
-        for tData <- data.tastys do f(binaryNameToRootName(tData.binaryName), Entry.TastyOnly(tData))
-      else
-        val tastyMap = data.tastys.map(t => t.binaryName -> t).toMap
-        val nestedPrefixes = data.classes.map(_.binaryName + "$")
+      val allClassDatas = data.listAllClassDatas()
+      val nestedPrefixes = allClassDatas.map(_.binaryName + "$")
 
-        for cData <- data.classes do
-          val binaryName = cData.binaryName
+      for cData <- allClassDatas do
+        val binaryName = cData.binaryName
 
-          tastyMap.get(binaryName) match
-            case Some(tastyData) =>
-              // #263 If there is a `.tasty` file, it is necessarily top-level
-              f(binaryNameToRootName(binaryName), Entry.ClassAndTasty(cData, tastyData))
-
-            case None =>
-              /* Otherwise, it can be Scala 2 or Java. In that case, we must
-               * only process top-level classes. We must include nested class
-               * data regardless, because we cannot tell whether it is Java
-               * or Scala 2 here.
-               */
-              val isTopLevel = !nestedPrefixes.exists(binaryName.startsWith(_))
-              if isTopLevel then
-                val nestedPrefix = binaryName + "$"
-                val nestedData = data.classes.filter(_.binaryName.startsWith(nestedPrefix))
-                f(binaryNameToRootName(binaryName), Entry.ClassOnly(cData, nestedData))
+        if cData.hasTastyFile then
+          // #263 If there is a `.tasty` file, it is necessarily top-level
+          val entry =
+            if cData.hasClassFile then Entry.ClassAndTasty(cData)
+            else Entry.TastyOnly(cData)
+          f(binaryNameToRootName(binaryName), entry)
+        else
+          /* Otherwise, it can be Scala 2 or Java. In that case, we must
+           * only process top-level classes. We must include nested class
+           * data regardless, because we cannot tell whether it is Java
+           * or Scala 2 here.
+           */
+          val isTopLevel = !nestedPrefixes.exists(binaryName.startsWith(_))
+          if isTopLevel then
+            val nestedPrefix = binaryName + "$"
+            val nestedData = allClassDatas.filter(_.binaryName.startsWith(nestedPrefix))
+            f(binaryNameToRootName(binaryName), Entry.ClassOnly(cData, nestedData))
     end foreachEntry
 
     def scanPackage(pkg: PackageSymbol)(using Context): Unit = {
@@ -251,7 +249,7 @@ private[tastyquery] object Loaders {
       }
     }
 
-    def lookupByEntry(src: Classpath.Entry)(using Context): Option[Iterable[TermOrTypeSymbol]] =
+    def lookupByEntry(src: ClasspathEntry)(using Context): Option[Iterable[TermOrTypeSymbol]] =
 
       def lookupRoots(pkg: PackageSymbol, rootNames: IArray[SimpleName]) =
         val buf = IArray.newBuilder[TermOrTypeSymbol]
@@ -278,12 +276,12 @@ private[tastyquery] object Loaders {
 
     def initPackages()(using ctx: Context): Unit =
 
-      def loadPackages(): IArray[(PackageSymbol, PackageData)] =
+      def loadPackages(): List[(PackageSymbol, PackageData)] =
         val localPackages = mutable.HashMap.empty[String, PackageSymbol]
         def createOrLookupPackage(pkgName: String): PackageSymbol =
           localPackages.getOrElseUpdate(pkgName, ctx.findPackageFromRootOrCreate(toPackageName(pkgName)))
-        classpath.entries.flatMap(entry =>
-          entry.packages.map(pkg => createOrLookupPackage(pkg.dotSeparatedName) -> pkg)
+        classpath.flatMap(entry =>
+          entry.listAllPackages().map(pkg => createOrLookupPackage(pkg.dotSeparatedName) -> pkg)
         )
       end loadPackages
 
@@ -291,7 +289,7 @@ private[tastyquery] object Loaders {
         searched = true
         packages = loadPackages().groupMap((pkg, _) => pkg)((_, data) => data)
         _hasGenericTuples =
-          packages.get(defn.scalaPackage).exists(_.exists(_.tastys.exists(_.binaryName == "$times$colon")))
+          packages.get(defn.scalaPackage).exists(_.exists(_.getClassDataByBinaryName("$times$colon").isDefined))
     end initPackages
 
     def hasGenericTuples: Boolean = _hasGenericTuples
@@ -300,7 +298,7 @@ private[tastyquery] object Loaders {
       require(searched)
 
       val localByEntry =
-        mutable.HashMap.empty[Classpath.Entry, mutable.HashMap[PackageSymbol, mutable.HashSet[SimpleName]]]
+        mutable.HashMap.empty[ClasspathEntry, mutable.HashMap[PackageSymbol, mutable.HashSet[SimpleName]]]
       val localSeen = mutable.HashMap.empty[PackageSymbol, mutable.HashSet[SimpleName]]
       val localPackages = mutable.HashMap.empty[String, PackageSymbol]
 
@@ -308,8 +306,8 @@ private[tastyquery] object Loaders {
         localPackages.getOrElseUpdate(pkgName, ctx.findPackageFromRoot(toPackageName(pkgName)))
 
       for
-        entry <- classpath.entries
-        pkgData <- entry.packages
+        entry <- classpath
+        pkgData <- entry.listAllPackages()
       do
         val pkg = lookupPackage(pkgData.dotSeparatedName)
         foreachEntry(pkgData)((name, _) =>
