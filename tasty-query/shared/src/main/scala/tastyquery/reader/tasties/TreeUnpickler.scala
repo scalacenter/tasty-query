@@ -1275,14 +1275,11 @@ private[tasties] class TreeUnpickler private (
           throw TastyFormatException(s"Unexpected underlying type of THIS: $tpe")
     case QUALTHIS =>
       reader.readByte()
-      if (tagFollowShared != IDENTtpt) {
-        throw TastyFormatException(s"Unexpected tag after QUALTHIS: ${astTagToString(tagFollowShared)} $posErrorMsg")
-      }
-      // Skip IDENTtpt tag and name
-      reader.readByte()
-      readTypeName()
-      // Type of QUALTHIS is ThisType for the type reference, which is the type of the IDENTtpt
-      ThisType(readTrueType().asInstanceOf[TypeRef])
+      val qualifier = readTypeTree.asInstanceOf[TypeIdent]
+      qualifier.toPrefix match
+        case tpe: TypeRef    => ThisType(tpe)
+        case tpe: PackageRef => tpe
+        case tpe             => throw TastyFormatException(s"Unexpected underlying type of QUALTHIS: $tpe")
     case SUPERtype =>
       reader.readByte()
       reader.readEnd()
@@ -1527,7 +1524,7 @@ private[tasties] class TreeUnpickler private (
       val spn = span
       reader.readByte()
       val typeName = readTypeName()
-      val typ = readTrueType()
+      val typ = readNonEmptyPrefix()
       TypeIdent(typeName)(typ)(spn)
     case SINGLETONtpt =>
       val spn = span
