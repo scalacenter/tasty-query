@@ -2,8 +2,6 @@ package tastyquery
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import dotty.tools.tasty.TastyFormat.NameTags
-
 import munit.{Location, TestOptions}
 
 import tastyquery.Annotations.*
