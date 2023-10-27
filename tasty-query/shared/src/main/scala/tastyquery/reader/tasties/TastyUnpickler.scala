@@ -2,16 +2,15 @@ package tastyquery.reader.tasties
 
 import scala.collection.mutable
 
-import dotty.tools.tasty.TastyBuffer.{Addr, NameRef}
-import dotty.tools.tasty.TastyFormat.NameTags
-import dotty.tools.tasty.{TastyHeaderUnpickler, TastyReader}
-
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Names.*
 import tastyquery.Signatures.*
 
 import tastyquery.reader.{ReaderContext, UTF8Utils}
+
+import TastyFormat.NameTags
+import TastyReader.{Addr, NameRef}
 
 private[reader] object TastyUnpickler {
 

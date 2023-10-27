@@ -131,41 +131,9 @@ lazy val tastyQuery =
     )
     .jvmSettings(
       fork := true,
-      libraryDependencies += "org.scala-lang" %% "tasty-core" % usedTastyRelease,
       Test / javalibEntry := (Test / rtJarOpt).value.getOrElse("jrt:/modules/java.base/"),
     )
     .jsSettings(
-      // Add the sources of tasty-core, since it is not published for Scala.js
-      ivyConfigurations += SourceDeps.hide,
-      transitiveClassifiers := Seq("sources"),
-      libraryDependencies += "org.scala-lang" %% "tasty-core" % usedTastyRelease % SourceDeps,
-      (Compile / sourceGenerators) += Def.task {
-        val s = streams.value
-        val cacheDir = s.cacheDirectory
-        val trgDir = (Compile / sourceManaged).value / "tasty-core-src"
-
-        val report = updateClassifiers.value
-        val tastyCoreSourcesJar = report.select(
-            configuration = configurationFilter(SourceDeps.name),
-            module = (_: ModuleID).name.startsWith("tasty-core_"),
-            artifact = artifactFilter(`type` = "src")).headOption.getOrElse {
-          throw new MessageOnlyException(s"Could not fetch tasty-core sources")
-        }
-
-        FileFunction.cached(cacheDir / s"fetchTastyCoreSource",
-            FilesInfo.lastModified, FilesInfo.exists) { dependencies =>
-          s.log.info(s"Unpacking tasty-core sources to $trgDir...")
-          if (trgDir.exists)
-            IO.delete(trgDir)
-          IO.createDirectory(trgDir)
-          IO.unzip(tastyCoreSourcesJar, trgDir)
-          val sourceFiles = (trgDir ** "*.scala").get.toSet
-          for (f <- sourceFiles)
-            IO.writeLines(f, patchTastyCoreSource(IO.readLines(f)))
-          sourceFiles
-        } (Set(tastyCoreSourcesJar)).toSeq
-      }.taskValue,
-
       Test / javalibEntry := {
         val rtJar = (Test / rtJarOpt).value
 
@@ -185,16 +153,6 @@ lazy val tastyQuery =
       scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.CommonJSModule)),
       jsEnv := new NodeJSEnv(NodeJSEnv.Config().withArgs(List("--enable-source-maps"))),
     )
-
-def patchTastyCoreSource(lines: List[String]): List[String] = {
-  val importStatement = raw"""(?s)(^ *import .+\.)_$$""".r
-  for (line <- lines) yield {
-    line match {
-      case importStatement(allButUnderscore) => allButUnderscore + "*"
-      case _                                 => line
-    }
-  }
-}
 
 def extractRTJar(targetRTJar: File): Unit = {
   import java.io.{IOException, FileOutputStream}
