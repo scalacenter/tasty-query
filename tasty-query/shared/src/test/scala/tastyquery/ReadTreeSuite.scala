@@ -295,6 +295,20 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
           ) =>
     }
     assert(containsSubtree(importMatch)(clue(tree)))
+
+    val qualThisPackageImportMatch: StructureCheck = {
+      case Import(
+            This(TypeIdent(SimpleTypeName("imports"))),
+            List(
+              ImportSelector(
+                ImportIdent(SimpleName("ClassInSameFile")),
+                Some(ImportIdent(SimpleName("RenamedClassInSameFile"))),
+                None
+              )
+            )
+          ) =>
+    }
+    assert(containsSubtree(qualThisPackageImportMatch)(clue(tree)))
   }
 
   testUnpickleTopLevel("given-import", "imports.ImportGiven") { tree =>

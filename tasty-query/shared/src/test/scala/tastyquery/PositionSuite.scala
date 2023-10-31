@@ -260,7 +260,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickle("import-selector-renamed", "imports.RenamedImport") { tree =>
-    assertEquals(collectCode[ImportSelector](tree), List("A => ClassA"))
+    assertEquals(collectCode[ImportSelector](tree), List("A => ClassA", "ClassInSameFile as RenamedClassInSameFile"))
   }
 
   testUnpickle("export", "simple_trees.Export") { tree =>
