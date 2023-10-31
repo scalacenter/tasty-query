@@ -1,88 +1,153 @@
 package tastyquery
 
-/** In-memory representation of the contents of classpaths. */
+/** Representation of the contents of classpaths. */
 object Classpaths:
-  /** Contains class data and tasty data for a given package. */
-  final class PackageData(val dotSeparatedName: String, val classes: IArray[ClassData], val tastys: IArray[TastyData]):
-    override def toString(): String = s"PackageData($dotSeparatedName)"
-
-  /** In-memory representation of a `.class` file.
+  /** The representation of an entire classpath.
     *
-    * `binaryName` is the file name without the `.class` extension.
+    * Classpaths are made of a sequence of entries (where order is relevant).
+    * Each entry contains a set of packages, and packages contain set of class
+    * information files.
     */
-  final class ClassData(val binaryName: String, val debugPath: String, val bytes: IArray[Byte]):
-    override def toString(): String = s"ClassData($binaryName, $debugPath)"
+  type Classpath = List[ClasspathEntry]
 
-  /** In-memory representation of a `.tasty` file.
+  /** One entry of the classpath.
     *
-    * `binaryName` is the file name without the `.class` extension.
-    */
-  final class TastyData(val binaryName: String, val debugPath: String, val bytes: IArray[Byte]):
-    override def toString(): String = s"TastyData($binaryName, $debugPath)"
-
-  /** In-memory representation of an entire classpath.
+    * A `ClasspathEntry` must have a meaningful `equals` and `hashCode`, which
+    * must reflect the identity of the entry (not necessarily the reference
+    * identity). Its equality is notably used by
+    * [[Contexts.Context.findSymbolsByClasspathEntry]].
     *
-    * A [[Classpath]] can be given to [[Contexts.Context.initialize]] to create a
-    * [[Contexts.Context]]. The latter gives semantic access to all the
-    * definitions on the classpath.
+    * Users of a `ClasspathEntry` and its components may consider them to be
+    * idempotent.
+    *
+    * All the methods of `ClasspathEntry` and its components may throw
+    * `java.io.IOException`s to indicate I/O errors.
+    *
+    * Implementations of this class are encouraged to define a `toString()`
+    * method that helps identifying the entry for debugging purposes.
     */
-  final class Classpath(val entries: IArray[Classpath.Entry]):
-
-    /** Returns the concatenation of this classpath with `other`.
-      * This is useful for structural sharing of [[Classpath.Entry Classpath Entries]]. e.g. in the following example
-      * the standard library is loaded once and shared between two classpaths:
-      * ```scala
-      * val stdLibCp = ClasspathLoaders.read(standardLibraryPaths)
-      * val libV101Cp = ClasspathLoaders.read(List(Paths.get("path/to/lib-1.0.1.jar"))) ++ stdLibCp
-      * val libV102Cp = ClasspathLoaders.read(List(Paths.get("path/to/lib-1.0.2.jar"))) ++ stdLibCp
-      * ```
+  trait ClasspathEntry:
+    /** Lists all the packages available in this entry, including nested packages.
+      *
+      * This method must not return two items with the same [[PackageData.dotSeparatedName]].
+      *
+      * Subsequent calls to `listAllPackages` may return the same instances of
+      * [[PackageData]], but need not do so.
       */
-    def ++(other: Classpath): Classpath = Classpath(entries ++ other.entries)
+    def listAllPackages(): List[PackageData]
+  end ClasspathEntry
 
-    /** Filter a classpath so it only contains roots that match the given binary names. */
-    def withFilter(binaryNames: List[String]): Classpath =
+  /** Information about one package within a [[ClasspathEntry]].
+    *
+    * Implementations of this class are encouraged to define a `toString()`
+    * method that helps identifying the package and its enclosing classpath
+    * entry for debugging purposes.
+    */
+  trait PackageData:
+    /** The fully-qualified name of the package represented by this `PackageData`. */
+    val dotSeparatedName: String
 
-      def packageAndClass(binaryName: String): (String, String) =
-        val lastSep = binaryName.lastIndexOf('.')
-        if lastSep == -1 then ("", binaryName)
-        else
-          import scala.language.unsafeNulls
-          val packageName = binaryName.substring(0, lastSep)
-          val className = binaryName.substring(lastSep + 1)
-          (packageName, className)
-
-      def filterEntry(entry: Classpath.Entry, lookup: Map[String, List[String]]) =
-        val packages = entry.packages.collect {
-          case pkg if lookup.contains(pkg.dotSeparatedName) =>
-            val tastys = pkg.tastys.filter(t => lookup(pkg.dotSeparatedName).contains(t.binaryName))
-            val classes = pkg.classes.filter(c => lookup(pkg.dotSeparatedName).contains(c.binaryName))
-            PackageData(pkg.dotSeparatedName, classes, tastys)
-        }
-        Classpath.Entry(packages)
-
-      val formatted = binaryNames.map(packageAndClass)
-      val lookup = formatted.groupMap((pkg, _) => pkg)((_, cls) => cls)
-      val filtered = entries.map(filterEntry(_, lookup))
-      Classpath(filtered)
-    end withFilter
-  end Classpath
-
-  /** Factory object for [[Classpath]] instances. */
-  object Classpath {
-
-    /** An entry (directory or jar file) of a [[Classpath]].
+    /** Lists all the files containing class information in this package (but not nested packages).
       *
-      * You can lookup all symbols originating from a particular [[Classpath.Entry]]
-      * with [[Contexts.Context.findSymbolsByClasspathEntry ctx.findSymbolsByClasspathEntry]].
+      * Class information is found in `.class` files and `.tasty` files. For
+      * any binary name `X`, if there is both an `X.class` and an `X.tasty`,
+      * they must be returned as part of the same [[ClassData]].
       *
-      * For example:
+      * This method must not return two items with the same [[ClassData.binaryName]].
       *
-      * ```scala
-      * val classpath = ClasspathLoaders.read(myLibraryPath :: stdLibPaths)
-      * given Context = Contexts.init(classpath)
-      * val myLibSyms = ctx.findSymbolsByClasspathEntry(classpath.entries.head)
-      * ```
+      * Subsequent calls to `listAllClassDatas` and [[getClassDataByBinaryName]]
+      * may return the same instances of [[ClassData]], but need not do so.
       */
-    final class Entry(val packages: IArray[PackageData])
-  }
+    def listAllClassDatas(): List[ClassData]
+
+    /** Get the [[ClassData]] associated with the given `binaryName` in this package, if it exists.
+      *
+      * Returns `None` if neither `binaryName.class` nor `binaryName.tasty` exists.
+      *
+      * Subsequent calls to `getClassDataByBinaryName` and [[listAllClassDatas]]
+      * may return the same instance of [[ClassData]], but need not do so.
+      */
+    def getClassDataByBinaryName(binaryName: String): Option[ClassData]
+  end PackageData
+
+  /** Information about one class within a [[PackageData]].
+    *
+    * When both a `.class` file and a `.tasty` file exist for a given binary
+    * name, they are represented by the same instance of `ClassData`.
+    *
+    * Implementations of this class are encouraged to define a `toString()`
+    * method that helps identifying the class and its enclosing package and
+    * classpath entry for debugging purposes.
+    */
+  trait ClassData:
+    /** The binary name of the class information represented by this `ClassData`.
+      *
+      * It is the name of the file(s) without the `.class` or `.tasty` extension.
+      */
+    val binaryName: String
+
+    /** Tests whether this class information has an associated `.tasty` file. */
+    def hasTastyFile: Boolean
+
+    /** Reads the contents of the `.tasty` file associated with this class information. */
+    def readTastyFileBytes(): IArray[Byte]
+
+    /** Tests whether this class information has an associated `.class` file. */
+    def hasClassFile: Boolean
+
+    /** Reads the contents of the `.class` file associated with this class information. */
+    def readClassFileBytes(): IArray[Byte]
+  end ClassData
+
+  /** In-memory representation of classpath entries. */
+  object InMemory:
+    import Classpaths as generic
+
+    final class ClasspathEntry(debugString: String, val packages: List[PackageData]) extends generic.ClasspathEntry:
+      override def toString(): String = debugString
+
+      def listAllPackages(): List[generic.PackageData] = packages
+    end ClasspathEntry
+
+    final class PackageData(debugString: String, val dotSeparatedName: String, val classes: List[ClassData])
+        extends generic.PackageData:
+      private lazy val byBinaryName = classes.map(c => c.binaryName -> c).toMap
+
+      override def toString(): String = debugString
+
+      def listAllClassDatas(): List[generic.ClassData] = classes
+
+      def getClassDataByBinaryName(binaryName: String): Option[generic.ClassData] = byBinaryName.get(binaryName)
+    end PackageData
+
+    final class ClassData(
+      debugString: String,
+      val binaryName: String,
+      val tastyFileBytes: Option[IArray[Byte]],
+      val classFileBytes: Option[IArray[Byte]]
+    ) extends generic.ClassData:
+      override def toString(): String = debugString
+
+      def hasTastyFile: Boolean = tastyFileBytes.isDefined
+
+      def readTastyFileBytes(): IArray[Byte] = tastyFileBytes.get
+
+      def hasClassFile: Boolean = classFileBytes.isDefined
+
+      def readClassFileBytes(): IArray[Byte] = classFileBytes.get
+
+      def combineWith(that: ClassData): ClassData =
+        require(
+          this.binaryName == that.binaryName,
+          s"cannot combine two ClassData for different binary names ${this.binaryName} and ${that.binaryName}"
+        )
+        ClassData(
+          debugString,
+          binaryName,
+          this.tastyFileBytes.orElse(that.tastyFileBytes),
+          this.classFileBytes.orElse(that.classFileBytes)
+        )
+      end combineWith
+    end ClassData
+  end InMemory
 end Classpaths
