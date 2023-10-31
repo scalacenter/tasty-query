@@ -2,8 +2,6 @@ package tastyquery
 
 import java.util.concurrent.ConcurrentHashMap
 
-import dotty.tools.tasty.TastyFormat.NameTags
-
 import scala.annotation.targetName
 
 import scala.jdk.CollectionConverters.*

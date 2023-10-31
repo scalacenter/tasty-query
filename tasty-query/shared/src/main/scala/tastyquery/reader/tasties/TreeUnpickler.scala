@@ -6,10 +6,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.util.NotGiven
 
-import dotty.tools.tasty.TastyReader
-import dotty.tools.tasty.TastyBuffer.*
-import dotty.tools.tasty.TastyFormat.*
-
 import tastyquery.Annotations.*
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
@@ -27,6 +23,8 @@ import tastyquery.Types.*
 import tastyquery.reader.ReaderContext
 import tastyquery.reader.ReaderContext.rctx
 
+import TastyFormat.*
+import TastyReader.*
 import TastyUnpickler.NameTable
 
 private[tasties] sealed trait AbstractCaseDefFactory[CaseDefType]

@@ -6,10 +6,6 @@ import scala.annotation.tailrec
 
 import scala.collection.mutable
 
-import dotty.tools.tasty.TastyBuffer.{Addr, NameRef}
-import dotty.tools.tasty.TastyFormat.SOURCE
-import dotty.tools.tasty.TastyReader
-
 import tastyquery.Contexts.*
 import tastyquery.Names.*
 import tastyquery.SourceFile
@@ -18,6 +14,9 @@ import tastyquery.Spans.*
 
 import tastyquery.reader.ReaderContext
 import tastyquery.reader.ReaderContext.rctx
+
+import TastyFormat.SOURCE
+import TastyReader.{Addr, NameRef}
 
 /** Unpickler for tree positions */
 private[reader] class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnpickler.NameTable)(using ReaderContext) {

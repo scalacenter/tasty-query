@@ -5,8 +5,6 @@ import scala.annotation.{constructorOnly, tailrec, targetName}
 import scala.collection.mutable
 import scala.compiletime.uninitialized
 
-import dotty.tools.tasty.TastyFormat.NameTags
-
 import tastyquery.Annotations.*
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
