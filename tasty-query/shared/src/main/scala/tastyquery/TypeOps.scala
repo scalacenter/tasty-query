@@ -110,7 +110,8 @@ private[tastyquery] object TypeOps:
         case _: PolyType =>
           false
         case tp2: MethodType =>
-          matchesType(tp1, tp2.resultType)
+          tp2.paramNames.isEmpty
+            && matchesType(tp1, tp2.resultType)
         case _ =>
           true
   end matchesType
