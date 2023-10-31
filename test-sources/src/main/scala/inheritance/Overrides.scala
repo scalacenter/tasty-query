@@ -13,6 +13,10 @@ object Overrides:
     def overloadedPoly[A](x: A): A = x
     def overloadedPoly[A, B](x: A, y: B): (A, B) = (x, y)
 
+    def overloadedParensNoParens(x: Int): Int = x
+
+    def overloadedNoParensParens: Int = 1
+
     override def toString(): String = "SuperMono"
   end SuperMono
 
@@ -33,6 +37,10 @@ object Overrides:
 
     override def overloadedPoly[B](a: B): B = a
     override def overloadedPoly[X, B](x: X, y: B): (X, B) = (x, y)
+
+    def overloadedParensNoParens: Int = 1
+
+    def overloadedNoParensParens(x: Int): Int = x
 
     override def toString: String = "ChildMono"
   end ChildMono

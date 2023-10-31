@@ -1803,6 +1803,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val poly1InChild = polyInChild.find(_.typeParamCountIs(1)).get
     val poly2InChild = polyInChild.find(_.typeParamCountIs(2)).get
 
+    val overloadedParensNoParensInSuper = SuperMonoClass.findNonOverloadedDecl(termName("overloadedParensNoParens"))
+    val overloadedParensNoParensInChild = ChildMonoClass.findNonOverloadedDecl(termName("overloadedParensNoParens"))
+
+    val overloadedNoParensParensInSuper = SuperMonoClass.findNonOverloadedDecl(termName("overloadedNoParensParens"))
+    val overloadedNoParensParensInChild = ChildMonoClass.findNonOverloadedDecl(termName("overloadedNoParensParens"))
+
     // From intInSuper
 
     assert(clue(intInSuper.overriddenSymbol(SuperMonoClass)) == Some(intInSuper))
@@ -1922,6 +1928,82 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     assert(clue(poly2InChild.allOverriddenSymbols.toList) == List(poly2InSuper))
     assert(clue(poly2InChild.nextOverriddenSymbol) == Some(poly2InSuper))
+
+    // From overloadedParensNoParensInSuper
+
+    assert(
+      clue(overloadedParensNoParensInSuper.overriddenSymbol(SuperMonoClass)) == Some(overloadedParensNoParensInSuper)
+    )
+    assert(clue(overloadedParensNoParensInSuper.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(
+      clue(overloadedParensNoParensInSuper.overridingSymbol(SuperMonoClass)) == Some(overloadedParensNoParensInSuper)
+    )
+    assert(clue(overloadedParensNoParensInSuper.overridingSymbol(ChildMonoClass)) == None)
+
+    assert(
+      clue(overloadedParensNoParensInSuper.matchingSymbol(SuperMonoClass, ChildMonoClass)) == Some(
+        overloadedParensNoParensInSuper
+      )
+    )
+    assert(clue(overloadedParensNoParensInSuper.matchingSymbol(ChildMonoClass, ChildMonoClass)) == None)
+
+    // From overloadedParensNoParensInChild
+
+    assert(clue(overloadedParensNoParensInChild.overriddenSymbol(SuperMonoClass)) == None)
+    assert(
+      clue(overloadedParensNoParensInChild.overriddenSymbol(ChildMonoClass)) == Some(overloadedParensNoParensInChild)
+    )
+
+    assert(clue(overloadedParensNoParensInChild.overridingSymbol(SuperMonoClass)) == None)
+    assert(
+      clue(overloadedParensNoParensInChild.overridingSymbol(ChildMonoClass)) == Some(overloadedParensNoParensInChild)
+    )
+
+    assert(clue(overloadedParensNoParensInChild.matchingSymbol(SuperMonoClass, ChildMonoClass)) == None)
+    assert(
+      clue(overloadedParensNoParensInChild.matchingSymbol(ChildMonoClass, ChildMonoClass)) == Some(
+        overloadedParensNoParensInChild
+      )
+    )
+
+    // From overloadedNoParensParensInSuper
+
+    assert(
+      clue(overloadedNoParensParensInSuper.overriddenSymbol(SuperMonoClass)) == Some(overloadedNoParensParensInSuper)
+    )
+    assert(clue(overloadedNoParensParensInSuper.overriddenSymbol(ChildMonoClass)) == None)
+
+    assert(
+      clue(overloadedNoParensParensInSuper.overridingSymbol(SuperMonoClass)) == Some(overloadedNoParensParensInSuper)
+    )
+    assert(clue(overloadedNoParensParensInSuper.overridingSymbol(ChildMonoClass)) == None)
+
+    assert(
+      clue(overloadedNoParensParensInSuper.matchingSymbol(SuperMonoClass, ChildMonoClass)) == Some(
+        overloadedNoParensParensInSuper
+      )
+    )
+    assert(clue(overloadedNoParensParensInSuper.matchingSymbol(ChildMonoClass, ChildMonoClass)) == None)
+
+    // From overloadedNoParensParensInChild
+
+    assert(clue(overloadedNoParensParensInChild.overriddenSymbol(SuperMonoClass)) == None)
+    assert(
+      clue(overloadedNoParensParensInChild.overriddenSymbol(ChildMonoClass)) == Some(overloadedNoParensParensInChild)
+    )
+
+    assert(clue(overloadedNoParensParensInChild.overridingSymbol(SuperMonoClass)) == None)
+    assert(
+      clue(overloadedNoParensParensInChild.overridingSymbol(ChildMonoClass)) == Some(overloadedNoParensParensInChild)
+    )
+
+    assert(clue(overloadedNoParensParensInChild.matchingSymbol(SuperMonoClass, ChildMonoClass)) == None)
+    assert(
+      clue(overloadedNoParensParensInChild.matchingSymbol(ChildMonoClass, ChildMonoClass)) == Some(
+        overloadedNoParensParensInChild
+      )
+    )
   }
 
   testWithContext("overrides-cannot-override") {
