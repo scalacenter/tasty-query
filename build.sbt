@@ -116,6 +116,14 @@ lazy val tastyQuery =
           ProblemFilters.exclude[Problem]("tastyquery.reader.*"),
         )
       },
+
+      tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
+      tastyMiMaConfig ~= { prev =>
+        prev
+          .withMoreArtifactPrivatePackages(java.util.Arrays.asList(
+            "tastyquery",
+          ))
+      },
     )
     .jvmSettings(
       fork := true,
