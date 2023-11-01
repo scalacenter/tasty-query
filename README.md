@@ -12,10 +12,6 @@ Its API allows users to query semantic information about the project:
 
 In addition, for Scala 3 code, it provides access to the full Trees, allowing for deeper inspection of the code.
 
-TASTy Query is still in development, so it is not unlikely that you will encounter bugs.
-Feel free to file them in our bug tracker.
-Nevertheless, it should already be usable for the most part.
-
 ## Usage
 
 Add the following dependency to your build:
@@ -28,12 +24,12 @@ libraryDependencies += "ch.epfl.scala" %% "tasty-query" % "<latest-version>"
 You can find the latest release in the Releases list on GitHub.
 
 Head over to the [latest API docs](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery.html) to see what's available.
-To get started, create a [`Classpath`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Classpaths$$Classpath.html) using [`ClasspathLoaders.read`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/jdk/ClasspathLoaders$.html).
+To get started, create a [`Classpath`](https://javadoc.io/page/ch.epfl.scala/tasty-query_3/latest/tastyquery/Classpaths$.html) using [`ClasspathLoaders.read`](https://javadoc.io/page/ch.epfl.scala/tasty-query_3/latest/tastyquery/jdk/ClasspathLoaders$.html).
 Please note that TASTy Query requires that all classes, such as the JRE, must be explicitly added to the classpath.
 On the JDK versions >= 9, the JRE classpath can be obtained on the JVM platform with `FileSystems.getFileSystem(java.net.URI.create("jrt:/")).getPath("modules", "java.base")`.
 On the JavaScript plaform the contents of this path need to be saved as a JAR file in the real file system.
-Then, create a [`Context`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Contexts$$Context.html) object using [`Contexts.init(classpath)`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Contexts$.html#init-fffffe7c).
-From there, follow the available methods to access [`Symbols`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Symbols$.html), [`Types`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Types$.html) and [`Trees`](https://javadoc.io/doc/ch.epfl.scala/tasty-query_3/latest/tastyquery/Trees$.html).
+Then, create a [`Context`](https://javadoc.io/page/ch.epfl.scala/tasty-query_3/latest/tastyquery/Contexts$$Context.html) object using [`Context.initialize(classpath)`](https://javadoc.io/page/ch.epfl.scala/tasty-query_3/latest/tastyquery/Contexts$$Context$.html#initialize-a22).
+From there, follow the available methods to access [`Symbols`](https://javadoc.io/page/ch.epfl.scala/tasty-query_3/latest/tastyquery/Symbols$.html), [`Types`](https://javadoc.io/page/ch.epfl.scala/tasty-query_3/latest/tastyquery/Types$.html) and [`Trees`](https://javadoc.io/page/ch.epfl.scala/tasty-query_3/latest/tastyquery/Trees$.html).
 
 ## Motivation
 
@@ -81,7 +77,7 @@ There are several reasons for that, including the following:
 Reading TASTy files is therefore complex, and requires a full classpath to make sense of it.
 The product is a multi-dimensional graph involving symbols, trees and types.
 
-tasty-query's job is to read TASTy files for you, and present the information it contains (explicitly or implicitly) in as convenient way as possible.
+tasty-query's job is to read TASTy files for you, and present the information it contains (explicitly or implicitly) in as convenient a way as possible.
 
 ## Use cases
 
