@@ -114,19 +114,15 @@ lazy val tastyQuery =
         Seq(
           // Everything in tastyquery.reader is private[tastyquery] at most
           ProblemFilters.exclude[Problem]("tastyquery.reader.*"),
-
-          // private[tastyquery], not an issue
-          ProblemFilters.exclude[IncompatibleMethTypeProblem]("tastyquery.Symbols#ClassSymbol.createRefinedClassSymbol"),
-          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Symbols#ClassSymbol.createRefinedClassSymbol"),
-          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#PolyType.fromParamsSymbols"),
-          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#TypeLambda.fromParamsSymbols"),
-          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Types#TypeLambdaTypeCompanion.fromParamsSymbols"),
-
-          // New abstract methods in a completely sealed hierarchy, not an issue
-          ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("tastyquery.Trees#*.canEqual"),
-          ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("tastyquery.Trees#*.productArity"),
-          ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("tastyquery.Trees#*.productElement"),
         )
+      },
+
+      tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
+      tastyMiMaConfig ~= { prev =>
+        prev
+          .withMoreArtifactPrivatePackages(java.util.Arrays.asList(
+            "tastyquery",
+          ))
       },
     )
     .jvmSettings(
