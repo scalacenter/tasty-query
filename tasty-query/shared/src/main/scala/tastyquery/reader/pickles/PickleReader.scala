@@ -195,19 +195,22 @@ private[pickles] class PickleReader {
     val owner = readMaybeExternalSymbolRef() match
       case sym: Symbol =>
         sym
-      case noRef: NoExternalSymbolRef if tag == TYPEsym =>
-        /* For some reason, Scala 2 pickles `TYPEsym` symbols whose owner references `NONEsym`.
+      case noRef: NoExternalSymbolRef if tag == TYPEsym || tag == VALsym =>
+        /* For some reason, Scala 2 pickles `TYPEsym` and `VALsym` symbols whose owner references `NONEsym`.
          * However, they do not appear to be referenced *themselves* from anywhere. They
          * only appear in the table, and hence get read from the loop in `Unpickler.run`.
          * We ignore these entries here by replacing them with `NONEsym`. If they end up
          * being actually referenced somewhere, then that somewhere will then crash with
          * an unexpected reference to `NONEsym`, which would provide us with more context
          * to perhaps solve this at a deeper level.
-         * If someone wants to investigate, there is a case of this in `scala.collection.Iterator`.
+         * If someone wants to investigate, there is a case of `TYPEsym` in `scala.collection.Iterator`.
+         * There is a case of `VALsym` somewhere in sbt, triggered when tasty-mima-checking sbt-tasty-mima itself.
          */
         return NoExternalSymbolRef.instance
       case external =>
-        errorBadSignature(s"expected local symbol reference but found $external")
+        errorBadSignature(
+          s"expected local symbol reference but found $external for owner of ${name1.toDebugString} with tag $tag"
+        )
 
     if name1 == nme.m_getClass && owner.owner == rctx.scalaPackage && HasProblematicGetClass.contains(owner.name) then
       return NoExternalSymbolRef.instance
