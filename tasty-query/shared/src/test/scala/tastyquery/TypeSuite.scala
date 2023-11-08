@@ -2395,6 +2395,17 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     assert(clue(app.tpe).isRef(anonClassSym))
   }
 
+  testWithContext("java-enum") {
+    val JavaLangEnumClass = ctx.findTopLevelClass("java.lang.Enum")
+    val JavaEnumClass = ctx.findTopLevelClass("simple_trees.JavaEnum")
+
+    val tree = JavaEnumClass.tree.get
+
+    findTree(tree.rhs.parents.head) { case apply: Apply =>
+      assert(clue(apply.tpe).isApplied(_.isRef(JavaLangEnumClass), List(_.isRef(JavaEnumClass))))
+    }
+  }
+
   testWithContext("toplevel-module-class-with-opaque-type-alias-companion-signature-name") {
     val TopLevelOpaqueTypeAliasModule =
       ctx.findStaticTerm("crosspackagetasty.TopLevelOpaqueTypeAlias$package.TopLevelOpaqueTypeAlias")
