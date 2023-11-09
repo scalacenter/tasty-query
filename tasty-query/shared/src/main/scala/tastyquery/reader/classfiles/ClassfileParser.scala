@@ -271,6 +271,7 @@ private[reader] object ClassfileParser {
         else if sym.isMethod && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
         else parsedType
       sym.withDeclaredType(adaptedType)
+      sym.autoFillParamSymss()
 
       // Verify after the fact that we don't mark signature-polymorphic methods that should not be
       if sym.isSignaturePolymorphicMethod then

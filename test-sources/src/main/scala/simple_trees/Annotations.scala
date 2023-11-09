@@ -26,4 +26,6 @@ class Annotations:
 
   @JavaAnnotWithDefault(false)
   def javaAnnotWithDefaultExplicit(): Int = 1
+
+  def renamedParam(@deprecatedName("oldName", since = "forever") newName: Int): Int = newName
 end Annotations

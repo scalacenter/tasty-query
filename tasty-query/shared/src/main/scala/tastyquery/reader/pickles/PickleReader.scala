@@ -340,21 +340,19 @@ private[pickles] class PickleReader {
             TermSymbol.createNotDeclaration(name.toTermName, owner)
           else TermSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles
-        val tpe = readSymType()
+        val storedType = readSymType() match
+          case storedType: Type => storedType
+          case storedType       => throw Scala2PickleFormatException(s"Type expected for $sym but found $storedType")
         val unwrappedTpe: TypeOrMethodic =
-          if flags.is(Method) then
-            tpe match
-              case tpe: TypeOrMethodic => translateTempPolyForMethod(tpe)
-              case _ => throw Scala2PickleFormatException(s"Type or methodic type expected for $sym but found $tpe")
-          else
-            tpe match
-              case tpe: Type => tpe
-              case _         => throw Scala2PickleFormatException(s"Type expected for $sym but found $tpe")
-        end unwrappedTpe
-        val ctorPatchedTpe =
-          if flags.is(Method) && name == nme.Constructor then patchConstructorType(sym.owner.asClass, unwrappedTpe)
-          else unwrappedTpe
-        sym.withDeclaredType(ctorPatchedTpe)
+          if flags.is(Method) then translateTempMethodAndPolyForMethod(storedType)
+          else storedType
+        val paramSymss = paramSymssOf(storedType)
+        if flags.is(Method) && name == nme.Constructor then
+          sym.withDeclaredType(patchConstructorType(sym.owner.asClass, unwrappedTpe))
+          sym.setParamSymss(patchConstructorParamSymss(sym, paramSymss))
+        else
+          sym.withDeclaredType(unwrappedTpe)
+          sym.setParamSymss(paramSymss)
       case MODULEsym =>
         val sym = TermSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym)
@@ -371,6 +369,15 @@ private[pickles] class PickleReader {
     sym
   }
 
+  private def paramSymssOf(storedType: Type): List[ParamSymbolsClause] = storedType match
+    case TempMethodType(paramSyms, resType) =>
+      Left(paramSyms) :: paramSymssOf(resType.requireType)
+    case TempPolyType(paramSyms, resType) =>
+      Right(paramSyms.map(_.asInstanceOf[LocalTypeParamSymbol])) :: paramSymssOf(resType.requireType)
+    case _ =>
+      Nil
+  end paramSymssOf
+
   private def patchConstructorType(cls: ClassSymbol, tpe: TypeOrMethodic)(using ReaderContext): TypeOrMethodic =
     def resultToUnit(tpe: TypeOrMethodic): TypeOrMethodic =
       tpe match
@@ -384,6 +391,41 @@ private[pickles] class PickleReader {
     val tpe1 = resultToUnit(tpe)
     cls.makePolyConstructorType(tpe1)
   end patchConstructorType
+
+  private def patchConstructorParamSymss(
+    ctor: TermSymbol,
+    paramSymss: List[ParamSymbolsClause]
+  ): List[ParamSymbolsClause] =
+    val cls = ctor.owner.asClass
+    val clsTypeParams = cls.typeParams
+
+    if clsTypeParams.isEmpty then paramSymss
+    else
+      // Create the symbols; don't assign bounds yet
+      val ctorTypeParams = clsTypeParams.map { clsTypeParam =>
+        LocalTypeParamSymbol
+          .create(clsTypeParam.name, ctor)
+          .withFlags(EmptyFlagSet, privateWithin = None)
+          .setAnnotations(Nil)
+      }
+
+      val ctorTypeParamRefs = ctorTypeParams.map(_.localRef)
+      def subst(tpe: TypeMappable): tpe.ThisTypeMappableType =
+        Substituters.substLocalThisClassTypeParams(tpe, clsTypeParams, ctorTypeParamRefs)
+
+      // Assign the bounds; when they refer to each other we need to substitute for the new local refs
+      for (clsTypeParam, ctorTypeParam) <- clsTypeParams.lazyZip(ctorTypeParams) do
+        ctorTypeParam.setDeclaredBounds(subst(clsTypeParam.declaredBounds))
+
+      // Overwrite the types of the existing param syms to refer to the new local refs as well
+      for
+        case Left(paramSyms) <- paramSymss
+        paramSym <- paramSyms
+      do paramSym.overwriteDeclaredType(subst(paramSym.declaredType))
+
+      Right(ctorTypeParams) :: paramSymss
+    end if
+  end patchConstructorParamSymss
 
   def readChildren()(using ReaderContext, PklStream, Entries, Index): Unit =
     val tag = pkl.readByte()
@@ -665,18 +707,7 @@ private[pickles] class PickleReader {
       case METHODtpe | IMPLICITMETHODtpe =>
         val restpe = readTypeOrMethodicRef()
         val params = pkl.until(end, () => readLocalSymbolRef().asTerm)
-        val maker = MethodType
-        /*val maker = MethodType.companion(
-          isImplicit = tag == IMPLICITMETHODtpe || params.nonEmpty && params.head.is(Implicit))*/
-        val result = maker.fromSymbols(params, restpe)
-        // result.resType match
-        //   case restpe1: MethodType if restpe1 ne restpe =>
-        //     val prevResParams = caches.paramsOfMethodType.remove(restpe)
-        //     if prevResParams != null then
-        //       caches.paramsOfMethodType.put(restpe1, prevResParams)
-        //   case _ =>
-        // if params.nonEmpty then caches.paramsOfMethodType.put(result, params)
-        result
+        TempMethodType(params, restpe)
       case POLYtpe =>
         // create PolyType
         //   - PT => register at index
@@ -742,18 +773,25 @@ private[pickles] class PickleReader {
   end translateTempPolyForTypeMember
 
   /** Convert temp poly type to PolyType and leave other types alone. */
-  private def translateTempPolyForMethod(tp: TypeOrMethodic)(using ReaderContext): TypeOrMethodic = tp match
+  private def translateTempMethodAndPolyForMethod(tp: TypeOrMethodic)(using ReaderContext): TypeOrMethodic = tp match
+    case TempMethodType(paramSyms, resType) =>
+      resType match
+        case resType: TypeOrMethodic =>
+          MethodType.fromSymbols(paramSyms, translateTempMethodAndPolyForMethod(resType))
+        case _ =>
+          throw Scala2PickleFormatException(s"Invalid type for method: $tp")
+
     case TempPolyType(tparams, restpe) =>
       val localTParams = tparams.asInstanceOf[List[LocalTypeParamSymbol]] // no class type params in methods
       restpe match
         case restpe: TypeOrMethodic =>
-          PolyType.fromParams(localTParams, restpe)
+          PolyType.fromParams(localTParams, translateTempMethodAndPolyForMethod(restpe))
         case _ =>
           throw Scala2PickleFormatException(s"Invalid type for method: $tp")
 
     case tp =>
       tp
-  end translateTempPolyForMethod
+  end translateTempMethodAndPolyForMethod
 
   private def noSuchTypeTag(tag: Int, end: Int): Nothing =
     errorBadSignature("bad type tag: " + tag)
@@ -946,6 +984,9 @@ private[reader] object PickleReader {
 
   private val Scala2Constructor: SimpleName = termName("this")
   private val Scala2TraitConstructor: SimpleName = termName("$init$")
+
+  private[tastyquery] case class TempMethodType(paramSyms: List[TermSymbol], resType: TypeMappable)
+      extends CustomTransientGroundType
 
   private[tastyquery] case class TempPolyType(paramSyms: List[TypeParamSymbol], resType: TypeMappable)
       extends CustomTransientGroundType

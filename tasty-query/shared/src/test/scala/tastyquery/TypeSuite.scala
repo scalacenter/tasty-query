@@ -102,6 +102,17 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case _                 => false
   end extension
 
+  extension (bounds: TypeBounds)
+    def isNothingAnyBounds(using Context): Boolean =
+      isBounds(_.isNothing, _.isAny)
+
+    def isJavaNothingAnyBounds(using Context): Boolean =
+      isBounds(_.isNothing, _.isFromJavaObject)
+
+    def isBounds(low: Type => Boolean, high: Type => Boolean)(using Context): Boolean =
+      low(bounds.low) && high(bounds.high)
+  end extension
+
   testWithContext("hierarchy-partitions") {
     /* These no-op matches test that the set of all possible `TypeMappable`s is
      * partitioned into certain sets of sub-classes and sub-traits.
@@ -3218,5 +3229,209 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
     assert(!clue(childInnerSym.localRef.underlying).isRef(ParentInnerClass))
     assert(clue(childInnerSym.localRef.underlying).isRef(ChildInnerClass))
+  }
+
+  testWithContext("paramSymss-synthetic") {
+    assert(clue(defn.Any_##.paramSymss) == Nil)
+
+    locally {
+      val List(Left(List(thatSym))) = defn.Any_==.paramSymss: @unchecked
+      assert(clue(thatSym.name) == termName("that"))
+      assert(clue(thatSym.declaredType).isRef(defn.AnyClass))
+    }
+
+    locally {
+      val List(Right(List(aSym))) = defn.Any_asInstanceOf.paramSymss: @unchecked
+      assert(clue(aSym.name) == typeName("A"))
+      assert(clue(aSym.declaredBounds).isNothingAnyBounds)
+    }
+  }
+
+  testWithContext("paramSymss-scala-3") {
+    locally {
+      val GenericMethodClass = ctx.findTopLevelClass("simple_trees.GenericMethod")
+      val identity = GenericMethodClass.findNonOverloadedDecl(termName("identity"))
+      val List(Right(List(t)), Left(List(x))) = identity.paramSymss: @unchecked
+
+      assert(clue(t.name) == typeName("T"))
+      assert(clue(t.declaredBounds).isNothingAnyBounds)
+
+      assert(clue(x.name) == termName("x"))
+      assert(clue(x.declaredType).isRef(t))
+    }
+
+    locally {
+      val GenericMethodWithTypeParamDependenciesClass =
+        ctx.findTopLevelClass("simple_trees.GenericMethodWithTypeParamDependencies")
+      val foo = GenericMethodWithTypeParamDependenciesClass.findNonOverloadedDecl(termName("foo"))
+      val List(Right(List(a, b, c, d)), Left(Nil)) = foo.paramSymss: @unchecked
+
+      assert(clue(a.name) == typeName("A"))
+
+      assert(clue(a.declaredBounds).isNothingAnyBounds)
+      assert(clue(b.declaredBounds).isBounds(_.isRef(d), _.isRef(a)))
+      assert(clue(c.declaredBounds).isBounds(_.isNothing, _.isRef(b)))
+      assert(clue(d.declaredBounds).isNothingAnyBounds)
+    }
+
+    locally {
+      val GenericClassWithTypeParamDependenciesClass =
+        ctx.findTopLevelClass("simple_trees.GenericClassWithTypeParamDependencies")
+      val ctor = GenericClassWithTypeParamDependenciesClass.findNonOverloadedDecl(nme.Constructor)
+      val List(Right(List(a, b, c, d)), Left(Nil)) = ctor.paramSymss: @unchecked
+
+      assert(clue(a.name) == typeName("A"))
+
+      assert(clue(a.declaredBounds).isNothingAnyBounds)
+      assert(clue(b.declaredBounds).isBounds(_.isRef(d), _.isRef(a)))
+      assert(clue(c.declaredBounds).isBounds(_.isNothing, _.isRef(b)))
+      assert(clue(d.declaredBounds).isNothingAnyBounds)
+    }
+
+    locally {
+      val AnnotationsClass = ctx.findTopLevelClass("simple_trees.Annotations")
+      val renamedParam = AnnotationsClass.findNonOverloadedDecl(termName("renamedParam"))
+      val List(Left(List(newName))) = renamedParam.paramSymss: @unchecked
+
+      assert(clue(newName.name) == termName("newName"))
+
+      val annot = newName.getAnnotation(ctx.findTopLevelClass("scala.deprecatedName")).get
+      assert(clue(annot.argCount) == 2)
+      assert(clue(annot.argIfConstant(0)) == Some(Constant("oldName")))
+      assert(clue(annot.argIfConstant(1)) == Some(Constant("forever")))
+    }
+  }
+
+  testWithContext("paramSymss-scala-2") {
+    val ArrayOpsClass = ctx.findTopLevelClass("scala.collection.ArrayOps")
+    val CollSeqHeadTailClass = ctx.findStaticModuleClass("scala.collection.package.+:")
+    val CollSeqClass = ctx.findTopLevelClass("scala.collection.Seq")
+    val CollSeqOpsClass = ctx.findTopLevelClass("scala.collection.SeqOps")
+    val ConsClass = ctx.findTopLevelClass("scala.collection.immutable.::")
+    val ListClass = ctx.findTopLevelClass("scala.collection.immutable.List")
+
+    val deprecatedNameClass = ctx.findTopLevelClass("scala.deprecatedName")
+
+    locally {
+      val headTailUnapply = CollSeqHeadTailClass.findNonOverloadedDecl(termName("unapply"))
+      val List(Right(List(a, cc, c)), Left(List(t))) = headTailUnapply.paramSymss: @unchecked
+
+      assert(clue(a.name) == typeName("A"))
+      assert(clue(t.name) == termName("t"))
+
+      extension (tpe: Type)
+        def isSeqOpsOf_A_CC_C: Boolean =
+          tpe.isApplied(_.isRef(CollSeqOpsClass), List(_.isRef(a), _.isRef(cc), _.isRef(c)))
+
+      assert(clue(a.declaredBounds).isNothingAnyBounds)
+      assert(clue(c.declaredBounds).isBounds(_.isNothing, _.isSeqOpsOf_A_CC_C))
+      assert(clue(cc.declaredBounds.low).isNothing)
+
+      (cc.declaredBounds.high: @unchecked) match
+        case tl: TypeLambda =>
+          assert(clue(tl.paramNames.size) == 1)
+          val paramRef = tl.paramRefs(0)
+          assert(tl.resultType.isApplied(_.isRef(CollSeqClass), List(_.isWildcard)))
+
+      assert(clue(t.declaredType).isIntersectionOf(_.isRef(c), _.isSeqOpsOf_A_CC_C))
+    }
+
+    locally {
+      val ctor = ConsClass.findNonOverloadedDecl(nme.Constructor)
+      val List(Right(List(a)), Left(List(head, next))) = ctor.paramSymss: @unchecked
+
+      assert(clue(a.name) == typeName("A"))
+      assert(clue(head.name) == termName("head"))
+
+      assert(clue(a.declaredBounds).isNothingAnyBounds)
+      assert(clue(head.declaredType).isRef(a))
+      assert(clue(next.declaredType).isApplied(_.isRef(ListClass), List(_.isRef(a))))
+    }
+
+    // TODO Enable this when we can read Scala 2 annotations
+    /*locally {
+      val find = ArrayOpsClass.findNonOverloadedDecl(termName("find"))
+      val List(Left(List(p))) = find.paramSymss: @unchecked
+
+      assert(clue(p.name) == termName("p"))
+      assert(clue(p.declaredType).isApplied(_.isRef(defn.FunctionNClass(1)), List(_ => true, _.isRef(defn.BooleanClass))))
+
+      println(p.annotations)
+
+      val annot = p.getAnnotation(deprecatedNameClass).get
+      assert(clue(annot.argIfConstant(0)) == Some(Constant("f")))
+      assert(clue(annot.argIfConstant(1)) == Some(Constant("2.13.3")))
+    }*/
+  }
+
+  testWithContext("paramSymss-java") {
+    val JArrayListClass = ctx.findTopLevelClass("java.util.ArrayList")
+    val JCollectionClass = ctx.findTopLevelClass("java.util.Collection")
+    val JCollectionsClass = ctx.findTopLevelModuleClass("java.util.Collections")
+    val JComparableClass = ctx.findTopLevelClass("java.lang.Comparable")
+    val JListClass = ctx.findTopLevelClass("java.util.List")
+
+    // to disambiguate overloads
+    def termParamCount(tpe: TypeOrMethodic): Int = tpe match
+      case tpe: MethodType => tpe.paramNames.size + termParamCount(tpe.resultType)
+      case tpe: PolyType   => termParamCount(tpe.resultType)
+      case tpe: Type       => 0
+
+    def firstTermParamType(tpe: TypeOrMethodic): Type = tpe match
+      case tpe: MethodType => tpe.paramTypes.head
+      case tpe: PolyType   => firstTermParamType(tpe.resultType)
+      case tpe: Type       => throw MatchError(tpe)
+
+    locally {
+      // static <T> void fill(List<? super T> list, T obj)
+      val fill = JCollectionsClass.findNonOverloadedDecl(termName("fill"))
+      val List(Right(List(t)), Left(List(list, obj))) = fill.paramSymss: @unchecked
+
+      assert(clue(t.declaredBounds).isJavaNothingAnyBounds)
+      assert(clue(obj.declaredType).isRef(t))
+      assert(clue(list.declaredType).isApplied(_.isRef(JListClass), List(_.isBounded(_.isRef(t), _.isFromJavaObject))))
+    }
+
+    locally {
+      // static <T extends Comparable<? super T>> void sort(List<T> list)
+      val sort = JCollectionsClass
+        .findAllOverloadedDecls(termName("sort"))
+        .find(sym => termParamCount(sym.declaredType) == 1)
+        .get
+      val List(Right(List(t)), Left(List(list))) = sort.paramSymss: @unchecked
+
+      assert(
+        clue(t.declaredBounds).isBounds(
+          _.isNothing,
+          _.isApplied(_.isRef(JComparableClass), List(_.isBounded(_.isRef(t), _.isFromJavaObject)))
+        )
+      )
+      assert(clue(list.declaredType).isApplied(_.isRef(JListClass), List(_.isRef(t))))
+    }
+
+    locally {
+      // public ArrayList()
+      val ctor = JArrayListClass
+        .findAllOverloadedDecls(nme.Constructor)
+        .find(sym => termParamCount(sym.declaredType) == 0)
+        .get
+      val List(Right(List(e)), Left(Nil)) = ctor.paramSymss: @unchecked
+
+      assert(clue(e.declaredBounds).isJavaNothingAnyBounds)
+    }
+
+    locally {
+      // public ArrayList(Collection<? extends E> c)
+      val ctor = JArrayListClass
+        .findAllOverloadedDecls(nme.Constructor)
+        .find(sym =>
+          termParamCount(sym.declaredType) == 1 && !firstTermParamType(sym.declaredType).isRef(defn.IntClass)
+        )
+        .get
+      val List(Right(List(e)), Left(List(c))) = ctor.paramSymss: @unchecked
+
+      assert(clue(e.declaredBounds).isJavaNothingAnyBounds)
+      assert(clue(c.declaredType).isApplied(_.isRef(JCollectionClass), List(_.isBounded(_.isNothing, _.isRef(e)))))
+    }
   }
 }

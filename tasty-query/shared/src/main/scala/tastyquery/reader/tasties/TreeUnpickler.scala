@@ -768,9 +768,14 @@ private[tasties] class TreeUnpickler private (
           if name == nme.Constructor then normalizeCtorParamClauses(params)
           else params
         symbol.withDeclaredType(ParamsClause.makeDefDefType(normalizedParams, tpt))
+        symbol.setParamSymss(normalizedParams.map(paramsClauseToParamSymbolsClause(_)))
         definingTree(symbol, DefDef(name, normalizedParams, tpt, rhs, symbol)(spn))
     }
   }
+
+  private def paramsClauseToParamSymbolsClause(clause: ParamsClause): ParamSymbolsClause = clause match
+    case Left(termParams)  => Left(termParams.map(_.symbol))
+    case Right(typeParams) => Right(typeParams.map(_.symbol.asInstanceOf[LocalTypeParamSymbol]))
 
   /** Normalizes the param clauses of a constructor definition.
     *
