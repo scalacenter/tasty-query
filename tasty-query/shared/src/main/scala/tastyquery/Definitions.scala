@@ -114,6 +114,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
       .withFlags(Method | flags, privateWithin = None)
       .withDeclaredType(tpe)
       .setAnnotations(Nil)
+      .autoFillParamSymss()
     sym.checkCompleted()
     sym
   end createSpecialMethod
@@ -341,6 +342,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
         mt => resultTypeParam.localRef
       )
     )
+    applyMethod.autoFillParamSymss()
     applyMethod.setAnnotations(Nil)
     applyMethod.checkCompleted()
 

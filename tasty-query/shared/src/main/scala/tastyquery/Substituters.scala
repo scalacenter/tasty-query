@@ -27,6 +27,10 @@ private[tastyquery] object Substituters:
     if from.isEmpty then tp
     else new SubstLocalParamsMap(from, to).apply(tp)
 
+  def substLocalBoundParams(tp: TypeMappable, from: ParamRefBinder, to: List[Type]): tp.ThisTypeMappableType =
+    if to.isEmpty then tp
+    else new SubstLocalBoundParamsMap(from, to).apply(tp)
+
   def substLocalThisClassTypeParams(
     tp: TypeMappable,
     from: List[ClassTypeParamSymbol],
@@ -141,6 +145,24 @@ private[tastyquery] object Substituters:
           mapOver(tp)
     end transform
   end SubstLocalParamsMap
+
+  private final class SubstLocalBoundParamsMap(from: ParamRefBinder, to: List[TypeOrWildcard]) extends TypeMap:
+    protected def transform(tp: TypeMappable): TypeMappable =
+      tp match
+        case tp: ParamRef =>
+          if tp.binder eq from then to(tp.paramNum) else tp
+        case tp: NamedType =>
+          tp.prefix match
+            case NoPrefix | _: PackageRef => tp
+            case prefix: Type             => tp.derivedSelect(apply(prefix))
+        case _: ThisType =>
+          tp
+        case tp: AppliedType =>
+          tp.map(apply(_), apply(_))
+        case _ =>
+          mapOver(tp)
+    end transform
+  end SubstLocalBoundParamsMap
 
   private final class SubstLocalThisClassTypeParamsMap(from: List[ClassTypeParamSymbol], to: List[Type])
       extends TypeMap:
