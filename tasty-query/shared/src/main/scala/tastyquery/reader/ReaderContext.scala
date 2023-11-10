@@ -33,6 +33,8 @@ private[reader] final class ReaderContext(underlying: Context):
   def CharType: TypeRef = underlying.defn.CharType
   def UnitType: TypeRef = underlying.defn.UnitType
 
+  def AnnotationType: TypeRef = underlying.defn.AnnotationType
+
   def ArrayTypeOf(tpe: TypeOrWildcard): AppliedType = underlying.defn.ArrayTypeOf(tpe)
 
   def GenericTupleTypeOf(elementTypes: List[TypeOrWildcard]): Type = underlying.defn.GenericTupleTypeOf(elementTypes)
