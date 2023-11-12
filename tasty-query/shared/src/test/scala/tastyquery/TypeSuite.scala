@@ -2,6 +2,7 @@ package tastyquery
 
 import scala.collection.mutable
 
+import tastyquery.Annotations.*
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
@@ -100,6 +101,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     def isConstant(constant: Constant)(using Context): Boolean = tpe match
       case tpe: ConstantType => tpe.value == constant
       case _                 => false
+
+    def isAnnotated(parent: Type => Boolean, annotation: Annotation => Boolean)(using Context): Boolean = tpe match
+      case tpe: AnnotatedType => parent(tpe.typ) && annotation(tpe.annotation)
+      case _                  => false
   end extension
 
   extension (bounds: TypeBounds)
@@ -2470,6 +2475,48 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
   }
 
+  testWithContext("annotations-scala-2") {
+    val SpecializableModuleClass = ctx.findTopLevelModuleClass("scala.Specializable")
+
+    val deprecatedClass = ctx.findTopLevelClass("scala.deprecated")
+    val specializedClass = ctx.findTopLevelClass("scala.specialized")
+
+    locally {
+      val BitSet1Class = ctx.findStaticClass("scala.collection.immutable.BitSet.BitSet1")
+      val List(deprecatedAnnot) = BitSet1Class.annotations: @unchecked
+
+      assert(clue(deprecatedAnnot.symbol) == deprecatedClass)
+      assert(clue(deprecatedAnnot.argCount) == 2)
+      assert(clue(deprecatedAnnot.argIfConstant(0)).isDefined)
+      assert(clue(deprecatedAnnot.argIfConstant(1)) == Some(Constant("2.13.0")))
+
+      intercept[UnsupportedOperationException](deprecatedAnnot.annotConstructor)
+    }
+
+    locally {
+      val Function1Class = defn.FunctionNClass(1)
+      val List(t1, r) = Function1Class.typeParams: @unchecked
+
+      def testAnnotOf(typeParam: ClassTypeParamSymbol, expectedMemberOfSpecializableName: SimpleName): Unit =
+        val List(specializedAnnot) = typeParam.annotations: @unchecked
+
+        assert(clue(specializedAnnot.symbol) == specializedClass)
+        assert(clue(specializedAnnot.argCount) == 1)
+        assert(clue(specializedAnnot.argIfConstant(0)).isEmpty)
+
+        specializedAnnot.arguments(0) match
+          case select @ Select(ident @ Ident(SimpleName("Specializable")), `expectedMemberOfSpecializableName`) =>
+            assert(clue(ident.symbol) == SpecializableModuleClass.moduleValue.get)
+            assert(clue(select.symbol) == SpecializableModuleClass.findDecl(expectedMemberOfSpecializableName))
+          case arg =>
+            fail("unexpected shape of argument", clues(arg))
+      end testAnnotOf
+
+      testAnnotOf(t1, termName("Arg"))
+      testAnnotOf(r, termName("Return"))
+    }
+  }
+
   testWithContext("uninitialized-var") {
     val UninitializedClass = ctx.findTopLevelClass("simple_trees.Uninitialized")
 
@@ -3311,6 +3358,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val ListClass = ctx.findTopLevelClass("scala.collection.immutable.List")
 
     val deprecatedNameClass = ctx.findTopLevelClass("scala.deprecatedName")
+    val uncheckedVarianceClass = ctx.findTopLevelClass("scala.annotation.unchecked.uncheckedVariance")
 
     locally {
       val headTailUnapply = CollSeqHeadTailClass.findNonOverloadedDecl(termName("unapply"))
@@ -3345,23 +3393,26 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
       assert(clue(a.declaredBounds).isNothingAnyBounds)
       assert(clue(head.declaredType).isRef(a))
-      assert(clue(next.declaredType).isApplied(_.isRef(ListClass), List(_.isRef(a))))
+      assert(
+        clue(next.declaredType)
+          .isApplied(_.isRef(ListClass), List(_.isAnnotated(_.isRef(a), _.symbol == uncheckedVarianceClass)))
+      )
     }
 
-    // TODO Enable this when we can read Scala 2 annotations
-    /*locally {
+    locally {
       val find = ArrayOpsClass.findNonOverloadedDecl(termName("find"))
       val List(Left(List(p))) = find.paramSymss: @unchecked
 
       assert(clue(p.name) == termName("p"))
-      assert(clue(p.declaredType).isApplied(_.isRef(defn.FunctionNClass(1)), List(_ => true, _.isRef(defn.BooleanClass))))
-
-      println(p.annotations)
+      assert(
+        clue(p.declaredType).isApplied(_.isRef(defn.FunctionNClass(1)), List(_ => true, _.isRef(defn.BooleanClass)))
+      )
 
       val annot = p.getAnnotation(deprecatedNameClass).get
       assert(clue(annot.argIfConstant(0)) == Some(Constant("f")))
       assert(clue(annot.argIfConstant(1)) == Some(Constant("2.13.3")))
-    }*/
+      intercept[UnsupportedOperationException](annot.annotConstructor)
+    }
   }
 
   testWithContext("paramSymss-java") {

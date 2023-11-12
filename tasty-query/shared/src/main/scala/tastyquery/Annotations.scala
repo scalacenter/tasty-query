@@ -25,7 +25,11 @@ object Annotations:
         computed
     end symbol
 
-    /** The symbol of the constructor used in the annotation. */
+    /** The symbol of the constructor used in the annotation.
+      *
+      * This operation is not supported for annotations read from Scala 2.
+      * It will throw an `UnsupportedOperationException`.
+      */
     def annotConstructor(using Context): TermSymbol =
       computeAnnotConstructor(tree)
 
@@ -136,13 +140,16 @@ object Annotations:
     def invalid(): Nothing =
       throw InvalidProgramStructureException(s"Cannot find annotation constructor in $tree")
 
+    def unsupportedScala2(): Nothing =
+      throw UnsupportedOperationException(s"Cannot compute the annotation constructor of a Scala 2 annotation: $tree")
+
     @tailrec
     def loop(tree: TermTree): TermSymbol = tree match
-      case Apply(fun, _)              => loop(fun)
-      case tree @ Select(New(tpt), _) => tree.tpe.asInstanceOf[TermRef].symbol
-      case TypeApply(fun, _)          => loop(fun)
-      case Block(_, expr)             => loop(expr)
-      case _                          => invalid()
+      case Apply(fun, _)                 => loop(fun)
+      case tree @ Select(New(tpt), name) => if name == nme.Constructor then unsupportedScala2() else tree.symbol.asTerm
+      case TypeApply(fun, _)             => loop(fun)
+      case Block(_, expr)                => loop(expr)
+      case _                             => invalid()
 
     loop(tree)
   end computeAnnotConstructor

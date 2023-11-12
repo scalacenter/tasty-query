@@ -5,14 +5,17 @@ import scala.annotation.switch
 import scala.collection.mutable
 import scala.reflect.NameTransformer
 
+import tastyquery.Annotations.*
 import tastyquery.Constants.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags.*
 import tastyquery.Modifiers.*
 import tastyquery.Names.*
+import tastyquery.SourcePosition
 import tastyquery.Substituters
 import tastyquery.Symbols.*
+import tastyquery.Trees.*
 import tastyquery.Types.*
 
 import tastyquery.reader.{ReaderContext, UTF8Utils}
@@ -82,6 +85,10 @@ private[pickles] class PickleReader {
 
   private def atNoCache[T <: AnyRef](i: Int)(op: PklStream ?=> T)(using PklStream, Entries, Index): T =
     pkl.unsafeFork(index(i))(op)
+
+  def readTermNameRef()(using PklStream, Entries, Index): SimpleName = readNameRef().asInstanceOf[SimpleName]
+
+  def readTypeNameRef()(using PklStream, Entries, Index): SimpleTypeName = readNameRef().asInstanceOf[SimpleTypeName]
 
   def readNameRef()(using PklStream, Entries, Index): SimpleName | SimpleTypeName = at(pkl.readNat())(readName())
 
@@ -365,7 +372,6 @@ private[pickles] class PickleReader {
         errorBadSignature("bad symbol tag: " + tag)
     }
     sym.withFlags(flags, privateWithin)
-    sym.setAnnotations(Nil) // TODO Read Scala 2 annotations
     sym
   }
 
@@ -524,9 +530,18 @@ private[pickles] class PickleReader {
       result
     }
 
+  /** Does entry represent a symbol annotation? */
+  def isSymbolAnnotationEntry(i: Int)(using PklStream, Entries, Index): Boolean =
+    val tag = pkl.bytes(index(i))
+    tag == SYMANNOT
+
   def isChildrenEntry(i: Int)(using PklStream, Entries, Index): Boolean =
     val tag = pkl.bytes(index(i))
     tag == CHILDREN
+
+  private def isNameEntry(i: Int)(using PklStream, Entries, Index): Boolean =
+    val tag = pkl.bytes(index(i))
+    tag == TERMname || tag == TYPEname
 
   protected def isRefinementClass(sym: Symbol): Boolean =
     sym.name == tpnme.RefinedClassMagic
@@ -712,7 +727,9 @@ private[pickles] class PickleReader {
         // create PolyType
         //   - PT => register at index
         val restpe = readTypeMappableRef()
-        val typeParams = pkl.until(end, () => readLocalSymbolRef().asInstanceOf[TypeParamSymbol])
+        val typeParams = pkl.until(end, () => readMaybeExternalSymbolRef()).collect { case typeParam: TypeParamSymbol =>
+          typeParam
+        }
         if typeParams.nonEmpty then TempPolyType(typeParams, restpe)
         else restpe
       case EXISTENTIALtpe =>
@@ -721,10 +738,9 @@ private[pickles] class PickleReader {
         val boundSyms = pkl.until(end, () => readLocalSymbolRef().asInstanceOf[TypeMemberSymbol])
         elimExistentials(boundSyms, restpe)
       case ANNOTATEDtpe =>
-        // TODO AnnotatedType.make(readTypeRef(), pkl.until(end, () => readAnnotationRef()))
         val underlying = readTrueTypeRef()
-        // ignore until `end` (annotations)
-        underlying
+        val annots = pkl.until(end, () => readTypeAnnotationRef())
+        annots.foldLeft(underlying)(AnnotatedType(_, _))
       case _ =>
         noSuchTypeTag(tag, end)
     }
@@ -795,6 +811,257 @@ private[pickles] class PickleReader {
 
   private def noSuchTypeTag(tag: Int, end: Int): Nothing =
     errorBadSignature("bad type tag: " + tag)
+
+  // --- Annotations ---
+
+  def readSymbolAnnotation()(using ReaderContext, PklStream, Entries, Index): (TermOrTypeSymbol, Annotation) =
+    val tag = pkl.readByte()
+    if tag != SYMANNOT then errorBadSignature("symbol annotation expected (" + tag + ")")
+    val end = pkl.readEnd()
+    val target = readLocalSymbolRef() match
+      case target: TermOrTypeSymbol => target
+      case target: PackageSymbol    => errorBadSignature(s"found unexpected annotation for package symbol $target")
+    val annotation = readAnnotationContents(end)
+    (target, annotation)
+  end readSymbolAnnotation
+
+  private def readTypeAnnotationRef()(using ReaderContext, PklStream, Entries, Index): Annotation =
+    at(pkl.readNat())(readTypeAnnotation())
+
+  private def readTypeAnnotation()(using ReaderContext, PklStream, Entries, Index): Annotation =
+    val tag = pkl.readByte()
+    if tag != ANNOTINFO then errorBadSignature("annotation expected (" + tag + ")")
+    val end = pkl.readEnd()
+    readAnnotationContents(end)
+  end readTypeAnnotation
+
+  private def readAnnotationContents(end: Int)(using ReaderContext, PklStream, Entries, Index): Annotation =
+    val pos = SourcePosition.NoPosition
+
+    val annotationType = readTrueTypeRef()
+
+    val args: List[TermTree] = pkl.until(
+      end,
+      { () =>
+        val argref = pkl.readNat()
+        if isNameEntry(argref) then
+          val name = at(argref)(readName())
+          val arg = readClassfileAnnotArg(pkl.readNat())
+          NamedArg(name.asInstanceOf[SimpleName], arg)(pos)
+        else readAnnotArg(argref)
+      }
+    )
+
+    /* Create a TermTree for the annotation that is "good enough" for the main
+     * methods of `Annotation` to work, notably `symbol` and `arguments`.
+     * We have to cheat for the constructor, as we do not have its Signature.
+     * Instead we use an unsigned `nme.Constructor`. This is invalid and will
+     * cause `Annotation.annotConstructor` to fail, but we do not really have
+     * a choice.
+     */
+    val annotationTree: TermTree =
+      val newNode = New(TypeWrapper(annotationType)(pos))(pos)
+      val selectCtorNode = Select(newNode, nme.Constructor)(None)(pos) // cheating here
+      Apply(selectCtorNode, args)(pos)
+
+    Annotation(annotationTree)
+  end readAnnotationContents
+
+  private def readClassfileAnnotArg(i: Int)(using ReaderContext, PklStream, Entries, Index): TermTree =
+    pkl.bytes(index(i)) match
+      case ANNOTINFO     => at(i)(readAnnotInfoArg())
+      case ANNOTARGARRAY => at(i)(readArrayAnnotArg())
+      case _             => readAnnotArg(i)
+  end readClassfileAnnotArg
+
+  private def readAnnotInfoArg()(using ReaderContext, PklStream, Entries, Index): TermTree =
+    pkl.readByte() // skip the `ANNOTINFO` tag
+    val end = pkl.readEnd()
+    readAnnotationContents(end).tree
+  end readAnnotInfoArg
+
+  /** Read a ClassfileAnnotArg (argument to a classfile annotation). */
+  private def readArrayAnnotArg()(using ReaderContext, PklStream, Entries, Index): TermTree =
+    val pos = SourcePosition.NoPosition
+
+    pkl.readByte() // skip the `annotargarray` tag
+    val end = pkl.readEnd()
+    // array elements are trees representing instances of scala.annotation.Annotation
+    val elems = pkl.until(end, () => readClassfileAnnotArg(pkl.readNat()))
+    SeqLiteral(elems, TypeWrapper(rctx.AnnotationType)(pos))(pos)
+  end readArrayAnnotArg
+
+  /** Read an annotation argument, which is pickled either as a Constant or a Tree. */
+  private def readAnnotArg(i: Int)(using ReaderContext, PklStream, Entries, Index): TermTree =
+    pkl.bytes(index(i)) match
+      case TREE =>
+        at(i)(guardedReadTermTree())
+      case _ =>
+        val const = at(i)(readConstant())
+        val pos = SourcePosition.NoPosition
+        const match
+          case c: Constant => Literal(c)(pos)
+          case tp: TermRef => Ident(tp.name.asInstanceOf[UnsignedTermName])(tp)(pos)
+  end readAnnotArg
+
+  private def guardedReadTermTree()(using ReaderContext, PklStream, Entries, Index): TermTree =
+    try readTermTree()
+    catch
+      case _: UnsupportedTreeInAnnotationException =>
+        val termRef = rctx.uninitializedMethodTermRef
+        Ident(termRef.name.asInstanceOf[UnsignedTermName])(termRef)(SourcePosition.NoPosition)
+  end guardedReadTermTree
+
+  // --- Trees ---
+
+  private def readTermTreeRef()(using ReaderContext, PklStream, Entries, Index): TermTree =
+    at(pkl.readNat())(readTermTree())
+
+  private def readTermTree()(using ReaderContext, PklStream, Entries, Index): TermTree =
+    readOptTree().get.asInstanceOf[TermTree]
+
+  private def readTypeTreeRef()(using ReaderContext, PklStream, Entries, Index): TypeTree =
+    at(pkl.readNat())(readTypeTree())
+
+  private def readTypeTree()(using ReaderContext, PklStream, Entries, Index): TypeTree =
+    readOptTree().get.asInstanceOf[TypeTree]
+
+  private def readAnyTreeRef()(using ReaderContext, PklStream, Entries, Index): Tree =
+    at(pkl.readNat())(readAnyTree())
+
+  private def readAnyTree()(using ReaderContext, PklStream, Entries, Index): Tree =
+    readOptTree().get
+
+  private def readOptTreeRef()(using ReaderContext, PklStream, Entries, Index): Option[Tree] =
+    at(pkl.readNat())(readOptTree())
+
+  private def readOptTree()(using ReaderContext, PklStream, Entries, Index): Option[Tree] =
+    val treeTag = pkl.readByte()
+    if treeTag != TREE then errorBadSignature(s"unexpected non-tree tag $treeTag")
+
+    val end = pkl.readEnd()
+    val tag = pkl.readByte()
+
+    if tag == EMPTYtree then None
+    else Some(readNonEmptyTreeImpl(tag, end))
+  end readOptTree
+
+  private def readNonEmptyTreeImpl(tag: Int, end: Int)(using ReaderContext, PklStream, Entries, Index): Tree =
+    val pos = SourcePosition.NoPosition
+
+    val tpe = readTypeMappableRef()
+
+    (tag: @switch) match
+      case BLOCKtree =>
+        val expr = readTermTreeRef()
+        val stats = pkl.until(end, () => readAnyTreeRef()).map(_.asInstanceOf[StatementTree])
+        Block(stats, expr)(pos)
+
+      case ASSIGNtree =>
+        val lhs = readTermTreeRef()
+        val rhs = readTermTreeRef()
+        Assign(lhs, rhs)(pos)
+
+      case IFtree =>
+        val cond = readTermTreeRef()
+        val thenp = readTermTreeRef()
+        val elsep = readTermTreeRef()
+        If(cond, thenp, elsep)(pos)
+
+      case THROWtree =>
+        Throw(readTermTreeRef())(pos)
+
+      case NEWtree =>
+        New(readTypeTreeRef())(pos)
+
+      case TYPEDtree =>
+        val expr = readTermTreeRef()
+        val tpt = readTypeTreeRef()
+        Typed(expr, tpt)(pos)
+
+      case TYPEAPPLYtree =>
+        val fun = readTermTreeRef()
+        val args = pkl.until(end, () => readTypeTreeRef())
+        TypeApply(fun, args)(pos)
+
+      case APPLYtree =>
+        // this is going to have an unsigned reference, which is not going to be good; dotc does not do any better
+        val fun = readTermTreeRef()
+        val args = pkl.until(end, () => readTermTreeRef())
+        Apply(fun, args)(pos)
+
+      case THIStree =>
+        val symbol = readLocalSymbolRef()
+        val name = readTypeNameRef()
+        symbol match
+          case symbol: ClassSymbol   => This(TypeIdent(symbol.name)(symbol.localRef)(pos))(pos)
+          case symbol: PackageSymbol => Ident(symbol.name)(symbol.packageRef)(pos)
+          case _                     => errorBadSignature(s"illegal THIStree of $symbol")
+
+      case SELECTtree =>
+        val designator = readMaybeExternalSymbolRef()
+        val qualifier = readTermTreeRef()
+        val name = readTermNameRef()
+        Select(qualifier, name)(None)(pos)
+
+      case IDENTtree =>
+        val designator = readMaybeExternalSymbolRef()
+        val name = readTermNameRef()
+        val tpe: TermReferenceType = designator match
+          case sym: TermSymbol             => sym.localRef
+          case sym: PackageSymbol          => sym.packageRef
+          case external: ExternalSymbolRef => external.toTermRef(NoPrefix)
+          case _                           => errorBadSignature(s"illegal $designator for IDENTtree (name '$name')")
+        Ident(name)(tpe)(pos)
+
+      case LITERALtree =>
+        readConstantRef() match
+          case c: Constant => Literal(c)(pos)
+          case tp: TermRef => Ident(tp.name.asInstanceOf[UnsignedTermName])(tp)(pos)
+
+      case TYPEtree =>
+        TypeWrapper(tpe.asInstanceOf[NonEmptyPrefix])(pos)
+
+      case ANNOTATEDtree =>
+        val annot = readTermTreeRef()
+        val tpt = readTypeTreeRef()
+        AnnotatedTypeTree(tpt, annot)(pos)
+
+      case SINGLETONTYPEtree =>
+        SingletonTypeTree(readTermTreeRef())(pos)
+
+      case SELECTFROMTYPEtree =>
+        val qualifier = readTypeTreeRef()
+        val selector = readTypeNameRef()
+        SelectTypeTree(qualifier, selector)(pos)
+
+      case COMPOUNDTYPEtree =>
+        readOptTreeRef()
+        TypeWrapper(tpe.requireType)(pos)
+
+      case APPLIEDTYPEtree =>
+        val tpt = readTypeTreeRef()
+        val args = pkl.until(end, () => readAnyTreeRef()).map {
+          case tpt: TypeArgTree => tpt
+          case tpt              => errorBadSignature(s"illegal type argument $tpt")
+        }
+        AppliedTypeTree(tpt, args)(pos)
+
+      case TYPEBOUNDStree =>
+        val lo = readTypeTreeRef()
+        val hi = readTypeTreeRef()
+        ExplicitTypeBoundsTree(lo, hi)(pos)
+
+      case EXISTENTIALTYPEtree =>
+        readOptTreeRef()
+        pkl.until(end, () => readOptTreeRef())
+        TypeWrapper(tpe.requireType)(pos)
+
+      case _ =>
+        throw UnsupportedTreeInAnnotationException(s"unsupported tree in annotation with tag $tag")
+  end readNonEmptyTreeImpl
+
+  // --- Constants ---
 
   private def readConstantRef()(using ReaderContext, PklStream, Entries, Index): Constant | TermRef =
     at(pkl.readNat())(readConstant())
@@ -975,7 +1242,10 @@ private[reader] object PickleReader {
   }
 
   // This is a final class with a single instance instead of an `object` to behave better within the union type below
-  final class NoExternalSymbolRef private ()
+  final class NoExternalSymbolRef private ():
+    override def toString(): String = "NoSymbol"
+  end NoExternalSymbolRef
+
   object NoExternalSymbolRef:
     val instance = new NoExternalSymbolRef
   end NoExternalSymbolRef
@@ -984,6 +1254,8 @@ private[reader] object PickleReader {
 
   private val Scala2Constructor: SimpleName = termName("this")
   private val Scala2TraitConstructor: SimpleName = termName("$init$")
+
+  private final class UnsupportedTreeInAnnotationException(message: String) extends Exception(message)
 
   private[tastyquery] case class TempMethodType(paramSyms: List[TermSymbol], resType: TypeMappable)
       extends CustomTransientGroundType

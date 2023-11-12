@@ -91,6 +91,9 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   def GenericTupleTypeOf(elementTypes: List[TypeOrWildcard]): Type =
     elementTypes.foldRight[Type](EmptyTupleType)(TupleConsTypeOf(_, _))
 
+  /** The `scala.annotation.Annotation` class type. */
+  val AnnotationType: TypeRef = TypeRef(scalaAnnotationPackage.packageRef, typeName("Annotation"))
+
   // Magic symbols that are not found on the classpath, but rather created by hand
 
   private def createSpecialClass(name: SimpleTypeName, parents: List[Type], flags: FlagSet): ClassSymbol =

@@ -186,7 +186,7 @@ private[pickles] object PickleFormat {
   inline val IFtree = 23
   inline val MATCHtree = 24
   inline val RETURNtree = 25
-  inline val TREtree = 26
+  inline val TRYtree = 26
   inline val THROWtree = 27
   inline val NEWtree = 28
   inline val TYPEDtree = 29
