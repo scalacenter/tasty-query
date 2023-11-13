@@ -128,11 +128,11 @@ private[reader] object ClassfileParser {
 
     val sigBytes = tpe match {
       case annot.ScalaSignature =>
-        val bytesArg = args.head.asInstanceOf[AnnotationValue.Const[pool.type]]
+        val bytesArg = args.head.asInstanceOf[AnnotationValue.Const]
         pool.sigbytes(bytesArg.valueIdx)
       case annot.ScalaLongSignature =>
-        val bytesArrArg = args.head.asInstanceOf[AnnotationValue.Arr[pool.type]]
-        val idxs = bytesArrArg.values.map(_.asInstanceOf[AnnotationValue.Const[pool.type]].valueIdx)
+        val bytesArrArg = args.head.asInstanceOf[AnnotationValue.Arr]
+        val idxs = bytesArrArg.values.map(_.asInstanceOf[AnnotationValue.Const].valueIdx)
         pool.sigbytes(idxs)
     }
     Unpickler.loadInfo(sigBytes)
@@ -231,7 +231,7 @@ private[reader] object ClassfileParser {
     end loadMembers
 
     def initParents(): Unit =
-      def binaryName(cls: ConstantInfo.Class[pool.type]) =
+      def binaryName(cls: ConstantInfo.Class) =
         pool.utf8(cls.nameIdx)
       val parents = classSig match
         case SigOrSupers.Sig(sig) =>
