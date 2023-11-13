@@ -149,7 +149,7 @@ private[reader] object ClassfileParser {
   )(using ReaderContext, Resolver): List[InnerClassDecl] = {
     import structure.{reader, given}
 
-    val allRegisteredSymbols = mutable.ListBuffer.empty[Symbol]
+    val allRegisteredSymbols = mutable.ListBuffer.empty[TermOrTypeSymbol]
 
     val cls = ClassSymbol.create(name.toTypeName, classOwner)
     allRegisteredSymbols += cls
@@ -285,10 +285,7 @@ private[reader] object ClassfileParser {
 
     for sym <- allRegisteredSymbols do
       sym.checkCompleted()
-      assert(
-        !sym.isPackage && sym.asInstanceOf[TermOrTypeSymbol].sourceLanguage == SourceLanguage.Java,
-        s"$sym of ${sym.getClass()}"
-      )
+      assert(sym.sourceLanguage == SourceLanguage.Java, s"$sym of ${sym.getClass()}")
 
     innerClasses.declarations
   }

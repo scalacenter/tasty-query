@@ -39,7 +39,7 @@ private[classfiles] object JavaSignatures:
   end parseSupers
 
   @throws[ClassfileFormatException]
-  def parseSignature(member: Symbol { val owner: Symbol }, signature: String, allRegisteredSymbols: Growable[Symbol])(
+  def parseSignature(member: TermOrTypeSymbol, signature: String, allRegisteredSymbols: Growable[TermOrTypeSymbol])(
     using ReaderContext,
     InnerClasses,
     Resolver
