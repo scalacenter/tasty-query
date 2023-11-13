@@ -925,7 +925,6 @@ object Symbols {
 
     // Reference fields (checked in doCheckCompleted)
     private var myTypeParams: List[ClassTypeParamSymbol] | Null = null
-    private var myParentsInit: (() => Context ?=> List[Type]) | Null = null
     private var myParents: List[Type] | Null = null
     private var myGivenSelfType: Option[Type] | Null = null
 
@@ -947,7 +946,7 @@ object Symbols {
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
       if myTypeParams == null then failNotCompleted("typeParams not initialized")
-      if myParents == null && myParentsInit == null then failNotCompleted("parents not initialized")
+      if myParents == null && tree.isEmpty then failNotCompleted("parents not initialized")
       if myGivenSelfType == null then failNotCompleted("givenSelfType not initialized")
 
     /** The open level of this class (open, closed, sealed or final). */
@@ -1077,29 +1076,32 @@ object Symbols {
       else local
 
     private[tastyquery] final def withParentsDirect(parents: List[Type]): this.type =
-      if myParentsInit != null || myParents != null then
-        throw IllegalStateException(s"reassignment of parents of $this")
+      if myParents != null then throw IllegalStateException(s"reassignment of parents of $this")
       myParents = parents
-      this
-
-    private[tastyquery] final def withParentsDelayed(parentsInit: () => Context ?=> List[Type]): this.type =
-      if myParentsInit != null || myParents != null then
-        throw IllegalStateException(s"reassignment of parents of $this")
-      myParentsInit = parentsInit
       this
 
     final def parents(using Context): List[Type] =
       val localParents = myParents
       if localParents != null then localParents
       else
-        val localParentsInit = myParentsInit
-        if localParentsInit != null then
-          val parents = localParentsInit()
-          myParents = parents
-          myParentsInit = null
-          parents
-        else throw IllegalStateException(s"$this was not assigned parents")
+        val computed = computeParents()
+        myParents = computed
+        computed
     end parents
+
+    private def computeParents()(using Context): List[Type] =
+      val tree = this.tree.getOrElse {
+        throw IllegalStateException(s"$this was not assigned parents")
+      }
+      tree.rhs.parents.map {
+        case parent: TermTree =>
+          Apply.computeAppliedNewType(parent).getOrElse {
+            throw InvalidProgramStructureException(s"Unexpected super call $parent in class $this")
+          }
+        case parent: TypeTree =>
+          parent.toType
+      }
+    end computeParents
 
     def parentClasses(using Context): List[ClassSymbol] =
       parents.map(tpe =>

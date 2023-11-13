@@ -686,15 +686,6 @@ private[tasties] class TreeUnpickler private (
           case _     => readTypeTree
         }
       }
-    cls.withParentsDelayed { () =>
-      parents.map {
-        case parent: TermTree =>
-          Apply.computeAppliedNewType(parent).getOrElse {
-            throw InvalidProgramStructureException(s"Unexpected super call $parent in class $cls")
-          }
-        case parent: TypeTree => parent.toType
-      }
-    }
     val self = readSelf
     cls.withGivenSelfType(self.map(_.tpt.toType))
     // The first entry is the constructor
