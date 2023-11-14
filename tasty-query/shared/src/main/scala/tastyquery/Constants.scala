@@ -139,7 +139,7 @@ object Constants {
       case _         => throw new Error("value " + value + " is not a Double")
     }
 
-    def stringValue: String = value.toString
+    def stringValue: String = if tag == NullTag then "null" else value.toString
 
     def typeValue: Type = value.asInstanceOf[Type]
 
@@ -148,7 +148,7 @@ object Constants {
       val seed = 17
       var h = seed
       h = mix(h, tag.##) // include tag in the hash, otherwise 0, 0d, 0L, 0f collide.
-      h = mix(h, value.hashCode()) // use hashCode() instead of ## to correctly handle Float/Double
+      if tag != NullTag then h = mix(h, value.hashCode) // use hashCode instead of ## to correctly handle Float/Double
       finalizeHash(h, length = 2)
     }
 
