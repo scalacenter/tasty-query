@@ -326,54 +326,50 @@ private[reader] object ClassfileParser {
   private def parse(classRoot: ClassData, structure: Structure): ClassKind = {
     import structure.{reader, given}
 
-    def process(attributesStream: Forked[DataStream]): ClassKind =
-      var runtimeAnnotStart: Forked[DataStream] | Null = null
-      var innerClassesStart: Option[Forked[DataStream]] = None
-      var sigOrNull: String | Null = null
-      var isScala = false
-      var isTASTY = false
-      var isScalaRaw = false
-      attributesStream.use {
-        reader.scanAttributes {
-          case attr.ScalaSig =>
-            isScala = true
-            runtimeAnnotStart != null
-          case attr.Scala =>
-            isScalaRaw = true
-            true
-          case attr.TASTY =>
-            isTASTY = true
-            true
-          case attr.RuntimeVisibleAnnotations =>
-            runtimeAnnotStart = data.fork
-            isScala
-          case attr.Signature =>
-            if !(isScala || isScalaRaw || isTASTY) then sigOrNull = data.fork.use(reader.readSignature)
-            false
-          case attr.InnerClasses =>
-            if !(isScala || isScalaRaw || isTASTY) then innerClassesStart = Some(data.fork)
-            false
-          case _ =>
-            false
-        }
-        isScalaRaw &= !isTASTY
+    var runtimeAnnotStart: Forked[DataStream] | Null = null
+    var innerClassesStart: Option[Forked[DataStream]] = None
+    var sigOrNull: String | Null = null
+    var isScala = false
+    var isTASTY = false
+    var isScalaRaw = false
+    structure.attributes.use {
+      reader.scanAttributes {
+        case attr.ScalaSig =>
+          isScala = true
+          runtimeAnnotStart != null
+        case attr.Scala =>
+          isScalaRaw = true
+          true
+        case attr.TASTY =>
+          isTASTY = true
+          true
+        case attr.RuntimeVisibleAnnotations =>
+          runtimeAnnotStart = data.fork
+          isScala
+        case attr.Signature =>
+          if !(isScala || isScalaRaw || isTASTY) then sigOrNull = data.fork.use(reader.readSignature)
+          false
+        case attr.InnerClasses =>
+          if !(isScala || isScalaRaw || isTASTY) then innerClassesStart = Some(data.fork)
+          false
+        case _ =>
+          false
       }
-      if isScala then
-        val annots = runtimeAnnotStart
-        if annots != null then ClassKind.Scala2(structure, annots)
-        else
-          throw Scala2PickleFormatException(
-            s"class file for ${classRoot.binaryName} is a scala 2 class, but has no annotations"
-          )
-      else if isTASTY then ClassKind.TASTy
-      else if isScalaRaw then ClassKind.Artifact
+      isScalaRaw &= !isTASTY
+    }
+    if isScala then
+      val annots = runtimeAnnotStart
+      if annots != null then ClassKind.Scala2(structure, annots)
       else
-        val sig = sigOrNull
-        val classSig = if sig != null then SigOrSupers.Sig(sig) else SigOrSupers.Supers
-        ClassKind.Java(structure, classSig, innerClassesStart)
-    end process
-
-    process(structure.attributes)
+        throw Scala2PickleFormatException(
+          s"class file for ${classRoot.binaryName} is a scala 2 class, but has no annotations"
+        )
+    else if isTASTY then ClassKind.TASTy
+    else if isScalaRaw then ClassKind.Artifact
+    else
+      val sig = sigOrNull
+      val classSig = if sig != null then SigOrSupers.Sig(sig) else SigOrSupers.Supers
+      ClassKind.Java(structure, classSig, innerClassesStart)
   }
 
   private def structure(reader: ClassfileReader)(using pool: reader.ConstantPool)(using DataStream): Structure = {
