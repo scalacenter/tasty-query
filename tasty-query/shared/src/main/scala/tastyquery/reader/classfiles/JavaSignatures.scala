@@ -39,15 +39,15 @@ private[classfiles] object JavaSignatures:
   end parseSupers
 
   @throws[ClassfileFormatException]
-  def parseSignature(member: TermOrTypeSymbol, signature: String, allRegisteredSymbols: Growable[TermOrTypeSymbol])(
-    using ReaderContext,
-    InnerClasses,
-    Resolver
-  ): TypeOrMethodic =
+  def parseSignature(
+    member: TermOrTypeSymbol,
+    isMethod: Boolean,
+    signature: String,
+    allRegisteredSymbols: Growable[TermOrTypeSymbol]
+  )(using ReaderContext, InnerClasses, Resolver): TypeOrMethodic =
     var offset = 0
     var end = signature.length
     val isClass = member.isClass
-    val isMethod = member.isTerm && member.asTerm.isMethod
 
     lazy val someEmptyType = Some(rctx.AnyType)
 

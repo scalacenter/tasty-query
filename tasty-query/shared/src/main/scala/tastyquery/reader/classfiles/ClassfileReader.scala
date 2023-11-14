@@ -409,6 +409,8 @@ private[classfiles] object ClassfileReader {
       extension (access: AccessFlags)
         private def isSet(flag: AccessFlags): Boolean = (access & flag) == flag
 
+        def isStatic: Boolean = isSet(Tags.Static)
+
         def isSynthetic: Boolean = isSet(Tags.Synthetic)
 
         def isPackagePrivate: Boolean = !isSet(Tags.Protected) && !isSet(Tags.Private) && !isSet(Tags.Public)

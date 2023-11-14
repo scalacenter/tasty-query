@@ -193,41 +193,60 @@ private[reader] object ClassfileParser {
       classOwner == rctx.javaLangInvokePackage
         && (cls.name == tpnme.MethodHandle || cls.name == tpnme.VarHandle)
 
-    /* Is the member with the given baseFlags and access flags signature-polymorphic?
-     *
-     * We cheat a little bit here compared to the spec: we do not test whether
-     * the method as *only* a varargs parameter. This is fine because
-     * MethodHandle and VarHandle do not contain any native method with varargs
-     * and also other arguments. We check that after the fact (see
-     * `if sym.isSignaturePolymorphicMethod` down below).
-     */
-    def isSignaturePolymorphic(baseFlags: FlagSet, access: AccessFlags): Boolean =
-      clsContainsSigPoly && baseFlags.is(Method) && access.isNativeVarargsIfMethod
+    /* Is the member with the given properties signature-polymorphic? */
+    def isSignaturePolymorphic(isMethod: Boolean, javaFlags: AccessFlags, declaredType: TypeOrMethodic): Boolean =
+      if clsContainsSigPoly && isMethod && javaFlags.isNativeVarargsIfMethod then
+        declaredType match
+          case mt: MethodType if mt.paramNames.sizeIs == 1 => true
+          case _                                           => false
+      else false
+    end isSignaturePolymorphic
 
-    def createMember(name: SimpleName, baseFlags: FlagSet, access: AccessFlags): TermSymbol =
-      val flags0 = baseFlags | access.toFlags | JavaDefined
-      val flags =
-        if isSignaturePolymorphic(baseFlags, access) then flags0 | SignaturePolymorphic
-        else flags0
-      val owner = if flags.is(Flags.Static) then moduleClass else cls
-      val sym = TermSymbol.create(name, owner).withFlags(flags, privateWithin(access))
-      sym.setAnnotations(Nil) // TODO Read Java annotations on fields and methods
+    def createMember(name: SimpleName, isMethod: Boolean, javaFlags: AccessFlags, memberSig: MemberSig): TermSymbol =
+      // Select the right owner and create the symbol
+      val owner = if javaFlags.isStatic then moduleClass else cls
+      val sym = TermSymbol.create(name, owner)
       allRegisteredSymbols += sym
-      sym
 
-    def loadMembers(): IArray[(TermSymbol, AccessFlags, MemberSig)] =
-      val buf = IArray.newBuilder[(TermSymbol, AccessFlags, MemberSig)]
+      // Parse the signature into a declared type for the symbol
+      val declaredType =
+        val parsedType = JavaSignatures.parseSignature(sym, isMethod, memberSig, allRegisteredSymbols)
+        val adaptedType =
+          if isMethod && sym.name == nme.Constructor then cls.makePolyConstructorType(parsedType)
+          else if isMethod && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
+          else parsedType
+        adaptedType
+      end declaredType
+      sym.withDeclaredType(declaredType)
+
+      // Compute the flags for the symbol
+      val flags =
+        var flags1 = javaFlags.toFlags | JavaDefined
+        if isMethod then flags1 |= Method
+        if isSignaturePolymorphic(isMethod, javaFlags, declaredType) then flags1 |= SignaturePolymorphic
+        flags1
+      end flags
+      sym.withFlags(flags, privateWithin(javaFlags))
+
+      // Auto fill the param symbols from the declared type
+      sym.autoFillParamSymss()
+
+      sym.setAnnotations(Nil) // TODO Read Java annotations on fields and methods
+
+      sym
+    end createMember
+
+    def loadMembers(): Unit =
       structure.fields.use {
-        reader.readFields { (name, sigOrDesc, access) =>
-          buf += ((createMember(name, EmptyFlagSet, access), access, sigOrDesc))
+        reader.readFields { (name, sigOrDesc, javaFlags) =>
+          createMember(name, isMethod = false, javaFlags, sigOrDesc)
         }
       }
       structure.methods.use {
-        reader.readMethods { (name, sigOrDesc, access) =>
-          buf += ((createMember(name, Method, access), access, sigOrDesc))
+        reader.readMethods { (name, sigOrDesc, javaFlags) =>
+          createMember(name, isMethod = true, javaFlags, sigOrDesc)
         }
       }
-      buf.result()
     end loadMembers
 
     def initParents(): Unit =
@@ -235,7 +254,7 @@ private[reader] object ClassfileParser {
         pool.utf8(cls.nameIdx)
       val parents = classSig match
         case SigOrSupers.Sig(sig) =>
-          JavaSignatures.parseSignature(cls, sig, allRegisteredSymbols).requireType match
+          JavaSignatures.parseSignature(cls, isMethod = false, sig, allRegisteredSymbols).requireType match
             case mix: AndType => mix.parts
             case sup          => sup :: Nil
         case SigOrSupers.Supers =>
@@ -262,26 +281,7 @@ private[reader] object ClassfileParser {
       else if cls.isString then rctx.createStringMagicMethods(cls)
       else if cls.isJavaEnum then rctx.createEnumMagicMethods(cls)
 
-    for (sym, javaFlags, memberSig) <- loadMembers() do
-      val parsedType = JavaSignatures.parseSignature(sym, memberSig, allRegisteredSymbols)
-      val adaptedType =
-        if sym.isMethod && sym.name == nme.Constructor then cls.makePolyConstructorType(parsedType)
-        else if sym.isMethod && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
-        else parsedType
-      sym.withDeclaredType(adaptedType)
-      sym.autoFillParamSymss()
-
-      // Verify after the fact that we don't mark signature-polymorphic methods that should not be
-      if sym.isSignaturePolymorphicMethod then
-        adaptedType match
-          case adaptedType: MethodType if adaptedType.paramNames.sizeIs == 1 =>
-            () // OK
-          case _ =>
-            throw AssertionError(
-              s"Found a method that would be signature-polymorphic but it has more than one argument: " +
-                s"${cls.name}.${sym.name}: ${adaptedType.showBasic}"
-            )
-    end for
+    loadMembers()
 
     for sym <- allRegisteredSymbols do
       sym.checkCompleted()
