@@ -187,15 +187,15 @@ private[classfiles] final class ClassfileReader private () {
     reader
   }
 
-  def readFields(op: (SimpleName, SigOrDesc, AccessFlags) => Unit)(using DataStream, ConstantPool): Unit =
+  def readFields(op: (SimpleName, MemberSig, AccessFlags) => Unit)(using DataStream, ConstantPool): Unit =
     readMembers(isMethod = false, op)
 
-  def readMethods(op: (SimpleName, SigOrDesc, AccessFlags) => Unit)(using DataStream, ConstantPool): Unit =
+  def readMethods(op: (SimpleName, MemberSig, AccessFlags) => Unit)(using DataStream, ConstantPool): Unit =
     readMembers(isMethod = true, op)
 
   private def readMembers(
     isMethod: Boolean,
-    op: (SimpleName, SigOrDesc, AccessFlags) => Unit
+    op: (SimpleName, MemberSig, AccessFlags) => Unit
   )(using ds: DataStream, pool: ConstantPool): Unit = {
     val count = data.readU2()
     loop(count) {
@@ -214,9 +214,7 @@ private[classfiles] final class ClassfileReader private () {
         case _ => false
       }
       val sig = sigOrNull
-      if !accessFlags.isSynthetic then
-        if sig == null then op(name, SigOrDesc.Desc(desc), accessFlags)
-        else op(name, SigOrDesc.Sig(sig), accessFlags)
+      if !accessFlags.isSynthetic then op(name, if sig == null then desc else sig, accessFlags)
     }
   }
 
@@ -399,9 +397,7 @@ private[classfiles] object ClassfileReader {
     IArray.unsafeFromArray(arr)
   }
 
-  enum SigOrDesc:
-    case Sig(str: String)
-    case Desc(str: String)
+  type MemberSig = String
 
   enum SigOrSupers:
     case Sig(str: String)

@@ -215,8 +215,8 @@ private[reader] object ClassfileParser {
       allRegisteredSymbols += sym
       sym
 
-    def loadMembers(): IArray[(TermSymbol, AccessFlags, SigOrDesc)] =
-      val buf = IArray.newBuilder[(TermSymbol, AccessFlags, SigOrDesc)]
+    def loadMembers(): IArray[(TermSymbol, AccessFlags, MemberSig)] =
+      val buf = IArray.newBuilder[(TermSymbol, AccessFlags, MemberSig)]
       structure.fields.use {
         reader.readFields { (name, sigOrDesc, access) =>
           buf += ((createMember(name, EmptyFlagSet, access), access, sigOrDesc))
@@ -242,7 +242,7 @@ private[reader] object ClassfileParser {
           structure.supers.use {
             val superClass = reader.readSuperClass().map(binaryName)
             val interfaces = reader.readInterfaces().map(binaryName)
-            Descriptors.parseSupers(cls, superClass, interfaces)
+            JavaSignatures.parseSupers(cls, superClass, interfaces)
           }
       end parents
       val parents1 =
@@ -262,10 +262,8 @@ private[reader] object ClassfileParser {
       else if cls.isString then rctx.createStringMagicMethods(cls)
       else if cls.isJavaEnum then rctx.createEnumMagicMethods(cls)
 
-    for (sym, javaFlags, sigOrDesc) <- loadMembers() do
-      val parsedType = sigOrDesc match
-        case SigOrDesc.Desc(desc) => Descriptors.parseDescriptor(sym, desc)
-        case SigOrDesc.Sig(sig)   => JavaSignatures.parseSignature(sym, sig, allRegisteredSymbols)
+    for (sym, javaFlags, memberSig) <- loadMembers() do
+      val parsedType = JavaSignatures.parseSignature(sym, memberSig, allRegisteredSymbols)
       val adaptedType =
         if sym.isMethod && sym.name == nme.Constructor then cls.makePolyConstructorType(parsedType)
         else if sym.isMethod && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)

@@ -15,13 +15,28 @@ import tastyquery.Symbols.*
 import tastyquery.reader.ReaderContext
 import tastyquery.reader.ReaderContext.rctx
 
-import ClassfileParser.{InnerClasses, Resolver}
+import ClassfileParser.{InnerClasses, Resolver, resolver}
 
 private[classfiles] object JavaSignatures:
 
   private object IgnoreTParamRefs
 
   private type JavaSignature = Null | PolyType | Map[TypeName, ClassTypeParamSymbol] | IgnoreTParamRefs.type
+
+  private def classRef(binaryName: SimpleName)(using ReaderContext, InnerClasses, Resolver): TypeRef =
+    resolver.resolve(binaryName)
+
+  def parseSupers(cls: ClassSymbol, superClass: Option[SimpleName], interfaces: IArray[SimpleName])(
+    using ReaderContext,
+    InnerClasses,
+    Resolver
+  ): List[Type] =
+    cls.withTypeParams(Nil)
+    if cls.isObject then rctx.AnyType :: rctx.MatchableType :: Nil
+    else
+      val superRef = superClass.map(classRef).getOrElse(rctx.ObjectType)
+      superRef :: interfaces.map(classRef).toList
+  end parseSupers
 
   @throws[ClassfileFormatException]
   def parseSignature(member: Symbol { val owner: Symbol }, signature: String, allRegisteredSymbols: Growable[Symbol])(
@@ -163,7 +178,7 @@ private[classfiles] object JavaSignatures:
       end classTypeSignatureRest
 
       if consume('L') then // must have 'L', identifier, and ';'.
-        val pre = simpleClassTypeSignature(Descriptors.classRef(binaryName()))
+        val pre = simpleClassTypeSignature(classRef(binaryName()))
         Some(classTypeSignatureRest(pre))
       else None
     end classTypeSignature
@@ -279,7 +294,7 @@ private[classfiles] object JavaSignatures:
         classRest(null)
 
     def fieldSignature: Type =
-      referenceType(null)
+      baseType.getOrElse(referenceType(null))
 
     def cookFailure(tname: TypeName, reason: String): Nothing =
       val path = if !isClass then s"${member.owner.displayFullName}#${member.name}" else member.displayFullName
