@@ -28,10 +28,7 @@ private[reader] object ClassfileParser {
   inline def resolver(using resolver: Resolver): resolver.type = resolver
 
   enum ClassKind:
-    case Scala2(structure: Structure, runtimeAnnotStart: Forked[DataStream])
-    case Java(structure: Structure, classSig: SigOrSupers, inners: Option[Forked[DataStream]])
-    case TASTy
-    case Artifact
+    case Scala2, Java, TASTy, Artifact
 
   case class InnerClassRef(name: SimpleName, outer: SimpleName, isStatic: Boolean)
 
@@ -109,44 +106,46 @@ private[reader] object ClassfileParser {
     val Empty = InnerClasses(Map.empty, Nil)
   end InnerClasses
 
-  class Structure(
-    val access: AccessFlags,
-    val binaryName: SimpleName,
-    val supers: Forked[DataStream],
-    val fields: Forked[DataStream],
-    val methods: Forked[DataStream],
-    val attributes: Forked[DataStream]
-  )(using val pool: ConstantPool)
-
-  def loadScala2Class(structure: Structure, runtimeAnnotStart: Forked[DataStream])(using ReaderContext): Unit = {
+  def loadScala2Class(structure: Structure)(using ReaderContext): Unit = {
     import structure.given
 
-    val Some(Annotation(tpe, args)) = runtimeAnnotStart.use {
-      ClassfileReader.readAnnotation(Set(annot.ScalaLongSignature, annot.ScalaSignature))
-    }: @unchecked
+    def failNoAnnot(): Nothing =
+      throw Scala2PickleFormatException(
+        s"class file for ${structure.binaryName} is a scala 2 class, " +
+          "but it does not have the required annotation ScalaSignature or ScalaLongSignature"
+      )
 
-    val sigBytes = tpe match {
+    val runtimeAnnotStart =
+      structure.attributes
+        .use(ClassfileReader.readAttribute(attr.RuntimeVisibleAnnotations))
+        .getOrElse(failNoAnnot())
+
+    val scalaSigAnnotation =
+      runtimeAnnotStart
+        .use(ClassfileReader.readAnnotation(Set(annot.ScalaLongSignature, annot.ScalaSignature)))
+        .getOrElse(failNoAnnot())
+
+    val sigBytes = scalaSigAnnotation.tpe match {
       case annot.ScalaSignature =>
-        val bytesArg = args.head.asInstanceOf[AnnotationValue.Const]
+        val bytesArg = scalaSigAnnotation.values.head.asInstanceOf[AnnotationValue.Const]
         pool.sigbytes(bytesArg.valueIdx)
       case annot.ScalaLongSignature =>
-        val bytesArrArg = args.head.asInstanceOf[AnnotationValue.Arr]
+        val bytesArrArg = scalaSigAnnotation.values.head.asInstanceOf[AnnotationValue.Arr]
         val idxs = bytesArrArg.values.map(_.asInstanceOf[AnnotationValue.Const].valueIdx)
         pool.sigbytes(idxs)
     }
     Unpickler.loadInfo(sigBytes)
-
   }
 
   def loadJavaClass(
     classOwner: DeclaringSymbol,
     name: SimpleName,
     structure: Structure,
-    classSig: SigOrSupers,
-    innerLookup: Map[SimpleName, ClassData],
-    optInnerClasses: Option[Forked[DataStream]]
+    innerLookup: Map[SimpleName, ClassData]
   )(using ReaderContext, Resolver): List[InnerClassDecl] = {
     import structure.given
+
+    val attributes = structure.attributes.use(ClassfileReader.readAttributeMap())
 
     val allRegisteredSymbols = mutable.ListBuffer.empty[TermOrTypeSymbol]
 
@@ -178,10 +177,10 @@ private[reader] object ClassfileParser {
       .setAnnotations(Nil)
     allRegisteredSymbols += module
 
-    def readInnerClasses(innerClasses: Forked[DataStream]): InnerClasses =
-      InnerClasses.parse(cls, moduleClass, structure, innerLookup, innerClasses)
-
-    val innerClassesStrict = optInnerClasses.map(readInnerClasses).getOrElse(InnerClasses.Empty)
+    val innerClassesStrict: InnerClasses =
+      attributes.get(attr.InnerClasses) match
+        case None         => InnerClasses.Empty
+        case Some(stream) => InnerClasses.parse(cls, moduleClass, structure, innerLookup, stream)
     given InnerClasses = innerClassesStrict
 
     /* Does this class contain signature-polymorphic methods?
@@ -251,18 +250,21 @@ private[reader] object ClassfileParser {
     def initParents(): Unit =
       def binaryName(cls: ConstantInfo.Class) =
         pool.utf8(cls.nameIdx)
-      val parents = classSig match
-        case SigOrSupers.Sig(sig) =>
+
+      val parents = attributes.get(attr.Signature) match
+        case Some(stream) =>
+          val sig = stream.use(ClassfileReader.readSignature)
           JavaSignatures.parseSignature(cls, isMethod = false, sig, allRegisteredSymbols).requireType match
             case mix: AndType => mix.parts
             case sup          => sup :: Nil
-        case SigOrSupers.Supers =>
+        case None =>
           structure.supers.use {
             val superClass = ClassfileReader.readSuperClass().map(binaryName)
             val interfaces = ClassfileReader.readInterfaces().map(binaryName)
             JavaSignatures.parseSupers(cls, superClass, interfaces)
           }
       end parents
+
       val parents1 =
         if parents.head eq rctx.FromJavaObjectType then rctx.ObjectType :: parents.tail
         else parents
@@ -322,81 +324,26 @@ private[reader] object ClassfileParser {
           None
   end ArrayTypeExtractor
 
-  private def parse(classRoot: ClassData, structure: Structure): ClassKind = {
+  def detectClassKind(structure: Structure): ClassKind =
     import structure.given
 
-    var runtimeAnnotStart: Forked[DataStream] | Null = null
-    var innerClassesStart: Option[Forked[DataStream]] = None
-    var sigOrNull: String | Null = null
-    var isScala = false
-    var isTASTY = false
-    var isScalaRaw = false
+    var result: ClassKind = ClassKind.Java // if we do not find anything special, it will be Java
     structure.attributes.use {
       ClassfileReader.scanAttributes {
         case attr.ScalaSig =>
-          isScala = true
-          runtimeAnnotStart != null
+          result = ClassKind.Scala2
+          true
         case attr.Scala =>
-          isScalaRaw = true
-          true
+          result = ClassKind.Artifact
+          false // keep going; there might be a ScalaSig or TASTY later on
         case attr.TASTY =>
-          isTASTY = true
+          result = ClassKind.TASTy
           true
-        case attr.RuntimeVisibleAnnotations =>
-          runtimeAnnotStart = data.fork
-          isScala
-        case attr.Signature =>
-          if !(isScala || isScalaRaw || isTASTY) then sigOrNull = data.fork.use(ClassfileReader.readSignature)
-          false
-        case attr.InnerClasses =>
-          if !(isScala || isScalaRaw || isTASTY) then innerClassesStart = Some(data.fork)
-          false
         case _ =>
           false
       }
-      isScalaRaw &= !isTASTY
     }
-    if isScala then
-      val annots = runtimeAnnotStart
-      if annots != null then ClassKind.Scala2(structure, annots)
-      else
-        throw Scala2PickleFormatException(
-          s"class file for ${classRoot.binaryName} is a scala 2 class, but has no annotations"
-        )
-    else if isTASTY then ClassKind.TASTy
-    else if isScalaRaw then ClassKind.Artifact
-    else
-      val sig = sigOrNull
-      val classSig = if sig != null then SigOrSupers.Sig(sig) else SigOrSupers.Supers
-      ClassKind.Java(structure, classSig, innerClassesStart)
-  }
-
-  private def readStructure()(using pool: ConstantPool)(using DataStream): Structure = {
-    val access = ClassfileReader.readAccessFlags()
-    val thisClass = ClassfileReader.readThisClass()
-    val supers = data.forkAndSkip {
-      data.skip(2) // superclass
-      data.skip(2 * data.readU2()) // interfaces
-    }
-    Structure(
-      access = access,
-      binaryName = pool.utf8(thisClass.nameIdx),
-      supers = supers,
-      fields = ClassfileReader.skipFields(),
-      methods = ClassfileReader.skipMethods(),
-      attributes = ClassfileReader.skipAttributes()
-    )
-  }
-
-  private def toplevel(classOwner: DeclaringSymbol, classRoot: ClassData): Structure =
-    ClassfileReader.unpickle(classRoot) {
-      ClassfileReader.acceptHeader(classOwner, classRoot)
-      val pool = ClassfileReader.readConstantPool()
-      readStructure()(using pool)
-    }
-  end toplevel
-
-  def readKind(classOwner: DeclaringSymbol, classRoot: ClassData): ClassKind =
-    parse(classRoot, toplevel(classOwner, classRoot))
+    result
+  end detectClassKind
 
 }

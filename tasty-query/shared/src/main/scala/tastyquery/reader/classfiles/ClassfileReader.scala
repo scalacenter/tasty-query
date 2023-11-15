@@ -2,6 +2,8 @@ package tastyquery.reader.classfiles
 
 import scala.annotation.switch
 
+import scala.collection.immutable.HashMap
+
 import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
@@ -16,7 +18,7 @@ import ClassfileReader.*
 import ClassfileReader.Access.*
 import Constants.*
 
-private[classfiles] object ClassfileReader {
+private[reader] object ClassfileReader {
   import Indexing.*
   import Access.*
 
@@ -24,7 +26,31 @@ private[classfiles] object ClassfileReader {
   inline val JavaMinorVersion = 3 // Java 1.1 (needed for `java.rmi.activation.ActivationGroup_Stub` in rt.jar)
   inline val JavaMagicNumber = 0xcafebabe
 
-  def acceptHeader(classOwner: DeclaringSymbol, classRoot: ClassData)(using DataStream): Unit = {
+  def readStructure(classOwner: DeclaringSymbol, classRoot: ClassData): Structure =
+    ClassfileReader.unpickle(classRoot) {
+      ClassfileReader.acceptHeader(classOwner, classRoot)
+
+      val pool = ClassfileReader.readConstantPool()
+      given ConstantPool = pool
+
+      val access = ClassfileReader.readAccessFlags()
+      val thisClass = ClassfileReader.readThisClass()
+      val supers = data.forkAndSkip {
+        data.skip(2) // superclass
+        data.skip(2 * data.readU2()) // interfaces
+      }
+      Structure(
+        access = access,
+        binaryName = pool.utf8(thisClass.nameIdx),
+        supers = supers,
+        fields = ClassfileReader.skipFields(),
+        methods = ClassfileReader.skipMethods(),
+        attributes = ClassfileReader.skipAttributes()
+      )
+    }
+  end readStructure
+
+  private def acceptHeader(classOwner: DeclaringSymbol, classRoot: ClassData)(using DataStream): Unit = {
     acceptMagicNumber(classOwner, classRoot)
     acceptVersion(classOwner, classRoot)
   }
@@ -53,13 +79,22 @@ private[classfiles] object ClassfileReader {
       )
   }
 
-  def readConstantPool()(using ds: DataStream): ConstantPool = {
+  private def readConstantPool()(using ds: DataStream): ConstantPool = {
     val count = data.readU2()
     val pool = ConstantPool(count)
     var doAdd = true
     while doAdd do doAdd = pool.add(acceptConstantInfo()(using ds, pool))
     pool
   }
+
+  class Structure(
+    val access: AccessFlags,
+    val binaryName: SimpleName,
+    val supers: Forked[DataStream],
+    val fields: Forked[DataStream],
+    val methods: Forked[DataStream],
+    val attributes: Forked[DataStream]
+  )(using val pool: ConstantPool)
 
   class ConstantPool(count: Int) { pool =>
     import ClassfileReader.Indexing.*
@@ -237,6 +272,27 @@ private[classfiles] object ClassfileReader {
     }
   }
 
+  def readAttributeMap()(using ds: DataStream, pool: ConstantPool): Map[SimpleName, Forked[DataStream]] =
+    val builder = HashMap.newBuilder[SimpleName, Forked[DataStream]]
+    scanAttributes { attributeName =>
+      builder += attributeName -> data.fork
+      false
+    }
+    builder.result()
+  end readAttributeMap
+
+  def readAttribute(attributeName: SimpleName)(using DataStream, ConstantPool): Option[Forked[DataStream]] =
+    var result: Option[Forked[DataStream]] = None
+    scanAttributes {
+      case `attributeName` =>
+        result = Some(data.fork)
+        true
+      case _ =>
+        false
+    }
+    result
+  end readAttribute
+
   def readAnnotation(typeDescriptors: Set[SimpleName])(using ds: DataStream, pool: ConstantPool): Option[Annotation] = {
     // pre: we are already inside the RuntimeVisibleAnnotations attribute
 
@@ -389,10 +445,6 @@ private[classfiles] object ClassfileReader {
   }
 
   type MemberSig = String
-
-  enum SigOrSupers:
-    case Sig(str: String)
-    case Supers
 
   object Access:
     opaque type AccessFlags = Int

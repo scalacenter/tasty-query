@@ -12,7 +12,7 @@ import tastyquery.Symbols.*
 import tastyquery.Trees.*
 
 import tastyquery.reader.ReaderContext.rctx
-import tastyquery.reader.classfiles.ClassfileParser
+import tastyquery.reader.classfiles.{ClassfileParser, ClassfileReader}
 import tastyquery.reader.classfiles.ClassfileParser.{ClassKind, InnerClassDecl, Resolver}
 import tastyquery.reader.tasties.TastyUnpickler
 
@@ -93,16 +93,17 @@ private[tastyquery] object Loaders {
       end innerClassLookup
 
       def inspectClass(root: Loader.Root, classData: ClassData, entry: Entry): Unit =
-        ClassfileParser.readKind(root.pkg, classData) match
-          case ClassKind.Scala2(structure, runtimeAnnotStart) =>
-            ClassfileParser.loadScala2Class(structure, runtimeAnnotStart)
-          case ClassKind.Java(structure, sig, optInnerClasses) =>
+        val structure = ClassfileReader.readStructure(root.pkg, classData)
+        val kind = ClassfileParser.detectClassKind(structure)
+        kind match
+          case ClassKind.Scala2 =>
+            ClassfileParser.loadScala2Class(structure)
+          case ClassKind.Java =>
             entry match
               case Entry.ClassOnly(_, nested) =>
                 val lookup = innerClassLookup(nested)
-                val innerDecls =
-                  ClassfileParser.loadJavaClass(root.pkg, root.rootName, structure, sig, lookup, optInnerClasses)
-                if innerDecls.nonEmpty then enterInners(innerDecls, lookup)
+                val innerDecls = ClassfileParser.loadJavaClass(root.pkg, root.rootName, structure, lookup)
+                enterInners(innerDecls, lookup)
               case _ => throw UnexpectedTasty(root)
           case ClassKind.TASTy =>
             entry match
@@ -136,12 +137,10 @@ private[tastyquery] object Loaders {
 
         explore match
           case inner :: rest =>
-            ClassfileParser.readKind(inner.owner, inner.classData) match
-              case ClassKind.Java(structure, sig, inners) =>
-                val innerDecls = ClassfileParser.loadJavaClass(inner.owner, inner.name, structure, sig, lookup, inners)
-                enterInners(rest ::: innerDecls, lookup)
-              case kind => throw unexpectedClassKind(kind, inner)
-          case nil =>
+            val structure = ClassfileReader.readStructure(inner.owner, inner.classData)
+            val innerDecls = ClassfileParser.loadJavaClass(inner.owner, inner.name, structure, lookup)
+            enterInners(rest ::: innerDecls, lookup)
+          case Nil =>
             ()
       end enterInners
 
