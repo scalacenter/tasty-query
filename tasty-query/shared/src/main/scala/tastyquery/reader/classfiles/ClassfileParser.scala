@@ -85,7 +85,7 @@ private[reader] object ClassfileParser {
       lookup: Map[SimpleName, ClassData],
       innerClasses: Forked[DataStream]
     ): InnerClasses =
-      import structure.reader
+      import structure.given
 
       def missingClass(binaryName: SimpleName) =
         ClassfileFormatException(s"Inner class $binaryName not found, keys: ${lookup.keys.toList}")
@@ -97,7 +97,7 @@ private[reader] object ClassfileParser {
       val refsBuf = Map.newBuilder[SimpleName, InnerClassRef]
       val declsBuf = List.newBuilder[InnerClassDecl]
       innerClasses.use {
-        reader.readInnerClasses { (name, innerBinaryName, outerBinaryName, flags) =>
+        ClassfileReader.readInnerClasses { (name, innerBinaryName, outerBinaryName, flags) =>
           val isStatic = flags.is(Flags.Static)
           refsBuf += innerBinaryName -> InnerClassRef(name, outerBinaryName, isStatic)
           if outerBinaryName == structure.binaryName then declsBuf += lookupDeclaration(isStatic, name, innerBinaryName)
@@ -112,18 +112,17 @@ private[reader] object ClassfileParser {
   class Structure(
     val access: AccessFlags,
     val binaryName: SimpleName,
-    val reader: ClassfileReader,
     val supers: Forked[DataStream],
     val fields: Forked[DataStream],
     val methods: Forked[DataStream],
     val attributes: Forked[DataStream]
-  )(using val pool: reader.ConstantPool)
+  )(using val pool: ConstantPool)
 
   def loadScala2Class(structure: Structure, runtimeAnnotStart: Forked[DataStream])(using ReaderContext): Unit = {
-    import structure.{reader, given}
+    import structure.given
 
     val Some(Annotation(tpe, args)) = runtimeAnnotStart.use {
-      reader.readAnnotation(Set(annot.ScalaLongSignature, annot.ScalaSignature))
+      ClassfileReader.readAnnotation(Set(annot.ScalaLongSignature, annot.ScalaSignature))
     }: @unchecked
 
     val sigBytes = tpe match {
@@ -147,7 +146,7 @@ private[reader] object ClassfileParser {
     innerLookup: Map[SimpleName, ClassData],
     optInnerClasses: Option[Forked[DataStream]]
   )(using ReaderContext, Resolver): List[InnerClassDecl] = {
-    import structure.{reader, given}
+    import structure.given
 
     val allRegisteredSymbols = mutable.ListBuffer.empty[TermOrTypeSymbol]
 
@@ -238,12 +237,12 @@ private[reader] object ClassfileParser {
 
     def loadMembers(): Unit =
       structure.fields.use {
-        reader.readFields { (name, sigOrDesc, javaFlags) =>
+        ClassfileReader.readFields { (name, sigOrDesc, javaFlags) =>
           createMember(name, isMethod = false, javaFlags, sigOrDesc)
         }
       }
       structure.methods.use {
-        reader.readMethods { (name, sigOrDesc, javaFlags) =>
+        ClassfileReader.readMethods { (name, sigOrDesc, javaFlags) =>
           createMember(name, isMethod = true, javaFlags, sigOrDesc)
         }
       }
@@ -259,8 +258,8 @@ private[reader] object ClassfileParser {
             case sup          => sup :: Nil
         case SigOrSupers.Supers =>
           structure.supers.use {
-            val superClass = reader.readSuperClass().map(binaryName)
-            val interfaces = reader.readInterfaces().map(binaryName)
+            val superClass = ClassfileReader.readSuperClass().map(binaryName)
+            val interfaces = ClassfileReader.readInterfaces().map(binaryName)
             JavaSignatures.parseSupers(cls, superClass, interfaces)
           }
       end parents
@@ -324,7 +323,7 @@ private[reader] object ClassfileParser {
   end ArrayTypeExtractor
 
   private def parse(classRoot: ClassData, structure: Structure): ClassKind = {
-    import structure.{reader, given}
+    import structure.given
 
     var runtimeAnnotStart: Forked[DataStream] | Null = null
     var innerClassesStart: Option[Forked[DataStream]] = None
@@ -333,7 +332,7 @@ private[reader] object ClassfileParser {
     var isTASTY = false
     var isScalaRaw = false
     structure.attributes.use {
-      reader.scanAttributes {
+      ClassfileReader.scanAttributes {
         case attr.ScalaSig =>
           isScala = true
           runtimeAnnotStart != null
@@ -347,7 +346,7 @@ private[reader] object ClassfileParser {
           runtimeAnnotStart = data.fork
           isScala
         case attr.Signature =>
-          if !(isScala || isScalaRaw || isTASTY) then sigOrNull = data.fork.use(reader.readSignature)
+          if !(isScala || isScalaRaw || isTASTY) then sigOrNull = data.fork.use(ClassfileReader.readSignature)
           false
         case attr.InnerClasses =>
           if !(isScala || isScalaRaw || isTASTY) then innerClassesStart = Some(data.fork)
@@ -372,9 +371,9 @@ private[reader] object ClassfileParser {
       ClassKind.Java(structure, classSig, innerClassesStart)
   }
 
-  private def structure(reader: ClassfileReader)(using pool: reader.ConstantPool)(using DataStream): Structure = {
-    val access = reader.readAccessFlags()
-    val thisClass = reader.readThisClass()
+  private def readStructure()(using pool: ConstantPool)(using DataStream): Structure = {
+    val access = ClassfileReader.readAccessFlags()
+    val thisClass = ClassfileReader.readThisClass()
     val supers = data.forkAndSkip {
       data.skip(2) // superclass
       data.skip(2 * data.readU2()) // interfaces
@@ -382,22 +381,20 @@ private[reader] object ClassfileParser {
     Structure(
       access = access,
       binaryName = pool.utf8(thisClass.nameIdx),
-      reader = reader,
       supers = supers,
-      fields = reader.skipFields(),
-      methods = reader.skipMethods(),
-      attributes = reader.skipAttributes()
+      fields = ClassfileReader.skipFields(),
+      methods = ClassfileReader.skipMethods(),
+      attributes = ClassfileReader.skipAttributes()
     )
   }
 
-  private def toplevel(classOwner: DeclaringSymbol, classRoot: ClassData): Structure = {
-    def headerAndStructure(reader: ClassfileReader)(using DataStream) = {
-      reader.acceptHeader(classOwner, classRoot)
-      structure(reader)(using reader.readConstantPool())
+  private def toplevel(classOwner: DeclaringSymbol, classRoot: ClassData): Structure =
+    ClassfileReader.unpickle(classRoot) {
+      ClassfileReader.acceptHeader(classOwner, classRoot)
+      val pool = ClassfileReader.readConstantPool()
+      readStructure()(using pool)
     }
-
-    ClassfileReader.unpickle(classRoot)(headerAndStructure)
-  }
+  end toplevel
 
   def readKind(classOwner: DeclaringSymbol, classRoot: ClassData): ClassKind =
     parse(classRoot, toplevel(classOwner, classRoot))

@@ -16,7 +16,13 @@ import ClassfileReader.*
 import ClassfileReader.Access.*
 import Constants.*
 
-private[classfiles] final class ClassfileReader private () {
+private[classfiles] object ClassfileReader {
+  import Indexing.*
+  import Access.*
+
+  inline val JavaMajorVersion = 45
+  inline val JavaMinorVersion = 3 // Java 1.1 (needed for `java.rmi.activation.ActivationGroup_Stub` in rt.jar)
+  inline val JavaMagicNumber = 0xcafebabe
 
   def acceptHeader(classOwner: DeclaringSymbol, classRoot: ClassData)(using DataStream): Unit = {
     acceptMagicNumber(classOwner, classRoot)
@@ -363,15 +369,6 @@ private[classfiles] final class ClassfileReader private () {
         throw ClassfileFormatException(s"Invalid constant tag $tag")
     }
   }
-}
-
-private[classfiles] object ClassfileReader {
-  import Indexing.*
-  import Access.*
-
-  inline val JavaMajorVersion = 45
-  inline val JavaMinorVersion = 3 // Java 1.1 (needed for `java.rmi.activation.ActivationGroup_Stub` in rt.jar)
-  inline val JavaMagicNumber = 0xcafebabe
 
   private inline def loop(times: Int)(inline op: => Unit): Unit = {
     var i = 0
@@ -396,8 +393,6 @@ private[classfiles] object ClassfileReader {
   enum SigOrSupers:
     case Sig(str: String)
     case Supers
-
-  type ConstantPool = ClassfileReader#ConstantPool & Singleton
 
   object Access:
     opaque type AccessFlags = Int
@@ -546,8 +541,6 @@ private[classfiles] object ClassfileReader {
       forked
   }
 
-  def unpickle[T](classRoot: ClassData)(op: ClassfileReader => DataStream ?=> T): T =
-    ClassfileBuffer.Root(classRoot.readClassFileBytes(), 0).use { s ?=>
-      op(ClassfileReader())
-    }
+  def unpickle[T](classRoot: ClassData)(op: DataStream ?=> T): T =
+    ClassfileBuffer.Root(classRoot.readClassFileBytes(), 0).use(op)
 }
