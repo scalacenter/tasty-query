@@ -55,6 +55,7 @@ private[tastyquery] object Flags:
   val Extension: Flag = newFlag("Extension")
   val Final: Flag = newFlag("Final")
   val Given: Flag = newFlag("Given")
+  val HasDefault: Flag = newFlag("HasDefault")
   val Implicit: Flag = newFlag("Implicit")
   val Infix: Flag = newFlag("Infix")
   val Inline: Flag = newFlag("Inline")

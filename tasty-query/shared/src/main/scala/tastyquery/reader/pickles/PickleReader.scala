@@ -487,7 +487,7 @@ private[pickles] class PickleReader {
     if pickleFlags.isStable then flags |= StableRealizable
     if pickleFlags.isStatic then flags |= Static
     if pickleFlags.isCaseAccessor then flags |= CaseAccessor
-    // if pickleFlags.hasDefault then flags |= HasDefault
+    if pickleFlags.hasDefault then flags |= HasDefault
     if pickleFlags.isTrait then flags |= Trait
     // if pickleFlags.isBridge then flags |= Bridge
     if pickleFlags.isAccessor then flags |= Accessor
