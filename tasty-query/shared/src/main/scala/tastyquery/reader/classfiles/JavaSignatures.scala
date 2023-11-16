@@ -82,6 +82,7 @@ private[classfiles] object JavaSignatures:
   def parseSignature(
     member: TermOrTypeSymbol,
     isMethod: Boolean,
+    methodParameterNames: List[UnsignedTermName],
     signature: String,
     allRegisteredSymbols: Growable[TermOrTypeSymbol]
   )(using ReaderContext, InnerClasses, Resolver): TypeOrMethodic =
@@ -294,13 +295,20 @@ private[classfiles] object JavaSignatures:
     def termParamsRest(env: JavaSignature): List[Type] =
       readUntil(')', javaTypeSignature(env))
 
+    def uniqueParamNames(count: Int): List[UnsignedTermName] =
+      val underlying = termName("x")
+      (0 until count).toList.map(i => UniqueName(underlying, "$", i))
+
     def methodSignature: MethodicType =
       def methodRest(env: JavaSignature): MethodType =
         if consume('(') then // must have '(', ')', and return type
           val params = termParamsRest(env)
           val ret = result(env)
           val _ = readWhile('^', throwsSignatureRest(env)) // ignore throws clauses
-          MethodType((0 until params.size).map(i => termName(s"x$$$i")).toList, params, ret)
+          val paramNames =
+            if methodParameterNames.isEmpty && params.nonEmpty then uniqueParamNames(params.size)
+            else methodParameterNames
+          MethodType(paramNames, params, ret)
         else abort
       if consume('<') then
         PolyType(lookaheadTypeParamNames)(

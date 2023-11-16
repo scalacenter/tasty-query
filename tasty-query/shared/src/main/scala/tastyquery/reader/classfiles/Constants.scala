@@ -8,6 +8,7 @@ private[classfiles] object Constants:
     val Scala = termName("Scala")
     val ScalaSig = termName("ScalaSig")
     val InnerClasses = termName("InnerClasses")
+    val MethodParameters = termName("MethodParameters")
     val RuntimeVisibleAnnotations = termName("RuntimeVisibleAnnotations") // RetentionPolicy.RUNTIME
     val RuntimeInvisibleAnnotations = termName("RuntimeInvisibleAnnotations") // RetentionPolicy.CLASS
     val RuntimeVisibleParameterAnnotations = termName("RuntimeVisibleParameterAnnotations")

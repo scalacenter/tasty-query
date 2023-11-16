@@ -219,6 +219,11 @@ private[reader] object ClassfileParser {
       val sym = TermSymbol.create(name, owner)
       allRegisteredSymbols += sym
 
+      // Read parameter names
+      val methodParamNames =
+        if isMethod then readMethodParameters(attributes).map(_._1)
+        else Nil
+
       // Find the signature, or fall back to the descriptor
       val memberSig = attributes.get(attr.Signature) match
         case Some(stream) => stream.use(ClassfileReader.readSignature)
@@ -226,7 +231,7 @@ private[reader] object ClassfileParser {
 
       // Parse the signature into a declared type for the symbol
       val declaredType =
-        val parsedType = JavaSignatures.parseSignature(sym, isMethod, memberSig, allRegisteredSymbols)
+        val parsedType = JavaSignatures.parseSignature(sym, isMethod, methodParamNames, memberSig, allRegisteredSymbols)
         val adaptedType =
           if isMethod && sym.name == nme.Constructor then cls.makePolyConstructorType(parsedType)
           else if isMethod && javaFlags.isVarargsIfMethod then patchForVarargs(sym, parsedType)
@@ -295,7 +300,9 @@ private[reader] object ClassfileParser {
       val parents = attributes.get(attr.Signature) match
         case Some(stream) =>
           val sig = stream.use(ClassfileReader.readSignature)
-          JavaSignatures.parseSignature(cls, isMethod = false, sig, allRegisteredSymbols).requireType match
+          val parsedSig =
+            JavaSignatures.parseSignature(cls, isMethod = false, methodParameterNames = Nil, sig, allRegisteredSymbols)
+          parsedSig.requireType match
             case mix: AndType => mix.parts
             case sup          => sup :: Nil
         case None =>
@@ -366,6 +373,14 @@ private[reader] object ClassfileParser {
         case _ =>
           None
   end ArrayTypeExtractor
+
+  private def readMethodParameters(attributes: AttributeMap)(
+    using ConstantPool
+  ): List[(UnsignedTermName, AccessFlags)] =
+    attributes.get(attr.MethodParameters) match
+      case Some(stream) => stream.use(ClassfileReader.readMethodParameters())
+      case None         => Nil
+  end readMethodParameters
 
   private def readAnnotations(
     sym: TermOrTypeSymbol,

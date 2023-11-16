@@ -47,6 +47,10 @@ public class BagOfJavaDefinitions {
     return arr;
   }
 
+  public int multipleArguments(int foo, boolean bar, String foobar) {
+    return foo;
+  }
+
   public java.lang.ProcessBuilder processBuilder() {
     return new ProcessBuilder("echo");
   }

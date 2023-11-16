@@ -707,6 +707,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(tpe.resultType.isArrayOf(_.isRef(JavaDefinedClass)))
     }
 
+    testDef(termName("multipleArguments")) { multipleArguments =>
+      assertJavaPublic(multipleArguments)
+      val tpe = multipleArguments.declaredType.asInstanceOf[MethodType]
+      assert(clue(tpe.paramNames) == List(termName("foo"), termName("bar"), termName("foobar")))
+    }
+
     testDef(name"processBuilder") { processBuilder =>
       assertJavaPublic(processBuilder)
       val tpe = processBuilder.declaredType.asInstanceOf[MethodType]

@@ -296,6 +296,24 @@ private[reader] object ClassfileReader {
     result
   end readAttribute
 
+  def readMethodParameters()(using ds: DataStream, pool: ConstantPool): List[(UnsignedTermName, AccessFlags)] =
+    val numParameters = data.readU1()
+    val resultBuilder = List.newBuilder[(UnsignedTermName, AccessFlags)]
+
+    var index = 0
+    while index != numParameters do
+      val nameIndex = data.readU2()
+      val name =
+        if nameIndex == 0 then UniqueName(termName("x"), "$", index)
+        else pool.utf8(pool.idx(nameIndex))
+      val accessFlags = AccessFlags.read(data.readU2())
+      resultBuilder += ((name, accessFlags))
+      index += 1
+    end while
+
+    resultBuilder.result()
+  end readMethodParameters
+
   def readAnnotation(typeDescriptors: Set[SimpleName])(using ds: DataStream, pool: ConstantPool): Option[Annotation] = {
     // pre: we are already inside the RuntimeVisibleAnnotations attribute
 
