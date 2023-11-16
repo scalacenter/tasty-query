@@ -852,19 +852,7 @@ private[pickles] class PickleReader {
       }
     )
 
-    /* Create a TermTree for the annotation that is "good enough" for the main
-     * methods of `Annotation` to work, notably `symbol` and `arguments`.
-     * We have to cheat for the constructor, as we do not have its Signature.
-     * Instead we use an unsigned `nme.Constructor`. This is invalid and will
-     * cause `Annotation.annotConstructor` to fail, but we do not really have
-     * a choice.
-     */
-    val annotationTree: TermTree =
-      val newNode = New(TypeWrapper(annotationType)(pos))(pos)
-      val selectCtorNode = Select(newNode, nme.Constructor)(None)(pos) // cheating here
-      Apply(selectCtorNode, args)(pos)
-
-    Annotation(annotationTree)
+    Annotation.fromAnnotTypeAndArgs(annotationType, args)
   end readAnnotationContents
 
   private def readClassfileAnnotArg(i: Int)(using ReaderContext, PklStream, Entries, Index): TermTree =

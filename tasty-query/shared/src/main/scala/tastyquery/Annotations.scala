@@ -27,7 +27,7 @@ object Annotations:
 
     /** The symbol of the constructor used in the annotation.
       *
-      * This operation is not supported for annotations read from Scala 2.
+      * This operation is not supported for annotations read from Java or Scala 2.
       * It will throw an `UnsupportedOperationException`.
       */
     def annotConstructor(using Context): TermSymbol =
@@ -111,6 +111,24 @@ object Annotations:
 
       new Annotation(tree)
     end apply
+
+    private[tastyquery] def fromAnnotTypeAndArgs(annotationType: Type, args: List[TermTree]): Annotation =
+      val pos = SourcePosition.NoPosition
+
+      /* Create a TermTree for the annotation that is "good enough" for the main
+       * methods of `Annotation` to work, notably `symbol` and `arguments`.
+       * We have to cheat for the constructor, as we do not have its Signature.
+       * Instead we use an unsigned `nme.Constructor`. This is invalid and will
+       * cause `Annotation.annotConstructor` to fail, but we do not really have
+       * a choice.
+       */
+      val annotationTree: TermTree =
+        val newNode = New(TypeWrapper(annotationType)(pos))(pos)
+        val selectCtorNode = Select(newNode, nme.Constructor)(None)(pos) // cheating here
+        Apply(selectCtorNode, args)(pos)
+
+      Annotation(annotationTree)
+    end fromAnnotTypeAndArgs
   end Annotation
 
   private def computeAnnotSymbol(tree: TermTree)(using Context): ClassSymbol =
@@ -140,13 +158,15 @@ object Annotations:
     def invalid(): Nothing =
       throw InvalidProgramStructureException(s"Cannot find annotation constructor in $tree")
 
-    def unsupportedScala2(): Nothing =
-      throw UnsupportedOperationException(s"Cannot compute the annotation constructor of a Scala 2 annotation: $tree")
+    def unsupported(): Nothing =
+      throw UnsupportedOperationException(
+        s"Cannot compute the annotation constructor of a Java or Scala 2 annotation: $tree"
+      )
 
     @tailrec
     def loop(tree: TermTree): TermSymbol = tree match
       case Apply(fun, _)                 => loop(fun)
-      case tree @ Select(New(tpt), name) => if name == nme.Constructor then unsupportedScala2() else tree.symbol.asTerm
+      case tree @ Select(New(tpt), name) => if name == nme.Constructor then unsupported() else tree.symbol.asTerm
       case TypeApply(fun, _)             => loop(fun)
       case Block(_, expr)                => loop(expr)
       case _                             => invalid()

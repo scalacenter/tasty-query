@@ -1,23 +1,28 @@
 package tastyquery.reader.classfiles
 
+import scala.annotation.switch
+
 import scala.collection.mutable
 
-import tastyquery.Annotations.Annotation as TQAnnotation
+import tastyquery.Annotations.*
 import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
+import tastyquery.Constants.*
 import tastyquery.Exceptions.*
 import tastyquery.Flags
 import tastyquery.Flags.*
 import tastyquery.Names.*
 import tastyquery.SourceLanguage
+import tastyquery.SourcePosition
 import tastyquery.Symbols.*
+import tastyquery.Trees.*
 import tastyquery.Types.*
 
 import tastyquery.reader.ReaderContext
 import tastyquery.reader.ReaderContext.rctx
 import tastyquery.reader.pickles.{Unpickler, PickleReader}
 
-import ClassfileReader.*
+import ClassfileReader.{Annotation as CFAnnotation, *}
 import ClassfileReader.Access.AccessFlags
 import Constants.*
 
@@ -63,6 +68,8 @@ private[reader] object ClassfileParser {
     def resolve(binaryName: SimpleName)(using ReaderContext, InnerClasses): TypeRef =
       lookup(binaryName, isStatic = false).asTypeRef
 
+    def resolveStatic(binaryName: SimpleName)(using ReaderContext, InnerClasses): TermRef =
+      lookup(binaryName, isStatic = true).asTermRef
   end Resolver
 
   /** The inner classes local to a class file */
@@ -127,10 +134,10 @@ private[reader] object ClassfileParser {
 
     val sigBytes = scalaSigAnnotation.tpe match {
       case annot.ScalaSignature =>
-        val bytesArg = scalaSigAnnotation.values.head.asInstanceOf[AnnotationValue.Const]
+        val bytesArg = scalaSigAnnotation.values.head._2.asInstanceOf[AnnotationValue.Const]
         pool.sigbytes(bytesArg.valueIdx)
       case annot.ScalaLongSignature =>
-        val bytesArrArg = scalaSigAnnotation.values.head.asInstanceOf[AnnotationValue.Arr]
+        val bytesArrArg = scalaSigAnnotation.values.head._2.asInstanceOf[AnnotationValue.Arr]
         val idxs = bytesArrArg.values.map(_.asInstanceOf[AnnotationValue.Const].valueIdx)
         pool.sigbytes(idxs)
     }
@@ -273,7 +280,6 @@ private[reader] object ClassfileParser {
 
     cls.withGivenSelfType(None)
     cls.withFlags(clsFlags, clsPrivateWithin)
-    cls.setAnnotations(Nil) // TODO Read Java annotations on classes
     initParents()
 
     // Intercept special classes to create their magic methods
@@ -283,6 +289,9 @@ private[reader] object ClassfileParser {
       else if cls.isJavaEnum then rctx.createEnumMagicMethods(cls)
 
     loadMembers()
+
+    val annotations = readAnnotations(cls, attributes)
+    cls.setAnnotations(annotations)
 
     for sym <- allRegisteredSymbols do
       sym.checkCompleted()
@@ -323,6 +332,88 @@ private[reader] object ClassfileParser {
         case _ =>
           None
   end ArrayTypeExtractor
+
+  private def readAnnotations(
+    sym: TermOrTypeSymbol,
+    attributes: Map[SimpleName, Forked[DataStream]]
+  )(using ConstantPool, ReaderContext, InnerClasses, Resolver): List[Annotation] =
+    readAnnotations(sym, attributes.get(attr.RuntimeVisibleAnnotations))
+      ::: readAnnotations(sym, attributes.get(attr.RuntimeInvisibleAnnotations))
+  end readAnnotations
+
+  private def readAnnotations(
+    sym: TermOrTypeSymbol,
+    annotationsStream: Option[Forked[DataStream]]
+  )(using ConstantPool, ReaderContext, InnerClasses, Resolver): List[Annotation] =
+    annotationsStream.fold(Nil)(readAnnotations(sym, _))
+  end readAnnotations
+
+  private def readAnnotations(
+    sym: TermOrTypeSymbol,
+    annotationsStream: Forked[DataStream]
+  )(using ConstantPool, ReaderContext, InnerClasses, Resolver): List[Annotation] =
+    val classfileAnnots = annotationsStream.use(ClassfileReader.readAllAnnotations())
+    classfileAnnots.map(classfileAnnotToAnnot(_))
+
+  private def classfileAnnotToAnnot(
+    classfileAnnot: CFAnnotation
+  )(using ConstantPool, ReaderContext, InnerClasses, Resolver): Annotation =
+    val annotationType = JavaSignatures.parseFieldDescriptor(classfileAnnot.tpe.name)
+
+    val args: List[TermTree] =
+      for (name, value) <- classfileAnnot.values.toList yield
+        val valueTree = annotationValueToTree(value)
+        NamedArg(name, valueTree)(SourcePosition.NoPosition)
+
+    Annotation.fromAnnotTypeAndArgs(annotationType, args)
+  end classfileAnnotToAnnot
+
+  private def annotationValueToTree(
+    value: AnnotationValue
+  )(using ConstantPool, ReaderContext, InnerClasses, Resolver): TermTree =
+    import AnnotationValue.Tags
+
+    val pool = summon[ConstantPool]
+    val pos = SourcePosition.NoPosition
+
+    value match
+      case AnnotationValue.Const(tag, valueIdx) =>
+        val constant = (tag: @switch) match
+          case Tags.Byte    => Constant(pool.integer(valueIdx).toByte)
+          case Tags.Char    => Constant(pool.integer(valueIdx).toChar)
+          case Tags.Double  => Constant(pool.double(valueIdx))
+          case Tags.Float   => Constant(pool.float(valueIdx))
+          case Tags.Int     => Constant(pool.integer(valueIdx))
+          case Tags.Long    => Constant(pool.long(valueIdx))
+          case Tags.Short   => Constant(pool.integer(valueIdx).toShort)
+          case Tags.Boolean => Constant(pool.integer(valueIdx) != 0)
+          case Tags.String  => Constant(pool.utf8(valueIdx).name)
+        Literal(constant)(pos)
+
+      case AnnotationValue.EnumConst(descriptor, constName) =>
+        /* JVMS says that it can be any field descriptor,
+         * but I don't see what we would do with a base type or array type.
+         */
+        val binaryName = descriptor.name match
+          case s"L$binaryName;" => binaryName
+          case other            => throw ClassfileFormatException(s"unexpected non-class field descriptor: $other")
+        val enumClassStaticRef = resolver.resolveStatic(termName(binaryName))
+        val constRef = TermRef(enumClassStaticRef, constName)
+        Ident(constName)(constRef)(pos)
+
+      case AnnotationValue.ClassConst(descriptor) =>
+        val classType = JavaSignatures.parseReturnDescriptor(descriptor.name)
+        Literal(Constant(classType))(pos)
+
+      case AnnotationValue.NestedAnnotation(annotation) =>
+        val nestedAnnot = classfileAnnotToAnnot(annotation)
+        nestedAnnot.tree
+
+      case AnnotationValue.Arr(values) =>
+        val valueTrees = values.map(annotationValueToTree(_)).toList
+        val elemType = rctx.AnyType // TODO This will not be type-correct
+        SeqLiteral(valueTrees, TypeWrapper(elemType)(pos))(pos)
+  end annotationValueToTree
 
   def detectClassKind(structure: Structure): ClassKind =
     import structure.given

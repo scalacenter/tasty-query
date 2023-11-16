@@ -38,6 +38,46 @@ private[classfiles] object JavaSignatures:
       superRef :: interfaces.map(classRef).toList
   end parseSupers
 
+  def parseReturnDescriptor(descriptor: String)(using ReaderContext, InnerClasses, Resolver): Type =
+    if descriptor == "V" then rctx.UnitType
+    else parseFieldDescriptor(descriptor)
+
+  def parseFieldDescriptor(descriptor: String)(using ReaderContext, InnerClasses, Resolver): Type =
+    def fail(): Nothing =
+      throw ClassfileFormatException(s"Not a valid field descriptor: '$descriptor'")
+
+    val len = descriptor.length()
+    var index = 0
+
+    while index < len && descriptor.charAt(index) == '[' do index += 1
+    val arrayDims = index
+
+    if index == len then fail()
+    val tag = descriptor.charAt(index)
+    index += 1
+
+    val base: Type = (tag: @switch) match
+      case 'B' => rctx.ByteType
+      case 'C' => rctx.CharType
+      case 'D' => rctx.DoubleType
+      case 'F' => rctx.FloatType
+      case 'I' => rctx.IntType
+      case 'J' => rctx.LongType
+      case 'S' => rctx.ShortType
+      case 'Z' => rctx.BooleanType
+      case 'L' =>
+        if descriptor.charAt(len - 1) != ';' then fail()
+        val binaryName = descriptor.substring(index, len - 1).nn
+        index = len
+        classRef(termName(binaryName))
+      case _ =>
+        fail()
+
+    if index != len then fail()
+
+    (0 until arrayDims).foldLeft(base)((elemType, _) => rctx.ArrayTypeOf(elemType))
+  end parseFieldDescriptor
+
   @throws[ClassfileFormatException]
   def parseSignature(
     member: TermOrTypeSymbol,

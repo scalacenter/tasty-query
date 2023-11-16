@@ -2544,6 +2544,67 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     }
   }
 
+  testWithContext("annotations-java") {
+    val JavaAnnotSingleValueClass = ctx.findTopLevelClass("javadefined.JavaAnnotSingleValue")
+    val JavaAnnotWithDefaultClass = ctx.findTopLevelClass("javadefined.JavaAnnotWithDefault")
+    val JavaAnnotMultiValuesClass = ctx.findTopLevelClass("javadefined.JavaAnnotMultiValues")
+    val JavaAnnotArrayValueClass = ctx.findTopLevelClass("javadefined.JavaAnnotArrayValue")
+    val JavaAnnotEnumValueClass = ctx.findTopLevelClass("javadefined.JavaAnnotEnumValue")
+    val JavaAnnotClassValueClass = ctx.findTopLevelClass("javadefined.JavaAnnotClassValue")
+    val JavaAnnotAnnotValueClass = ctx.findTopLevelClass("javadefined.JavaAnnotAnnotValue")
+    val JavaAnnotClassRetentionClass = ctx.findTopLevelClass("javadefined.JavaAnnotClassRetention")
+
+    val JavaAnnotationsClass = ctx.findTopLevelClass("javadefined.JavaAnnotations")
+
+    val TimeUnitModuleClass = ctx.findTopLevelModuleClass("java.util.concurrent.TimeUnit")
+
+    def ok: Unit = ()
+
+    def checkAnnotArgs(sym: TermOrTypeSymbol, annotClass: ClassSymbol)(pf: PartialFunction[List[TermTree], Unit])(
+      using munit.Location
+    ): Unit =
+      val annot = sym.getAnnotation(annotClass).getOrElse(fail(s"$sym does not have an annotation $annotClass"))
+      pf.applyOrElse(annot.arguments, args => fail("unexpected annotation arguments", clues(sym, annotClass, args)))
+    end checkAnnotArgs
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotSingleValueClass) { case List(Literal(Constant(5))) =>
+      ok
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotWithDefaultClass) { case Nil =>
+      ok
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotMultiValuesClass) {
+      case List(Literal(Constant(5)), Literal(Constant(true))) => ok
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotArrayValueClass) {
+      case List(SeqLiteral(List(Literal(Constant(2)), _, _, Literal(Constant(7))), _)) => ok
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotEnumValueClass) { case List(ident @ Ident(SimpleName("MINUTES"))) =>
+      assert(clue(ident.tpe).isRef(TimeUnitModuleClass.findDecl(termName("MINUTES"))))
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotClassValueClass) {
+      case List(Literal(const)) if const.tag == Constants.ClazzTag =>
+        assert(clue(const.typeValue).isRef(defn.ShortClass))
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotAnnotValueClass) { case List(annotTree) =>
+      val nestedAnnot = Annotation(annotTree)
+      assert(clue(nestedAnnot.symbol) == JavaAnnotSingleValueClass)
+      nestedAnnot.arguments match
+        case List(Literal(Constant(42))) => ok
+        case nestedArgs                  => fail("unexpected nested arguments", clues(nestedArgs))
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotClassRetentionClass) { case Nil =>
+      ok
+    }
+  }
+
   testWithContext("uninitialized-var") {
     val UninitializedClass = ctx.findTopLevelClass("simple_trees.Uninitialized")
 

@@ -166,6 +166,13 @@ object Constants {
 
     def stringValue: String = if tag == NullTag then "null" else value.toString
 
+    /** The class type value of a `classOf` constant.
+      *
+      * This must be a "possibly parametrized class type" according to the
+      * specification of the language. If the class is polymorphic, it may be
+      * applied (making it a proper type) or not (in which case it is not a
+      * proper type).
+      */
     def typeValue: Type = value.asInstanceOf[Type]
 
     override def hashCode: Int = {

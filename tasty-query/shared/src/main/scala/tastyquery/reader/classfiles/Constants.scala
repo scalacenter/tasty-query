@@ -9,6 +9,7 @@ private[classfiles] object Constants:
     val ScalaSig = termName("ScalaSig")
     val InnerClasses = termName("InnerClasses")
     val RuntimeVisibleAnnotations = termName("RuntimeVisibleAnnotations") // RetentionPolicy.RUNTIME
+    val RuntimeInvisibleAnnotations = termName("RuntimeInvisibleAnnotations") // RetentionPolicy.CLASS
     val Signature = termName("Signature")
   end attr
 
