@@ -118,6 +118,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
       .withDeclaredType(tpe)
       .setAnnotations(Nil)
       .autoFillParamSymss()
+    sym.paramSymss.foreach(_.merge.foreach(_.setAnnotations(Nil)))
     sym.checkCompleted()
     sym
   end createSpecialMethod
@@ -347,6 +348,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     )
     applyMethod.autoFillParamSymss()
     applyMethod.setAnnotations(Nil)
+    applyMethod.paramSymss.foreach(_.merge.foreach(_.setAnnotations(Nil)))
     applyMethod.checkCompleted()
 
     cls.checkCompleted()

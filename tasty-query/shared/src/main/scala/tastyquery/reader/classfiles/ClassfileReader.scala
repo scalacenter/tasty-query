@@ -273,7 +273,9 @@ private[reader] object ClassfileReader {
     }
   }
 
-  def readAttributeMap()(using ds: DataStream, pool: ConstantPool): Map[SimpleName, Forked[DataStream]] =
+  type AttributeMap = Map[SimpleName, Forked[DataStream]]
+
+  def readAttributeMap()(using ds: DataStream, pool: ConstantPool): AttributeMap =
     val builder = HashMap.newBuilder[SimpleName, Forked[DataStream]]
     scanAttributes { attributeName =>
       builder += attributeName -> data.fork
@@ -351,6 +353,15 @@ private[reader] object ClassfileReader {
     }
     resultBuilder.result()
   end readAllAnnotations
+
+  def readAllParameterAnnotations()(using ds: DataStream, pool: ConstantPool): List[List[Annotation]] =
+    val numParameters = data.readU1()
+    val resultBuilder = List.newBuilder[List[Annotation]]
+    loop(numParameters) {
+      resultBuilder += readAllAnnotations()
+    }
+    resultBuilder.result()
+  end readAllParameterAnnotations
 
   private def readAnnotation()(using ds: DataStream, pool: ConstantPool): Annotation =
     val typeName = pool.utf8(pool.idx(data.readU2()))

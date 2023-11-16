@@ -248,8 +248,29 @@ private[reader] object ClassfileParser {
       val annots = readAnnotations(sym, attributes)
       sym.setAnnotations(annots)
 
-      // Auto fill the param symbols from the declared type
-      sym.autoFillParamSymss()
+      // Handle parameters
+      if isMethod then
+        // Auto fill the param symbols from the declared type
+        sym.autoFillParamSymss()
+
+        val termParamAnnots = readTermParamAnnotations(attributes)
+        if termParamAnnots.isEmpty then
+          // fast path
+          sym.paramSymss.foreach(_.merge.foreach(_.setAnnotations(Nil)))
+        else
+          val termParamAnnotsIter = termParamAnnots.iterator
+
+          for paramSyms <- sym.paramSymss do
+            paramSyms match
+              case Left(termParamSyms) =>
+                for termParamSym <- termParamSyms do
+                  val annots = if termParamAnnotsIter.hasNext then termParamAnnotsIter.next() else Nil
+                  termParamSym.setAnnotations(annots)
+              case Right(typeParamSyms) =>
+                // TODO Maybe one day we also read type annotations
+                typeParamSyms.foreach(_.setAnnotations(Nil))
+        end if
+      end if
 
       sym
     end createMember
@@ -348,7 +369,7 @@ private[reader] object ClassfileParser {
 
   private def readAnnotations(
     sym: TermOrTypeSymbol,
-    attributes: Map[SimpleName, Forked[DataStream]]
+    attributes: AttributeMap
   )(using ConstantPool, ReaderContext, InnerClasses, Resolver): List[Annotation] =
     readAnnotations(sym, attributes.get(attr.RuntimeVisibleAnnotations))
       ::: readAnnotations(sym, attributes.get(attr.RuntimeInvisibleAnnotations))
@@ -367,6 +388,25 @@ private[reader] object ClassfileParser {
   )(using ConstantPool, ReaderContext, InnerClasses, Resolver): List[Annotation] =
     val classfileAnnots = annotationsStream.use(ClassfileReader.readAllAnnotations())
     classfileAnnots.map(classfileAnnotToAnnot(_))
+
+  private def readTermParamAnnotations(
+    attributes: AttributeMap
+  )(using ConstantPool, ReaderContext, InnerClasses, Resolver): List[List[Annotation]] =
+    val runtimeVisible = attributes.get(attr.RuntimeVisibleParameterAnnotations) match
+      case None         => Nil
+      case Some(stream) => stream.use(ClassfileReader.readAllParameterAnnotations())
+
+    val runtimeInvisible = attributes.get(attr.RuntimeInvisibleParameterAnnotations) match
+      case None         => Nil
+      case Some(stream) => stream.use(ClassfileReader.readAllParameterAnnotations())
+
+    if runtimeVisible.isEmpty && runtimeInvisible.isEmpty then
+      // fast path
+      Nil
+    else
+      for (rtVisible, rtInvisible) <- runtimeVisible.zipAll(runtimeInvisible, Nil, Nil)
+      yield (rtVisible ::: rtInvisible).map(classfileAnnotToAnnot(_))
+  end readTermParamAnnotations
 
   private def classfileAnnotToAnnot(
     classfileAnnot: CFAnnotation

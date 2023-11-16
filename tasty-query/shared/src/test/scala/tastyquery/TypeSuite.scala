@@ -2633,6 +2633,24 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     checkAnnotArgs(annotatedMethod, JavaAnnotClassRetentionClass) { case Nil =>
       ok
     }
+
+    val annotatedParams = JavaAnnotationsClass.findNonOverloadedDecl(termName("annotatedParams"))
+    val List(Right(_), Left(paramSyms)) = annotatedParams.paramSymss: @unchecked
+
+    assert(clue(paramSyms(0).annotations) == Nil)
+
+    checkAnnotArgs(paramSyms(1), JavaAnnotSingleValueClass) { case List(Literal(Constant(123))) =>
+      ok
+    }
+
+    checkAnnotArgs(paramSyms(2), JavaAnnotClassValueClass) {
+      case List(Literal(const)) if const.tag == Constants.ClazzTag =>
+        assert(clue(const.typeValue).isArrayOf(_.isRef(defn.StringClass)))
+    }
+
+    checkAnnotArgs(paramSyms(2), JavaAnnotClassRetentionClass) { case Nil =>
+      ok
+    }
   }
 
   testWithContext("uninitialized-var") {
