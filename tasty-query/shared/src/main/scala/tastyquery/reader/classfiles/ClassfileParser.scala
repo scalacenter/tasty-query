@@ -207,11 +207,22 @@ private[reader] object ClassfileParser {
       else false
     end isSignaturePolymorphic
 
-    def createMember(name: SimpleName, isMethod: Boolean, javaFlags: AccessFlags, memberSig: MemberSig): TermSymbol =
+    def createMember(
+      name: SimpleName,
+      isMethod: Boolean,
+      javaFlags: AccessFlags,
+      descriptor: String,
+      attributes: Map[SimpleName, Forked[DataStream]]
+    ): TermSymbol =
       // Select the right owner and create the symbol
       val owner = if javaFlags.isStatic then moduleClass else cls
       val sym = TermSymbol.create(name, owner)
       allRegisteredSymbols += sym
+
+      // Find the signature, or fall back to the descriptor
+      val memberSig = attributes.get(attr.Signature) match
+        case Some(stream) => stream.use(ClassfileReader.readSignature)
+        case None         => descriptor
 
       // Parse the signature into a declared type for the symbol
       val declaredType =
@@ -233,23 +244,25 @@ private[reader] object ClassfileParser {
       end flags
       sym.withFlags(flags, privateWithin(javaFlags))
 
+      // Read and fill annotations
+      val annots = readAnnotations(sym, attributes)
+      sym.setAnnotations(annots)
+
       // Auto fill the param symbols from the declared type
       sym.autoFillParamSymss()
-
-      sym.setAnnotations(Nil) // TODO Read Java annotations on fields and methods
 
       sym
     end createMember
 
     def loadMembers(): Unit =
       structure.fields.use {
-        ClassfileReader.readFields { (name, sigOrDesc, javaFlags) =>
-          createMember(name, isMethod = false, javaFlags, sigOrDesc)
+        ClassfileReader.readMembers { (javaFlags, name, descriptor, attributes) =>
+          createMember(name, isMethod = false, javaFlags, descriptor, attributes)
         }
       }
       structure.methods.use {
-        ClassfileReader.readMethods { (name, sigOrDesc, javaFlags) =>
-          createMember(name, isMethod = true, javaFlags, sigOrDesc)
+        ClassfileReader.readMembers { (javaFlags, name, descriptor, attributes) =>
+          createMember(name, isMethod = true, javaFlags, descriptor, attributes)
         }
       }
     end loadMembers

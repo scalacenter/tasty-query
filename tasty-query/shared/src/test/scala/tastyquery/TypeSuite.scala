@@ -2603,6 +2603,36 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     checkAnnotArgs(JavaAnnotationsClass, JavaAnnotClassRetentionClass) { case Nil =>
       ok
     }
+
+    val annotatedField = JavaAnnotationsClass.findDecl(termName("annotatedField"))
+
+    checkAnnotArgs(annotatedField, JavaAnnotWithDefaultClass) { case List(Literal(Constant(false))) =>
+      ok
+    }
+
+    checkAnnotArgs(annotatedField, JavaAnnotMultiValuesClass) {
+      case List(Literal(Constant(true)), Literal(Constant(5))) => ok
+    }
+
+    checkAnnotArgs(annotatedField, JavaAnnotClassValueClass) {
+      case List(Literal(const)) if const.tag == Constants.ClazzTag =>
+        assert(clue(const.typeValue).isRef(ctx.findTopLevelClass("java.lang.CharSequence")))
+    }
+
+    checkAnnotArgs(annotatedField, JavaAnnotClassRetentionClass) { case Nil =>
+      ok
+    }
+
+    val annotatedMethod = JavaAnnotationsClass.findNonOverloadedDecl(termName("annotatedMethod"))
+
+    checkAnnotArgs(annotatedMethod, JavaAnnotClassValueClass) {
+      case List(Literal(const)) if const.tag == Constants.ClazzTag =>
+        assert(clue(const.typeValue).isRef(defn.UnitClass))
+    }
+
+    checkAnnotArgs(annotatedMethod, JavaAnnotClassRetentionClass) { case Nil =>
+      ok
+    }
   }
 
   testWithContext("uninitialized-var") {

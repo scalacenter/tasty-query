@@ -243,15 +243,8 @@ private[reader] object ClassfileReader {
     reader
   }
 
-  def readFields(op: (SimpleName, MemberSig, AccessFlags) => Unit)(using DataStream, ConstantPool): Unit =
-    readMembers(isMethod = false, op)
-
-  def readMethods(op: (SimpleName, MemberSig, AccessFlags) => Unit)(using DataStream, ConstantPool): Unit =
-    readMembers(isMethod = true, op)
-
-  private def readMembers(
-    isMethod: Boolean,
-    op: (SimpleName, MemberSig, AccessFlags) => Unit
+  def readMembers(
+    op: (AccessFlags, SimpleName, String, Map[SimpleName, Forked[DataStream]]) => Unit
   )(using ds: DataStream, pool: ConstantPool): Unit = {
     val count = data.readU2()
     loop(count) {
@@ -260,17 +253,8 @@ private[reader] object ClassfileReader {
       val name = pool.utf8(nameIdx)
       val descriptorIdx = pool.idx(data.readU2())
       val desc = pool.utf8(descriptorIdx).name
-      var sigOrNull: String | Null = null
-      scanAttributes {
-        case attr.Signature => // optional, only if there are generic type arguments
-          data.fork.use {
-            sigOrNull = readSignature
-          }
-          false
-        case _ => false
-      }
-      val sig = sigOrNull
-      if !accessFlags.isSynthetic then op(name, if sig == null then desc else sig, accessFlags)
+      val attributes = readAttributeMap()
+      if !accessFlags.isSynthetic then op(accessFlags, name, desc, attributes)
     }
   }
 
