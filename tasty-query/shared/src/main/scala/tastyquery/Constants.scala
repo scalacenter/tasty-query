@@ -20,7 +20,7 @@ object Constants {
   final val NullTag = 11
   final val ClazzTag = 12
 
-  class Constant(val value: Matchable, val tag: Int) {
+  final class Constant(val value: Matchable, val tag: Int) {
     def wideType(using Context): Type = tag match
       case UnitTag    => defn.UnitType
       case BooleanTag => defn.BooleanType
