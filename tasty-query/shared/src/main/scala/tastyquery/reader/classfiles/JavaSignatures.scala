@@ -281,7 +281,7 @@ private[classfiles] object JavaSignatures:
         val tparams = tparamNames.map { tname =>
           val paramSym = ClassTypeParamSymbol.create(tname, cls)
           allRegisteredSymbols += paramSym
-          paramSym.withFlags(ClassTypeParam | JavaDefined, None).setAnnotations(Nil)
+          paramSym.withFlags(JavaDefined, None).setAnnotations(Nil)
           paramSym
         }
         val lookup = tparamNames.lazyZip(tparams).toMap

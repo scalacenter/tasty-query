@@ -193,7 +193,6 @@ private[tasties] class TreeUnpickler private (
         flags |= ParamAccessor
         if !rhsIsEmpty then // param alias
           flags |= Method
-    if tag == TYPEPARAM then flags |= TypeParameter
     flags
 
   private def posErrorMsg: String = s"at address ${reader.currentAddr} in file $filename"

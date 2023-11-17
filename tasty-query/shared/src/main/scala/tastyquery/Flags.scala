@@ -78,16 +78,10 @@ private[tastyquery] object Flags:
   val SignaturePolymorphic: Flag = newFlag("SignaturePolymorphic")
   val SuperParamAlias: Flag = newFlag("SuperParamAlias")
   val Static: Flag = newFlag("Static")
-  private[tastyquery] val StableRealizable: Flag = newFlag("StableRealizable")
+  val StableRealizable: Flag = newFlag("StableRealizable")
   val Synthetic: Flag = newFlag("Synthetic")
   val Trait: Flag = newFlag("Trait")
   val Transparent: Flag = newFlag("Transparent")
-  val TypeParameter: Flag = newFlag("TypeParameter")
-
-  val VarianceFlags: FlagSet = Covariant | Contravariant
-
-  /** A symbol is a class' type parameter iff it has all of these flags. */
-  val ClassTypeParam: FlagSet = Private | TypeParameter
 
   /** Modules always have these flags set */
   val ModuleValCreationFlags: FlagSet = Module | Lazy | Final | StableRealizable
