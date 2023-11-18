@@ -322,14 +322,14 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val inputTypeParams = List.tabulate(n) { i =>
       ClassTypeParamSymbol
         .create(typeName("T" + i), cls)
-        .withFlags(ClassTypeParam | Contravariant, None)
+        .withFlags(Contravariant, None)
         .setDeclaredBounds(NothingAnyBounds)
         .setAnnotations(Nil)
     }
     val resultTypeParam =
       ClassTypeParamSymbol
         .create(typeName("R"), cls)
-        .withFlags(ClassTypeParam | Covariant, None)
+        .withFlags(Covariant, None)
         .setDeclaredBounds(NothingAnyBounds)
         .setAnnotations(Nil)
 
