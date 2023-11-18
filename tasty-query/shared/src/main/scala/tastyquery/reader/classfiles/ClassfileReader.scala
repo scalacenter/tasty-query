@@ -2,6 +2,8 @@ package tastyquery.reader.classfiles
 
 import scala.annotation.switch
 
+import scala.collection.immutable.HashMap
+
 import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
 import tastyquery.Exceptions.*
@@ -16,9 +18,39 @@ import ClassfileReader.*
 import ClassfileReader.Access.*
 import Constants.*
 
-private[classfiles] final class ClassfileReader private () {
+private[reader] object ClassfileReader {
+  import Indexing.*
+  import Access.*
 
-  def acceptHeader(classOwner: DeclaringSymbol, classRoot: ClassData)(using DataStream): Unit = {
+  inline val JavaMajorVersion = 45
+  inline val JavaMinorVersion = 3 // Java 1.1 (needed for `java.rmi.activation.ActivationGroup_Stub` in rt.jar)
+  inline val JavaMagicNumber = 0xcafebabe
+
+  def readStructure(classOwner: DeclaringSymbol, classRoot: ClassData): Structure =
+    ClassfileReader.unpickle(classRoot) {
+      ClassfileReader.acceptHeader(classOwner, classRoot)
+
+      val pool = ClassfileReader.readConstantPool()
+      given ConstantPool = pool
+
+      val access = ClassfileReader.readAccessFlags()
+      val thisClass = ClassfileReader.readThisClass()
+      val supers = data.forkAndSkip {
+        data.skip(2) // superclass
+        data.skip(2 * data.readU2()) // interfaces
+      }
+      Structure(
+        access = access,
+        binaryName = pool.utf8(thisClass.nameIdx),
+        supers = supers,
+        fields = ClassfileReader.skipFields(),
+        methods = ClassfileReader.skipMethods(),
+        attributes = ClassfileReader.skipAttributes()
+      )
+    }
+  end readStructure
+
+  private def acceptHeader(classOwner: DeclaringSymbol, classRoot: ClassData)(using DataStream): Unit = {
     acceptMagicNumber(classOwner, classRoot)
     acceptVersion(classOwner, classRoot)
   }
@@ -47,7 +79,7 @@ private[classfiles] final class ClassfileReader private () {
       )
   }
 
-  def readConstantPool()(using ds: DataStream): ConstantPool = {
+  private def readConstantPool()(using ds: DataStream): ConstantPool = {
     val count = data.readU2()
     val pool = ConstantPool(count)
     var doAdd = true
@@ -55,19 +87,26 @@ private[classfiles] final class ClassfileReader private () {
     pool
   }
 
-  class ConstantPool(count: Int) { pool =>
-    import ClassfileReader.Indexing
+  class Structure(
+    val access: AccessFlags,
+    val binaryName: SimpleName,
+    val supers: Forked[DataStream],
+    val fields: Forked[DataStream],
+    val methods: Forked[DataStream],
+    val attributes: Forked[DataStream]
+  )(using val pool: ConstantPool)
 
-    private val infos = Array.ofDim[ConstantInfo[this.type]](count)
+  class ConstantPool(count: Int) { pool =>
+    import ClassfileReader.Indexing.*
+
+    private val infos = Array.ofDim[ConstantInfo](count)
     private var index = 1
 
     private var seensigbytes = false
 
-    type Idx = Indexing.Index[this.type]
+    def cls(idx: Index): ConstantInfo.Class = infos(idx).asInstanceOf[ConstantInfo.Class]
 
-    def cls(idx: Idx): ConstantInfo.Class[this.type] = infos(idx).asInstanceOf[ConstantInfo.Class[this.type]]
-
-    def utf8(idx: Idx): SimpleName = this.apply(idx) match {
+    def utf8(idx: Index): SimpleName = this.apply(idx) match {
       case ConstantInfo.Utf8(name: SimpleName) => name
       case ConstantInfo.Utf8(forked: Forked[DataStream]) =>
         val name = termName(forked.use(data.readUTF8()))
@@ -77,13 +116,13 @@ private[classfiles] final class ClassfileReader private () {
         throw ClassfileFormatException(s"Expected UTF8 at index $idx")
     }
 
-    def sigbytes(idx: Idx): IArray[Byte] =
+    def sigbytes(idx: Index): IArray[Byte] =
       decodeSigBytes(encodedSigbytes(idx))
 
-    def sigbytes(idxs: IArray[Idx]): IArray[Byte] =
+    def sigbytes(idxs: IArray[Index]): IArray[Byte] =
       decodeSigBytes(idxs.flatMap(encodedSigbytes))
 
-    private def encodedSigbytes(idx: Idx): IArray[Byte] = this.apply(idx) match {
+    private def encodedSigbytes(idx: Index): IArray[Byte] = this.apply(idx) match {
       case ConstantInfo.Utf8(forked: Forked[DataStream]) =>
         forked.use(data.readSlice(data.readU2()))
       case _ =>
@@ -96,9 +135,9 @@ private[classfiles] final class ClassfileReader private () {
       val decodedLength = ByteCodecs.decode(buffer)
       IArray.unsafeFromArray(buffer).take(decodedLength)
 
-    private[ClassfileReader] def idx(i: Int): Idx = Indexing.idx(this, i)
+    private[ClassfileReader] def idx(i: Int): Index = Indexing.idx(i)
 
-    private[ClassfileReader] def add(info: ConstantInfo[this.type]): Boolean = {
+    private[ClassfileReader] def add(info: ConstantInfo): Boolean = {
       infos(index) = info
       def debug() = {
         // TODO read constant pool info lazily?
@@ -127,13 +166,13 @@ private[classfiles] final class ClassfileReader private () {
       index < count
     }
 
-    def apply(index: Idx): ConstantInfo[this.type] = {
+    def apply(index: Index): ConstantInfo = {
       if (index < 1 || index >= infos.length)
         throw ClassfileFormatException(s"Invalid constant pool index $index")
       infos(index)
     }
 
-    def force(index: Idx): ConstantInfo[this.type] =
+    def force(index: Index): ConstantInfo =
       this.apply(index) match {
         case ConstantInfo.Utf8(_) =>
           this.utf8(index) // force name
@@ -145,10 +184,10 @@ private[classfiles] final class ClassfileReader private () {
   def readAccessFlags()(using DataStream): AccessFlags =
     AccessFlags.read(data.readU2())
 
-  def readThisClass()(using ds: DataStream, pool: ConstantPool): ConstantInfo.Class[pool.type] =
+  def readThisClass()(using ds: DataStream, pool: ConstantPool): ConstantInfo.Class =
     pool.cls(pool.idx(data.readU2()))
 
-  def readSuperClass()(using ds: DataStream, pool: ConstantPool): Option[ConstantInfo.Class[pool.type]] = {
+  def readSuperClass()(using ds: DataStream, pool: ConstantPool): Option[ConstantInfo.Class] = {
     val idx = data.readU2()
     val entry =
       if idx == 0 then None
@@ -156,7 +195,7 @@ private[classfiles] final class ClassfileReader private () {
     entry
   }
 
-  def readInterfaces()(using ds: DataStream, pool: ConstantPool): IArray[ConstantInfo.Class[pool.type]] = {
+  def readInterfaces()(using ds: DataStream, pool: ConstantPool): IArray[ConstantInfo.Class] = {
     val count = data.readU2()
     val interfaces =
       for i <- 0 until count yield pool.cls(pool.idx(data.readU2()))
@@ -233,9 +272,28 @@ private[classfiles] final class ClassfileReader private () {
     }
   }
 
-  def readAnnotation(
-    typeDescriptors: Set[SimpleName]
-  )(using ds: DataStream, pool: ConstantPool): Option[Annotation[pool.type]] = {
+  def readAttributeMap()(using ds: DataStream, pool: ConstantPool): Map[SimpleName, Forked[DataStream]] =
+    val builder = HashMap.newBuilder[SimpleName, Forked[DataStream]]
+    scanAttributes { attributeName =>
+      builder += attributeName -> data.fork
+      false
+    }
+    builder.result()
+  end readAttributeMap
+
+  def readAttribute(attributeName: SimpleName)(using DataStream, ConstantPool): Option[Forked[DataStream]] =
+    var result: Option[Forked[DataStream]] = None
+    scanAttributes {
+      case `attributeName` =>
+        result = Some(data.fork)
+        true
+      case _ =>
+        false
+    }
+    result
+  end readAttribute
+
+  def readAnnotation(typeDescriptors: Set[SimpleName])(using ds: DataStream, pool: ConstantPool): Option[Annotation] = {
     // pre: we are already inside the RuntimeVisibleAnnotations attribute
 
     def skipAnnotationArgument(): Unit = {
@@ -272,7 +330,7 @@ private[classfiles] final class ClassfileReader private () {
       }
     }
 
-    def readAnnotationArgument(): AnnotationValue[pool.type] = {
+    def readAnnotationArgument(): AnnotationValue = {
       import AnnotationValue.Tags
       val tag = data.readU1().toChar
       tag match {
@@ -300,7 +358,7 @@ private[classfiles] final class ClassfileReader private () {
       }
     }
 
-    def readAnnotationArgs(tpe: SimpleName): Annotation[pool.type] = {
+    def readAnnotationArgs(tpe: SimpleName): Annotation = {
       val numPairs = data.readU2()
       val args = accumulateAnnotValues(numPairs) {
         data.skip(2) // name index
@@ -341,7 +399,7 @@ private[classfiles] final class ClassfileReader private () {
     }
   }
 
-  private def acceptConstantInfo()(using ds: DataStream, pool: ConstantPool): ConstantInfo[pool.type] = {
+  private def acceptConstantInfo()(using ds: DataStream, pool: ConstantPool): ConstantInfo = {
     import ClassfileReader.ConstantInfo as c
     import pool.idx
     val tag = data.readU1()
@@ -367,15 +425,6 @@ private[classfiles] final class ClassfileReader private () {
         throw ClassfileFormatException(s"Invalid constant tag $tag")
     }
   }
-}
-
-private[classfiles] object ClassfileReader {
-  import Indexing.*
-  import Access.*
-
-  inline val JavaMajorVersion = 45
-  inline val JavaMinorVersion = 3 // Java 1.1 (needed for `java.rmi.activation.ActivationGroup_Stub` in rt.jar)
-  inline val JavaMagicNumber = 0xcafebabe
 
   private inline def loop(times: Int)(inline op: => Unit): Unit = {
     var i = 0
@@ -385,10 +434,8 @@ private[classfiles] object ClassfileReader {
     }
   }
 
-  private inline def accumulateAnnotValues[P <: ClassfileReader.ConstantPool](
-    size: Int
-  )(inline op: => AnnotationValue[P]): IArray[AnnotationValue[P]] = {
-    val arr = new Array[AnnotationValue[P]](size)
+  private inline def accumulateAnnotValues(size: Int)(inline op: => AnnotationValue): IArray[AnnotationValue] = {
+    val arr = new Array[AnnotationValue](size)
     var i = 0
     while (i < size) {
       arr(i) = op
@@ -399,12 +446,6 @@ private[classfiles] object ClassfileReader {
 
   type MemberSig = String
 
-  enum SigOrSupers:
-    case Sig(str: String)
-    case Supers
-
-  type ConstantPool = ClassfileReader#ConstantPool & Singleton
-
   object Access:
     opaque type AccessFlags = Int
 
@@ -414,6 +455,8 @@ private[classfiles] object ClassfileReader {
 
       extension (access: AccessFlags)
         private def isSet(flag: AccessFlags): Boolean = (access & flag) == flag
+
+        def isStatic: Boolean = isSet(Tags.Static)
 
         def isSynthetic: Boolean = isSet(Tags.Synthetic)
 
@@ -458,28 +501,28 @@ private[classfiles] object ClassfileReader {
   end Access
 
   object Indexing {
-    opaque type Index[C <: ConstantPool] <: Int = Int
-    private[ClassfileReader] def idx[C <: ConstantPool](pool: C, index: Int): Index[pool.type] = index
+    opaque type Index <: Int = Int
+    private[ClassfileReader] def idx(index: Int): Index = index
   }
 
-  enum ConstantInfo[C <: ConstantPool] derives CanEqual {
-    case Class(nameIdx: Index[C])
-    case Fieldref(classIdx: Index[C], nameandtypeIdx: Index[C])
-    case Methodref(classIdx: Index[C], nameandtypeIdx: Index[C])
-    case InterfaceMethodref(classIdx: Index[C], nameandtypeIdx: Index[C])
-    case String(stringIdx: Index[C])
+  enum ConstantInfo derives CanEqual {
+    case Class(nameIdx: Index)
+    case Fieldref(classIdx: Index, nameandtypeIdx: Index)
+    case Methodref(classIdx: Index, nameandtypeIdx: Index)
+    case InterfaceMethodref(classIdx: Index, nameandtypeIdx: Index)
+    case String(stringIdx: Index)
     case Integer(value: Int)
     case Float(value: scala.Float)
     case Long(value: scala.Long)
     case Double(value: scala.Double)
-    case NameAndType(nameIdx: Index[C], descriptorIdx: Index[C])
+    case NameAndType(nameIdx: Index, descriptorIdx: Index)
     case Utf8(value: SimpleName | Forked[DataStream])
-    case MethodHandle(referenceKind: Index[C], referenceIndex: Index[C])
-    case MethodType(descriptorIdx: Index[C])
-    case Dynamic(bootstrapMethodAttrIndex: Index[C], nameAndTypeIndex: Index[C])
-    case InvokeDynamic(bootstrapMethodAttrIndex: Index[C], nameAndTypeIndex: Index[C])
-    case Module(nameIdx: Index[C])
-    case Package(nameIdx: Index[C])
+    case MethodHandle(referenceKind: Index, referenceIndex: Index)
+    case MethodType(descriptorIdx: Index)
+    case Dynamic(bootstrapMethodAttrIndex: Index, nameAndTypeIndex: Index)
+    case InvokeDynamic(bootstrapMethodAttrIndex: Index, nameAndTypeIndex: Index)
+    case Module(nameIdx: Index)
+    case Package(nameIdx: Index)
   }
 
   object ConstantInfo {
@@ -504,9 +547,9 @@ private[classfiles] object ClassfileReader {
     }
   }
 
-  enum AnnotationValue[C <: ConstantPool] {
-    case Const(valueIdx: Index[C])
-    case Arr(values: IArray[AnnotationValue[C]])
+  enum AnnotationValue {
+    case Const(valueIdx: Index)
+    case Arr(values: IArray[AnnotationValue])
     case Unknown()
   }
 
@@ -528,7 +571,7 @@ private[classfiles] object ClassfileReader {
     }
   }
 
-  case class Annotation[P <: ClassfileReader.ConstantPool](tpe: SimpleName, values: IArray[AnnotationValue[P]])
+  case class Annotation(tpe: SimpleName, values: IArray[AnnotationValue])
 
   inline def data(using data: DataStream): data.type = data
 
@@ -550,8 +593,6 @@ private[classfiles] object ClassfileReader {
       forked
   }
 
-  def unpickle[T](classRoot: ClassData)(op: ClassfileReader => DataStream ?=> T): T =
-    ClassfileBuffer.Root(classRoot.readClassFileBytes(), 0).use { s ?=>
-      op(ClassfileReader())
-    }
+  def unpickle[T](classRoot: ClassData)(op: DataStream ?=> T): T =
+    ClassfileBuffer.Root(classRoot.readClassFileBytes(), 0).use(op)
 }
