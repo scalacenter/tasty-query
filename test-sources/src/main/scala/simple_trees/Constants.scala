@@ -9,7 +9,7 @@ class Constants {
   val charVal = 'a'
   val intVal = 1
   val longVal: Long = 1L
-  val floatVal: Float = 1.1f
+  val floatVal: Float = 1.5f
   val doubleVal: Double = 1.1d
   val stringVal = "string"
   val nullVal = null

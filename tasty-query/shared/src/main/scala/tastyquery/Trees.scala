@@ -52,6 +52,9 @@ object Trees {
     end computeAutoPos
 
     def withPos(pos: SourcePosition): Tree
+
+    final def showBasic: String =
+      Printers.withWriterToString(writer => new Printers.Printer(writer).printAnyTree(this))
   }
 
   sealed abstract class TopLevelTree(pos: SourcePosition) extends Tree(pos):

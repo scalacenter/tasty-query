@@ -56,7 +56,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   testUnpickle("literal", "simple_trees.Constants") { tree =>
     assertEquals(
       collectCode[Literal](tree),
-      List("()", "false", "true", "1", "1", "'a'", "1", "1L", "1.1f", "1.1d", "\"string\"", "null")
+      List("()", "false", "true", "1", "1", "'a'", "1", "1L", "1.5f", "1.1d", "\"string\"", "null")
     )
   }
 

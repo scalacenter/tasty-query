@@ -62,6 +62,7 @@ object Names {
     val m_+ : SimpleName = termName("+")
 
     val m_apply: SimpleName = termName("apply")
+    val m_unapply: SimpleName = termName("unapply")
   }
 
   object tpnme {
