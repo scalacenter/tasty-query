@@ -87,12 +87,13 @@ object ClasspathLoaders:
         fromDirectory(join(dir, e.name), join(relPath, e.name))
       }
 
+      val normalizedRelPath = relPath.replace('\\', '/').nn
       val irFileNames = files.map(_.name).filter(isClassOrTasty)
       val directFiles = Future.traverse(irFileNames) { n =>
         val path = join(dir, n)
         cbFuture[Uint8Array](readFile(path, _)).map { content =>
           val contentAsInt8Array = new Int8Array(content.buffer)
-          FileContent(relPath, n, path, IArray.from(contentAsInt8Array.toArray))
+          FileContent(normalizedRelPath, n, path, IArray.from(contentAsInt8Array.toArray))
         }
       }
 
