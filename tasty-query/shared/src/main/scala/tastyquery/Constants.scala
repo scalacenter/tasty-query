@@ -1,5 +1,7 @@
 package tastyquery
 
+import scala.annotation.switch
+
 import scala.compiletime.asMatchable
 
 import tastyquery.Contexts.*
@@ -20,7 +22,30 @@ object Constants {
   final val NullTag = 11
   final val ClazzTag = 12
 
-  class Constant(val value: Matchable, val tag: Int) {
+  final class Constant private (val value: Matchable, val tag: Int, internal: Boolean) {
+    @deprecated("this constructor is unsafe; use the `apply` methods in the companion instead", since = "1.1.0")
+    def this(value: Matchable, tag: Int) =
+      this(value, tag, internal = true)
+
+      // Check that the tag matches the value:
+      val valid = (tag: @switch) match
+        case UnitTag    => value == ()
+        case BooleanTag => value.isInstanceOf[Boolean]
+        case CharTag    => value.isInstanceOf[Char]
+        case ByteTag    => value.isInstanceOf[Byte]
+        case ShortTag   => value.isInstanceOf[Short]
+        case IntTag     => value.isInstanceOf[Int]
+        case LongTag    => value.isInstanceOf[Long]
+        case FloatTag   => value.isInstanceOf[Float]
+        case DoubleTag  => value.isInstanceOf[Double]
+        case StringTag  => value.isInstanceOf[String]
+        case NullTag    => value == null
+        case ClazzTag   => value.isInstanceOf[Type]
+        case _          => false
+
+      require(valid, s"Illegal combination of value and tag for Constant($value, $tag)")
+    end this
+
     def wideType(using Context): Type = tag match
       case UnitTag    => defn.UnitType
       case BooleanTag => defn.BooleanType
@@ -160,18 +185,18 @@ object Constants {
   }
 
   object Constant {
-    def apply(x: Null): Constant = new Constant(x, NullTag)
-    def apply(x: Unit): Constant = new Constant(x, UnitTag)
-    def apply(x: Boolean): Constant = new Constant(x, BooleanTag)
-    def apply(x: Byte): Constant = new Constant(x, ByteTag)
-    def apply(x: Short): Constant = new Constant(x, ShortTag)
-    def apply(x: Int): Constant = new Constant(x, IntTag)
-    def apply(x: Long): Constant = new Constant(x, LongTag)
-    def apply(x: Float): Constant = new Constant(x, FloatTag)
-    def apply(x: Double): Constant = new Constant(x, DoubleTag)
-    def apply(x: String): Constant = new Constant(x, StringTag)
-    def apply(x: Char): Constant = new Constant(x, CharTag)
-    def apply(x: Type): Constant = new Constant(x, ClazzTag)
+    def apply(x: Null): Constant = new Constant(x, NullTag, internal = true)
+    def apply(x: Unit): Constant = new Constant(x, UnitTag, internal = true)
+    def apply(x: Boolean): Constant = new Constant(x, BooleanTag, internal = true)
+    def apply(x: Byte): Constant = new Constant(x, ByteTag, internal = true)
+    def apply(x: Short): Constant = new Constant(x, ShortTag, internal = true)
+    def apply(x: Int): Constant = new Constant(x, IntTag, internal = true)
+    def apply(x: Long): Constant = new Constant(x, LongTag, internal = true)
+    def apply(x: Float): Constant = new Constant(x, FloatTag, internal = true)
+    def apply(x: Double): Constant = new Constant(x, DoubleTag, internal = true)
+    def apply(x: String): Constant = new Constant(x, StringTag, internal = true)
+    def apply(x: Char): Constant = new Constant(x, CharTag, internal = true)
+    def apply(x: Type): Constant = new Constant(x, ClazzTag, internal = true)
 
     def unapply(c: Constant): Constant = c
   }
