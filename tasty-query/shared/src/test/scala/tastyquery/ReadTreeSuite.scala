@@ -426,7 +426,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     }
     assert(containsSubtree(longConstMatch)(clue(tree)))
 
-    val floatConstMatch: StructureCheck = { case ValDef(SimpleName("floatVal"), _, Some(Literal(Constant(1.1f))), _) =>
+    val floatConstMatch: StructureCheck = { case ValDef(SimpleName("floatVal"), _, Some(Literal(Constant(1.5f))), _) =>
     }
     assert(containsSubtree(floatConstMatch)(clue(tree)))
 
