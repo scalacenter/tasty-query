@@ -1051,17 +1051,44 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         throw AssertionError(s"unexpected type $tpe")
   }
 
-  testWithContext("scala-2-default-params") {
+  testWithContext("default-params") {
+    extension (sym: TermSymbol) def paramCount: Int = sym.declaredType.asInstanceOf[MethodType].paramNames.size
+
     val DefaultParamsClass = ctx.findTopLevelClass("simple_trees.DefaultParams")
     assert(clue(DefaultParamsClass.getNonOverloadedDecl(DefaultGetterName(termName("foo"), 0))).isEmpty)
     DefaultParamsClass.findNonOverloadedDecl(DefaultGetterName(termName("foo"), 1))
     DefaultParamsClass.findNonOverloadedDecl(DefaultGetterName(termName("foo"), 2))
     assert(clue(DefaultParamsClass.getNonOverloadedDecl(DefaultGetterName(termName("foo"), 3))).isEmpty)
 
+    val fooOverloads = DefaultParamsClass.findAllOverloadedDecls(termName("foo"))
+
+    val fooWithDefaults = fooOverloads.find(_.paramCount == 3).get
+    assert(clue(fooWithDefaults.hasParamWithDefault) && !clue(fooWithDefaults.isParamWithDefault))
+    val List(Left(fooWithDefaultsParams)) = fooWithDefaults.paramSymss: @unchecked
+    assert(clue(fooWithDefaultsParams.map(_.isParamWithDefault)) == List(false, true, true))
+    assert(clue(fooWithDefaultsParams.map(_.hasParamWithDefault)).forall(_ == false))
+
+    for fooOverload <- fooOverloads if fooOverload ne fooWithDefaults do
+      assert(!clue(fooOverload.hasParamWithDefault) && !clue(fooOverload.isParamWithDefault))
+      val List(Left(params)) = fooOverload.paramSymss: @unchecked
+      assert(clue(params.map(_.isParamWithDefault)).forall(_ == false))
+      assert(clue(params.map(_.hasParamWithDefault)).forall(_ == false))
+  }
+
+  testWithContext("default-params-scala-2") {
     val IteratorClass = ctx.findTopLevelClass("scala.collection.Iterator")
     assert(clue(IteratorClass.getNonOverloadedDecl(DefaultGetterName(termName("indexWhere"), 0))).isEmpty)
     IteratorClass.findNonOverloadedDecl(DefaultGetterName(termName("indexWhere"), 1))
     assert(clue(IteratorClass.getNonOverloadedDecl(DefaultGetterName(termName("indexWhere"), 2))).isEmpty)
+
+    locally {
+      val indexWhere = IteratorClass.findNonOverloadedDecl(termName("indexWhere"))
+      assert(clue(indexWhere.hasParamWithDefault) && !clue(indexWhere.isParamWithDefault))
+
+      val List(Left(List(p, from))) = indexWhere.paramSymss: @unchecked
+      assert(!clue(p.hasParamWithDefault) && !clue(p.isParamWithDefault))
+      assert(!clue(from.hasParamWithDefault) && clue(from.isParamWithDefault))
+    }
 
     val ArrayDequeModClass = ctx.findTopLevelModuleClass("scala.collection.mutable.ArrayDeque")
     ArrayDequeModClass.findNonOverloadedDecl(DefaultGetterName(nme.Constructor, 0))

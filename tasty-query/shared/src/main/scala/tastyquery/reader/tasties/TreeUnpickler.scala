@@ -312,7 +312,7 @@ private[tasties] class TreeUnpickler private (
         case CASEaccessor  => addFlag(CaseAccessor)
         case COVARIANT     => addFlag(Covariant)
         case CONTRAVARIANT => addFlag(Contravariant)
-        case HASDEFAULT    => ignoreFlag()
+        case HASDEFAULT    => addFlag(HasDefault)
         case STABLE        => addFlag(StableRealizable)
         case EXTENSION     => addFlag(Extension)
         case GIVEN         => addFlag(Given)
