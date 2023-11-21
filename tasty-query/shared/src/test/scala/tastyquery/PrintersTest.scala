@@ -224,4 +224,92 @@ class PrintersTest extends UnrestrictedUnpicklingSuite:
     )
     testShowBasicMember(MatchTypeClass, typeName("MTWithBind"), "type MTWithBind[X] = X match { case List[t] => t }")
   }
+
+  testWithContext("multiline tree printers") {
+    def testShowMultiline(tree: Tree, expected: String)(using munit.Location): Unit =
+      assert(clue(tree.showMultiline) == clue(expected))
+
+    def testShowMultilineMember(cls: ClassSymbol, memberName: Name, expected: String)(using munit.Location): Unit =
+      val member = memberName match
+        case memberName: UnsignedTermName => cls.findNonOverloadedDecl(memberName)
+        case _                            => cls.findMember(memberName)
+      testShowMultiline(member.tree.get, expected)
+
+    val GenericClassWithNestedGenericClass = ctx.findTopLevelClass("simple_trees.GenericClassWithNestedGeneric")
+    testShowMultiline(
+      GenericClassWithNestedGenericClass.tree.get,
+      """class GenericClassWithNestedGeneric[T] extends java.lang.Object() {
+        |  def <init>[T](): scala.Unit
+        |  class NestedGeneric[U] extends java.lang.Object() {
+        |    def <init>[U](): scala.Unit
+        |  }
+        |}""".stripMargin
+    )
+
+    val PatternMatchingOnCaseClassClass = ctx.findTopLevelClass("simple_trees.PatternMatchingOnCaseClass")
+    testShowMultilineMember(
+      PatternMatchingOnCaseClassClass,
+      termName("caseMatching"),
+      """def caseMatching(c: AbstractForCaseClasses): Int = (c match {
+        |  case FirstCase(x @ _): simple_trees.FirstCase =>  {
+        |    (x: scala.Int)
+        |  }
+        |  case SecondCase(y @ _): simple_trees.SecondCase =>  {
+        |    (y: scala.Int)
+        |  }
+        |  case _ =>  {
+        |    0
+        |  }
+        |})""".stripMargin
+    )
+
+    val ClassWithSelfClass = ctx.findTopLevelClass("simple_trees.ClassWithSelf")
+    testShowMultiline(
+      ClassWithSelfClass.tree.get,
+      """class ClassWithSelf extends java.lang.Object() with TraitWithSelf {
+        |  self: simple_trees.ClassWithSelf =>
+        |  def <init>(): scala.Unit
+        |}""".stripMargin
+    )
+
+    val HigherKindedClass = ctx.findTopLevelClass("simple_trees.HigherKinded")
+    testShowMultiline(
+      HigherKindedClass.tree.get,
+      """trait HigherKinded[A <: ([_$1] =>> scala.Any)] extends java.lang.Object {
+        |  def <init>[A[_$1]](): scala.Unit
+        |  def m[T](x: A[T]): A[T]
+        |  def f[B[_$2], T](x: B[T]): B[T]
+        |}""".stripMargin
+    )
+
+    val MatchTypeClass = ctx.findTopLevelClass("simple_trees.MatchType")
+    testShowMultilineMember(
+      MatchTypeClass,
+      typeName("MT"),
+      """type MT[X] = X match {
+        |  case Int => String
+        |}""".stripMargin
+    )
+    testShowMultilineMember(
+      MatchTypeClass,
+      typeName("MTWithBound"),
+      """type MTWithBound[X] <: Product = X match {
+        |  case Int => Some[Int]
+        |}""".stripMargin
+    )
+    testShowMultilineMember(
+      MatchTypeClass,
+      typeName("MTWithWildcard"),
+      """type MTWithWildcard[X] = X match {
+        |  case _ => Int
+        |}""".stripMargin
+    )
+    testShowMultilineMember(
+      MatchTypeClass,
+      typeName("MTWithBind"),
+      """type MTWithBind[X] = X match {
+        |  case List[t] => t
+        |}""".stripMargin
+    )
+  }
 end PrintersTest

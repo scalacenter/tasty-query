@@ -798,6 +798,41 @@ private[tastyquery] object Printers:
       out.write(str)
   end Printer
 
+  /** A `Printer` that prints blocks with line separators and indentation. */
+  class MultilinePrinter(out: Writer) extends Printer(out):
+    private var spaces: String = "                                        " // 40 spaces
+    private var currentIndent: Int = 0
+
+    private final val IndentWidth = 2
+
+    protected final def printNewLine(): Unit =
+      print("\n")
+      out.write(spaces, 0, currentIndent)
+
+    protected final def printNewLineAndIndent(): Unit =
+      currentIndent += IndentWidth
+      if spaces.length() < currentIndent then spaces = spaces + spaces
+      printNewLine()
+
+    protected final def printNewLineAndOutdent(): Unit =
+      if currentIndent < IndentWidth then throw IllegalStateException("Trying to outdent more than indent")
+      currentIndent -= IndentWidth
+      printNewLine()
+
+    override def printBlock[A](elems: List[A])(printElem: A => Unit): Unit =
+      if elems.isEmpty then print(" {}")
+      else
+        print(" {")
+        printNewLineAndIndent()
+        printElem(elems.head)
+        for elem <- elems.tail do
+          printNewLine()
+          printElem(elem)
+        printNewLineAndOutdent()
+        print("}")
+    end printBlock
+  end MultilinePrinter
+
   private def isSyntacticNothing(tpe: Type): Boolean = tpe match
     case tpe: TypeRef => tpe.name == tpnme.Nothing && isScalaPackageRef(tpe.prefix)
     case _            => false

@@ -266,6 +266,9 @@ object Types {
     def showBasic: String =
       Printers.withWriterToString(writer => new Printers.Printer(writer).print(this))
 
+    final def showMultiline: String =
+      Printers.withWriterToString(writer => new Printers.MultilinePrinter(writer).print(this))
+
     def requireType: Type = this match
       case self: Type => self
       case self       => throw InvalidProgramStructureException(s"Unexpected non-type $self")
