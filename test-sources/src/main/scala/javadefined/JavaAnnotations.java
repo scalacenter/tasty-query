@@ -24,6 +24,11 @@ public class JavaAnnotations {
     return 1;
   }
 
+  @JavaAnnotClassValue(java.util.List.class)
+  public int otherAnnotatedMethod() {
+    return 1;
+  }
+
   public <T> int annotatedParams(
     int noAnnot,
     @JavaAnnotSingleValue(123)

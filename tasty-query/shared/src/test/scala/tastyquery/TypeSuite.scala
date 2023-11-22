@@ -2640,6 +2640,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       ok
     }
 
+    val otherAnnotatedMethod = JavaAnnotationsClass.findNonOverloadedDecl(termName("otherAnnotatedMethod"))
+
+    checkAnnotArgs(otherAnnotatedMethod, JavaAnnotClassValueClass) {
+      case List(Literal(const)) if const.tag == Constants.ClazzTag =>
+        // Note that `isRef` only accepts a `TypeRef` of the given symbol; not an `AppliedType`
+        assert(clue(const.typeValue).isRef(ctx.findTopLevelClass("java.util.List")))
+    }
+
     val annotatedParams = JavaAnnotationsClass.findNonOverloadedDecl(termName("annotatedParams"))
     val List(Right(_), Left(paramSyms)) = annotatedParams.paramSymss: @unchecked
 
