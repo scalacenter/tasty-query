@@ -3,6 +3,7 @@ package tastyquery.reader.classfiles
 import scala.annotation.switch
 
 import scala.collection.immutable.HashMap
+import scala.reflect.ClassTag
 
 import tastyquery.Classpaths.*
 import tastyquery.Contexts.*
@@ -116,6 +117,22 @@ private[reader] object ClassfileReader {
         throw ClassfileFormatException(s"Expected UTF8 at index $idx")
     }
 
+    def integer(idx: Index): Int = this.apply(idx) match
+      case ConstantInfo.Integer(value) => value
+      case _                           => throw ClassfileFormatException(s"Expected Integer at index $idx")
+
+    def long(idx: Index): Long = this.apply(idx) match
+      case ConstantInfo.Long(value) => value
+      case _                        => throw ClassfileFormatException(s"Expected Long at index $idx")
+
+    def float(idx: Index): Float = this.apply(idx) match
+      case ConstantInfo.Float(value) => value
+      case _                         => throw ClassfileFormatException(s"Expected Float at index $idx")
+
+    def double(idx: Index): Double = this.apply(idx) match
+      case ConstantInfo.Double(value) => value
+      case _                          => throw ClassfileFormatException(s"Expected Double at index $idx")
+
     def sigbytes(idx: Index): IArray[Byte] =
       decodeSigBytes(encodedSigbytes(idx))
 
@@ -226,15 +243,8 @@ private[reader] object ClassfileReader {
     reader
   }
 
-  def readFields(op: (SimpleName, MemberSig, AccessFlags) => Unit)(using DataStream, ConstantPool): Unit =
-    readMembers(isMethod = false, op)
-
-  def readMethods(op: (SimpleName, MemberSig, AccessFlags) => Unit)(using DataStream, ConstantPool): Unit =
-    readMembers(isMethod = true, op)
-
-  private def readMembers(
-    isMethod: Boolean,
-    op: (SimpleName, MemberSig, AccessFlags) => Unit
+  def readMembers(
+    op: (AccessFlags, SimpleName, String, Map[SimpleName, Forked[DataStream]]) => Unit
   )(using ds: DataStream, pool: ConstantPool): Unit = {
     val count = data.readU2()
     loop(count) {
@@ -243,17 +253,8 @@ private[reader] object ClassfileReader {
       val name = pool.utf8(nameIdx)
       val descriptorIdx = pool.idx(data.readU2())
       val desc = pool.utf8(descriptorIdx).name
-      var sigOrNull: String | Null = null
-      scanAttributes {
-        case attr.Signature => // optional, only if there are generic type arguments
-          data.fork.use {
-            sigOrNull = readSignature
-          }
-          false
-        case _ => false
-      }
-      val sig = sigOrNull
-      if !accessFlags.isSynthetic then op(name, if sig == null then desc else sig, accessFlags)
+      val attributes = readAttributeMap()
+      if !accessFlags.isSynthetic then op(accessFlags, name, desc, attributes)
     }
   }
 
@@ -272,7 +273,9 @@ private[reader] object ClassfileReader {
     }
   }
 
-  def readAttributeMap()(using ds: DataStream, pool: ConstantPool): Map[SimpleName, Forked[DataStream]] =
+  type AttributeMap = Map[SimpleName, Forked[DataStream]]
+
+  def readAttributeMap()(using ds: DataStream, pool: ConstantPool): AttributeMap =
     val builder = HashMap.newBuilder[SimpleName, Forked[DataStream]]
     scanAttributes { attributeName =>
       builder += attributeName -> data.fork
@@ -293,6 +296,24 @@ private[reader] object ClassfileReader {
     result
   end readAttribute
 
+  def readMethodParameters()(using ds: DataStream, pool: ConstantPool): List[(UnsignedTermName, AccessFlags)] =
+    val numParameters = data.readU1()
+    val resultBuilder = List.newBuilder[(UnsignedTermName, AccessFlags)]
+
+    var index = 0
+    while index != numParameters do
+      val nameIndex = data.readU2()
+      val name =
+        if nameIndex == 0 then UniqueName(termName("x"), "$", index)
+        else pool.utf8(pool.idx(nameIndex))
+      val accessFlags = AccessFlags.read(data.readU2())
+      resultBuilder += ((name, accessFlags))
+      index += 1
+    end while
+
+    resultBuilder.result()
+  end readMethodParameters
+
   def readAnnotation(typeDescriptors: Set[SimpleName])(using ds: DataStream, pool: ConstantPool): Option[Annotation] = {
     // pre: we are already inside the RuntimeVisibleAnnotations attribute
 
@@ -304,7 +325,7 @@ private[reader] object ClassfileReader {
             Tags.String | Tags.Class =>
           data.skip(2)
         case Tags.Enum =>
-          data.skip(3)
+          data.skip(4)
         case Tags.Annotation =>
           skipAnnotation()
         case Tags.Array =>
@@ -330,55 +351,82 @@ private[reader] object ClassfileReader {
       }
     }
 
-    def readAnnotationArgument(): AnnotationValue = {
-      import AnnotationValue.Tags
-      val tag = data.readU1().toChar
-      tag match {
-        case Tags.Byte | Tags.Char | Tags.Double | Tags.Float | Tags.Int | Tags.Long | Tags.Short | Tags.Boolean |
-            Tags.String =>
-          AnnotationValue.Const(pool.idx(data.readU2()))
-        case Tags.Enum =>
-          data.skip(1)
-          data.skip(2)
-          AnnotationValue.Unknown()
-        case Tags.Class =>
-          data.skip(2)
-          AnnotationValue.Unknown()
-        case Tags.Annotation =>
-          skipAnnotation()
-          AnnotationValue.Unknown()
-        case Tags.Array =>
-          val count = data.readU2()
-          val values = accumulateAnnotValues(count) {
-            readAnnotationArgument()
-          }
-          AnnotationValue.Arr(values)
-        case _ =>
-          throw ClassfileFormatException(s"Invalid annotation argument tag $tag")
-      }
-    }
-
-    def readAnnotationArgs(tpe: SimpleName): Annotation = {
-      val numPairs = data.readU2()
-      val args = accumulateAnnotValues(numPairs) {
-        data.skip(2) // name index
-        readAnnotationArgument()
-      }
-      Annotation(tpe, args)
-    }
-
     val numAnnots = data.readU2()
     loop(numAnnots) {
       val typeIdx = pool.idx(data.readU2())
       val typeName = pool.utf8(typeIdx)
-      if typeDescriptors.contains(typeName) then {
-        return Some(readAnnotationArgs(typeName))
-      } else {
-        skipAnnotationArgs()
-      }
+      if typeDescriptors.contains(typeName) then
+        val args = readAnnotationArgs()
+        return Some(Annotation(typeName, args))
+      else skipAnnotationArgs()
     }
     None
   }
+
+  def readAllAnnotations()(using ds: DataStream, pool: ConstantPool): List[Annotation] =
+    val numAnnots = data.readU2()
+    val resultBuilder = List.newBuilder[Annotation]
+    loop(numAnnots) {
+      resultBuilder += readAnnotation()
+    }
+    resultBuilder.result()
+  end readAllAnnotations
+
+  def readAllParameterAnnotations()(using ds: DataStream, pool: ConstantPool): List[List[Annotation]] =
+    val numParameters = data.readU1()
+    val resultBuilder = List.newBuilder[List[Annotation]]
+    loop(numParameters) {
+      resultBuilder += readAllAnnotations()
+    }
+    resultBuilder.result()
+  end readAllParameterAnnotations
+
+  private def readAnnotation()(using ds: DataStream, pool: ConstantPool): Annotation =
+    val typeName = pool.utf8(pool.idx(data.readU2()))
+    val args = readAnnotationArgs()
+    Annotation(typeName, args)
+  end readAnnotation
+
+  private def readAnnotationArgs()(using ds: DataStream, pool: ConstantPool): IArray[(SimpleName, AnnotationValue)] =
+    val numPairs = data.readU2()
+    accumulateAnnotValues(numPairs) {
+      val nameIdx = pool.idx(data.readU2())
+      val argName = pool.utf8(nameIdx)
+      val value = readAnnotationArgument()
+      argName -> value
+    }
+  end readAnnotationArgs
+
+  private def readAnnotationArgument()(using ds: DataStream, pool: ConstantPool): AnnotationValue =
+    import AnnotationValue.Tags
+
+    def readPoolIndex(): Index = pool.idx(data.readU2())
+
+    val tag = data.readU1().toChar
+    (tag: @switch) match {
+      case Tags.Byte | Tags.Char | Tags.Double | Tags.Float | Tags.Int | Tags.Long | Tags.Short | Tags.Boolean |
+          Tags.String =>
+        AnnotationValue.Const(tag, readPoolIndex())
+      case Tags.Enum =>
+        val typeName = pool.utf8(readPoolIndex())
+        val constName = pool.utf8(readPoolIndex())
+        AnnotationValue.EnumConst(typeName, constName)
+      case Tags.Class =>
+        val descriptor = pool.utf8(readPoolIndex())
+        AnnotationValue.ClassConst(descriptor)
+      case Tags.Annotation =>
+        val annotation = readAnnotation()
+        AnnotationValue.NestedAnnotation(annotation)
+      case Tags.Array =>
+        val count = data.readU2()
+        val values = accumulateAnnotValues(count) {
+          readAnnotationArgument()
+        }
+        AnnotationValue.Arr(values)
+      case _ =>
+        throw ClassfileFormatException(s"Invalid annotation argument tag $tag")
+    }
+  end readAnnotationArgument
 
   def readInnerClasses(
     op: (SimpleName, SimpleName, SimpleName, FlagSet) => Unit
@@ -434,8 +482,8 @@ private[reader] object ClassfileReader {
     }
   }
 
-  private inline def accumulateAnnotValues(size: Int)(inline op: => AnnotationValue): IArray[AnnotationValue] = {
-    val arr = new Array[AnnotationValue](size)
+  private inline def accumulateAnnotValues[A: ClassTag](size: Int)(inline op: => A): IArray[A] = {
+    val arr = new Array[A](size)
     var i = 0
     while (i < size) {
       arr(i) = op
@@ -548,9 +596,11 @@ private[reader] object ClassfileReader {
   }
 
   enum AnnotationValue {
-    case Const(valueIdx: Index)
+    case Const(tag: Char, valueIdx: Index)
+    case EnumConst(descriptor: SimpleName, constName: SimpleName)
+    case ClassConst(descriptor: SimpleName)
+    case NestedAnnotation(annotation: Annotation)
     case Arr(values: IArray[AnnotationValue])
-    case Unknown()
   }
 
   object AnnotationValue {
@@ -571,7 +621,7 @@ private[reader] object ClassfileReader {
     }
   }
 
-  case class Annotation(tpe: SimpleName, values: IArray[AnnotationValue])
+  case class Annotation(tpe: SimpleName, values: IArray[(SimpleName, AnnotationValue)])
 
   inline def data(using data: DataStream): data.type = data
 

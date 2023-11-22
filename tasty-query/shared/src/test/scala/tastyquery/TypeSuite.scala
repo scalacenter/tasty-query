@@ -707,6 +707,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(tpe.resultType.isArrayOf(_.isRef(JavaDefinedClass)))
     }
 
+    testDef(termName("multipleArguments")) { multipleArguments =>
+      assertJavaPublic(multipleArguments)
+      val tpe = multipleArguments.declaredType.asInstanceOf[MethodType]
+      assert(clue(tpe.paramNames) == List(termName("foo"), termName("bar"), termName("foobar")))
+    }
+
     testDef(name"processBuilder") { processBuilder =>
       assertJavaPublic(processBuilder)
       val tpe = processBuilder.declaredType.asInstanceOf[MethodType]
@@ -2541,6 +2547,123 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
       testAnnotOf(t1, termName("Arg"))
       testAnnotOf(r, termName("Return"))
+    }
+  }
+
+  testWithContext("annotations-java") {
+    val JavaAnnotSingleValueClass = ctx.findTopLevelClass("javadefined.JavaAnnotSingleValue")
+    val JavaAnnotWithDefaultClass = ctx.findTopLevelClass("javadefined.JavaAnnotWithDefault")
+    val JavaAnnotMultiValuesClass = ctx.findTopLevelClass("javadefined.JavaAnnotMultiValues")
+    val JavaAnnotArrayValueClass = ctx.findTopLevelClass("javadefined.JavaAnnotArrayValue")
+    val JavaAnnotEnumValueClass = ctx.findTopLevelClass("javadefined.JavaAnnotEnumValue")
+    val JavaAnnotClassValueClass = ctx.findTopLevelClass("javadefined.JavaAnnotClassValue")
+    val JavaAnnotAnnotValueClass = ctx.findTopLevelClass("javadefined.JavaAnnotAnnotValue")
+    val JavaAnnotClassRetentionClass = ctx.findTopLevelClass("javadefined.JavaAnnotClassRetention")
+
+    val JavaAnnotationsClass = ctx.findTopLevelClass("javadefined.JavaAnnotations")
+
+    val TimeUnitModuleClass = ctx.findTopLevelModuleClass("java.util.concurrent.TimeUnit")
+
+    def ok: Unit = ()
+
+    def checkAnnotArgs(sym: TermOrTypeSymbol, annotClass: ClassSymbol)(pf: PartialFunction[List[TermTree], Unit])(
+      using munit.Location
+    ): Unit =
+      val annot = sym.getAnnotation(annotClass).getOrElse(fail(s"$sym does not have an annotation $annotClass"))
+      pf.applyOrElse(annot.arguments, args => fail("unexpected annotation arguments", clues(sym, annotClass, args)))
+    end checkAnnotArgs
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotSingleValueClass) { case List(Literal(Constant(5))) =>
+      ok
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotWithDefaultClass) { case Nil =>
+      ok
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotMultiValuesClass) {
+      case List(Literal(Constant(5)), Literal(Constant(true))) => ok
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotArrayValueClass) {
+      case List(SeqLiteral(List(Literal(Constant(2)), _, _, Literal(Constant(7))), _)) => ok
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotEnumValueClass) { case List(ident @ Ident(SimpleName("MINUTES"))) =>
+      assert(clue(ident.tpe).isRef(TimeUnitModuleClass.findDecl(termName("MINUTES"))))
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotClassValueClass) {
+      case List(Literal(const)) if const.tag == Constants.ClazzTag =>
+        assert(clue(const.typeValue).isRef(defn.ShortClass))
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotAnnotValueClass) { case List(annotTree) =>
+      val nestedAnnot = Annotation(annotTree)
+      assert(clue(nestedAnnot.symbol) == JavaAnnotSingleValueClass)
+      nestedAnnot.arguments match
+        case List(Literal(Constant(42))) => ok
+        case nestedArgs                  => fail("unexpected nested arguments", clues(nestedArgs))
+    }
+
+    checkAnnotArgs(JavaAnnotationsClass, JavaAnnotClassRetentionClass) { case Nil =>
+      ok
+    }
+
+    val annotatedField = JavaAnnotationsClass.findDecl(termName("annotatedField"))
+
+    checkAnnotArgs(annotatedField, JavaAnnotWithDefaultClass) { case List(Literal(Constant(false))) =>
+      ok
+    }
+
+    checkAnnotArgs(annotatedField, JavaAnnotMultiValuesClass) {
+      case List(Literal(Constant(true)), Literal(Constant(5))) => ok
+    }
+
+    checkAnnotArgs(annotatedField, JavaAnnotClassValueClass) {
+      case List(Literal(const)) if const.tag == Constants.ClazzTag =>
+        assert(clue(const.typeValue).isRef(ctx.findTopLevelClass("java.lang.CharSequence")))
+    }
+
+    checkAnnotArgs(annotatedField, JavaAnnotClassRetentionClass) { case Nil =>
+      ok
+    }
+
+    val annotatedMethod = JavaAnnotationsClass.findNonOverloadedDecl(termName("annotatedMethod"))
+
+    checkAnnotArgs(annotatedMethod, JavaAnnotClassValueClass) {
+      case List(Literal(const)) if const.tag == Constants.ClazzTag =>
+        assert(clue(const.typeValue).isRef(defn.UnitClass))
+    }
+
+    checkAnnotArgs(annotatedMethod, JavaAnnotClassRetentionClass) { case Nil =>
+      ok
+    }
+
+    val otherAnnotatedMethod = JavaAnnotationsClass.findNonOverloadedDecl(termName("otherAnnotatedMethod"))
+
+    checkAnnotArgs(otherAnnotatedMethod, JavaAnnotClassValueClass) {
+      case List(Literal(const)) if const.tag == Constants.ClazzTag =>
+        // Note that `isRef` only accepts a `TypeRef` of the given symbol; not an `AppliedType`
+        assert(clue(const.typeValue).isRef(ctx.findTopLevelClass("java.util.List")))
+    }
+
+    val annotatedParams = JavaAnnotationsClass.findNonOverloadedDecl(termName("annotatedParams"))
+    val List(Right(_), Left(paramSyms)) = annotatedParams.paramSymss: @unchecked
+
+    assert(clue(paramSyms(0).annotations) == Nil)
+
+    checkAnnotArgs(paramSyms(1), JavaAnnotSingleValueClass) { case List(Literal(Constant(123))) =>
+      ok
+    }
+
+    checkAnnotArgs(paramSyms(2), JavaAnnotClassValueClass) {
+      case List(Literal(const)) if const.tag == Constants.ClazzTag =>
+        assert(clue(const.typeValue).isArrayOf(_.isRef(defn.StringClass)))
+    }
+
+    checkAnnotArgs(paramSyms(2), JavaAnnotClassRetentionClass) { case Nil =>
+      ok
     }
   }
 

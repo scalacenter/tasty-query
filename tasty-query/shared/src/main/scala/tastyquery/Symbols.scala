@@ -489,7 +489,6 @@ object Symbols {
             .createNotDeclaration(name, this)
             .withFlags(EmptyFlagSet, privateWithin = None)
             .withDeclaredType(paramType)
-            .setAnnotations(Nil)
         }
         Left(paramSyms) :: autoComputeParamSymss(tpe.resultType)
 
@@ -498,7 +497,6 @@ object Symbols {
           LocalTypeParamSymbol
             .create(name, this)
             .withFlags(EmptyFlagSet, privateWithin = None)
-            .setAnnotations(Nil)
         }
         val paramSymRefs = paramSyms.map(_.localRef)
         def subst(t: TypeOrMethodic): t.ThisTypeMappableType =

@@ -38,10 +38,51 @@ private[classfiles] object JavaSignatures:
       superRef :: interfaces.map(classRef).toList
   end parseSupers
 
+  def parseReturnDescriptor(descriptor: String)(using ReaderContext, InnerClasses, Resolver): Type =
+    if descriptor == "V" then rctx.UnitType
+    else parseFieldDescriptor(descriptor)
+
+  def parseFieldDescriptor(descriptor: String)(using ReaderContext, InnerClasses, Resolver): Type =
+    def fail(): Nothing =
+      throw ClassfileFormatException(s"Not a valid field descriptor: '$descriptor'")
+
+    val len = descriptor.length()
+    var index = 0
+
+    while index < len && descriptor.charAt(index) == '[' do index += 1
+    val arrayDims = index
+
+    if index == len then fail()
+    val tag = descriptor.charAt(index)
+    index += 1
+
+    val base: Type = (tag: @switch) match
+      case 'B' => rctx.ByteType
+      case 'C' => rctx.CharType
+      case 'D' => rctx.DoubleType
+      case 'F' => rctx.FloatType
+      case 'I' => rctx.IntType
+      case 'J' => rctx.LongType
+      case 'S' => rctx.ShortType
+      case 'Z' => rctx.BooleanType
+      case 'L' =>
+        if descriptor.charAt(len - 1) != ';' then fail()
+        val binaryName = descriptor.substring(index, len - 1).nn
+        index = len
+        classRef(termName(binaryName))
+      case _ =>
+        fail()
+
+    if index != len then fail()
+
+    (0 until arrayDims).foldLeft(base)((elemType, _) => rctx.ArrayTypeOf(elemType))
+  end parseFieldDescriptor
+
   @throws[ClassfileFormatException]
   def parseSignature(
     member: TermOrTypeSymbol,
     isMethod: Boolean,
+    methodParameterNames: List[UnsignedTermName],
     signature: String,
     allRegisteredSymbols: Growable[TermOrTypeSymbol]
   )(using ReaderContext, InnerClasses, Resolver): TypeOrMethodic =
@@ -254,13 +295,20 @@ private[classfiles] object JavaSignatures:
     def termParamsRest(env: JavaSignature): List[Type] =
       readUntil(')', javaTypeSignature(env))
 
+    def uniqueParamNames(count: Int): List[UnsignedTermName] =
+      val underlying = termName("x")
+      (0 until count).toList.map(i => UniqueName(underlying, "$", i))
+
     def methodSignature: MethodicType =
       def methodRest(env: JavaSignature): MethodType =
         if consume('(') then // must have '(', ')', and return type
           val params = termParamsRest(env)
           val ret = result(env)
           val _ = readWhile('^', throwsSignatureRest(env)) // ignore throws clauses
-          MethodType((0 until params.size).map(i => termName(s"x$$$i")).toList, params, ret)
+          val paramNames =
+            if methodParameterNames.isEmpty && params.nonEmpty then uniqueParamNames(params.size)
+            else methodParameterNames
+          MethodType(paramNames, params, ret)
         else abort
       if consume('<') then
         PolyType(lookaheadTypeParamNames)(
