@@ -685,7 +685,17 @@ private[tasties] class TreeUnpickler private (
           case _     => readTypeTree
         }
       }
-    val self = readSelf
+
+    val self0 = readSelf
+    val self = self0 match
+      case Some(orig @ SelfDef(name, tpt)) if cls.name.isObjectClassTypeName && cls.owner.isClass =>
+        // Work around https://github.com/lampepfl/dotty/issues/19019: replace with a correct SELFDEF
+        val owner = cls.owner.asClass
+        val fixedTpt = TypeWrapper(TermRef(owner.thisType, cls.name.sourceObjectName))(orig.pos)
+        Some(SelfDef(name, fixedTpt)(orig.pos))
+      case _ =>
+        self0
+
     cls.withGivenSelfType(self.map(_.tpt.toType))
     // The first entry is the constructor
     val cstr = readStat.asInstanceOf[DefDef]
