@@ -134,6 +134,16 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   val NothingAnyBounds = AbstractTypeBounds(SyntacticNothingType, AnyClass.topLevelRef)
 
+  // See `case noRef: NoExternalSymbolRef` in PickleReader
+  private[tastyquery] val scala2FakeOwner: TermSymbol =
+    TermSymbol
+      .createNotDeclaration(termName("<nosymbol>"), scalaPackage)
+      .withFlags(Synthetic, None)
+      .withDeclaredType(AnyType)
+      .setAnnotations(Nil)
+      .checkCompleted()
+  end scala2FakeOwner
+
   private def createSpecialTypeAlias(
     name: TypeName,
     owner: DeclaringSymbol,

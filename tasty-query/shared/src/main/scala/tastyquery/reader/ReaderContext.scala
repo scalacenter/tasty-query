@@ -43,6 +43,8 @@ private[reader] final class ReaderContext(underlying: Context):
 
   def uninitializedMethodTermRef: TermRef = underlying.defn.uninitializedMethodTermRef
 
+  def scala2FakeOwner: TermSymbol = underlying.defn.scala2FakeOwner
+
   def findPackageFromRootOrCreate(fullyQualifiedName: PackageFullName): PackageSymbol =
     underlying.findPackageFromRootOrCreate(fullyQualifiedName)
 
