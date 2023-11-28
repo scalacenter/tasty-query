@@ -1190,7 +1190,7 @@ object Types {
             .allPackageObjectDecls()
             .iterator
             .map { cls =>
-              cls.getDecl(name) match
+              cls.getMember(name) match
                 case None       => ResolveMemberResult.NotFound
                 case Some(decl) => makeResult(decl, cls.moduleValue.get.staticRef)
             }
