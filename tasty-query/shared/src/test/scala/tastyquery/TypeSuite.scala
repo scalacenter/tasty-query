@@ -3635,4 +3635,16 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(clue(c.declaredType).isApplied(_.isRef(JCollectionClass), List(_.isBounded(_.isNothing, _.isRef(e)))))
     }
   }
+
+  testWithContext("recursive-match-types-bounds-as-seen-from-issue-401") {
+    val RecursiveMatchTypeSym =
+      ctx.findStaticType("simple_trees.RecursiveMatchType$package.RecursiveMatchType").asInstanceOf[TypeMemberSymbol]
+    val staticRef = RecursiveMatchTypeSym.staticRef
+
+    /* Here, we only make sure that calls below terminate.
+     * More elaborate resolution is tested through `WholeClasspathSuite` over `RecursiveMatchTypeTest`.
+     */
+    RecursiveMatchTypeSym.boundsAsSeenFrom(staticRef.prefix)
+    staticRef.underlying
+  }
 }

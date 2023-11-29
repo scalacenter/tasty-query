@@ -469,6 +469,8 @@ object Symbols {
       if local != null then local
       else throw new IllegalStateException(s"$this was not assigned a declared type")
 
+    private lazy val isPrefixDependent: Boolean = TypeOps.isPrefixDependent(declaredType)
+
     private[tastyquery] final def setParamSymss(paramSymss: List[ParamSymbolsClause]): this.type =
       if myParamSymss != null then throw IllegalStateException(s"reassignment of paramSymss to $this")
       myParamSymss = paramSymss
@@ -607,7 +609,8 @@ object Symbols {
       TermRef(owner.staticOwnerPrefix, this)
 
     final def typeAsSeenFrom(prefix: Prefix)(using Context): TypeOrMethodic =
-      declaredType.asSeenFrom(prefix, owner)
+      if isPrefixDependent then declaredType.asSeenFrom(prefix, owner)
+      else declaredType // fast path
 
     private def isConstructor: Boolean =
       owner.isClass && isMethod && name == nme.Constructor
@@ -731,9 +734,12 @@ object Symbols {
 
     def declaredBounds: TypeBounds
 
+    private lazy val isPrefixDependent = TypeOps.isPrefixDependent(declaredBounds)
+
     final def boundsAsSeenFrom(prefix: Prefix)(using Context): TypeBounds =
       def default: TypeBounds =
-        declaredBounds.mapBounds(_.asSeenFrom(prefix, owner))
+        if isPrefixDependent then declaredBounds.mapBounds(_.asSeenFrom(prefix, owner))
+        else declaredBounds // fast path, but also important to cut infinite recursions
 
       this match
         case sym: ClassTypeParamSymbol =>
