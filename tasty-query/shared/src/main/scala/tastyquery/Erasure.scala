@@ -55,13 +55,12 @@ private[tastyquery] object Erasure:
         else ClassRef(cls).arrayOf()
       case tpe: TypeRef =>
         tpe.optSymbol match
-          case Some(sym: TypeMemberSymbol) =>
-            sym.typeDef match
-              case TypeMemberDefinition.TypeAlias(alias)          => arrayOf(alias)
-              case TypeMemberDefinition.AbstractType(bounds)      => arrayOfBounds(bounds)
-              case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => arrayOf(alias)
+          case Some(sym: TypeMemberSymbol) if sym.isOpaqueTypeAlias =>
+            arrayOf(tpe.translucentSuperType)
           case _ =>
-            arrayOfBounds(tpe.bounds)
+            tpe.bounds match
+              case bounds: AbstractTypeBounds => arrayOfBounds(bounds)
+              case TypeAlias(alias)           => arrayOf(alias)
       case tpe: TypeParamRef    => arrayOfBounds(tpe.bounds)
       case tpe: Type            => preErase(tpe, keepUnit = false).arrayOf()
       case tpe: WildcardTypeArg => arrayOfBounds(tpe.bounds)
@@ -81,15 +80,7 @@ private[tastyquery] object Erasure:
         if !keepUnit && cls.isUnit then ClassRef(defn.ErasedBoxedUnitClass)
         else ClassRef(cls)
       case tpe: TypeRef =>
-        tpe.optSymbol match
-          case Some(sym: TypeMemberSymbol) =>
-            sym.typeDef match
-              case TypeMemberDefinition.OpaqueTypeAlias(_, alias) =>
-                preErase(alias, keepUnit)
-              case _ =>
-                preErase(tpe.underlying, keepUnit)
-          case _ =>
-            preErase(tpe.underlying, keepUnit)
+        preErase(tpe.translucentSuperType, keepUnit)
       case tpe: SingletonType =>
         preErase(tpe.underlying, keepUnit)
       case tpe: TypeParamRef =>

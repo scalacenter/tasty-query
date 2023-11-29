@@ -211,6 +211,16 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
     assertSigned(mOpaqueWithBounds, "(scala.Null):scala.Null")
   }
 
+  testWithContext("path-dependent-opaque-type-alias") {
+    val PathDependentOpaqueBarClass = ctx.findStaticClass("simple_trees.PathDependentOpaque.Bar")
+
+    val bar = PathDependentOpaqueBarClass.findNonOverloadedDecl(termName("bar"))
+    assertSigned(bar, "(java.lang.String):scala.Unit")
+
+    val get = PathDependentOpaqueBarClass.findNonOverloadedDecl(termName("get"))
+    assertSigned(get, "():java.lang.String")
+  }
+
   testWithContext("scala2-case-class-varargs") {
     val StringContext = ctx.findTopLevelClass("scala.StringContext")
 
