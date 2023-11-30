@@ -7,3 +7,10 @@ object MyFlags:
   val Private: MyFlags = new MyFlags(1L << 0)
 
   def mergeAll(xs: Array[MyFlags]): MyFlags = xs.reduce(_.merge(_))
+end MyFlags
+
+object MyFlagsTest:
+  def test(): Unit =
+    MyFlags.mergeAll(Array(MyFlags.Private))
+  end test
+end MyFlagsTest

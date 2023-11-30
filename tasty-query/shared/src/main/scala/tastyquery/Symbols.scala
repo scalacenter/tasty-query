@@ -1005,11 +1005,12 @@ object Symbols {
       specialKind == SpecialKind.None && isValueClass
 
     def isPrimitiveValueClass: Boolean =
-      specialKind == SpecialKind.Unit || specialKind == SpecialKind.NonUnitPrimitive
+      specialKind >= SpecialKind.FirstPrimitive && specialKind <= SpecialKind.LastPrimitive
 
     def isTupleNClass: Boolean = specialKind == SpecialKind.TupleN
 
     private[tastyquery] def isAny: Boolean = specialKind == SpecialKind.Any
+    private[tastyquery] def isMatchable: Boolean = specialKind == SpecialKind.Matchable
     private[tastyquery] def isObject: Boolean = specialKind == SpecialKind.Object
     private[tastyquery] def isAnyVal: Boolean = specialKind == SpecialKind.AnyVal
     private[tastyquery] def isUnit: Boolean = specialKind == SpecialKind.Unit
@@ -1199,6 +1200,19 @@ object Symbols {
         case _ =>
           ErasedTypeRef.ClassRef(this)
     end computeErasure
+
+    private[tastyquery] final def boxedClass(using Context): ClassSymbol = specialKind match
+      case SpecialKind.Unit    => defn.ErasedBoxedUnitClass
+      case SpecialKind.Boolean => defn.BoxedBooleanClass
+      case SpecialKind.Char    => defn.BoxedCharClass
+      case SpecialKind.Byte    => defn.BoxedByteClass
+      case SpecialKind.Short   => defn.BoxedShortClass
+      case SpecialKind.Int     => defn.BoxedIntClass
+      case SpecialKind.Long    => defn.BoxedLongClass
+      case SpecialKind.Float   => defn.BoxedFloatClass
+      case SpecialKind.Double  => defn.BoxedDoubleClass
+      case _                   => this
+    end boxedClass
 
     // DeclaringSymbol implementation
 
@@ -1671,21 +1685,31 @@ object Symbols {
       inline val Object = 3
       inline val AnyVal = 4
       inline val Unit = 5
-      inline val NonUnitPrimitive = 6
-      inline val String = 7
-      inline val Null = 8
-      inline val Singleton = 9
-      inline val Array = 10
-      inline val PolyFunction = 11
-      inline val Tuple = 12
-      inline val NonEmptyTuple = 13
-      inline val TupleCons = 14
-      inline val EmptyTuple = 15
-      inline val FunctionN = 16
-      inline val ContextFunctionN = 17
-      inline val TupleN = 18
-      inline val JavaEnum = 19
-      inline val Refinement = 20
+      inline val Boolean = 6
+      inline val Char = 7
+      inline val Byte = 8
+      inline val Short = 9
+      inline val Int = 10
+      inline val Long = 11
+      inline val Float = 12
+      inline val Double = 13
+      inline val String = 14
+      inline val Null = 15
+      inline val Singleton = 16
+      inline val Array = 17
+      inline val PolyFunction = 18
+      inline val Tuple = 19
+      inline val NonEmptyTuple = 20
+      inline val TupleCons = 21
+      inline val EmptyTuple = 22
+      inline val FunctionN = 23
+      inline val ContextFunctionN = 24
+      inline val TupleN = 25
+      inline val JavaEnum = 26
+      inline val Refinement = 27
+
+      inline val FirstPrimitive = Unit
+      inline val LastPrimitive = Double
     end SpecialKind
 
     private def computeSpecialKind(name: ClassTypeName, owner: Symbol): SpecialKind =
@@ -1700,14 +1724,14 @@ object Symbols {
                     case tpnme.Matchable     => SpecialKind.Matchable
                     case tpnme.AnyVal        => SpecialKind.AnyVal
                     case tpnme.Unit          => SpecialKind.Unit
-                    case tpnme.Boolean       => SpecialKind.NonUnitPrimitive
-                    case tpnme.Char          => SpecialKind.NonUnitPrimitive
-                    case tpnme.Byte          => SpecialKind.NonUnitPrimitive
-                    case tpnme.Short         => SpecialKind.NonUnitPrimitive
-                    case tpnme.Int           => SpecialKind.NonUnitPrimitive
-                    case tpnme.Long          => SpecialKind.NonUnitPrimitive
-                    case tpnme.Float         => SpecialKind.NonUnitPrimitive
-                    case tpnme.Double        => SpecialKind.NonUnitPrimitive
+                    case tpnme.Boolean       => SpecialKind.Boolean
+                    case tpnme.Char          => SpecialKind.Char
+                    case tpnme.Byte          => SpecialKind.Byte
+                    case tpnme.Short         => SpecialKind.Short
+                    case tpnme.Int           => SpecialKind.Int
+                    case tpnme.Long          => SpecialKind.Long
+                    case tpnme.Float         => SpecialKind.Float
+                    case tpnme.Double        => SpecialKind.Double
                     case tpnme.Null          => SpecialKind.Null
                     case tpnme.Singleton     => SpecialKind.Singleton
                     case tpnme.Array         => SpecialKind.Array

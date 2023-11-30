@@ -7,3 +7,12 @@ object MyArrayOps:
   def genericArrayOps[T](xs: Array[T]): MyArrayOps[T] = new MyArrayOps(xs)
 
   def arrayOfIntArrayOps(xss: Array[Array[Int]]): Array[MyArrayOps[Int]] = xss.map(intArrayOps)
+end MyArrayOps
+
+object MyArrayOpsTest:
+  def test(): Unit =
+    MyArrayOps.intArrayOps(Array(1))
+    MyArrayOps.genericArrayOps(Array("foo"))
+    MyArrayOps.arrayOfIntArrayOps(Array(Array(1)))
+  end test
+end MyArrayOpsTest

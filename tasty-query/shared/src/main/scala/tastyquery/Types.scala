@@ -130,25 +130,16 @@ object Types {
       case ClassRef(cls)                  => cls.signatureName.toString()
       case ArrayTypeRef(base, dimensions) => base.toString() + "[]" * dimensions
 
-    def arrayOf(): ArrayTypeRef = this match
-      case classRef: ClassRef             => ArrayTypeRef(classRef, 1)
-      case ArrayTypeRef(base, dimensions) => ArrayTypeRef(base, dimensions + 1)
+    def arrayOf(): ArrayTypeRef = multiArrayOf(dims = 1)
+
+    private[tastyquery] def multiArrayOf(dims: Int): ArrayTypeRef = this match
+      case classRef: ClassRef             => ArrayTypeRef(classRef, dims)
+      case ArrayTypeRef(base, dimensions) => ArrayTypeRef(base, dimensions + dims)
 
     /** The `SignatureName` for this `ErasedTypeRef` as found in the `TermSig`s of `Signature`s. */
-    def toSigFullName: SignatureName = this match
-      case ClassRef(cls) =>
-        cls.signatureName
-
-      case ArrayTypeRef(base, dimensions) =>
-        val suffix = "[]" * dimensions
-        val baseName = base.cls.signatureName
-        val suffixedLast = baseName.items.last match
-          case ObjectClassName(baseModuleName) =>
-            baseModuleName.append(suffix).withObjectSuffix
-          case last: SimpleName =>
-            last.append(suffix)
-        SignatureName(baseName.items.init :+ suffixedLast)
-    end toSigFullName
+    @deprecated("is is not a meaningful operation; it does not compute the right SignatureName's", since = "1.1.1")
+    def toSigFullName: SignatureName =
+      Signature.toSigName(this)
   end ErasedTypeRef
 
   object ErasedTypeRef:
