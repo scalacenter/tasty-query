@@ -1312,7 +1312,7 @@ object Types {
     private[tastyquery] override def translucentSuperType(using Context): Type = optSymbol match
       case Some(sym: TypeMemberSymbol) =>
         sym.typeDef match
-          case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => alias
+          case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => alias.asSeenFrom(prefix, sym.owner)
           case _                                              => underlying
       case _ =>
         underlying
