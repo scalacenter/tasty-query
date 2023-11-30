@@ -199,13 +199,13 @@ object Symbols {
     final def asPackage: PackageSymbol = this.asInstanceOf[PackageSymbol]
 
     final def hasAnnotation(annotClass: ClassSymbol)(using Context): Boolean =
-      annotations.exists(_.symbol == annotClass)
+      annotations.exists(_.safeHasSymbol(annotClass))
 
     final def getAnnotations(annotClass: ClassSymbol)(using Context): List[Annotation] =
-      annotations.filter(_.symbol == annotClass)
+      annotations.filter(_.safeHasSymbol(annotClass))
 
     final def getAnnotation(annotClass: ClassSymbol)(using Context): Option[Annotation] =
-      annotations.find(_.symbol == annotClass)
+      annotations.find(_.safeHasSymbol(annotClass))
 
     override def toString: String = {
       val ownerPrefix = owner match
