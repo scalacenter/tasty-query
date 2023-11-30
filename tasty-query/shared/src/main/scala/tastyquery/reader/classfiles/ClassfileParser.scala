@@ -329,6 +329,18 @@ private[reader] object ClassfileParser {
       else if cls.isString then rctx.createStringMagicMethods(cls)
       else if cls.isJavaEnum then rctx.createEnumMagicMethods(cls)
 
+    // Synthesize a constructor for interfaces
+    if cls.isTrait then
+      val ctor = TermSymbol
+        .create(nme.Constructor, cls)
+        .withDeclaredType(cls.makePolyConstructorType(MethodType(Nil, Nil, rctx.UnitType)))
+        .withFlags(Method | JavaDefined, None)
+        .setAnnotations(Nil)
+        .autoFillParamSymss()
+      ctor.paramSymss.foreach(_.merge.foreach(_.setAnnotations(Nil)))
+      allRegisteredSymbols += ctor
+    end if
+
     loadMembers()
 
     val annotations = readAnnotations(cls, attributes)
