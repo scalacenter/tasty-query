@@ -393,8 +393,13 @@ private[tastyquery] object Printers:
         print(")")
 
       case InlineMatch(selector, cases) =>
-        print("inline ")
-        print(InlineMatch(selector, cases)(tree.pos))
+        print("(inline ")
+        selector match
+          case Some(sel) => print(sel)
+          case None      => print("_")
+        print(" match")
+        printBlock(cases)(print(_))
+        print(")")
 
       case SeqLiteral(elems, elemtpt) =>
         print("[")

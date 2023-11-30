@@ -113,8 +113,8 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
-          // !!! Compatibility breach, but there was no way someone could have maningfully extended `Constant`
-          ProblemFilters.exclude[FinalClassProblem]("tastyquery.Constants$Constant"),
+          // private, not an issue
+          ProblemFilters.exclude[MissingClassProblem]("tastyquery.TypeOps$TypeFold"),
           // Everything in tastyquery.reader is private[tastyquery] at most
           ProblemFilters.exclude[Problem]("tastyquery.reader.*"),
         )
@@ -126,10 +126,6 @@ lazy val tastyQuery =
         prev
           .withMoreArtifactPrivatePackages(java.util.Arrays.asList(
             "tastyquery",
-          ))
-          .withMoreProblemFilters(java.util.Arrays.asList(
-            // !!! Compatibility breach, but there was no way someone could have maningfully extended `Constant`
-            ProblemMatcher.make(ProblemKind.RestrictedOpenLevelChange, "tastyquery.Constants.Constant"),
           ))
       },
     )

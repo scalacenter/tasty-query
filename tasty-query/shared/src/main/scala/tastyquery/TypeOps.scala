@@ -6,6 +6,15 @@ import tastyquery.Types.*
 import tastyquery.TypeMaps.*
 
 private[tastyquery] object TypeOps:
+  /** Is the given type dependent at all on the prefix it will be seen from?
+    *
+    * In other words, does it contain any `ThisType`?
+    *
+    * If not, there is no need to map it through `asSeenFrom`.
+    */
+  def isPrefixDependent(tp: TypeMappable): Boolean =
+    existsPart(tp)(_.isInstanceOf[ThisType])
+
   def asSeenFrom(tp: TypeOrMethodic, pre: Prefix, cls: Symbol)(using Context): tp.ThisTypeMappableType =
     pre match
       case NoPrefix | _: PackageRef        => tp
@@ -82,6 +91,69 @@ private[tastyquery] object TypeOps:
       super.expandBounds(tp)
     }
   }
+
+  // Folds over types
+
+  def existsPart(tp: TypeMappable)(p: TypeMappable => Boolean): Boolean =
+    new TypeFold[Boolean] {
+      override def apply(z: Boolean, tp: TypeMappable): Boolean =
+        z || p(tp) || super.apply(z, tp)
+    }.apply(false, tp)
+  end existsPart
+
+  private class TypeFold[A] extends ((A, TypeMappable) => A):
+    def apply(z: A, tp: TypeMappable): A = tp match
+      case NoPrefix | _: PackageRef =>
+        z
+
+      case _: NothingType | _: AnyKindType | _: ThisType | _: ConstantType | _: ParamRef | _: RecThis =>
+        z
+      case tp: NamedType =>
+        apply(z, tp.prefix)
+      case tp: SuperType =>
+        apply(z, tp.thistpe)
+      case tp: AppliedType =>
+        tp.args.foldLeft(apply(z, tp.tycon))(this)
+      case tp: ByNameType =>
+        apply(z, tp.resultType)
+      case tp: RepeatedType =>
+        apply(z, tp.elemType)
+      case tp: LambdaType =>
+        apply(tp.paramInfos.foldLeft(z)(this), tp.resultType)
+      case tp: AnnotatedType =>
+        apply(z, tp.typ)
+      case tp: TypeRefinement =>
+        apply(apply(z, tp.parent), tp.refinedBounds)
+      case tp: TermRefinement =>
+        apply(apply(z, tp.parent), tp.refinedType)
+      case tp: RecType =>
+        apply(z, tp.parent)
+      case tp: MatchType =>
+        val z1 = apply(apply(z, tp.bound), tp.scrutinee)
+        tp.cases.foldLeft(z1)(apply(_, _))
+      case tp: SkolemType =>
+        apply(z, tp.tpe)
+      case tp: OrType =>
+        apply(apply(z, tp.first), tp.second)
+      case tp: AndType =>
+        apply(apply(z, tp.first), tp.second)
+
+      case tp: WildcardTypeArg =>
+        apply(z, tp.bounds)
+
+      case AbstractTypeBounds(low, high) =>
+        apply(apply(z, low), high)
+      case TypeAlias(alias) =>
+        apply(z, alias)
+
+      case tp: CustomTransientGroundType =>
+        throw IllegalArgumentException(s"Unexpected custom transient type: $tp")
+    end apply
+
+    def apply(z: A, caze: MatchTypeCase): A =
+      val z1 = caze.paramTypeBounds.foldLeft(z)(this)
+      apply(apply(z1, caze.pattern), caze.result)
+  end TypeFold
 
   // Tests around `matches`
 
