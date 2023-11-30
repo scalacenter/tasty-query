@@ -13,6 +13,7 @@ import tastyquery.Types.*
 object Annotations:
   final class Annotation(val tree: TermTree):
     private var mySymbol: ClassSymbol | Null = null
+    private var mySafeSymbol: Option[ClassSymbol] | Null = null
     private var myArguments: List[TermTree] | Null = null
 
     /** The annotation class symbol. */
@@ -22,8 +23,26 @@ object Annotations:
       else
         val computed = computeAnnotSymbol(tree)
         mySymbol = computed
+        mySafeSymbol = Some(computed)
         computed
     end symbol
+
+    /** Tests whether the annotation has the given class symbol.
+      *
+      * If the class of this annotation cannot be successfully resolved, returns `false`.
+      */
+    private[tastyquery] def safeHasSymbol(cls: ClassSymbol)(using Context): Boolean =
+      val safeSymbol =
+        val local = mySafeSymbol
+        if local != null then local
+        else
+          val local = computeSafeAnnotSymbol(tree)
+          local.foreach(mySymbol = _)
+          mySafeSymbol = local
+          local
+
+      safeSymbol.contains(cls)
+    end safeHasSymbol
 
     /** The symbol of the constructor used in the annotation.
       *
@@ -137,6 +156,14 @@ object Annotations:
       throw InvalidProgramStructureException(s"Illegal annotation class type ${tpt.toType} in $tree")
     }
   end computeAnnotSymbol
+
+  private def computeSafeAnnotSymbol(tree: TermTree)(using Context): Option[ClassSymbol] =
+    // This is not a very efficient way to deal with this, but I don't really see a good solution
+    try Some(computeAnnotSymbol(tree))
+    catch
+      case _: MemberNotFoundException =>
+        None
+  end computeSafeAnnotSymbol
 
   private def findNewAnnotTypeTree(tree: TermTree): TypeTree =
     def invalid(): Nothing =
