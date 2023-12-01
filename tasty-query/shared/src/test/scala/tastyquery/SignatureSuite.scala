@@ -282,13 +282,47 @@ class SignatureSuite extends UnrestrictedUnpicklingSuite:
   testWithContext("value-class-monomorphic-arrayOf") {
     val MyFlags = ctx.findTopLevelModuleClass("inheritance.MyFlags")
     val mergeAll = MyFlags.findNonOverloadedDecl(name"mergeAll")
-    assertSigned(mergeAll, "(inheritance.MyFlags[]):scala.Long")
+    assertSigned(mergeAll, "(scala.Long[]):scala.Long")
   }
 
   testWithContext("value-class-polymorphic-arrayOf") {
     val MyArrayOps = ctx.findTopLevelModuleClass("inheritance.MyArrayOps")
     val arrayOfIntArrayOps = MyArrayOps.findNonOverloadedDecl(name"arrayOfIntArrayOps")
-    assertSigned(arrayOfIntArrayOps, "(scala.Int[][]):inheritance.MyArrayOps[]")
+    assertSigned(arrayOfIntArrayOps, "(scala.Int[][]):java.lang.Object[]")
+  }
+
+  testWithContext("value-class-dependent") {
+    val ValueClassWithDependentErasureClass = ctx.findTopLevelModuleClass("simple_trees.ValueClassWithDependentErasure")
+
+    val ofGeneric = ValueClassWithDependentErasureClass.findNonOverloadedDecl(termName("ofGeneric"))
+    assertSigned(ofGeneric, "(1,java.lang.Object):java.lang.Object")
+
+    val ofString = ValueClassWithDependentErasureClass.findNonOverloadedDecl(termName("ofString"))
+    assertSigned(ofString, "(java.lang.String):java.lang.String")
+
+    val ofInt = ValueClassWithDependentErasureClass.findNonOverloadedDecl(termName("ofInt"))
+    assertSigned(ofInt, "(java.lang.Integer):scala.Int")
+
+    val arrayOfGeneric = ValueClassWithDependentErasureClass.findNonOverloadedDecl(termName("arrayOfGeneric"))
+    assertSigned(arrayOfGeneric, "(1,java.lang.Object[]):java.lang.Object")
+
+    val arrayOfString = ValueClassWithDependentErasureClass.findNonOverloadedDecl(termName("arrayOfString"))
+    assertSigned(arrayOfString, "(java.lang.Object[]):java.lang.String")
+
+    val arrayOfInt = ValueClassWithDependentErasureClass.findNonOverloadedDecl(termName("arrayOfInt"))
+    assertSigned(arrayOfInt, "(java.lang.Object[]):scala.Int")
+
+    val ofGenericArray = ValueClassWithDependentErasureClass.findNonOverloadedDecl(termName("ofGenericArray"))
+    assertSigned(ofGenericArray, "(1,java.lang.Object):java.lang.Object")
+
+    val ofGenericSeqArray = ValueClassWithDependentErasureClass.findNonOverloadedDecl(termName("ofGenericSeqArray"))
+    assertSigned(ofGenericSeqArray, "(1,scala.collection.immutable.Seq[]):scala.collection.immutable.Seq[]")
+
+    val ofStringArray = ValueClassWithDependentErasureClass.findNonOverloadedDecl(termName("ofStringArray"))
+    assertSigned(ofStringArray, "(java.lang.String[]):java.lang.String[]")
+
+    val ofIntArray = ValueClassWithDependentErasureClass.findNonOverloadedDecl(termName("ofIntArray"))
+    assertSigned(ofIntArray, "(scala.Int[]):scala.Int[]")
   }
 
   testWithContext("package-ref-from-tasty") {

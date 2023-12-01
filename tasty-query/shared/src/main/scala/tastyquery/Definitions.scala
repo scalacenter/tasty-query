@@ -396,6 +396,15 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   lazy val CharClass = scalaPackage.requiredClass("Char")
   lazy val UnitClass = scalaPackage.requiredClass("Unit")
 
+  private[tastyquery] lazy val BoxedBooleanClass = javaLangPackage.requiredClass("Boolean")
+  private[tastyquery] lazy val BoxedCharClass = javaLangPackage.requiredClass("Character")
+  private[tastyquery] lazy val BoxedByteClass = javaLangPackage.requiredClass("Byte")
+  private[tastyquery] lazy val BoxedShortClass = javaLangPackage.requiredClass("Short")
+  private[tastyquery] lazy val BoxedIntClass = javaLangPackage.requiredClass("Integer")
+  private[tastyquery] lazy val BoxedLongClass = javaLangPackage.requiredClass("Long")
+  private[tastyquery] lazy val BoxedFloatClass = javaLangPackage.requiredClass("Float")
+  private[tastyquery] lazy val BoxedDoubleClass = javaLangPackage.requiredClass("Double")
+
   lazy val StringClass = javaLangPackage.requiredClass("String")
 
   lazy val ProductClass = scalaPackage.requiredClass("Product")

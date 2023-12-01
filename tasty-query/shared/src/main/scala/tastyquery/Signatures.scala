@@ -4,6 +4,7 @@ import tastyquery.Contexts.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Types.*
+import tastyquery.Types.ErasedTypeRef.*
 
 object Signatures:
   enum ParamSig:
@@ -27,6 +28,24 @@ object Signatures:
   end Signature
 
   object Signature {
+    private def sigName(tpe: Type, language: SourceLanguage, keepUnit: Boolean)(using Context): SignatureName =
+      toSigName(Erasure.eraseForSigName(tpe, language, keepUnit))
+
+    private[tastyquery] def toSigName(typeRef: ErasedTypeRef): SignatureName = typeRef match
+      case ClassRef(cls) =>
+        cls.signatureName
+
+      case ArrayTypeRef(base, dimensions) =>
+        val suffix = "[]" * dimensions
+        val baseName = base.cls.signatureName
+        val suffixedLast = baseName.items.last match
+          case ObjectClassName(baseModuleName) =>
+            baseModuleName.append(suffix).withObjectSuffix
+          case last: SimpleName =>
+            last.append(suffix)
+        SignatureName(baseName.items.init :+ suffixedLast)
+    end toSigName
+
     private[tastyquery] def fromType(
       info: TypeOrMethodic,
       language: SourceLanguage,
@@ -35,14 +54,15 @@ object Signatures:
       def rec(info: TypeOrMethodic, acc: List[ParamSig]): Signature =
         info match {
           case info: MethodType =>
-            val erased = info.paramTypes.map(tpe => ParamSig.Term(ErasedTypeRef.erase(tpe, language).toSigFullName))
-            rec(info.resultType, acc ::: erased)
+            val paramSigs = info.paramTypes.map(tpe => ParamSig.Term(sigName(tpe, language, keepUnit = false)))
+            rec(info.resultType, acc ::: paramSigs)
           case info: PolyType =>
-            rec(info.resultType, acc ::: ParamSig.TypeLen(info.paramTypeBounds.length) :: Nil)
+            val typeLenSig = ParamSig.TypeLen(info.paramTypeBounds.length)
+            rec(info.resultType, acc ::: typeLenSig :: Nil)
           case tpe: Type =>
             val retType = optCtorReturn.map(_.appliedRefInsideThis).getOrElse(tpe)
-            val erasedRetType = ErasedTypeRef.erase(retType, language, keepUnit = true)
-            Signature(acc, erasedRetType.toSigFullName)
+            val resSig = sigName(retType, language, keepUnit = true)
+            Signature(acc, resSig)
         }
 
       rec(info, Nil)
