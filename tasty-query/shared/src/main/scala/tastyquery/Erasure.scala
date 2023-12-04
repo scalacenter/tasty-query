@@ -41,23 +41,29 @@ private[tastyquery] object Erasure:
     finishErase(patchedPreErased)
   end eraseForSigName
 
+  /** The pre-erasure of a value class.
+    *
+    * It primarily represents the underlying erased type. However, it also
+    * remembers the originating value class symbol. Different fields are used
+    * in different contexts:
+    *
+    * - Normally, the `underlying` type is used.
+    * - As the argument of `Array`s, the `valueClass` is used instead.
+    * - In `erasedGlb`, the `valueClass` is used for the *ordering* criteria,
+    *   but the `underlying` type is used for the actual erasure.
+    */
   private final case class ErasedValueClass(valueClass: ClassSymbol, underlying: ErasedTypeRef)
 
   private type PreErasedTypeRef = ErasedTypeRef | ErasedValueClass
 
-  /** First pass of erasure, where some special types are preserved as is,
-    * and where value classes become `ErasedValueClass`es.
-    *
-    * In particular, `Any` is preserved as `Any`, instead of becoming
-    * `java.lang.Object`.
-    */
+  /** First pass of erasure, where where value classes become `ErasedValueClass`es. */
   private def preErase(tpe: Type, keepUnit: Boolean)(using Context, SourceLanguage): PreErasedTypeRef =
     def arrayOf(tpe: TypeOrWildcard): ErasedTypeRef =
-      if isGenericArrayElement(tpe) then ClassRef(defn.ObjectClass)
+      if isGenericArrayElement(tpe) then defn.ObjectClass.erasure
       else
         preErase(tpe.highIfWildcard, keepUnit = false) match
           case base: ErasedTypeRef             => base.arrayOf()
-          case ErasedValueClass(valueClass, _) => ClassRef(valueClass).arrayOf()
+          case ErasedValueClass(valueClass, _) => valueClass.erasure.arrayOf()
 
     tpe match
       case tpe: AppliedType =>
@@ -67,13 +73,13 @@ private[tastyquery] object Erasure:
               val List(targ) = tpe.args: @unchecked
               arrayOf(targ)
             else if cls.isDerivedValueClass then preErasePolyValueClass(cls, tpe.args)
-            else ClassRef(cls)
+            else cls.erasure
           case _ =>
             preErase(tpe.translucentSuperType, keepUnit)
       case TypeRef.OfClass(cls) =>
-        if !keepUnit && cls.isUnit then ClassRef(defn.ErasedBoxedUnitClass)
+        if !keepUnit && cls.isUnit then defn.ErasedBoxedUnitClass.erasure
         else if cls.isDerivedValueClass then preEraseMonoValueClass(cls)
-        else ClassRef(cls)
+        else cls.erasure
       case tpe: TypeRef =>
         preErase(tpe.translucentSuperType, keepUnit)
       case tpe: SingletonType =>
@@ -100,7 +106,7 @@ private[tastyquery] object Erasure:
       case tpe: AnnotatedType =>
         preErase(tpe.typ, keepUnit)
       case tpe @ defn.PolyFunctionType(mt) =>
-        ClassRef(defn.PolyFunctionType.functionClassOf(mt))
+        defn.PolyFunctionType.functionClassOf(mt).erasure
       case tpe: RefinedType =>
         preErase(tpe.parent, keepUnit)
       case tpe: RecType =>
@@ -120,9 +126,8 @@ private[tastyquery] object Erasure:
 
   private def finishErase(typeRef: PreErasedTypeRef)(using Context, SourceLanguage): ErasedTypeRef =
     typeRef match
-      case ClassRef(cls)                           => cls.erasure
-      case ArrayTypeRef(ClassRef(cls), dimensions) => ArrayTypeRef(cls.erasure, dimensions)
-      case ErasedValueClass(_, underlying)         => finishErase(underlying)
+      case typeRef: ErasedTypeRef          => typeRef
+      case ErasedValueClass(_, underlying) => finishErase(underlying)
   end finishErase
 
   private def preEraseMonoValueClass(cls: ClassSymbol)(using Context, SourceLanguage): ErasedValueClass =
@@ -181,7 +186,7 @@ private[tastyquery] object Erasure:
      */
     val erasedValueClass =
       if isPrimitive(erasedSpecializedUnderlying) && !isPrimitive(erasedGenericUnderlying) then
-        ClassRef(erasedSpecializedUnderlying.asInstanceOf[ClassRef].cls.boxedClass)
+        erasedSpecializedUnderlying.asInstanceOf[ClassRef].cls.boxedClass.erasure
       else if genericUnderlying.baseType(defn.ArrayClass).isDefined then erasedGenericUnderlying
       else erasedSpecializedUnderlying
 
@@ -286,16 +291,16 @@ private[tastyquery] object Erasure:
     * which leads to more predictable bytecode and (?) faster dynamic dispatch.
     */
   private def erasedLub(tp1: ErasedTypeRef, tp2: ErasedTypeRef)(using Context): ErasedTypeRef =
-    def erasedObject: ClassRef = ClassRef(defn.ObjectClass)
+    def erasedObject: ClassRef = defn.ObjectClass.erasure
 
     (tp1, tp2) match
       case (ClassRef(cls1), ClassRef(cls2)) =>
-        ClassRef(erasedClassRefLub(cls1, cls2))
+        erasedClassRefLub(cls1, cls2).erasure
       case (ArrayTypeRef(ClassRef(base1), dims1), ArrayTypeRef(ClassRef(base2), dims2)) =>
         if dims1 != dims2 then erasedObject
         else if base1 == base2 then tp1
         else if base1.isPrimitiveValueClass || base2.isPrimitiveValueClass then erasedObject
-        else ArrayTypeRef(ClassRef(erasedClassRefLub(base1, base2)), dims1)
+        else ArrayTypeRef(erasedClassRefLub(base1, base2).erasure, dims1)
       case (ClassRef(cls1), tp2: ArrayTypeRef) =>
         if cls1 == defn.ErasedNothingClass || cls1.isNull then tp2
         else erasedObject
