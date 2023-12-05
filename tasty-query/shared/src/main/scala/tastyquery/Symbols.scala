@@ -705,7 +705,7 @@ object Symbols {
     type DefiningTreeType <: TypeDef | TypeTreeBind
     type MatchingSymbolType = TypeSymbol
 
-    if name.toTermName.isInstanceOf[UniqueName] && !this.isInstanceOf[LocalTypeParamSymbol] then
+    if name.toTermName.isInstanceOf[UniqueName] && !this.isInstanceOf[TypeParamSymbol] then
       throw UnsupportedOperationException(s"${this.displayFullName: @unchecked} -- ${name.toDebugString}")
 
     override final def localRef: TypeRef =
