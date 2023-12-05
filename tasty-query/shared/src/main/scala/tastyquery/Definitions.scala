@@ -110,14 +110,15 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     owner: ClassSymbol,
     name: UnsignedTermName,
     tpe: TypeOrMethodic,
-    flags: FlagSet = EmptyFlagSet
+    flags: FlagSet = EmptyFlagSet,
+    termParamFlags: FlagSet = EmptyFlagSet
   ): TermSymbol =
     val sym = TermSymbol
       .create(name, owner)
       .withFlags(Method | flags, privateWithin = None)
       .withDeclaredType(tpe)
       .setAnnotations(Nil)
-      .autoFillParamSymss()
+      .autoFillParamSymss(termParamFlags)
     sym.paramSymss.foreach(_.merge.foreach(_.setAnnotations(Nil)))
     sym.checkCompleted()
     sym
@@ -295,20 +296,49 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     * cannot read other files while loading one file.
     */
   private[tastyquery] def createPredefMagicMethods(cls: ClassSymbol): Unit =
-    val nnMethodType = PolyType(List(typeName("T")))(
-      _ => List(NothingAnyBounds),
-      pt => MethodType(List(termName("x")))(_ => List(pt.paramRefs(0)), mt => AndType(mt.paramRefs(0), pt.paramRefs(0)))
+    val TNameList = List(typeName("T"))
+    val xNameList = List(termName("x"))
+    val yNameList = List(termName("y"))
+
+    val NothingAnyBoundsList = List(NothingAnyBounds)
+
+    // assert
+    val assertMethodType1 = MethodType(List(termName("assertion")), List(BooleanType), UnitType)
+    val assertMethodType2 =
+      MethodType(List(termName("assertion"), termName("message")), List(BooleanType, ByNameType(AnyType)), UnitType)
+    for assertMethodType <- List(assertMethodType1, assertMethodType2) do
+      createSpecialMethod(
+        cls,
+        termName("assert"),
+        assertMethodType,
+        Transparent | Inline | Final,
+        termParamFlags = Inline
+      )
+
+    // valueOf
+    val valueOfMethodType = PolyType(TNameList)(_ => NothingAnyBoundsList, pt => pt.paramRefs(0))
+    createSpecialMethod(cls, termName("valueOf"), valueOfMethodType, Inline | Final)
+
+    // summon
+    val summonMethodType = PolyType(TNameList)(
+      _ => NothingAnyBoundsList,
+      pt => MethodType(xNameList)(_ => pt.paramRefs, mt => mt.paramRefs(0))
+    )
+    createSpecialMethod(cls, termName("summon"), summonMethodType, Transparent | Inline | Final, termParamFlags = Given)
+
+    // nn
+    val nnMethodType = PolyType(TNameList)(
+      _ => NothingAnyBoundsList,
+      pt => MethodType(xNameList)(_ => List(pt.paramRefs(0)), mt => AndType(mt.paramRefs(0), pt.paramRefs(0)))
     )
     createSpecialMethod(cls, termName("nn"), nnMethodType, Inline | Final | Extension)
 
+    // eq and ne
     val anyRefOrNull = OrType(AnyRefType, NullType)
-    val eqNeMethodType = MethodType(
-      List(termName("x")),
-      List(anyRefOrNull),
-      MethodType(List(termName("y")), List(anyRefOrNull), BooleanType)
-    )
-    createSpecialMethod(cls, termName("eq"), eqNeMethodType, Inline | Final | Extension)
-    createSpecialMethod(cls, termName("ne"), eqNeMethodType, Inline | Final | Extension)
+    val eqNeMethodType =
+      MethodType(xNameList, List(anyRefOrNull), MethodType(yNameList, List(anyRefOrNull), BooleanType))
+    createSpecialMethod(cls, termName("eq"), eqNeMethodType, Inline | Final | Extension, termParamFlags = Inline)
+    createSpecialMethod(cls, termName("ne"), eqNeMethodType, Inline | Final | Extension, termParamFlags = Inline)
   end createPredefMagicMethods
 
   /** Creates one of the `ContextFunctionNClass` classes.
