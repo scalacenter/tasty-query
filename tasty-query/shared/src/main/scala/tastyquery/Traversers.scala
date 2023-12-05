@@ -118,6 +118,7 @@ object Traversers:
         traverse(expr)
       case Inlined(expr, caller, bindings) =>
         traverse(expr)
+        traverse(caller)
         traverse(bindings)
       case _: ImportIdent | _: Ident | _: This | _: Literal =>
         ()
