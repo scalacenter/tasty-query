@@ -477,38 +477,42 @@ object Symbols {
       this
 
     private[tastyquery] final def autoFillParamSymss(): this.type =
-      setParamSymss(autoComputeParamSymss(declaredType))
+      setParamSymss(autoComputeParamSymss(declaredType, termParamFlags = EmptyFlagSet))
 
-    private def autoComputeParamSymss(tpe: TypeOrMethodic): List[ParamSymbolsClause] = tpe match
-      case tpe: MethodType =>
-        /* For term params, we do not instantiate the paramTypes.
-         * We only use autoFillParamSymss for Java definitions, which do not
-         * support term param references at all, and from Definitions, which
-         * does not use that capability in the term param bounds.
-         */
-        val paramSyms = tpe.paramNames.lazyZip(tpe.paramTypes).map { (name, paramType) =>
-          TermSymbol
-            .createNotDeclaration(name, this)
-            .withFlags(EmptyFlagSet, privateWithin = None)
-            .withDeclaredType(paramType)
-        }
-        Left(paramSyms) :: autoComputeParamSymss(tpe.resultType)
+    private[tastyquery] final def autoFillParamSymss(termParamFlags: FlagSet): this.type =
+      setParamSymss(autoComputeParamSymss(declaredType, termParamFlags))
 
-      case tpe: PolyType =>
-        val paramSyms = tpe.paramNames.map { name =>
-          LocalTypeParamSymbol
-            .create(name, this)
-            .withFlags(EmptyFlagSet, privateWithin = None)
-        }
-        val paramSymRefs = paramSyms.map(_.localRef)
-        def subst(t: TypeOrMethodic): t.ThisTypeMappableType =
-          Substituters.substLocalBoundParams(t, tpe, paramSymRefs)
-        for (paramSym, paramTypeBounds) <- paramSyms.lazyZip(tpe.paramTypeBounds) do
-          paramSym.setDeclaredBounds(paramTypeBounds.mapBounds(subst(_)))
-        Right(paramSyms) :: autoComputeParamSymss(subst(tpe.resultType))
+    private def autoComputeParamSymss(tpe: TypeOrMethodic, termParamFlags: FlagSet): List[ParamSymbolsClause] =
+      tpe match
+        case tpe: MethodType =>
+          /* For term params, we do not instantiate the paramTypes.
+           * We only use autoFillParamSymss for Java definitions, which do not
+           * support term param references at all, and from Definitions, which
+           * does not use that capability in the term param bounds.
+           */
+          val paramSyms = tpe.paramNames.lazyZip(tpe.paramTypes).map { (name, paramType) =>
+            TermSymbol
+              .createNotDeclaration(name, this)
+              .withFlags(termParamFlags, privateWithin = None)
+              .withDeclaredType(paramType)
+          }
+          Left(paramSyms) :: autoComputeParamSymss(tpe.resultType, termParamFlags)
 
-      case tpe: Type =>
-        Nil
+        case tpe: PolyType =>
+          val paramSyms = tpe.paramNames.map { name =>
+            LocalTypeParamSymbol
+              .create(name, this)
+              .withFlags(EmptyFlagSet, privateWithin = None)
+          }
+          val paramSymRefs = paramSyms.map(_.localRef)
+          def subst(t: TypeOrMethodic): t.ThisTypeMappableType =
+            Substituters.substLocalBoundParams(t, tpe, paramSymRefs)
+          for (paramSym, paramTypeBounds) <- paramSyms.lazyZip(tpe.paramTypeBounds) do
+            paramSym.setDeclaredBounds(paramTypeBounds.mapBounds(subst(_)))
+          Right(paramSyms) :: autoComputeParamSymss(subst(tpe.resultType), termParamFlags)
+
+        case tpe: Type =>
+          Nil
     end autoComputeParamSymss
 
     def paramSymss: List[ParamSymbolsClause] =
