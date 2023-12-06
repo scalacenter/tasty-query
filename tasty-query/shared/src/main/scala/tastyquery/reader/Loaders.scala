@@ -159,10 +159,15 @@ private[tastyquery] object Loaders {
 
     /** Loads all the roots of the given `pkg`. */
     private[tastyquery] def loadAllRoots(pkg: PackageSymbol)(using Context): Unit =
-      for
-        entries <- roots.remove(pkg)
-        (rootName, entry) <- IArray.from(entries).sortBy(_(0).name) // sort for determinism.
-      do completeRoot(Loader.Root(pkg, rootName), entry)
+      roots.get(pkg) match
+        case Some(entries) =>
+          val allNames =
+            entries.keysIterator.toList.sortBy(_.name) // sort for determinism
+          for rootName <- allNames do doLoadRoot(pkg, entries, rootName)
+          // Upon success, we won't need anything from that package anymore
+          roots -= pkg
+        case None =>
+          ()
     end loadAllRoots
 
     /** Loads all the roots of the given `pkg` that could be package objects. */
@@ -171,10 +176,9 @@ private[tastyquery] object Loaders {
         case Some(entries) =>
           val candidateNames =
             entries.keysIterator.filter(_.isPackageObjectName).toList.sortBy(_.name) // sort for determinism
-          for
-            rootName <- candidateNames
-            entry <- entries.remove(rootName)
-          do completeRoot(Loader.Root(pkg, rootName), entry)
+          for rootName <- candidateNames do doLoadRoot(pkg, entries, rootName)
+          // Upon success, we won't need any of the loaded entries anymore
+          entries --= candidateNames
         case None =>
           ()
     end loadAllPackageObjectRoots
@@ -196,15 +200,25 @@ private[tastyquery] object Loaders {
       roots.get(pkg) match
         case Some(entries) =>
           val rootName = topLevelSymbolNameToRootName(name)
-          entries.remove(rootName) match
-            case Some(entry) =>
-              completeRoot(Loader.Root(pkg, rootName), entry)
-              true
-            case None =>
-              false
+          val result = doLoadRoot(pkg, entries, rootName)
+          if result then
+            // Upon success, we won't need that particular entry anymore
+            entries -= rootName
+          result
         case None =>
           false
     end loadRoot
+
+    private def doLoadRoot(pkg: PackageSymbol, pkgEntries: mutable.Map[SimpleName, Entry], rootName: SimpleName)(
+      using Context
+    ): Boolean =
+      pkgEntries.get(rootName) match
+        case Some(entry) =>
+          completeRoot(Loader.Root(pkg, rootName), entry)
+          true
+        case None =>
+          false
+    end doLoadRoot
 
     private def foreachEntry(data: PackageData)(f: (SimpleName, Entry) => Unit): Unit =
       def binaryNameToRootName(binaryName: String): SimpleName =
@@ -239,11 +253,11 @@ private[tastyquery] object Loaders {
       require(searched)
       packages.get(pkg) match {
         case Some(datas) =>
-          packages -= pkg
           val localRoots = mutable.HashMap.empty[SimpleName, Entry]
           for data <- datas do
             foreachEntry(data)(localRoots.getOrElseUpdate) // duplicate roots from later classpath entries are ignored
           roots(pkg) = localRoots
+          packages -= pkg
         case _ => // probably a synthetic package that only has other packages as members. (i.e. `package java`)
       }
     }

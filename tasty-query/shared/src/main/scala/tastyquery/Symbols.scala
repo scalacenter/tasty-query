@@ -1801,6 +1801,8 @@ object Symbols {
     // DeclaringSymbol-related fields
     private var rootsInitialized: Boolean = false
     private val myDeclarations = mutable.HashMap[UnsignedName, Symbol]()
+    private val pendingDeclarations = mutable.HashMap[UnsignedName, Symbol]()
+    private var isLoadingNewRoots: Boolean = false
 
     // Cache fields
     val packageRef: PackageRef = new PackageRef(this)
@@ -1852,19 +1854,58 @@ object Symbols {
     end getPackageDecl
 
     private[Symbols] final def addDecl(decl: Symbol): Unit =
-      assert(!myDeclarations.contains(decl.name), s"trying to add a second entry $decl for name ${decl.name} in $this")
-      myDeclarations(decl.name) = decl
+      assert(
+        !myDeclarations.contains(decl.name) && !pendingDeclarations.contains(decl.name),
+        s"trying to add a second entry $decl for name ${decl.name} in $this"
+      )
 
-    private final def ensureRootsInitialized()(using Context): Unit =
-      if !rootsInitialized then
-        ctx.classloader.scanPackage(this)
-        rootsInitialized = true
+      /* If we are loading new roots and the decl is not a package,
+       * add the declaration to the pending set only. They will be committed
+       * later by `loadingNewRoots` if loading is successful.
+       *
+       * Packages are always eagerly committed.
+       */
+      decl match
+        case decl: TermOrTypeSymbol if isLoadingNewRoots =>
+          pendingDeclarations(decl.name) = decl
+        case _ =>
+          myDeclarations(decl.name) = decl
+    end addDecl
+
+    /** Performs an operation that can load new roots from the class loader.
+      *
+      * While loading new roots, any new non-package member sent to `addDecl`
+      * is added to `pendingDeclarations` instead of `myDeclarations`. They
+      * are committed to `myDeclarations` only after the `op` successfully
+      * completes.
+      *
+      * This way, any exception occurring during loading does not pollute the
+      * publicly visible state in `myDeclarations`.
+      */
+    private def loadingNewRoots[A](op: Loader => A)(using Context): A =
+      if isLoadingNewRoots then throw IllegalStateException(s"Cyclic loading of new roots in package $this")
+
+      isLoadingNewRoots = true
+      try
+        if !rootsInitialized then
+          ctx.classloader.scanPackage(this)
+          rootsInitialized = true
+
+        val result = op(ctx.classloader)
+
+        // Upon success, commit pending declations
+        myDeclarations ++= pendingDeclarations
+
+        result
+      finally
+        pendingDeclarations.clear() // whether or not they were committed
+        isLoadingNewRoots = false
+    end loadingNewRoots
 
     final def getDecl(name: Name)(using Context): Option[Symbol] = name match
       case name: UnsignedName =>
         myDeclarations.get(name).orElse {
-          ensureRootsInitialized()
-          if ctx.classloader.loadRoot(this, name) then myDeclarations.get(name)
+          if loadingNewRoots(_.loadRoot(this, name)) then myDeclarations.get(name)
           else None
         }
       case _: SignedName =>
@@ -1893,8 +1934,7 @@ object Symbols {
       }
 
     final def declarations(using Context): List[Symbol] =
-      ensureRootsInitialized()
-      ctx.classloader.loadAllRoots(this)
+      loadingNewRoots(_.loadAllRoots(this))
       myDeclarations.values.toList
 
     // See PackageRef.findMember
@@ -1908,8 +1948,7 @@ object Symbols {
     end allPackageObjectDecls
 
     private def computeAllPackageObjectDecls()(using Context): List[ClassSymbol] =
-      ensureRootsInitialized()
-      ctx.classloader.loadAllPackageObjectRoots(this)
+      loadingNewRoots(_.loadAllPackageObjectRoots(this))
       myDeclarations.valuesIterator.collect {
         case cls: ClassSymbol if cls.name.isPackageObjectClassName => cls
       }.toList
