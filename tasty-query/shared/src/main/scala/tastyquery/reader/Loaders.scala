@@ -159,6 +159,7 @@ private[tastyquery] object Loaders {
 
     /** Loads all the roots of the given `pkg`. */
     private[tastyquery] def loadAllRoots(pkg: PackageSymbol)(using Context): Unit =
+      scanPackage(pkg)
       roots.get(pkg) match
         case Some(entries) =>
           val allNames =
@@ -172,6 +173,7 @@ private[tastyquery] object Loaders {
 
     /** Loads all the roots of the given `pkg` that could be package objects. */
     private[tastyquery] def loadAllPackageObjectRoots(pkg: PackageSymbol)(using Context): Unit =
+      scanPackage(pkg)
       roots.get(pkg) match
         case Some(entries) =>
           val candidateNames =
@@ -197,6 +199,7 @@ private[tastyquery] object Loaders {
       *   `true` if a root was loaded, `false` otherwise.
       */
     private[tastyquery] def loadRoot(pkg: PackageSymbol, name: Name)(using Context): Boolean =
+      scanPackage(pkg)
       roots.get(pkg) match
         case Some(entries) =>
           val rootName = topLevelSymbolNameToRootName(name)
@@ -249,7 +252,7 @@ private[tastyquery] object Loaders {
             f(binaryNameToRootName(binaryName), Entry.ClassOnly(cData, nestedData))
     end foreachEntry
 
-    def scanPackage(pkg: PackageSymbol)(using Context): Unit = {
+    private def scanPackage(pkg: PackageSymbol)(using Context): Unit = {
       require(searched)
       packages.get(pkg) match {
         case Some(datas) =>

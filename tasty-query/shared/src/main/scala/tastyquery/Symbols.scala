@@ -1803,7 +1803,6 @@ object Symbols {
     private[Symbols] val specialKind: SpecialKind = computeSpecialKind(name, owner)
 
     // DeclaringSymbol-related fields
-    private var rootsInitialized: Boolean = false
     private val myDeclarations = mutable.HashMap[UnsignedName, Symbol]()
     private val pendingDeclarations = mutable.HashMap[UnsignedName, Symbol]()
     private var isLoadingNewRoots: Boolean = false
@@ -1891,10 +1890,6 @@ object Symbols {
 
       isLoadingNewRoots = true
       try
-        if !rootsInitialized then
-          ctx.classloader.scanPackage(this)
-          rootsInitialized = true
-
         val result = op(ctx.classloader)
 
         // Upon success, commit pending declations
@@ -1992,7 +1987,6 @@ object Symbols {
 
     private[tastyquery] def createRoots(): (PackageSymbol, PackageSymbol) =
       val root = PackageSymbol(nme.RootName, null)
-      root.rootsInitialized = true
       val empty = PackageSymbol(nme.EmptyPackageName, root)
       root.addDecl(empty)
       (root, empty)
