@@ -3647,4 +3647,18 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     RecursiveMatchTypeSym.boundsAsSeenFrom(staticRef.prefix)
     staticRef.underlying
   }
+
+  testWithContext("sister-classes-with-names-that-look-like-inner-classes-issue-413") {
+    // Can find a top-level class that looks like an inner class
+    val JavaDefinedEvilClass = ctx.findTopLevelClass("javadefined.JavaDefined$Evil")
+    assert(clue(JavaDefinedEvilClass.owner).isPackage)
+    assert(clue(JavaDefinedEvilClass.name) == typeName("JavaDefined$Evil"))
+
+    // Cannot confuse an inner class for a top-level class
+    intercept[MemberNotFoundException](ctx.findTopLevelClass("javadefined.GenericJavaClass$MyInner"))
+
+    // After that, can still find the real inner class (it wasn't thrown away)
+    val GenericJavaClass = ctx.findTopLevelClass("javadefined.GenericJavaClass")
+    assert(clue(GenericJavaClass.getDecl(typeName("MyInner"))).exists(_.isClass))
+  }
 }

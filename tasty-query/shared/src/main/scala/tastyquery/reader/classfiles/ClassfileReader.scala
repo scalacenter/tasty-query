@@ -154,6 +154,11 @@ private[reader] object ClassfileReader {
 
     private[ClassfileReader] def idx(i: Int): Index = Indexing.idx(i)
 
+    /** An `Index` in this constant pool, or `None` if 0. */
+    private[ClassfileReader] def optIdx(i: Int): Option[Index] =
+      if i == 0 then None
+      else Some(idx(i))
+
     private[ClassfileReader] def add(info: ConstantInfo): Boolean = {
       infos(index) = info
       def debug() = {
@@ -428,22 +433,32 @@ private[reader] object ClassfileReader {
     }
   end readAnnotationArgument
 
+  /** Reads the content of the `InnerClasses` attribute.
+    *
+    * Calls `op` for each entry with the following arguments:
+    *
+    * - `innerBinaryName`: the fully-qualified binary name of the inner class.
+    * - `outerBinaryName`: the declaring outer class of the inner class, if
+    *   it exists, i.e., if it is not top-level, local, or anymous.
+    * - `innerSimpleName`: the simple name of the inner class, as found in the
+    *   source code, if it is not anonymous.
+    * - `innerAccessFlags`: the access flags of the inner class.
+    */
   def readInnerClasses(
-    op: (SimpleName, SimpleName, SimpleName, FlagSet) => Unit
+    op: (SimpleName, Option[SimpleName], Option[SimpleName], FlagSet) => Unit
   )(using ds: DataStream, pool: ConstantPool): Unit = {
     val numberOfClasses = data.readU2()
     loop(numberOfClasses) {
       val innerClassIdx = pool.idx(data.readU2())
-      val outerClassId = data.readU2() // 0 if a local/anonymous class
-      val innerNameId = data.readU2() // 0 if anonymous
+      val outerClassIdx = pool.optIdx(data.readU2()) // 0 if a local/anonymous class
+      val innerNameIdx = pool.optIdx(data.readU2()) // 0 if anonymous
       val accessFlags = readAccessFlags().toFlags
 
-      // We don't care about local, anonymous or synthetic classes
-      if outerClassId != 0 && innerNameId != 0 && !accessFlags.is(Synthetic) then
-        val innerClass = pool.utf8(pool.cls(innerClassIdx).nameIdx)
-        val innerName = pool.utf8(pool.idx(innerNameId))
-        val outerClass = pool.utf8(pool.cls(pool.idx(outerClassId)).nameIdx)
-        op(innerName, innerClass, outerClass, accessFlags)
+      val innerBinaryName = pool.utf8(pool.cls(innerClassIdx).nameIdx)
+      val outerBinaryName = outerClassIdx.map(idx => pool.utf8(pool.cls(idx).nameIdx))
+      val innerSimpleName = innerNameIdx.map(pool.utf8(_))
+
+      op(innerBinaryName, outerBinaryName, innerSimpleName, accessFlags)
     }
   }
 

@@ -1832,6 +1832,9 @@ object Symbols {
     /** Is this the root package? */
     final def isRootPackage: Boolean = owner == null
 
+    /** Is this the empty package? */
+    private[tastyquery] def isEmptyPackage: Boolean = specialKind == SpecialKind.empty
+
     /** Is this the scala package? */
     private[tastyquery] def isScalaPackage: Boolean = specialKind == SpecialKind.scala
 
@@ -1961,9 +1964,10 @@ object Symbols {
     private[Symbols] object SpecialKind:
       inline val None = 0
       inline val root = 1
-      inline val scala = 2
-      inline val java = 3
-      inline val javaLang = 4
+      inline val empty = 2
+      inline val scala = 3
+      inline val java = 4
+      inline val javaLang = 5
     end SpecialKind
 
     private def computeSpecialKind(name: SimpleName, owner: PackageSymbol | Null): SpecialKind =
@@ -1972,6 +1976,7 @@ object Symbols {
           (owner.specialKind: @switch) match
             case SpecialKind.root =>
               name match
+                case nme.EmptyPackageName => SpecialKind.empty
                 case nme.scalaPackageName => SpecialKind.scala
                 case nme.javaPackageName  => SpecialKind.java
                 case _                    => SpecialKind.None
