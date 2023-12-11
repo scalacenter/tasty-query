@@ -1803,7 +1803,6 @@ object Symbols {
     private[Symbols] val specialKind: SpecialKind = computeSpecialKind(name, owner)
 
     // DeclaringSymbol-related fields
-    private var rootsInitialized: Boolean = false
     private val myDeclarations = mutable.HashMap[UnsignedName, Symbol]()
     private val pendingDeclarations = mutable.HashMap[UnsignedName, Symbol]()
     private var isLoadingNewRoots: Boolean = false
@@ -1832,6 +1831,9 @@ object Symbols {
 
     /** Is this the root package? */
     final def isRootPackage: Boolean = owner == null
+
+    /** Is this the empty package? */
+    private[tastyquery] def isEmptyPackage: Boolean = specialKind == SpecialKind.empty
 
     /** Is this the scala package? */
     private[tastyquery] def isScalaPackage: Boolean = specialKind == SpecialKind.scala
@@ -1891,10 +1893,6 @@ object Symbols {
 
       isLoadingNewRoots = true
       try
-        if !rootsInitialized then
-          ctx.classloader.scanPackage(this)
-          rootsInitialized = true
-
         val result = op(ctx.classloader)
 
         // Upon success, commit pending declations
@@ -1966,9 +1964,10 @@ object Symbols {
     private[Symbols] object SpecialKind:
       inline val None = 0
       inline val root = 1
-      inline val scala = 2
-      inline val java = 3
-      inline val javaLang = 4
+      inline val empty = 2
+      inline val scala = 3
+      inline val java = 4
+      inline val javaLang = 5
     end SpecialKind
 
     private def computeSpecialKind(name: SimpleName, owner: PackageSymbol | Null): SpecialKind =
@@ -1977,6 +1976,7 @@ object Symbols {
           (owner.specialKind: @switch) match
             case SpecialKind.root =>
               name match
+                case nme.EmptyPackageName => SpecialKind.empty
                 case nme.scalaPackageName => SpecialKind.scala
                 case nme.javaPackageName  => SpecialKind.java
                 case _                    => SpecialKind.None
@@ -1992,7 +1992,6 @@ object Symbols {
 
     private[tastyquery] def createRoots(): (PackageSymbol, PackageSymbol) =
       val root = PackageSymbol(nme.RootName, null)
-      root.rootsInitialized = true
       val empty = PackageSymbol(nme.EmptyPackageName, root)
       root.addDecl(empty)
       (root, empty)

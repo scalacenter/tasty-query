@@ -33,11 +33,11 @@ private[reader] object ClassfileParser {
   inline def resolver(using resolver: Resolver): resolver.type = resolver
 
   enum ClassKind:
-    case Scala2, Java, TASTy, Artifact
+    case Scala2, Java, TASTy, ScalaArtifact, JavaInnerOrArtifact
 
-  case class InnerClassRef(name: SimpleName, outer: SimpleName, isStatic: Boolean)
+  case class InnerClassRef(innerSimpleName: SimpleName, outerBinaryName: SimpleName, isStatic: Boolean)
 
-  case class InnerClassDecl(classData: ClassData, name: SimpleName, owner: DeclaringSymbol)
+  case class InnerClassDecl(innerSimpleName: SimpleName, owner: DeclaringSymbol, innerBinaryName: SimpleName)
 
   class Resolver:
     private val refs = mutable.HashMap.empty[SimpleName, TypeRef]
@@ -86,25 +86,25 @@ private[reader] object ClassfileParser {
       cls: ClassSymbol,
       moduleClass: ClassSymbol,
       structure: Structure,
-      lookup: Map[SimpleName, ClassData],
       innerClasses: Forked[DataStream]
     ): InnerClasses =
       import structure.given
 
-      def missingClass(binaryName: SimpleName) =
-        ClassfileFormatException(s"Inner class $binaryName not found, keys: ${lookup.keys.toList}")
-
-      def lookupDeclaration(isStatic: Boolean, name: SimpleName, binaryName: SimpleName): InnerClassDecl =
-        val data = lookup.getOrElse(binaryName, throw missingClass(binaryName))
-        InnerClassDecl(data, name, if isStatic then moduleClass else cls)
-
       val refsBuf = Map.newBuilder[SimpleName, InnerClassRef]
       val declsBuf = List.newBuilder[InnerClassDecl]
       innerClasses.use {
-        ClassfileReader.readInnerClasses { (name, innerBinaryName, outerBinaryName, flags) =>
-          val isStatic = flags.is(Flags.Static)
-          refsBuf += innerBinaryName -> InnerClassRef(name, outerBinaryName, isStatic)
-          if outerBinaryName == structure.binaryName then declsBuf += lookupDeclaration(isStatic, name, innerBinaryName)
+        ClassfileReader.readInnerClasses { (innerBinaryName, outerBinaryNameOpt, innerSimpleNameOpt, flags) =>
+          // We don't care about local, anonymous or synthetic classes
+          if outerBinaryNameOpt.isDefined && innerSimpleNameOpt.isDefined && !flags.is(Synthetic) then
+            val outerBinaryName = outerBinaryNameOpt.get
+            val innerSimpleName = innerSimpleNameOpt.get
+
+            val isStatic = flags.is(Flags.Static)
+            refsBuf += innerBinaryName -> InnerClassRef(innerSimpleName, outerBinaryName, isStatic)
+
+            if outerBinaryName == structure.binaryName then
+              val owner = if isStatic then moduleClass else cls
+              declsBuf += InnerClassDecl(innerSimpleName, owner, innerBinaryName)
         }
       }
       InnerClasses(refsBuf.result(), declsBuf.result())
@@ -144,12 +144,10 @@ private[reader] object ClassfileParser {
     Unpickler.loadInfo(sigBytes)
   }
 
-  def loadJavaClass(
-    classOwner: DeclaringSymbol,
-    name: SimpleName,
-    structure: Structure,
-    innerLookup: Map[SimpleName, ClassData]
-  )(using ReaderContext, Resolver): List[InnerClassDecl] = {
+  def loadJavaClass(classOwner: DeclaringSymbol, name: SimpleName, structure: Structure)(
+    using ReaderContext,
+    Resolver
+  ): List[InnerClassDecl] = {
     import structure.given
 
     val attributes = structure.attributes.use(ClassfileReader.readAttributeMap())
@@ -187,7 +185,7 @@ private[reader] object ClassfileParser {
     val innerClassesStrict: InnerClasses =
       attributes.get(attr.InnerClasses) match
         case None         => InnerClasses.Empty
-        case Some(stream) => InnerClasses.parse(cls, moduleClass, structure, innerLookup, stream)
+        case Some(stream) => InnerClasses.parse(cls, moduleClass, structure, stream)
     given InnerClasses = innerClassesStrict
 
     /* Does this class contain signature-polymorphic methods?
@@ -498,6 +496,8 @@ private[reader] object ClassfileParser {
   def detectClassKind(structure: Structure): ClassKind =
     import structure.given
 
+    var innerClassesStream: Forked[DataStream] | Null = null
+
     var result: ClassKind = ClassKind.Java // if we do not find anything special, it will be Java
     structure.attributes.use {
       ClassfileReader.scanAttributes {
@@ -505,16 +505,34 @@ private[reader] object ClassfileParser {
           result = ClassKind.Scala2
           true
         case attr.Scala =>
-          result = ClassKind.Artifact
+          result = ClassKind.ScalaArtifact
           false // keep going; there might be a ScalaSig or TASTY later on
         case attr.TASTY =>
           result = ClassKind.TASTy
           true
+        case attr.InnerClasses =>
+          innerClassesStream = data.fork
+          false
         case _ =>
           false
       }
     }
-    result
+
+    if result == ClassKind.Java && innerClassesStream != null then
+      if containsSelfInnerClassDecl(structure.binaryName, innerClassesStream.nn) then ClassKind.JavaInnerOrArtifact
+      else ClassKind.Java
+    else result
   end detectClassKind
 
+  private def containsSelfInnerClassDecl(binaryName: SimpleName, innerClassesStream: Forked[DataStream])(
+    using ConstantPool
+  ): Boolean =
+    innerClassesStream.use {
+      var result = false
+      ClassfileReader.readInnerClasses { (innerFullBinaryName, _, _, _) =>
+        result ||= (innerFullBinaryName == binaryName)
+      }
+      result
+    }
+  end containsSelfInnerClassDecl
 }
