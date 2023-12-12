@@ -45,6 +45,8 @@ private[reader] final class ReaderContext(underlying: Context):
 
   def scala2FakeOwner: TermSymbol = underlying.defn.scala2FakeOwner
 
+  def scala2MacroInfoFakeMethod: TermSymbol = underlying.defn.scala2MacroInfoFakeMethod
+
   def findPackageFromRootOrCreate(fullyQualifiedName: PackageFullName): PackageSymbol =
     underlying.findPackageFromRootOrCreate(fullyQualifiedName)
 

@@ -976,10 +976,12 @@ private[pickles] class PickleReader {
         val designator = readMaybeExternalSymbolRef()
         val name = readTermNameRef()
         val tpe: TermReferenceType = designator match
-          case sym: TermSymbol             => sym.localRef
-          case sym: PackageSymbol          => sym.packageRef
-          case external: ExternalSymbolRef => external.toTermRef(NoPrefix)
-          case _                           => errorBadSignature(s"illegal $designator for IDENTtree (name '$name')")
+          case sym: TermSymbol                               => sym.localRef
+          case sym: PackageSymbol                            => sym.packageRef
+          case external: ExternalSymbolRef                   => external.toTermRef(NoPrefix)
+          case _: NoExternalSymbolRef if name == nme.m_macro => rctx.scala2MacroInfoFakeMethod.localRef
+          case _ =>
+            errorBadSignature(s"illegal $designator for IDENTtree (name '$name')")
         Ident(name)(tpe)(pos)
 
       case LITERALtree =>
