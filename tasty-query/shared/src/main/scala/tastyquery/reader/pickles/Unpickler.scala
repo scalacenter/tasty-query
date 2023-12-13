@@ -27,6 +27,9 @@ private[reader] object Unpickler {
         }
       }
 
+      // Now read the types of symbols
+      reader.completeAllSymbolTypes(structure)
+
       // Read children after reading the symbols themselves, fix for SI-3951
       index.loopWithIndices { (offset, i) =>
         if (reader.missingEntry(i)) {
