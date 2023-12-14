@@ -188,9 +188,6 @@ private[pickles] class PickleReader {
           s"expected local symbol reference but found $external for owner of ${name1.toDebugString} with tag $tag"
         )
 
-    if name1 == nme.m_getClass && owner.owner == rctx.scalaPackage && HasProblematicGetClass.contains(owner.name) then
-      return NoExternalSymbolRef.instance
-
     extension (n: ClassTypeName | UnsignedTermName)
       def toTermName: UnsignedTermName = n match
         case n: UnsignedTermName => n
@@ -258,10 +255,13 @@ private[pickles] class PickleReader {
         /* Discard symbols that should not be seen from a Scala 3 point of view:
          * - private fields generated for vals/vars (with a trailing ' ' in their name)
          * - `$extension` methods
+         * - the `getClass()` method of primitive value classes
          */
         val forceNotDeclaration = name1 match
           case SimpleName(str) =>
-            if flags.is(Method) then str.endsWith("$extension")
+            if flags.is(Method) then
+              str.endsWith("$extension")
+              || (name1 == nme.m_getClass && owner.isClass && owner.asClass.isPrimitiveValueClass)
             else if flags.isAllOf(Private | Local, butNotAnyOf = Method) then str.endsWith(" ")
             else false
           case _ => false
@@ -1231,27 +1231,5 @@ private[reader] object PickleReader {
 
   /** Temporary type for classinfos, will be decomposed on completion of the class */
   private[tastyquery] case class TempClassInfoType(parentTypes: List[Type]) extends CustomTransientGroundType
-
-  private def isTupleClassName(name: TypeName): Boolean =
-    name.toTermName match
-      case SimpleName(str) =>
-        str.startsWith("Tuple")
-          && str.length() > 5
-          && str.iterator.drop(5).forall(c => c >= '0' && c <= '9')
-      case _ =>
-        false
-  end isTupleClassName
-
-  private val HasProblematicGetClass: Set[Name] = Set(
-    tpnme.Unit,
-    tpnme.Boolean,
-    tpnme.Char,
-    tpnme.Byte,
-    tpnme.Short,
-    tpnme.Int,
-    tpnme.Long,
-    tpnme.Float,
-    tpnme.Double
-  )
 
 }
