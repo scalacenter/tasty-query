@@ -90,9 +90,6 @@ private[pickles] class PickleReader {
     } else tOpt.asInstanceOf[T] // temp hack for expression evaluator
   }
 
-  private def atNoCache[T <: AnyRef](i: Int)(op: PklStream ?=> T)(using PklStream, Entries, Index): T =
-    pkl.unsafeFork(index(i))(op)
-
   def readTermNameRef()(using PklStream, Entries, Index): SimpleName = readNameRef().asInstanceOf[SimpleName]
 
   def readTypeNameRef()(using PklStream, Entries, Index): SimpleTypeName = readNameRef().asInstanceOf[SimpleTypeName]
@@ -279,9 +276,7 @@ private[pickles] class PickleReader {
           else if tname == tpnme.scala2LocalChild then ClassSymbol.createNotDeclaration(tname, owner)
           else ClassSymbol.create(tname, owner)
         storeResultInEntries(cls)
-        val typeParams = atNoCache(infoRef)(readTypeParams())
         if cls.isRefinementClass then return cls // by-pass further assignments, including Flags
-        cls.withTypeParams(typeParams)
         if !atEnd then localClassGivenSelfTypeRefs(cls) = pkl.readNat()
         if cls.owner == rctx.scalaPackage && tname == tpnme.PredefModule then rctx.createPredefMagicMethods(cls)
         cls
@@ -347,20 +342,23 @@ private[pickles] class PickleReader {
           case cls: ClassSymbol =>
             assert(!cls.isRefinementClass, s"refinement class $cls should not have stored the type $tpe")
 
-            val scala2ParentTypes = tpe match
+            val (typeParams, scala2ParentTypes) = tpe match
               case TempPolyType(tparams, restpe: TempClassInfoType) =>
-                assert(tparams.corresponds(cls.typeParams)(_ eq _)) // should reuse the class type params
-                restpe.parentTypes
-              case tpe: TempClassInfoType => tpe.parentTypes
+                (tparams.map(_.asInstanceOf[ClassTypeParamSymbol]), restpe.parentTypes)
+              case tpe: TempClassInfoType =>
+                (Nil, tpe.parentTypes)
               case tpe =>
                 throw Scala2PickleFormatException(s"unexpected type $tpe for $cls, owner is ${cls.owner}")
+
+            cls.withTypeParams(typeParams)
+
             val parentTypes =
               if cls.isAnyVal then
                 // Patch the superclasses of AnyVal to contain Matchable
                 scala2ParentTypes :+ rctx.MatchableType
               else if cls.isTupleNClass && rctx.hasGenericTuples then
                 // Patch the superclass of TupleN classes to inherit from *:
-                rctx.GenericTupleTypeOf(cls.typeParams.map(_.localRef)) :: scala2ParentTypes.tail
+                rctx.GenericTupleTypeOf(typeParams.map(_.localRef)) :: scala2ParentTypes.tail
               else scala2ParentTypes
             cls.withParentsDirect(parentTypes)
 
@@ -377,6 +375,7 @@ private[pickles] class PickleReader {
 
             if sym.isMethod && sym.name == nme.Constructor then
               val cls = sym.owner.asClass
+              completeSymbolType(cls)
               for typeParam <- cls.typeParams do completeSymbolType(typeParam)
               sym.withDeclaredType(patchConstructorType(cls, unwrappedTpe))
               sym.setParamSymss(patchConstructorParamSymss(sym, paramSymss))
