@@ -127,29 +127,13 @@ private[pickles] class PickleReader {
     readMaybeExternalSymbolAt(pkl.readNat())
 
   def readMaybeExternalSymbolAt(i: Int)(using ReaderContext, PklStream, Entries, Index): MaybeExternalSymbol =
-    // Similar to at(), but sometimes readMaybeExternalSymbol stores the result itself in entries
-    val tOpt = entries(i).asInstanceOf[MaybeExternalSymbol | Null]
-    if tOpt == null then {
-      val res = pkl.unsafeFork(index(i)) {
-        readMaybeExternalSymbol(i)
-      }
-      val existingEntry = entries(i)
-      if existingEntry == null then entries(i) = res
-      else assert(res eq existingEntry, s"$res <-> $existingEntry}")
-      res
-    } else tOpt
+    at(i)(readMaybeExternalSymbol())
 
-  def readMaybeExternalSymbol(
-    storeInEntriesAt: Int
-  )(using ReaderContext, PklStream, Entries, Index): MaybeExternalSymbol = {
+  def readMaybeExternalSymbol()(using ReaderContext, PklStream, Entries, Index): MaybeExternalSymbol = {
     // val start = indexCoord(readIndex) // no need yet to record the position of symbols
     val tag = pkl.readByte()
     val end = pkl.readEnd()
     def atEnd(using PklStream) = pkl.atOffset(end)
-
-    def storeResultInEntries(result: MaybeExternalSymbol): Unit =
-      assert(entries(storeInEntriesAt) == null, entries(storeInEntriesAt))
-      entries(storeInEntriesAt) = result
 
     def readExtSymbol(): MaybeExternalSymbol =
       val name = decodeName(readNameRef())
@@ -188,7 +172,6 @@ private[pickles] class PickleReader {
 
     assert(!frozenSymbols, s"Trying to create symbol named ${name1.toDebugString} after symbols are frozen")
 
-    assert(entries(storeInEntriesAt) == null, entries(storeInEntriesAt))
     val owner = readMaybeExternalSymbolRef() match
       case sym: Symbol =>
         sym
@@ -207,14 +190,6 @@ private[pickles] class PickleReader {
 
     if name1 == nme.m_getClass && owner.owner == rctx.scalaPackage && HasProblematicGetClass.contains(owner.name) then
       return NoExternalSymbolRef.instance
-
-    /* In some situations, notably involving EXISTENTIALtpe, reading the
-     * reference to the owner may re-try to read this very symbol. In that
-     * case, the entries(storeInEntriesAt) will have been filled while reading
-     * the owner, and we must immediately return what was already stored.
-     */
-    val storedWhileReadingOwner = entries(storeInEntriesAt)
-    if storedWhileReadingOwner != null then return storedWhileReadingOwner.asInstanceOf[MaybeExternalSymbol]
 
     extension (n: ClassTypeName | UnsignedTermName)
       def toTermName: UnsignedTermName = n match
@@ -265,7 +240,6 @@ private[pickles] class PickleReader {
             else LocalTypeParamSymbol.create(name1, owner)
           else if pickleFlags.isExistential then TypeMemberSymbol.createNotDeclaration(name1, owner)
           else TypeMemberSymbol.create(name1, owner)
-        storeResultInEntries(sym)
         sym
 
       case CLASSsym =>
@@ -275,7 +249,6 @@ private[pickles] class PickleReader {
             ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, Scala2Defined)
           else if tname == tpnme.scala2LocalChild then ClassSymbol.createNotDeclaration(tname, owner)
           else ClassSymbol.create(tname, owner)
-        storeResultInEntries(cls)
         if cls.isRefinementClass then return cls // by-pass further assignments, including Flags
         if !atEnd then localClassGivenSelfTypeRefs(cls) = pkl.readNat()
         if cls.owner == rctx.scalaPackage && tname == tpnme.PredefModule then rctx.createPredefMagicMethods(cls)
@@ -296,7 +269,6 @@ private[pickles] class PickleReader {
           if pickleFlags.isExistential || forceNotDeclaration then
             TermSymbol.createNotDeclaration(name.toTermName, owner)
           else TermSymbol.create(name.toTermName, owner)
-        storeResultInEntries(sym)
         sym
 
       case _ =>
@@ -520,9 +492,6 @@ private[pickles] class PickleReader {
 
   def missingEntry(index: Int)(using Entries): Boolean =
     entries(index) == null
-
-  def addEntry[A <: AnyRef](index: Int, ref: A)(using Entries): Unit =
-    entries(index) = ref
 
   def isSymbolEntry(i: Int)(using PklStream, Entries, Index): Boolean = {
     val tag = pkl.bytes(index(i)).toInt
