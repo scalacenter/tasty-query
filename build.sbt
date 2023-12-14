@@ -5,6 +5,7 @@ import org.scalajs.jsenv.nodejs.NodeJSEnv
 
 val usedScalaCompiler = "3.3.1"
 val usedTastyRelease = usedScalaCompiler
+val scala2Version = "2.13.12"
 
 val SourceDeps = config("sourcedeps").hide
 
@@ -61,6 +62,17 @@ lazy val root = project.in(file("."))
     publish / skip := true,
   )
 
+lazy val scala2TestSources = crossProject(JSPlatform, JVMPlatform)
+  .crossType(CrossType.Pure)
+  .in(file("scala2-test-sources"))
+  .settings(commonSettings)
+  .settings(
+    scalaVersion := scala2Version,
+    publish / skip := true,
+    scalacOptions += "-Xfatal-warnings",
+    libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value % "provided",
+  )
+
 lazy val testSources = crossProject(JSPlatform, JVMPlatform)
   .crossType(CrossType.Pure)
   .in(file("test-sources"))
@@ -70,6 +82,7 @@ lazy val testSources = crossProject(JSPlatform, JVMPlatform)
     scalacOptions += "-Xfatal-warnings",
     javacOptions += "-parameters",
   )
+  .dependsOn(scala2TestSources)
 
 lazy val tastyQuery =
   crossProject(JSPlatform, JVMPlatform).in(file("tasty-query"))
