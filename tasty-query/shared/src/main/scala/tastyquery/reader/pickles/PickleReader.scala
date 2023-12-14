@@ -28,6 +28,13 @@ private[pickles] class PickleReader {
   opaque type Entries = Array[AnyRef | Null]
   opaque type Index = IArray[Int]
 
+  private var frozenSymbols: Boolean = false
+
+  /** The map from created local symbols to the address of their info, until it gets read. */
+  private val localSymbolInfoRefs = mutable.AnyRefMap.empty[TermOrTypeSymbol, Int]
+
+  private val localClassGivenSelfTypeRefs = mutable.AnyRefMap.empty[ClassSymbol, Int]
+
   final class Structure(using val myEntries: Entries, val myIndex: Index):
     def allRegisteredSymbols: Iterator[TermOrTypeSymbol] =
       myEntries.iterator.collect { case sym: TermOrTypeSymbol =>
@@ -122,22 +129,6 @@ private[pickles] class PickleReader {
   def readMaybeExternalSymbolRef()(using ReaderContext, PklStream, Entries, Index): MaybeExternalSymbol =
     readMaybeExternalSymbolAt(pkl.readNat())
 
-  def ensureReadAllLocalDeclsOfRefinement(ownerIndex: Int)(using ReaderContext, PklStream, Entries, Index): Unit =
-    index.loopWithIndices { (offset, i) =>
-      val idx = index(i)
-      val tag = pkl.bytes(idx).toInt
-      if tag >= firstSymTag && tag <= lastSymTag then
-        val include = pkl.unsafeFork(idx) {
-          pkl.readByte() // tag
-          pkl.readNat() // length
-          pkl.readNat() // name
-          val ownerRef = pkl.readNat()
-          ownerRef == ownerIndex
-        }
-        if include then readLocalSymbolAt(i).asInstanceOf[TermOrTypeSymbol]
-    }
-  end ensureReadAllLocalDeclsOfRefinement
-
   def readMaybeExternalSymbolAt(i: Int)(using ReaderContext, PklStream, Entries, Index): MaybeExternalSymbol =
     // Similar to at(), but sometimes readMaybeExternalSymbol stores the result itself in entries
     val tOpt = entries(i).asInstanceOf[MaybeExternalSymbol | Null]
@@ -197,6 +188,8 @@ private[pickles] class PickleReader {
         DefaultGetterName(termName(underlyingStr), indexStr.toInt - 1)
       case decoded =>
         decoded
+
+    assert(!frozenSymbols, s"Trying to create symbol named ${name1.toDebugString} after symbols are frozen")
 
     assert(entries(storeInEntriesAt) == null, entries(storeInEntriesAt))
     val owner = readMaybeExternalSymbolRef() match
@@ -266,13 +259,7 @@ private[pickles] class PickleReader {
       }
     }
 
-    def readSymType(): TypeMappable =
-      try at(infoRef)(readTypeMappable())
-      catch
-        case t: Throwable =>
-          throw new Scala2PickleFormatException(s"error while unpickling the type of $owner.$name", t)
-
-    val sym: Symbol = tag match {
+    val sym: TermOrTypeSymbol = tag match {
       case TYPEsym | ALIASsym =>
         var name1 = name.toTypeName
         val sym: TypeSymbolWithBounds =
@@ -282,19 +269,8 @@ private[pickles] class PickleReader {
           else if pickleFlags.isExistential then TypeMemberSymbol.createNotDeclaration(name1, owner)
           else TypeMemberSymbol.create(name1, owner)
         storeResultInEntries(sym)
-        val tpe = readSymType()
-        val bounds = tpe match
-          case tpe: TypeOrWildcard => translateTempPolyForTypeMember(tpe)
-          case _ => throw Scala2PickleFormatException(s"Type or type bounds expected for $sym gut found $tpe")
-        sym match
-          case sym: TypeMemberSymbol =>
-            sym.withDefinition(bounds match
-              case bounds: AbstractTypeBounds => TypeMemberDefinition.AbstractType(bounds)
-              case TypeAlias(alias)           => TypeMemberDefinition.TypeAlias(alias)
-            )
-          case sym: TypeParamSymbol =>
-            sym.setDeclaredBounds(bounds)
         sym
+
       case CLASSsym =>
         val tname = name.toTypeName.asInstanceOf[ClassTypeName]
         val cls =
@@ -303,31 +279,14 @@ private[pickles] class PickleReader {
           else if tname == tpnme.scala2LocalChild then ClassSymbol.createNotDeclaration(tname, owner)
           else ClassSymbol.create(tname, owner)
         storeResultInEntries(cls)
-        val tpe = readSymType()
         val typeParams = atNoCache(infoRef)(readTypeParams())
-        if isRefinementClass(cls) then return cls // by-pass further assignments, including Flags
+        if cls.isRefinementClass then return cls // by-pass further assignments, including Flags
         cls.withTypeParams(typeParams)
-        val scala2ParentTypes = tpe match
-          case TempPolyType(tparams, restpe: TempClassInfoType) =>
-            assert(tparams.corresponds(typeParams)(_ eq _)) // should reuse the class type params
-            restpe.parentTypes
-          case tpe: TempClassInfoType => tpe.parentTypes
-          case tpe =>
-            throw Scala2PickleFormatException(s"unexpected type $tpe for $cls, owner is $owner")
-        val parentTypes =
-          if cls.owner == rctx.scalaPackage && tname == tpnme.AnyVal then
-            // Patch the superclasses of AnyVal to contain Matchable
-            scala2ParentTypes :+ rctx.MatchableType
-          else if cls.owner == rctx.scalaPackage && isTupleClassName(tname) && rctx.hasGenericTuples then
-            // Patch the superclass of TupleN classes to inherit from *:
-            rctx.GenericTupleTypeOf(typeParams.map(_.localRef)) :: scala2ParentTypes.tail
-          else scala2ParentTypes
-        val givenSelfType = if atEnd then None else Some(readTrueTypeRef())
-        cls.withParentsDirect(parentTypes)
-        cls.withGivenSelfType(givenSelfType)
+        if !atEnd then localClassGivenSelfTypeRefs(cls) = pkl.readNat()
         if cls.owner == rctx.scalaPackage && tname == tpnme.PredefModule then rctx.createPredefMagicMethods(cls)
         cls
-      case VALsym =>
+
+      case MODULEsym | VALsym =>
         /* Discard symbols that should not be seen from a Scala 3 point of view:
          * - private fields generated for vals/vars (with a trailing ' ' in their name)
          * - `$extension` methods
@@ -342,34 +301,89 @@ private[pickles] class PickleReader {
           if pickleFlags.isExistential || forceNotDeclaration then
             TermSymbol.createNotDeclaration(name.toTermName, owner)
           else TermSymbol.create(name.toTermName, owner)
-        storeResultInEntries(sym) // Store the symbol before reading its type, to avoid cycles
-        val storedType = readSymType() match
-          case storedType: Type => storedType
-          case storedType       => throw Scala2PickleFormatException(s"Type expected for $sym but found $storedType")
-        val unwrappedTpe: TypeOrMethodic =
-          if flags.is(Method) then translateTempMethodAndPolyForMethod(storedType)
-          else storedType
-        val paramSymss = paramSymssOf(storedType)
-        if flags.is(Method) && name == nme.Constructor then
-          sym.withDeclaredType(patchConstructorType(sym.owner.asClass, unwrappedTpe))
-          sym.setParamSymss(patchConstructorParamSymss(sym, paramSymss))
-        else
-          sym.withDeclaredType(unwrappedTpe)
-          sym.setParamSymss(paramSymss)
-      case MODULEsym =>
-        val sym = TermSymbol.create(name.toTermName, owner)
         storeResultInEntries(sym)
-        val ownerPrefix = owner.asInstanceOf[DeclaringSymbol] match
-          case owner: PackageSymbol => owner.packageRef
-          case owner: ClassSymbol   => owner.thisType
-        sym.withDeclaredType(TypeRef(ownerPrefix, sym.name.asSimpleName.withObjectSuffix.toTypeName))
         sym
+
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     }
+
     sym.withFlags(flags, privateWithin)
+    localSymbolInfoRefs(sym) = infoRef
     sym
   }
+
+  def completeAllSymbolTypes(structure: Structure)(using ReaderContext, PklStream, Entries, Index): Unit =
+    frozenSymbols = true
+    for sym <- structure.allRegisteredSymbols do completeSymbolType(sym)
+
+  private def completeSymbolType(sym: TermOrTypeSymbol)(using ReaderContext, PklStream, Entries, Index): Unit =
+    localSymbolInfoRefs.remove(sym) match
+      case None =>
+        // If it is not there, it means it was already computed and assigned, or is being computed
+        ()
+
+      case Some(infoRef) =>
+        val tpe =
+          try at(infoRef)(readTypeMappable())
+          catch
+            case t: Throwable =>
+              throw new Scala2PickleFormatException(s"error while unpickling the type of $sym", t)
+
+        sym match
+          case sym: TypeSymbolWithBounds =>
+            val bounds = tpe match
+              case tpe: TypeOrWildcard => translateTempPolyForTypeMember(tpe)
+              case _ => throw Scala2PickleFormatException(s"Type or type bounds expected for $sym gut found $tpe")
+            sym match
+              case sym: TypeMemberSymbol =>
+                sym.withDefinition(bounds match
+                  case bounds: AbstractTypeBounds => TypeMemberDefinition.AbstractType(bounds)
+                  case TypeAlias(alias)           => TypeMemberDefinition.TypeAlias(alias)
+                )
+              case sym: TypeParamSymbol =>
+                sym.setDeclaredBounds(bounds)
+
+          case cls: ClassSymbol =>
+            assert(!cls.isRefinementClass, s"refinement class $cls should not have stored the type $tpe")
+
+            val scala2ParentTypes = tpe match
+              case TempPolyType(tparams, restpe: TempClassInfoType) =>
+                assert(tparams.corresponds(cls.typeParams)(_ eq _)) // should reuse the class type params
+                restpe.parentTypes
+              case tpe: TempClassInfoType => tpe.parentTypes
+              case tpe =>
+                throw Scala2PickleFormatException(s"unexpected type $tpe for $cls, owner is ${cls.owner}")
+            val parentTypes =
+              if cls.isAnyVal then
+                // Patch the superclasses of AnyVal to contain Matchable
+                scala2ParentTypes :+ rctx.MatchableType
+              else if cls.isTupleNClass && rctx.hasGenericTuples then
+                // Patch the superclass of TupleN classes to inherit from *:
+                rctx.GenericTupleTypeOf(cls.typeParams.map(_.localRef)) :: scala2ParentTypes.tail
+              else scala2ParentTypes
+            cls.withParentsDirect(parentTypes)
+
+            val givenSelfType = localClassGivenSelfTypeRefs.remove(cls).map(addr => at(addr)(readTrueType()))
+            cls.withGivenSelfType(givenSelfType)
+
+          case sym: TermSymbol =>
+            val storedType = tpe match
+              case storedType: Type => storedType
+              case storedType => throw Scala2PickleFormatException(s"Type expected for $sym but found $storedType")
+
+            val paramSymss = paramSymssOf(storedType)
+            val unwrappedTpe: TypeOrMethodic = translateTempMethodAndPolyForMethod(storedType)
+
+            if sym.isMethod && sym.name == nme.Constructor then
+              val cls = sym.owner.asClass
+              for typeParam <- cls.typeParams do completeSymbolType(typeParam)
+              sym.withDeclaredType(patchConstructorType(cls, unwrappedTpe))
+              sym.setParamSymss(patchConstructorParamSymss(sym, paramSymss))
+            else
+              sym.withDeclaredType(unwrappedTpe)
+              sym.setParamSymss(paramSymss)
+  end completeSymbolType
 
   private def paramSymssOf(storedType: Type): List[ParamSymbolsClause] = storedType match
     case TempMethodType(paramSyms, resType) =>
@@ -513,8 +527,7 @@ private[pickles] class PickleReader {
 
   def isSymbolEntry(i: Int)(using PklStream, Entries, Index): Boolean = {
     val tag = pkl.bytes(index(i)).toInt
-    (firstSymTag <= tag && tag <= lastSymTag &&
-    (tag != CLASSsym || !isRefinementSymbolEntry(i)))
+    (firstSymTag <= tag && tag <= lastSymTag)
   }
 
   def isRefinementSymbolEntry(i: Int)(using PklStream, Entries, Index): Boolean =
@@ -538,9 +551,6 @@ private[pickles] class PickleReader {
   private def isNameEntry(i: Int)(using PklStream, Entries, Index): Boolean =
     val tag = pkl.bytes(index(i))
     tag == TERMname || tag == TYPEname
-
-  protected def isRefinementClass(sym: Symbol): Boolean =
-    sym.name == tpnme.RefinedClassMagic
 
   def isSymbolRef(i: Int)(using PklStream, Index): Boolean = {
     val tag = pkl.bytes(index(i))
@@ -577,6 +587,8 @@ private[pickles] class PickleReader {
     at(pkl.readNat())(readTypeMappable())
 
   private def readTypeMappable()(using ReaderContext, PklStream, Entries, Index): TypeMappable = {
+    assert(frozenSymbols, s"Trying to read a type but symbols have not been frozen yet")
+
     def select(pre: Prefix, sym: TermOrTypeSymbol): Type =
       // structural members need to be selected by name, their symbols are only
       // valid in the synthetic refinement class that defines them.
@@ -698,11 +710,11 @@ private[pickles] class PickleReader {
         val clazz = readLocalSymbolAt(clazzIndex).asClass
         val parents = pkl.until(end, () => readTrueTypeRef())
         val parent = parents.reduceLeft(AndType(_, _))
-        ensureReadAllLocalDeclsOfRefinement(clazzIndex)
         val decls = clazz.declarationsOfClass
         if decls.isEmpty then parent
         else
           val refined = decls.toList.foldLeft(parent) { (parent, sym) =>
+            completeSymbolType(sym)
             sym match
               case sym: TypeMemberSymbol =>
                 TypeRefinement(parent, sym.name, sym.declaredBounds)
@@ -718,18 +730,22 @@ private[pickles] class PickleReader {
       case METHODtpe | IMPLICITMETHODtpe =>
         val restpe = readTypeOrMethodicRef()
         val params = pkl.until(end, () => readLocalSymbolRef().asTerm)
+        params.foreach(completeSymbolType(_))
         TempMethodType(params, restpe)
       case POLYtpe =>
         // create PolyType
         //   - PT => register at index
         val restpe = readTypeMappableRef()
         val typeParams = pkl.until(end, () => readLocalSymbolRef().asInstanceOf[TypeParamSymbol])
-        if typeParams.nonEmpty then TempPolyType(typeParams, restpe)
+        if typeParams.nonEmpty then
+          typeParams.foreach(completeSymbolType(_))
+          TempPolyType(typeParams, restpe)
         else restpe
       case EXISTENTIALtpe =>
         val restpe = readTrueTypeRef()
         // TODO Should these be LocalTypeParamSymbols?
         val boundSyms = pkl.until(end, () => readLocalSymbolRef().asInstanceOf[TypeMemberSymbol])
+        for boundSym <- boundSyms do completeSymbolType(boundSym)
         elimExistentials(boundSyms, restpe)
       case ANNOTATEDtpe =>
         val underlying = readTrueTypeRef()
