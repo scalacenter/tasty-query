@@ -90,9 +90,6 @@ private[pickles] class PickleReader {
     } else tOpt.asInstanceOf[T] // temp hack for expression evaluator
   }
 
-  private def atNoCache[T <: AnyRef](i: Int)(op: PklStream ?=> T)(using PklStream, Entries, Index): T =
-    pkl.unsafeFork(index(i))(op)
-
   def readTermNameRef()(using PklStream, Entries, Index): SimpleName = readNameRef().asInstanceOf[SimpleName]
 
   def readTypeNameRef()(using PklStream, Entries, Index): SimpleTypeName = readNameRef().asInstanceOf[SimpleTypeName]
@@ -130,29 +127,13 @@ private[pickles] class PickleReader {
     readMaybeExternalSymbolAt(pkl.readNat())
 
   def readMaybeExternalSymbolAt(i: Int)(using ReaderContext, PklStream, Entries, Index): MaybeExternalSymbol =
-    // Similar to at(), but sometimes readMaybeExternalSymbol stores the result itself in entries
-    val tOpt = entries(i).asInstanceOf[MaybeExternalSymbol | Null]
-    if tOpt == null then {
-      val res = pkl.unsafeFork(index(i)) {
-        readMaybeExternalSymbol(i)
-      }
-      val existingEntry = entries(i)
-      if existingEntry == null then entries(i) = res
-      else assert(res eq existingEntry, s"$res <-> $existingEntry}")
-      res
-    } else tOpt
+    at(i)(readMaybeExternalSymbol())
 
-  def readMaybeExternalSymbol(
-    storeInEntriesAt: Int
-  )(using ReaderContext, PklStream, Entries, Index): MaybeExternalSymbol = {
+  def readMaybeExternalSymbol()(using ReaderContext, PklStream, Entries, Index): MaybeExternalSymbol = {
     // val start = indexCoord(readIndex) // no need yet to record the position of symbols
     val tag = pkl.readByte()
     val end = pkl.readEnd()
     def atEnd(using PklStream) = pkl.atOffset(end)
-
-    def storeResultInEntries(result: MaybeExternalSymbol): Unit =
-      assert(entries(storeInEntriesAt) == null, entries(storeInEntriesAt))
-      entries(storeInEntriesAt) = result
 
     def readExtSymbol(): MaybeExternalSymbol =
       val name = decodeName(readNameRef())
@@ -183,15 +164,11 @@ private[pickles] class PickleReader {
     }
 
     // symbols that were pickled with Pickler.writeSymInfo
-    val name1: SimpleTypeName | UnsignedTermName = decodeName(readNameRef()) match
-      case SimpleName(MangledDefaultGetterNameRegex(underlyingStr, indexStr)) =>
-        DefaultGetterName(termName(underlyingStr), indexStr.toInt - 1)
-      case decoded =>
-        decoded
+
+    val name1: SimpleTypeName | SimpleName = decodeName(readNameRef())
 
     assert(!frozenSymbols, s"Trying to create symbol named ${name1.toDebugString} after symbols are frozen")
 
-    assert(entries(storeInEntriesAt) == null, entries(storeInEntriesAt))
     val owner = readMaybeExternalSymbolRef() match
       case sym: Symbol =>
         sym
@@ -208,45 +185,8 @@ private[pickles] class PickleReader {
           s"expected local symbol reference but found $external for owner of ${name1.toDebugString} with tag $tag"
         )
 
-    if name1 == nme.m_getClass && owner.owner == rctx.scalaPackage && HasProblematicGetClass.contains(owner.name) then
-      return NoExternalSymbolRef.instance
-
-    /* In some situations, notably involving EXISTENTIALtpe, reading the
-     * reference to the owner may re-try to read this very symbol. In that
-     * case, the entries(storeInEntriesAt) will have been filled while reading
-     * the owner, and we must immediately return what was already stored.
-     */
-    val storedWhileReadingOwner = entries(storeInEntriesAt)
-    if storedWhileReadingOwner != null then return storedWhileReadingOwner.asInstanceOf[MaybeExternalSymbol]
-
-    extension (n: ClassTypeName | UnsignedTermName)
-      def toTermName: UnsignedTermName = n match
-        case n: UnsignedTermName => n
-        case n: ClassTypeName    => n.toTermName
-
-      def toTypeName: ClassTypeName = n match
-        case n: ClassTypeName     => n
-        case n: SignatureNameItem => n.toTypeName
-        case _                    => errorBadSignature(s"cannot convert ${n.toDebugString} to a type name")
-    end extension
-
-    extension (n: TermName) def asSimpleName: SimpleName = n.asInstanceOf[SimpleName]
-
     val pickleFlags = readPickleFlags(name1.isInstanceOf[TypeName])
     val flags0 = pickleFlagsToFlags(pickleFlags)
-    val name: ClassTypeName | UnsignedTermName =
-      if pickleFlags.isType && flags0.is(Module) then name1.toTermName.asSimpleName.withObjectSuffix.toTypeName
-      else if flags0.is(Method) && (name1 == Scala2Constructor || name1 == Scala2TraitConstructor) then nme.Constructor
-      else name1
-
-    // Adapt the flags of getters so they become like vals/vars instead
-    val flags =
-      if flags0.isAllOf(Method | Accessor) && !name.toString().endsWith("_=") then
-        val flags1 = flags0 &~ (Method | Accessor)
-        if flags1.is(StableRealizable) then flags1
-        else flags1 | Mutable
-      else flags0
-    end flags
 
     val (privateWithin, infoRef) = {
       val ref = pkl.readNat()
@@ -254,61 +194,90 @@ private[pickles] class PickleReader {
       else {
         val pw = readLocalSymbolAt(ref) match
           case pw: DeclaringSymbol => pw
-          case pw                  => errorBadSignature(s"invalid privateWithin $pw for $owner.$name")
+          case pw                  => errorBadSignature(s"invalid privateWithin $pw for $owner.$name1")
         (Some(pw), pkl.readNat())
       }
     }
 
     val sym: TermOrTypeSymbol = tag match {
       case TYPEsym | ALIASsym =>
-        var name1 = name.toTypeName
+        val name = name1.asInstanceOf[SimpleTypeName]
+        val flags = flags0
+
         val sym: TypeSymbolWithBounds =
           if pickleFlags.isParam then
-            if owner.isClass then ClassTypeParamSymbol.create(name1, owner.asClass)
-            else LocalTypeParamSymbol.create(name1, owner)
-          else if pickleFlags.isExistential then TypeMemberSymbol.createNotDeclaration(name1, owner)
-          else TypeMemberSymbol.create(name1, owner)
-        storeResultInEntries(sym)
-        sym
+            if owner.isClass then ClassTypeParamSymbol.create(name, owner.asClass)
+            else LocalTypeParamSymbol.create(name, owner)
+          else if pickleFlags.isExistential then TypeMemberSymbol.createNotDeclaration(name, owner)
+          else TypeMemberSymbol.create(name, owner)
+        sym.withFlags(flags, privateWithin)
+
+      case CLASSsym if name1 == tpnme.RefinedClassMagic =>
+        // return to by-pass the addition to localSymbolInfoRefs
+        return ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, Scala2Defined)
 
       case CLASSsym =>
-        val tname = name.toTypeName.asInstanceOf[ClassTypeName]
+        val name2 = name1.asInstanceOf[SimpleTypeName]
+        val name: ClassTypeName =
+          if flags0.is(Module) then name2.withObjectSuffix
+          else name2
+
+        val flags = flags0
+
         val cls =
-          if tname == tpnme.RefinedClassMagic then
-            ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, Scala2Defined)
-          else if tname == tpnme.scala2LocalChild then ClassSymbol.createNotDeclaration(tname, owner)
-          else ClassSymbol.create(tname, owner)
-        storeResultInEntries(cls)
-        val typeParams = atNoCache(infoRef)(readTypeParams())
-        if cls.isRefinementClass then return cls // by-pass further assignments, including Flags
-        cls.withTypeParams(typeParams)
+          if name == tpnme.scala2LocalChild then ClassSymbol.createNotDeclaration(name, owner)
+          else ClassSymbol.create(name, owner)
+
         if !atEnd then localClassGivenSelfTypeRefs(cls) = pkl.readNat()
-        if cls.owner == rctx.scalaPackage && tname == tpnme.PredefModule then rctx.createPredefMagicMethods(cls)
-        cls
+
+        if cls.owner == rctx.scalaPackage && name == tpnme.PredefModule then rctx.createPredefMagicMethods(cls)
+        cls.withFlags(flags, privateWithin)
 
       case MODULEsym | VALsym =>
+        val name2 = name1.asInstanceOf[SimpleName]
+        val nameString = name2.name
+
+        val name: UnsignedTermName =
+          if pickleFlags.isMethod then
+            name2 match
+              case Scala2Constructor | Scala2TraitConstructor =>
+                nme.Constructor
+              case SimpleName(MangledDefaultGetterNameRegex(underlyingStr, indexStr)) =>
+                DefaultGetterName(termName(underlyingStr), indexStr.toInt - 1)
+              case _ =>
+                name2
+          else name2
+        end name
+
+        // Adapt the flags of getters so they become like vals/vars instead
+        val flags =
+          if flags0.isAllOf(Method | Accessor) && !nameString.endsWith("_=") then
+            val flags1 = flags0 &~ (Method | Accessor)
+            if flags1.is(StableRealizable) then flags1
+            else flags1 | Mutable
+          else flags0
+        end flags
+
         /* Discard symbols that should not be seen from a Scala 3 point of view:
          * - private fields generated for vals/vars (with a trailing ' ' in their name)
          * - `$extension` methods
+         * - the `getClass()` method of primitive value classes
          */
-        val forceNotDeclaration = name1 match
-          case SimpleName(str) =>
-            if flags.is(Method) then str.endsWith("$extension")
-            else if flags.isAllOf(Private | Local, butNotAnyOf = Method) then str.endsWith(" ")
-            else false
-          case _ => false
+        val forceNotDeclaration =
+          if flags.is(Method) then
+            nameString.endsWith("$extension")
+            || (name2 == nme.m_getClass && owner.isClass && owner.asClass.isPrimitiveValueClass)
+          else flags.isAllOf(Private | Local) && nameString.endsWith(" ")
+
         val sym =
-          if pickleFlags.isExistential || forceNotDeclaration then
-            TermSymbol.createNotDeclaration(name.toTermName, owner)
-          else TermSymbol.create(name.toTermName, owner)
-        storeResultInEntries(sym)
-        sym
+          if pickleFlags.isExistential || forceNotDeclaration then TermSymbol.createNotDeclaration(name, owner)
+          else TermSymbol.create(name, owner)
+        sym.withFlags(flags, privateWithin)
 
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     }
 
-    sym.withFlags(flags, privateWithin)
     localSymbolInfoRefs(sym) = infoRef
     sym
   }
@@ -347,20 +316,23 @@ private[pickles] class PickleReader {
           case cls: ClassSymbol =>
             assert(!cls.isRefinementClass, s"refinement class $cls should not have stored the type $tpe")
 
-            val scala2ParentTypes = tpe match
+            val (typeParams, scala2ParentTypes) = tpe match
               case TempPolyType(tparams, restpe: TempClassInfoType) =>
-                assert(tparams.corresponds(cls.typeParams)(_ eq _)) // should reuse the class type params
-                restpe.parentTypes
-              case tpe: TempClassInfoType => tpe.parentTypes
+                (tparams.map(_.asInstanceOf[ClassTypeParamSymbol]), restpe.parentTypes)
+              case tpe: TempClassInfoType =>
+                (Nil, tpe.parentTypes)
               case tpe =>
                 throw Scala2PickleFormatException(s"unexpected type $tpe for $cls, owner is ${cls.owner}")
+
+            cls.withTypeParams(typeParams)
+
             val parentTypes =
               if cls.isAnyVal then
                 // Patch the superclasses of AnyVal to contain Matchable
                 scala2ParentTypes :+ rctx.MatchableType
               else if cls.isTupleNClass && rctx.hasGenericTuples then
                 // Patch the superclass of TupleN classes to inherit from *:
-                rctx.GenericTupleTypeOf(cls.typeParams.map(_.localRef)) :: scala2ParentTypes.tail
+                rctx.GenericTupleTypeOf(typeParams.map(_.localRef)) :: scala2ParentTypes.tail
               else scala2ParentTypes
             cls.withParentsDirect(parentTypes)
 
@@ -377,6 +349,7 @@ private[pickles] class PickleReader {
 
             if sym.isMethod && sym.name == nme.Constructor then
               val cls = sym.owner.asClass
+              completeSymbolType(cls)
               for typeParam <- cls.typeParams do completeSymbolType(typeParam)
               sym.withDeclaredType(patchConstructorType(cls, unwrappedTpe))
               sym.setParamSymss(patchConstructorParamSymss(sym, paramSymss))
@@ -521,9 +494,6 @@ private[pickles] class PickleReader {
 
   def missingEntry(index: Int)(using Entries): Boolean =
     entries(index) == null
-
-  def addEntry[A <: AnyRef](index: Int, ref: A)(using Entries): Unit =
-    entries(index) = ref
 
   def isSymbolEntry(i: Int)(using PklStream, Entries, Index): Boolean = {
     val tag = pkl.bytes(index(i)).toInt
@@ -1263,27 +1233,5 @@ private[reader] object PickleReader {
 
   /** Temporary type for classinfos, will be decomposed on completion of the class */
   private[tastyquery] case class TempClassInfoType(parentTypes: List[Type]) extends CustomTransientGroundType
-
-  private def isTupleClassName(name: TypeName): Boolean =
-    name.toTermName match
-      case SimpleName(str) =>
-        str.startsWith("Tuple")
-          && str.length() > 5
-          && str.iterator.drop(5).forall(c => c >= '0' && c <= '9')
-      case _ =>
-        false
-  end isTupleClassName
-
-  private val HasProblematicGetClass: Set[Name] = Set(
-    tpnme.Unit,
-    tpnme.Boolean,
-    tpnme.Char,
-    tpnme.Byte,
-    tpnme.Short,
-    tpnme.Int,
-    tpnme.Long,
-    tpnme.Float,
-    tpnme.Double
-  )
 
 }
