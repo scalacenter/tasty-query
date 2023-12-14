@@ -164,11 +164,8 @@ private[pickles] class PickleReader {
     }
 
     // symbols that were pickled with Pickler.writeSymInfo
-    val name1: SimpleTypeName | UnsignedTermName = decodeName(readNameRef()) match
-      case SimpleName(MangledDefaultGetterNameRegex(underlyingStr, indexStr)) =>
-        DefaultGetterName(termName(underlyingStr), indexStr.toInt - 1)
-      case decoded =>
-        decoded
+
+    val name1: SimpleTypeName | SimpleName = decodeName(readNameRef())
 
     assert(!frozenSymbols, s"Trying to create symbol named ${name1.toDebugString} after symbols are frozen")
 
@@ -188,34 +185,8 @@ private[pickles] class PickleReader {
           s"expected local symbol reference but found $external for owner of ${name1.toDebugString} with tag $tag"
         )
 
-    extension (n: ClassTypeName | UnsignedTermName)
-      def toTermName: UnsignedTermName = n match
-        case n: UnsignedTermName => n
-        case n: ClassTypeName    => n.toTermName
-
-      def toTypeName: ClassTypeName = n match
-        case n: ClassTypeName     => n
-        case n: SignatureNameItem => n.toTypeName
-        case _                    => errorBadSignature(s"cannot convert ${n.toDebugString} to a type name")
-    end extension
-
-    extension (n: TermName) def asSimpleName: SimpleName = n.asInstanceOf[SimpleName]
-
     val pickleFlags = readPickleFlags(name1.isInstanceOf[TypeName])
     val flags0 = pickleFlagsToFlags(pickleFlags)
-    val name: ClassTypeName | UnsignedTermName =
-      if pickleFlags.isType && flags0.is(Module) then name1.toTermName.asSimpleName.withObjectSuffix.toTypeName
-      else if flags0.is(Method) && (name1 == Scala2Constructor || name1 == Scala2TraitConstructor) then nme.Constructor
-      else name1
-
-    // Adapt the flags of getters so they become like vals/vars instead
-    val flags =
-      if flags0.isAllOf(Method | Accessor) && !name.toString().endsWith("_=") then
-        val flags1 = flags0 &~ (Method | Accessor)
-        if flags1.is(StableRealizable) then flags1
-        else flags1 | Mutable
-      else flags0
-    end flags
 
     val (privateWithin, infoRef) = {
       val ref = pkl.readNat()
@@ -223,59 +194,90 @@ private[pickles] class PickleReader {
       else {
         val pw = readLocalSymbolAt(ref) match
           case pw: DeclaringSymbol => pw
-          case pw                  => errorBadSignature(s"invalid privateWithin $pw for $owner.$name")
+          case pw                  => errorBadSignature(s"invalid privateWithin $pw for $owner.$name1")
         (Some(pw), pkl.readNat())
       }
     }
 
     val sym: TermOrTypeSymbol = tag match {
       case TYPEsym | ALIASsym =>
-        var name1 = name.toTypeName
+        val name = name1.asInstanceOf[SimpleTypeName]
+        val flags = flags0
+
         val sym: TypeSymbolWithBounds =
           if pickleFlags.isParam then
-            if owner.isClass then ClassTypeParamSymbol.create(name1, owner.asClass)
-            else LocalTypeParamSymbol.create(name1, owner)
-          else if pickleFlags.isExistential then TypeMemberSymbol.createNotDeclaration(name1, owner)
-          else TypeMemberSymbol.create(name1, owner)
-        sym
+            if owner.isClass then ClassTypeParamSymbol.create(name, owner.asClass)
+            else LocalTypeParamSymbol.create(name, owner)
+          else if pickleFlags.isExistential then TypeMemberSymbol.createNotDeclaration(name, owner)
+          else TypeMemberSymbol.create(name, owner)
+        sym.withFlags(flags, privateWithin)
+
+      case CLASSsym if name1 == tpnme.RefinedClassMagic =>
+        // return to by-pass the addition to localSymbolInfoRefs
+        return ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, Scala2Defined)
 
       case CLASSsym =>
-        val tname = name.toTypeName.asInstanceOf[ClassTypeName]
+        val name2 = name1.asInstanceOf[SimpleTypeName]
+        val name: ClassTypeName =
+          if flags0.is(Module) then name2.withObjectSuffix
+          else name2
+
+        val flags = flags0
+
         val cls =
-          if tname == tpnme.RefinedClassMagic then
-            ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, Scala2Defined)
-          else if tname == tpnme.scala2LocalChild then ClassSymbol.createNotDeclaration(tname, owner)
-          else ClassSymbol.create(tname, owner)
-        if cls.isRefinementClass then return cls // by-pass further assignments, including Flags
+          if name == tpnme.scala2LocalChild then ClassSymbol.createNotDeclaration(name, owner)
+          else ClassSymbol.create(name, owner)
+
         if !atEnd then localClassGivenSelfTypeRefs(cls) = pkl.readNat()
-        if cls.owner == rctx.scalaPackage && tname == tpnme.PredefModule then rctx.createPredefMagicMethods(cls)
-        cls
+
+        if cls.owner == rctx.scalaPackage && name == tpnme.PredefModule then rctx.createPredefMagicMethods(cls)
+        cls.withFlags(flags, privateWithin)
 
       case MODULEsym | VALsym =>
+        val name2 = name1.asInstanceOf[SimpleName]
+        val nameString = name2.name
+
+        val name: UnsignedTermName =
+          if pickleFlags.isMethod then
+            name2 match
+              case Scala2Constructor | Scala2TraitConstructor =>
+                nme.Constructor
+              case SimpleName(MangledDefaultGetterNameRegex(underlyingStr, indexStr)) =>
+                DefaultGetterName(termName(underlyingStr), indexStr.toInt - 1)
+              case _ =>
+                name2
+          else name2
+        end name
+
+        // Adapt the flags of getters so they become like vals/vars instead
+        val flags =
+          if flags0.isAllOf(Method | Accessor) && !nameString.endsWith("_=") then
+            val flags1 = flags0 &~ (Method | Accessor)
+            if flags1.is(StableRealizable) then flags1
+            else flags1 | Mutable
+          else flags0
+        end flags
+
         /* Discard symbols that should not be seen from a Scala 3 point of view:
          * - private fields generated for vals/vars (with a trailing ' ' in their name)
          * - `$extension` methods
          * - the `getClass()` method of primitive value classes
          */
-        val forceNotDeclaration = name1 match
-          case SimpleName(str) =>
-            if flags.is(Method) then
-              str.endsWith("$extension")
-              || (name1 == nme.m_getClass && owner.isClass && owner.asClass.isPrimitiveValueClass)
-            else if flags.isAllOf(Private | Local, butNotAnyOf = Method) then str.endsWith(" ")
-            else false
-          case _ => false
+        val forceNotDeclaration =
+          if flags.is(Method) then
+            nameString.endsWith("$extension")
+            || (name2 == nme.m_getClass && owner.isClass && owner.asClass.isPrimitiveValueClass)
+          else flags.isAllOf(Private | Local) && nameString.endsWith(" ")
+
         val sym =
-          if pickleFlags.isExistential || forceNotDeclaration then
-            TermSymbol.createNotDeclaration(name.toTermName, owner)
-          else TermSymbol.create(name.toTermName, owner)
-        sym
+          if pickleFlags.isExistential || forceNotDeclaration then TermSymbol.createNotDeclaration(name, owner)
+          else TermSymbol.create(name, owner)
+        sym.withFlags(flags, privateWithin)
 
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
     }
 
-    sym.withFlags(flags, privateWithin)
     localSymbolInfoRefs(sym) = infoRef
     sym
   }
