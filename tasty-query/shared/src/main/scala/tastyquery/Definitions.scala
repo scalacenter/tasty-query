@@ -145,6 +145,15 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
       .checkCompleted()
   end scala2FakeOwner
 
+  private[tastyquery] val scala2MacroInfoFakeMethod: TermSymbol =
+    TermSymbol
+      .createNotDeclaration(nme.m_macro, scalaPackage)
+      .withFlags(Synthetic, None)
+      .withDeclaredType(NothingType)
+      .setAnnotations(Nil)
+      .checkCompleted()
+  end scala2MacroInfoFakeMethod
+
   private def createSpecialTypeAlias(
     name: TypeName,
     owner: DeclaringSymbol,

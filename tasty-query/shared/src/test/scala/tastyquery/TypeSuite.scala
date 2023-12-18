@@ -3661,4 +3661,20 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
     val GenericJavaClass = ctx.findTopLevelClass("javadefined.GenericJavaClass")
     assert(clue(GenericJavaClass.getDecl(typeName("MyInner"))).exists(_.isClass))
   }
+
+  testWithContext("scala-2-macro-definition") {
+    val MacrosClass = ctx.findTopLevelModuleClass("scalatwo.Macros")
+    val macroImplAnnotClass = ctx.findTopLevelClass("scala.reflect.macros.internal.macroImpl")
+
+    val foo = MacrosClass.findNonOverloadedDecl(termName("foo"))
+    assert(foo.isMacro)
+
+    val annotImplMacro = foo.getAnnotation(macroImplAnnotClass).get
+    annotImplMacro.arguments.head match
+      case TypeApply(Apply(macroIdent @ Ident(macroName), _), _) =>
+        assert(clue(macroName) == nme.m_macro)
+        assert(clue(macroIdent.symbol) == defn.scala2MacroInfoFakeMethod)
+      case arg =>
+        fail("unexpected argument to @macroImpl", clues(arg))
+  }
 }

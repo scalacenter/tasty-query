@@ -63,6 +63,8 @@ object Names {
 
     val m_apply: SimpleName = termName("apply")
     val m_unapply: SimpleName = termName("unapply")
+
+    private[tastyquery] val m_macro: SimpleName = termName("macro")
   }
 
   object tpnme {
