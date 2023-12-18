@@ -3677,4 +3677,25 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       case arg =>
         fail("unexpected argument to @macroImpl", clues(arg))
   }
+
+  testWithContext("inlined-path-issue-424") {
+    val InlinedPathClass = ctx.findTopLevelClass("simple_trees.InlinedPath")
+    val FooClass = ctx.findStaticClass("simple_trees.InlinedPath.Foo")
+    val InnerTypeMember = FooClass.findDecl(typeName("Inner"))
+
+    val test = InlinedPathClass.findNonOverloadedDecl(termName("test"))
+    val List(Left(List(x)), Left(List(inner))) = test.paramSymss: @unchecked
+
+    assert(clue(x.name) == termName("x"))
+    assert(clue(x).isGivenOrUsing)
+    assert(clue(x.declaredType).isRef(FooClass))
+
+    assert(clue(inner.name) == termName("inner"))
+    inner.declaredType match
+      case typeRef: TypeRef =>
+        assert(clue(typeRef.prefix).isRef(x)) // through inlining the path
+        assert(typeRef.isRef(InnerTypeMember))
+      case tpe =>
+        fail("unexpected type for inner", clues(tpe))
+  }
 }

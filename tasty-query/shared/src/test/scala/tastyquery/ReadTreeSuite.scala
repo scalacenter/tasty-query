@@ -1452,6 +1452,22 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert(containsSubtree(inlined)(clue(tree)))
   }
 
+  testUnpickle("inlined-path", "simple_trees.InlinedPath") { tree =>
+    val inlinedPath: StructureCheck = {
+      case SelectTypeTree(
+            InlinedTypeTree(
+              Some(TypeIdent(ObjectClassTypeName(SimpleTypeName("InlinedPath")))),
+              InlinedTypeTree(None, TypeWrapper(TermRefInternal(NoPrefix, xSym: Symbol)))
+            ),
+            SimpleTypeName("Inner")
+          ) if xSym.name == termName("x") =>
+    }
+    val testDef = findTree(tree) { case testDef @ DefDef(SimpleName("test"), _, _, _, _) =>
+      testDef
+    }
+    assert(containsSubtree(inlinedPath)(clue(testDef)))
+  }
+
   testUnpickle("select-tpt", "simple_trees.SelectType") { tree =>
     val selectTpt: StructureCheck = {
       case ValDef(

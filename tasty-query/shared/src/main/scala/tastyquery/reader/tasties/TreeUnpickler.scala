@@ -1073,20 +1073,7 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       val end = reader.readEnd()
       val expr = readTerm
-      val caller: Option[TypeIdent | SelectTypeTree] =
-        reader.ifBefore(end)(
-          tagFollowShared match {
-            // The caller is not specified, this is a binding (or next val or def)
-            case VALDEF | DEFDEF => None
-            case _ =>
-              readTypeTree match
-                case caller: TypeIdent      => Some(caller)
-                case caller: SelectTypeTree => Some(caller)
-                case caller =>
-                  throw TastyFormatException(s"Unexpected Inlined caller $caller $posErrorMsg")
-          },
-          None
-        )
+      val caller = readInlinedCaller(end)
       val bindings = reader.until(end)(readValOrDefDef)
       Inlined(expr, caller, bindings)(spn)
     case SHAREDterm =>
@@ -1635,6 +1622,15 @@ private[tasties] class TreeUnpickler private (
       val body = readTypeTree
       val bindings = readStats(end).map(_.asInstanceOf[TypeMember])
       TypeBindingsTree(bindings, body)(spn)
+    case INLINED =>
+      val spn = span
+      reader.readByte()
+      val end = reader.readEnd()
+      val expansion = readTypeTree
+      val caller = readInlinedCaller(end)
+      if reader.currentAddr != end then
+        throw TastyFormatException(s"Unexpected bindings in INLINED type tree $posErrorMsg")
+      InlinedTypeTree(caller, expansion)(spn)
     case SHAREDterm =>
       val spn = span
       reader.readByte()
@@ -1645,6 +1641,22 @@ private[tasties] class TreeUnpickler private (
     case _ =>
       TypeWrapper(readNonEmptyPrefix())(span)
   }
+
+  private def readInlinedCaller(end: Addr)(using SourceFile): Option[TypeIdent | SelectTypeTree] =
+    reader.ifBefore(end)(
+      tagFollowShared match {
+        // The caller is not specified, this is a binding (or next val or def)
+        case VALDEF | DEFDEF => None
+        case _ =>
+          readTypeTree match
+            case caller: TypeIdent      => Some(caller)
+            case caller: SelectTypeTree => Some(caller)
+            case caller =>
+              throw TastyFormatException(s"Unexpected Inlined caller $caller $posErrorMsg")
+      },
+      None
+    )
+  end readInlinedCaller
 
   private def protectReadDefiningTypeTree[A <: TypeTree](body: => A): A =
     /* It is possible to find SHAREDterm's referencing REFINEDtpt, `LAMBDAtpt`, etc.
