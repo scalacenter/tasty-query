@@ -759,10 +759,19 @@ private[tasties] class TreeUnpickler private (
       else if tag == VALDEF then Some(readTermOrUninitialized())
       else Some(readTerm)
     readAnnotationsInModifiers(symbol, end)
+
     tag match {
       case VALDEF | PARAM =>
-        symbol.withDeclaredType(tpt.toType)
+        val tpe: Type = tpt.toPrefix match
+          case tpe: Type =>
+            tpe
+          case packageRef: PackageRef =>
+            // Work around https://github.com/lampepfl/dotty/issues/19237
+            if tag == PARAM && symbol.owner.name.isInstanceOf[InlineAccessorName] then rctx.NothingType
+            else throw TastyFormatException(s"unexpected type $packageRef for $symbol in $posErrorMsg")
+        symbol.withDeclaredType(tpe)
         definingTree(symbol, ValDef(name, tpt, rhs, symbol)(spn))
+
       case DEFDEF =>
         val normalizedParams =
           if name == nme.Constructor then normalizeCtorParamClauses(params)
