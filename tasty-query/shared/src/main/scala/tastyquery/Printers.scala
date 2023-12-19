@@ -655,6 +655,13 @@ private[tastyquery] object Printers:
             case elem: TypeMember => print(elem)
             case elem: TypeTree   => print(elem)
         }
+
+      case InlinedTypeTree(caller, expansion) =>
+        for c <- caller do
+          print("<inlined: ")
+          print(c)
+          print(">")
+        print(expansion)
     end print
 
     def print(tree: WildcardTypeArgTree): Unit =

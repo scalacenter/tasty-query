@@ -920,6 +920,21 @@ object Trees {
     override def withPos(pos: SourcePosition): TypeBindingsTree = TypeBindingsTree(bindings, body)(pos)
   end TypeBindingsTree
 
+  /** A tree representing an inlined type.
+    *
+    * @param caller
+    *   The toplevel class from which the type was inlined.
+    * @param expansion
+    *   The expanded type.
+    */
+  final case class InlinedTypeTree(caller: Option[TypeIdent | SelectTypeTree], expansion: TypeTree)(pos: SourcePosition)
+      extends TypeTree(pos):
+    override protected def calculateType: NonEmptyPrefix =
+      expansion.toPrefix
+
+    override final def withPos(pos: SourcePosition): InlinedTypeTree = InlinedTypeTree(caller, expansion)(pos)
+  end InlinedTypeTree
+
   // --- TypeDefinitionTrees and TypeBoundsTrees ------------------------------
 
   sealed abstract class TypeDefinitionTree(pos: SourcePosition) extends Tree(pos):

@@ -179,6 +179,9 @@ object Traversers:
       case TypeBindingsTree(bindings, body) =>
         traverse(bindings)
         traverse(body)
+      case InlinedTypeTree(caller, expansion) =>
+        traverse(caller)
+        traverse(expansion)
 
       // TypeDefinitionTree's
       case InferredTypeBoundsTree(bounds) =>
