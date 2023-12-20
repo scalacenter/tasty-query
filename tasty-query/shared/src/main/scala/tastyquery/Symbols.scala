@@ -100,7 +100,7 @@ object Symbols {
       if myPrivateWithin == null then throw failNotCompleted("privateWithin was not initialized")
       if myAnnotations == null then throw failNotCompleted("annotations were not initialized")
 
-    private[tastyquery] def withTree(t: DefiningTreeType): this.type =
+    private[tastyquery] def setTree(t: DefiningTreeType): this.type =
       require(!isPackage, s"Multiple trees correspond to one package, a single tree cannot be assigned")
       myTree = Some(t)
       this
@@ -108,7 +108,7 @@ object Symbols {
     final def tree: Option[DefiningTreeType] =
       myTree
 
-    private[tastyquery] final def withFlags(flags: FlagSet, privateWithin: Option[DeclaringSymbol]): this.type =
+    private[tastyquery] final def setFlags(flags: FlagSet, privateWithin: Option[DeclaringSymbol]): this.type =
       setFlags(flags)
       setPrivateWithin(privateWithin)
 
@@ -445,7 +445,7 @@ object Symbols {
         throw IllegalArgumentException(s"illegal non-empty paramSymss $myParamSymss for $this")
     end doCheckCompleted
 
-    private[tastyquery] final def withDeclaredType(tpe: TypeOrMethodic): this.type =
+    private[tastyquery] final def setDeclaredType(tpe: TypeOrMethodic): this.type =
       assignOnce(myDeclaredType, (myDeclaredType = tpe))(s"reassignment of declared type to $this")
       this
 
@@ -480,8 +480,8 @@ object Symbols {
           val paramSyms = tpe.paramNames.lazyZip(tpe.paramTypes).map { (name, paramType) =>
             TermSymbol
               .createNotDeclaration(name, this)
-              .withFlags(termParamFlags, privateWithin = None)
-              .withDeclaredType(paramType)
+              .setFlags(termParamFlags, privateWithin = None)
+              .setDeclaredType(paramType)
           }
           Left(paramSyms) :: autoComputeParamSymss(tpe.resultType, termParamFlags)
 
@@ -489,7 +489,7 @@ object Symbols {
           val paramSyms = tpe.paramNames.map { name =>
             LocalTypeParamSymbol
               .create(name, this)
-              .withFlags(EmptyFlagSet, privateWithin = None)
+              .setFlags(EmptyFlagSet, privateWithin = None)
           }
           val paramSymRefs = paramSyms.map(_.localRef)
           def subst(t: TypeOrMethodic): t.ThisTypeMappableType =
@@ -840,7 +840,7 @@ object Symbols {
       super.doCheckCompleted()
       if myDefinition == null then failNotCompleted("type member definition not initialized")
 
-    private[tastyquery] final def withDefinition(definition: TypeMemberDefinition): this.type =
+    private[tastyquery] final def setDefinition(definition: TypeMemberDefinition): this.type =
       assignOnce(myDefinition, (myDefinition = definition))(s"Reassignment of the definition of $this")
       this
 
@@ -1041,14 +1041,14 @@ object Symbols {
       }
     end signatureName
 
-    private[tastyquery] final def withTypeParams(tparams: List[ClassTypeParamSymbol]): this.type =
+    private[tastyquery] final def setTypeParams(tparams: List[ClassTypeParamSymbol]): this.type =
       assignOnce(myTypeParams, (myTypeParams = tparams))(s"reassignment of type parameters to $this")
       this
 
     final def typeParams: List[ClassTypeParamSymbol] =
       getAssignedOnce(myTypeParams)(s"type params not initialized for $this")
 
-    private[tastyquery] final def withParentsDirect(parents: List[Type]): this.type =
+    private[tastyquery] final def setParentsDirect(parents: List[Type]): this.type =
       assignOnce(myParents, (myParents = parents))(s"reassignment of parents of $this")
       this
 
@@ -1073,7 +1073,7 @@ object Symbols {
         }
       )
 
-    private[tastyquery] final def withGivenSelfType(givenSelfType: Option[Type]): this.type =
+    private[tastyquery] final def setGivenSelfType(givenSelfType: Option[Type]): this.type =
       assignOnce(myGivenSelfType, (myGivenSelfType = givenSelfType))(s"reassignment of givenSelfType for $this")
       this
 
@@ -1693,10 +1693,10 @@ object Symbols {
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, objectType: TypeRef, flags: FlagSet): ClassSymbol =
       val cls = ClassSymbol(tpnme.RefinedClassMagic, owner) // by-pass `owner.addDeclIfDeclaringSym`
       cls
-        .withTypeParams(Nil)
-        .withParentsDirect(objectType :: Nil)
-        .withGivenSelfType(None)
-        .withFlags(flags, None)
+        .setTypeParams(Nil)
+        .setParentsDirect(objectType :: Nil)
+        .setGivenSelfType(None)
+        .setFlags(flags, None)
         .setAnnotations(Nil)
       cls.checkCompleted()
       cls
@@ -1721,7 +1721,7 @@ object Symbols {
     val packageRef: PackageRef = new PackageRef(this)
     private var myAllPackageObjectDecls: List[ClassSymbol] | Null = null
 
-    this.withFlags(EmptyFlagSet, None)
+    this.setFlags(EmptyFlagSet, None)
     this.setAnnotations(Nil)
 
     private lazy val _fullName: PackageFullName =

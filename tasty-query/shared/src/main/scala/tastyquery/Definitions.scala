@@ -98,10 +98,10 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   private def createSpecialClass(name: SimpleTypeName, parents: List[Type], flags: FlagSet): ClassSymbol =
     val cls = ClassSymbol.create(name, scalaPackage)
-    cls.withTypeParams(Nil)
-    cls.withParentsDirect(parents)
-    cls.withGivenSelfType(None)
-    cls.withFlags(flags, None)
+    cls.setTypeParams(Nil)
+    cls.setParentsDirect(parents)
+    cls.setGivenSelfType(None)
+    cls.setFlags(flags, None)
     cls.setAnnotations(Nil)
     cls.checkCompleted()
     cls
@@ -115,8 +115,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   ): TermSymbol =
     val sym = TermSymbol
       .create(name, owner)
-      .withFlags(Method | flags, privateWithin = None)
-      .withDeclaredType(tpe)
+      .setFlags(Method | flags, privateWithin = None)
+      .setDeclaredType(tpe)
       .setAnnotations(Nil)
       .autoFillParamSymss(termParamFlags)
     sym.paramSymss.foreach(_.merge.foreach(_.setAnnotations(Nil)))
@@ -139,8 +139,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   private[tastyquery] val scala2FakeOwner: TermSymbol =
     TermSymbol
       .createNotDeclaration(termName("<nosymbol>"), scalaPackage)
-      .withFlags(Synthetic, None)
-      .withDeclaredType(AnyType)
+      .setFlags(Synthetic, None)
+      .setDeclaredType(AnyType)
       .setAnnotations(Nil)
       .checkCompleted()
   end scala2FakeOwner
@@ -148,8 +148,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   private[tastyquery] val scala2MacroInfoFakeMethod: TermSymbol =
     TermSymbol
       .createNotDeclaration(nme.m_macro, scalaPackage)
-      .withFlags(Synthetic, None)
-      .withDeclaredType(NothingType)
+      .setFlags(Synthetic, None)
+      .setDeclaredType(NothingType)
       .setAnnotations(Nil)
       .checkCompleted()
   end scala2MacroInfoFakeMethod
@@ -161,8 +161,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     alias: Type
   ): TypeMemberSymbol =
     val sym = TypeMemberSymbol.create(name, owner)
-    sym.withFlags(flags, None)
-    sym.withDefinition(TypeMemberDefinition.TypeAlias(alias))
+    sym.setFlags(flags, None)
+    sym.setDefinition(TypeMemberDefinition.TypeAlias(alias))
     sym.setAnnotations(Nil)
     sym.checkCompleted()
     sym
@@ -177,8 +177,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val andOrParamNames = List(typeName("A"), typeName("B"))
 
     val andTypeAlias = TypeMemberSymbol.create(typeName("&"), scalaPackage)
-    andTypeAlias.withFlags(EmptyFlagSet, None)
-    andTypeAlias.withDefinition(
+    andTypeAlias.setFlags(EmptyFlagSet, None)
+    andTypeAlias.setDefinition(
       TypeMemberDefinition.TypeAlias(
         TypeLambda(andOrParamNames)(
           pt => List(NothingAnyBounds, NothingAnyBounds),
@@ -190,8 +190,8 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     andTypeAlias.checkCompleted()
 
     val orTypeAlias = TypeMemberSymbol.create(typeName("|"), scalaPackage)
-    orTypeAlias.withFlags(EmptyFlagSet, None)
-    orTypeAlias.withDefinition(
+    orTypeAlias.setFlags(EmptyFlagSet, None)
+    orTypeAlias.setDefinition(
       TypeMemberDefinition.TypeAlias(
         TypeLambda(andOrParamNames)(
           pt => List(NothingAnyBounds, NothingAnyBounds),
@@ -364,32 +364,32 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     val name = typeName("ContextFunction" + n)
     val cls = ClassSymbol.create(name, scalaPackage)
 
-    cls.withFlags(Trait | NoInitsInterface, None)
-    cls.withParentsDirect(ObjectType :: Nil)
+    cls.setFlags(Trait | NoInitsInterface, None)
+    cls.setParentsDirect(ObjectType :: Nil)
     cls.setAnnotations(Nil)
-    cls.withGivenSelfType(None)
+    cls.setGivenSelfType(None)
 
     val inputTypeParams = List.tabulate(n) { i =>
       ClassTypeParamSymbol
         .create(typeName("T" + i), cls)
-        .withFlags(Contravariant, None)
+        .setFlags(Contravariant, None)
         .setDeclaredBounds(NothingAnyBounds)
         .setAnnotations(Nil)
     }
     val resultTypeParam =
       ClassTypeParamSymbol
         .create(typeName("R"), cls)
-        .withFlags(Covariant, None)
+        .setFlags(Covariant, None)
         .setDeclaredBounds(NothingAnyBounds)
         .setAnnotations(Nil)
 
     val allTypeParams = inputTypeParams :+ resultTypeParam
     allTypeParams.foreach(_.checkCompleted())
-    cls.withTypeParams(allTypeParams)
+    cls.setTypeParams(allTypeParams)
 
     val applyMethod = TermSymbol.create(termName("apply"), cls)
-    applyMethod.withFlags(Method | Abstract, None)
-    applyMethod.withDeclaredType(
+    applyMethod.setFlags(Method | Abstract, None)
+    applyMethod.setDeclaredType(
       MethodType(List.tabulate(n)(i => termName("x" + i)))(
         mt => inputTypeParams.map(_.localRef),
         mt => resultTypeParam.localRef

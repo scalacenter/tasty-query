@@ -31,7 +31,7 @@ private[classfiles] object JavaSignatures:
     InnerClasses,
     Resolver
   ): List[Type] =
-    cls.withTypeParams(Nil)
+    cls.setTypeParams(Nil)
     if cls.isObject then rctx.AnyType :: rctx.MatchableType :: Nil
     else
       val superRef = superClass.map(classRef).getOrElse(rctx.ObjectType)
@@ -329,16 +329,16 @@ private[classfiles] object JavaSignatures:
         val tparams = tparamNames.map { tname =>
           val paramSym = ClassTypeParamSymbol.create(tname, cls)
           allRegisteredSymbols += paramSym
-          paramSym.withFlags(JavaDefined, None).setAnnotations(Nil)
+          paramSym.setFlags(JavaDefined, None).setAnnotations(Nil)
           paramSym
         }
         val lookup = tparamNames.lazyZip(tparams).toMap
         val tparamBounds = typeParamsRest(lookup)
         tparams.lazyZip(tparamBounds).foreach((tparam, bounds) => tparam.setDeclaredBounds(bounds))
-        cls.withTypeParams(tparams)
+        cls.setTypeParams(tparams)
         classRest(lookup)
       else
-        cls.withTypeParams(Nil)
+        cls.setTypeParams(Nil)
         classRest(null)
 
     def fieldSignature: Type =

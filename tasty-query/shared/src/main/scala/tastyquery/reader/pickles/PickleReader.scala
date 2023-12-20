@@ -210,7 +210,7 @@ private[pickles] class PickleReader {
             else LocalTypeParamSymbol.create(name, owner)
           else if pickleFlags.isExistential then TypeMemberSymbol.createNotDeclaration(name, owner)
           else TypeMemberSymbol.create(name, owner)
-        sym.withFlags(flags, privateWithin)
+        sym.setFlags(flags, privateWithin)
 
       case CLASSsym if name1 == tpnme.RefinedClassMagic =>
         // return to by-pass the addition to localSymbolInfoRefs
@@ -231,7 +231,7 @@ private[pickles] class PickleReader {
         if !atEnd then localClassGivenSelfTypeRefs(cls) = pkl.readNat()
 
         if cls.owner == rctx.scalaPackage && name == tpnme.PredefModule then rctx.createPredefMagicMethods(cls)
-        cls.withFlags(flags, privateWithin)
+        cls.setFlags(flags, privateWithin)
 
       case MODULEsym | VALsym =>
         val name2 = name1.asInstanceOf[SimpleName]
@@ -272,7 +272,7 @@ private[pickles] class PickleReader {
         val sym =
           if pickleFlags.isExistential || forceNotDeclaration then TermSymbol.createNotDeclaration(name, owner)
           else TermSymbol.create(name, owner)
-        sym.withFlags(flags, privateWithin)
+        sym.setFlags(flags, privateWithin)
 
       case _ =>
         errorBadSignature("bad symbol tag: " + tag)
@@ -306,7 +306,7 @@ private[pickles] class PickleReader {
               case _ => throw Scala2PickleFormatException(s"Type or type bounds expected for $sym gut found $tpe")
             sym match
               case sym: TypeMemberSymbol =>
-                sym.withDefinition(bounds match
+                sym.setDefinition(bounds match
                   case bounds: AbstractTypeBounds => TypeMemberDefinition.AbstractType(bounds)
                   case TypeAlias(alias)           => TypeMemberDefinition.TypeAlias(alias)
                 )
@@ -324,7 +324,7 @@ private[pickles] class PickleReader {
               case tpe =>
                 throw Scala2PickleFormatException(s"unexpected type $tpe for $cls, owner is ${cls.owner}")
 
-            cls.withTypeParams(typeParams)
+            cls.setTypeParams(typeParams)
 
             val parentTypes =
               if cls.isAnyVal then
@@ -334,10 +334,10 @@ private[pickles] class PickleReader {
                 // Patch the superclass of TupleN classes to inherit from *:
                 rctx.GenericTupleTypeOf(typeParams.map(_.localRef)) :: scala2ParentTypes.tail
               else scala2ParentTypes
-            cls.withParentsDirect(parentTypes)
+            cls.setParentsDirect(parentTypes)
 
             val givenSelfType = localClassGivenSelfTypeRefs.remove(cls).map(addr => at(addr)(readTrueType()))
-            cls.withGivenSelfType(givenSelfType)
+            cls.setGivenSelfType(givenSelfType)
 
           case sym: TermSymbol =>
             val storedType = tpe match
@@ -351,10 +351,10 @@ private[pickles] class PickleReader {
               val cls = sym.owner.asClass
               completeSymbolType(cls)
               for typeParam <- cls.typeParams do completeSymbolType(typeParam)
-              sym.withDeclaredType(patchConstructorType(cls, unwrappedTpe))
+              sym.setDeclaredType(patchConstructorType(cls, unwrappedTpe))
               sym.setParamSymss(patchConstructorParamSymss(sym, paramSymss))
             else
-              sym.withDeclaredType(unwrappedTpe)
+              sym.setDeclaredType(unwrappedTpe)
               sym.setParamSymss(paramSymss)
   end completeSymbolType
 
@@ -394,7 +394,7 @@ private[pickles] class PickleReader {
       val ctorTypeParams = clsTypeParams.map { clsTypeParam =>
         LocalTypeParamSymbol
           .create(clsTypeParam.name, ctor)
-          .withFlags(EmptyFlagSet, privateWithin = None)
+          .setFlags(EmptyFlagSet, privateWithin = None)
           .setAnnotations(Nil)
       }
 
