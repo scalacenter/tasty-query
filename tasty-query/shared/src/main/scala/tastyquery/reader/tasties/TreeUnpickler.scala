@@ -122,7 +122,7 @@ private[tasties] class TreeUnpickler private (
           if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(toTypeName(name), owner)
           else TermSymbol.create(name, owner)
         caches.registerSym(start, sym)
-        sym.setFlags(Case)
+        readSymbolModifiers(sym, tag, end)
         // bind is never an owner
         reader.until(end)(createSymbols(owner))
       case REFINEDtpt =>
@@ -185,6 +185,7 @@ private[tasties] class TreeUnpickler private (
   private def normalizeFlags(sym: Symbol, tag: Int, givenFlags: FlagSet, rhsIsEmpty: Boolean): FlagSet =
     var flags = givenFlags
     if tag == DEFDEF then flags |= Method
+    else if tag == BIND then flags |= Case
     if rhsIsEmpty && (tag == VALDEF || tag == DEFDEF) then flags |= Abstract
     if givenFlags.is(Module) then flags |= (if tag == VALDEF then ModuleValCreationFlags else ModuleClassCreationFlags)
     if flags.is(Enum) && !flags.is(Method) && sym.isTerm then flags |= StableRealizable
