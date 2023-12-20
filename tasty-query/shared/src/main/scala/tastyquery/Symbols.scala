@@ -96,9 +96,9 @@ object Symbols {
       * If a check fail, it should be reported with [[failNotCompleted]].
       */
     protected def doCheckCompleted(): Unit =
-      if !isFlagsInitialized then throw failNotCompleted("flags were not initialized")
-      if myPrivateWithin == null then throw failNotCompleted("privateWithin was not initialized")
-      if myAnnotations == null then throw failNotCompleted("annotations were not initialized")
+      if !isFlagsInitialized then failNotCompleted("flags were not initialized")
+      if myPrivateWithin == null then failNotCompleted("privateWithin was not initialized")
+      if myAnnotations == null then failNotCompleted("annotations were not initialized")
 
     private[tastyquery] def setTree(t: DefiningTreeType): this.type =
       require(!isPackage, s"Multiple trees correspond to one package, a single tree cannot be assigned")
