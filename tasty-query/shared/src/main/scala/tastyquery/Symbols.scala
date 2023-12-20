@@ -122,27 +122,18 @@ object Symbols {
     end setFlags
 
     private[tastyquery] final def setPrivateWithin(privateWithin: Option[DeclaringSymbol]): this.type =
-      if myPrivateWithin != null then throw IllegalStateException(s"reassignment of privateWithin to $this")
-      else
-        myPrivateWithin = privateWithin
-        this
-    end setPrivateWithin
+      assignOnce(myPrivateWithin, (myPrivateWithin = privateWithin))(s"reassignment of privateWithin to $this")
+      this
 
     private[tastyquery] final def setAnnotations(annots: List[Annotation]): this.type =
-      if myAnnotations != null then throw IllegalStateException(s"reassignment of annotations to $this")
-      else
-        myAnnotations = annots
-        this
+      assignOnce(myAnnotations, (myAnnotations = annots))(s"reassignment of annotations to $this")
+      this
 
     final def annotations: List[Annotation] =
-      val local = myAnnotations
-      if local != null then local
-      else throw IllegalStateException(s"annotations of $this have not been initialized")
+      getAssignedOnce(myAnnotations)(s"annotations of $this have not been initialized")
 
     protected final def privateWithin: Option[DeclaringSymbol] =
-      val local = myPrivateWithin
-      if local != null then local
-      else throw IllegalStateException(s"privateWithin of $this has not been initialized")
+      getAssignedOnce(myPrivateWithin)(s"privateWithin of $this has not been initialized")
 
     protected final def flags: FlagSet =
       if isFlagsInitialized then myFlags
@@ -455,8 +446,7 @@ object Symbols {
     end doCheckCompleted
 
     private[tastyquery] final def withDeclaredType(tpe: TypeOrMethodic): this.type =
-      if myDeclaredType != null then throw new IllegalStateException(s"reassignment of declared type to $this")
-      myDeclaredType = tpe
+      assignOnce(myDeclaredType, (myDeclaredType = tpe))(s"reassignment of declared type to $this")
       this
 
     /** You should not need this; it is a hack for patching Scala 2 constructors in `PickleReader`. */
@@ -465,15 +455,12 @@ object Symbols {
       this
 
     def declaredType: TypeOrMethodic =
-      val local = myDeclaredType
-      if local != null then local
-      else throw new IllegalStateException(s"$this was not assigned a declared type")
+      getAssignedOnce(myDeclaredType)(s"$this was not assigned a declared type")
 
     private lazy val isPrefixDependent: Boolean = TypeOps.isPrefixDependent(declaredType)
 
     private[tastyquery] final def setParamSymss(paramSymss: List[ParamSymbolsClause]): this.type =
-      if myParamSymss != null then throw IllegalStateException(s"reassignment of paramSymss to $this")
-      myParamSymss = paramSymss
+      assignOnce(myParamSymss, (myParamSymss = paramSymss))(s"reassignment of paramSymss to $this")
       this
 
     private[tastyquery] final def autoFillParamSymss(): this.type =
@@ -516,9 +503,7 @@ object Symbols {
     end autoComputeParamSymss
 
     def paramSymss: List[ParamSymbolsClause] =
-      val local = myParamSymss
-      if local != null then local
-      else throw IllegalStateException(s"$this was not assigned its paramSymss")
+      getAssignedOnce(myParamSymss)(s"$this was not assigned its paramSymss")
 
     /** Is this symbol a module val, i.e., the term of an `object`?
       *
@@ -770,14 +755,11 @@ object Symbols {
       if myDeclaredBounds == null then failNotCompleted("bounds are not initialized")
 
     private[tastyquery] final def setDeclaredBounds(bounds: TypeBounds): this.type =
-      if myDeclaredBounds != null then throw IllegalStateException(s"Trying to re-set the bounds of $this")
-      myDeclaredBounds = bounds
+      assignOnce(myDeclaredBounds, (myDeclaredBounds = bounds))(s"Trying to re-set the bounds of $this")
       this
 
     final def declaredBounds: TypeBounds =
-      val local = myDeclaredBounds
-      if local == null then throw IllegalStateException(s"$this was not assigned type bounds")
-      else local
+      getAssignedOnce(myDeclaredBounds)(s"$this was not assigned type bounds")
   end TypeParamSymbol
 
   final class ClassTypeParamSymbol private (name: TypeName, override val owner: ClassSymbol)
@@ -859,14 +841,11 @@ object Symbols {
       if myDefinition == null then failNotCompleted("type member definition not initialized")
 
     private[tastyquery] final def withDefinition(definition: TypeMemberDefinition): this.type =
-      if myDefinition != null then throw IllegalStateException(s"Reassignment of the definition of $this")
-      myDefinition = definition
+      assignOnce(myDefinition, (myDefinition = definition))(s"Reassignment of the definition of $this")
       this
 
     final def typeDef: TypeMemberDefinition =
-      val local = myDefinition
-      if local == null then throw IllegalStateException("$this was not assigned a definition")
-      else local
+      getAssignedOnce(myDefinition)("$this was not assigned a definition")
 
     final def declaredBounds: TypeBounds = typeDef match
       case TypeMemberDefinition.TypeAlias(alias)           => TypeAlias(alias)
@@ -1063,18 +1042,14 @@ object Symbols {
     end signatureName
 
     private[tastyquery] final def withTypeParams(tparams: List[ClassTypeParamSymbol]): this.type =
-      if myTypeParams != null then throw new IllegalStateException(s"reassignment of type parameters to $this")
-      myTypeParams = tparams
+      assignOnce(myTypeParams, (myTypeParams = tparams))(s"reassignment of type parameters to $this")
       this
 
     final def typeParams: List[ClassTypeParamSymbol] =
-      val local = myTypeParams
-      if local == null then throw new IllegalStateException(s"type params not initialized for $this")
-      else local
+      getAssignedOnce(myTypeParams)(s"type params not initialized for $this")
 
     private[tastyquery] final def withParentsDirect(parents: List[Type]): this.type =
-      if myParents != null then throw IllegalStateException(s"reassignment of parents of $this")
-      myParents = parents
+      assignOnce(myParents, (myParents = parents))(s"reassignment of parents of $this")
       this
 
     final def parents(using Context): List[Type] = memoized(myParents, myParents = _) {
@@ -1099,14 +1074,11 @@ object Symbols {
       )
 
     private[tastyquery] final def withGivenSelfType(givenSelfType: Option[Type]): this.type =
-      if myGivenSelfType != null then throw new IllegalStateException(s"reassignment of givenSelfType for $this")
-      myGivenSelfType = givenSelfType
+      assignOnce(myGivenSelfType, (myGivenSelfType = givenSelfType))(s"reassignment of givenSelfType for $this")
       this
 
     final def givenSelfType: Option[Type] =
-      val local = myGivenSelfType
-      if local == null then throw new IllegalStateException(s"givenSelfType not initialized for $this")
-      else local
+      getAssignedOnce(myGivenSelfType)(s"givenSelfType not initialized for $this")
 
     final def appliedRefInsideThis: Type = memoized(myAppliedRef, myAppliedRef = _) {
       if typeParams.isEmpty then localRef
