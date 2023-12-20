@@ -14,6 +14,7 @@ import tastyquery.Signatures.*
 import tastyquery.Spans.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
+import tastyquery.Utils.*
 
 import tastyquery.reader.Loaders.Loader
 
@@ -233,9 +234,7 @@ object Symbols {
       */
     def localRef: NamedType =
       // overridden in subclasses to provide a better-known result type
-      val local = myLocalRef
-      if local != null then local
-      else
+      memoized(myLocalRef, myLocalRef = _) {
         val pre = this match
           case self: ClassSymbol if self.isRefinementClass =>
             /* Refinement classes are not declarations of their owner.
@@ -247,9 +246,8 @@ object Symbols {
               case owner: PackageSymbol => owner.packageRef
               case owner: ClassSymbol   => owner.thisType
               case _                    => NoPrefix
-        val computed = NamedType(pre, this)
-        myLocalRef = computed
-        computed
+        NamedType(pre, this)
+      }
     end localRef
 
     /** The source language in which this symbol was defined.
@@ -624,25 +622,11 @@ object Symbols {
     private[tastyquery] final def needsSignature: Boolean =
       declaredType.isInstanceOf[MethodicType]
 
-    final def signature(using Context): Signature =
-      val local = mySignature
-      if local != null then local
-      else
-        val sig = Signature.fromType(declaredType, sourceLanguage, Option.when(isConstructor)(owner.asClass))
-        mySignature = sig
-        sig
-    end signature
+    final def signature(using Context): Signature = memoized(mySignature, mySignature = _) {
+      Signature.fromType(declaredType, sourceLanguage, Option.when(isConstructor)(owner.asClass))
+    }
 
-    final def targetName(using Context): UnsignedTermName =
-      val local = myTargetName
-      if local != null then local
-      else
-        val computed = computeTargetName()
-        myTargetName = computed
-        computed
-    end targetName
-
-    private def computeTargetName()(using Context): UnsignedTermName =
+    final def targetName(using Context): UnsignedTermName = memoized(myTargetName, myTargetName = _) {
       if annotations.isEmpty then name
       else
         defn.targetNameAnnotClass match
@@ -651,7 +635,7 @@ object Symbols {
             getAnnotation(targetNameAnnotClass) match
               case None        => name
               case Some(annot) => termName(annot.argIfConstant(0).get.stringValue)
-    end computeTargetName
+    }
 
     /** Returns the possibly signed name of this symbol.
       *
@@ -661,16 +645,10 @@ object Symbols {
       * If the `owner` of this symbol is a `DeclaringSymbol`, then `owner.getDecl(signedName)`
       * will return this symbol. This is not always the case with `name`.
       */
-    final def signedName(using Context): TermName =
-      val local = mySignedName
-      if local != null then local
-      else
-        val computed =
-          if needsSignature then SignedName(name, signature, targetName)
-          else name
-        mySignedName = computed
-        computed
-    end signedName
+    final def signedName(using Context): TermName = memoized(mySignedName, mySignedName = _) {
+      if needsSignature then SignedName(name, signature, targetName)
+      else name
+    }
 
     protected final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[TermSymbol] =
       val candidates = inClass.getAllOverloadedDecls(name).filterNot(_.isPrivate)
@@ -1079,12 +1057,9 @@ object Symbols {
           computeErasedName(owner.owner, filledName)
       end computeErasedName
 
-      val local = mySignatureName
-      if local != null then local
-      else
-        val computed = computeErasedName(owner, name.toTermName.asInstanceOf[SignatureNameItem])
-        mySignatureName = computed
-        computed
+      memoized(mySignatureName, mySignatureName = _) {
+        computeErasedName(owner, name.toTermName.asInstanceOf[SignatureNameItem])
+      }
     end signatureName
 
     private[tastyquery] final def withTypeParams(tparams: List[ClassTypeParamSymbol]): this.type =
@@ -1102,16 +1077,7 @@ object Symbols {
       myParents = parents
       this
 
-    final def parents(using Context): List[Type] =
-      val localParents = myParents
-      if localParents != null then localParents
-      else
-        val computed = computeParents()
-        myParents = computed
-        computed
-    end parents
-
-    private def computeParents()(using Context): List[Type] =
+    final def parents(using Context): List[Type] = memoized(myParents, myParents = _) {
       val tree = this.tree.getOrElse {
         throw IllegalStateException(s"$this was not assigned parents")
       }
@@ -1123,7 +1089,7 @@ object Symbols {
         case parent: TypeTree =>
           parent.toType
       }
-    end computeParents
+    }
 
     def parentClasses(using Context): List[ClassSymbol] =
       parents.map(tpe =>
@@ -1142,59 +1108,32 @@ object Symbols {
       if local == null then throw new IllegalStateException(s"givenSelfType not initialized for $this")
       else local
 
-    final def appliedRefInsideThis: Type =
-      val local = myAppliedRef
-      if local != null then local
-      else
-        val computed =
-          if typeParams.isEmpty then localRef
-          else AppliedType(localRef, typeParams.map(_.localRef))
-        myAppliedRef = computed
-        computed
-    end appliedRefInsideThis
+    final def appliedRefInsideThis: Type = memoized(myAppliedRef, myAppliedRef = _) {
+      if typeParams.isEmpty then localRef
+      else AppliedType(localRef, typeParams.map(_.localRef))
+    }
 
-    final def selfType: Type =
-      val local = mySelfType
-      if local != null then local
-      else
-        val computed = givenSelfType match
-          case None =>
-            appliedRefInsideThis
-          case Some(givenSelf) =>
-            if isModuleClass then givenSelf
-            else AndType(givenSelf, appliedRefInsideThis)
-        mySelfType = computed
-        computed
-    end selfType
+    final def selfType: Type = memoized(mySelfType, mySelfType = _) {
+      givenSelfType match
+        case None =>
+          appliedRefInsideThis
+        case Some(givenSelf) =>
+          if isModuleClass then givenSelf
+          else AndType(givenSelf, appliedRefInsideThis)
+    }
 
-    final def linearization(using Context): List[ClassSymbol] =
-      val local = myLinearization
-      if local != null then local
-      else
-        val computed = computeLinearization()
-        myLinearization = computed
-        computed
-
-    private def computeLinearization()(using Context): List[ClassSymbol] =
+    final def linearization(using Context): List[ClassSymbol] = memoized(myLinearization, myLinearization = _) {
       val parentsLin = parentClasses.foldLeft[List[ClassSymbol]](Nil) { (lin, parent) =>
         parent.linearization.filter(c => !lin.contains(c)) ::: lin
       }
       this :: parentsLin
+    }
 
     final def isSubClass(that: ClassSymbol)(using Context): Boolean =
       linearization.contains(that)
 
     /** The erasure of this class; nonsensical for `scala.Array`. */
-    private[tastyquery] final def erasure(using Context): ErasedTypeRef.ClassRef =
-      val local = myErasure
-      if local != null then local
-      else
-        val computed = computeErasure()
-        myErasure = computed
-        computed
-    end erasure
-
-    private def computeErasure()(using Context): ErasedTypeRef.ClassRef =
+    private[tastyquery] final def erasure(using Context): ErasedTypeRef.ClassRef = memoized(myErasure, myErasure = _) {
       (specialKind: @switch) match
         case SpecialKind.Any | SpecialKind.AnyVal | SpecialKind.Matchable | SpecialKind.Singleton =>
           defn.ObjectClass.erasure
@@ -1205,7 +1144,7 @@ object Symbols {
           defn.scalaPackage.findDecl(correspondingFunctionNName).asClass.erasure
         case _ =>
           ErasedTypeRef.ClassRef(this)
-    end computeErasure
+    }
 
     private[tastyquery] final def boxedClass(using Context): ClassSymbol = specialKind match
       case SpecialKind.Unit    => defn.ErasedBoxedUnitClass
@@ -1591,14 +1530,9 @@ object Symbols {
     private var myThisType: ThisType | Null = null
 
     /** The `ThisType` for this class, as visible from inside this class. */
-    final def thisType: ThisType =
-      val local = myThisType
-      if local != null then local
-      else
-        val computed = ThisType(localRef)
-        myThisType = computed
-        computed
-    end thisType
+    final def thisType: ThisType = memoized(myThisType, myThisType = _) {
+      ThisType(localRef)
+    }
 
     /** Directly sets the sealed children of this class.
       *
@@ -1626,27 +1560,20 @@ object Symbols {
       * The results are ordered by their declaration order in the source.
       */
     final def sealedChildren(using Context): List[ClassSymbol | TermSymbol] =
-      val local = mySealedChildren
-      if local != null then local
-      else
-        val computed: List[SealedChild] =
-          if !flags.is(Sealed) then Nil
-          else computeSealedChildren()
-        mySealedChildren = computed
-        computed
-    end sealedChildren
-
-    private def computeSealedChildren()(using Context): List[SealedChild] =
-      myScala2SealedChildren match
-        case Some(scala2Children) =>
-          scala2Children.map(extractSealedChildFromScala2(_))
-        case None =>
-          defn.internalChildAnnotClass match
+      memoized(mySealedChildren, mySealedChildren = _) {
+        if !flags.is(Sealed) then Nil
+        else
+          myScala2SealedChildren match
+            case Some(scala2Children) =>
+              scala2Children.map(extractSealedChildFromScala2(_))
             case None =>
-              Nil
-            case Some(annotClass) =>
-              getAnnotations(annotClass).map(extractSealedChildFromChildAnnot(_))
-    end computeSealedChildren
+              defn.internalChildAnnotClass match
+                case None =>
+                  Nil
+                case Some(annotClass) =>
+                  getAnnotations(annotClass).map(extractSealedChildFromChildAnnot(_))
+      }
+    end sealedChildren
 
     private def extractSealedChildFromScala2(scala2Child: Symbol | Scala2ExternalSymRef)(using Context): SealedChild =
       val sym = scala2Child match
@@ -1952,21 +1879,14 @@ object Symbols {
 
     // See PackageRef.findMember
     private[tastyquery] def allPackageObjectDecls()(using Context): List[ClassSymbol] =
-      val local = myAllPackageObjectDecls
-      if local != null then local
-      else
-        val computed = computeAllPackageObjectDecls()
-        myAllPackageObjectDecls = computed
-        computed
+      memoized(myAllPackageObjectDecls, myAllPackageObjectDecls = _) {
+        loadingNewRoots(_.loadAllPackageObjectRoots(this))
+        myDeclarations.valuesIterator.collect {
+          case cls: ClassSymbol if cls.name.isPackageObjectClassName => cls
+        }.toList
+          .sortBy(_.name.toString) // sort for determinism
+      }
     end allPackageObjectDecls
-
-    private def computeAllPackageObjectDecls()(using Context): List[ClassSymbol] =
-      loadingNewRoots(_.loadAllPackageObjectRoots(this))
-      myDeclarations.valuesIterator.collect {
-        case cls: ClassSymbol if cls.name.isPackageObjectClassName => cls
-      }.toList
-        .sortBy(_.name.toString) // sort for determinism
-    end computeAllPackageObjectDecls
   }
 
   private[tastyquery] object PackageSymbol:
