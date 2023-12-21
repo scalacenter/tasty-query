@@ -10,6 +10,7 @@ import tastyquery.Exceptions.*
 import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
+import tastyquery.Utils.*
 
 import tastyquery.reader.ReaderContext.rctx
 import tastyquery.reader.classfiles.{ClassfileParser, ClassfileReader}
@@ -168,7 +169,7 @@ private[tastyquery] object Loaders {
     private var initialized = false
     private var packages: Map[PackageSymbol, PackageLoadingInfo] = compiletime.uninitialized
     private var _hasGenericTuples: Boolean = compiletime.uninitialized
-    private var byEntry: ByEntryMap | Null = null
+    private var byEntry: Memo[ByEntryMap] = uninitializedMemo
 
     private def toPackageName(dotSeparated: String): PackageFullName =
       val parts =
@@ -245,12 +246,10 @@ private[tastyquery] object Loaders {
           case Some(pkgs) => Some(pkgs.view.flatMap(lookupRoots))
           case None       => None
 
-      val localByEntry = byEntry
-      if localByEntry == null then
-        val newByEntry = computeByEntry()
-        byEntry = newByEntry
-        computeLookup(newByEntry)
-      else computeLookup(localByEntry)
+      val localByEntry = memoized(byEntry, byEntry = _) {
+        computeByEntry()
+      }
+      computeLookup(localByEntry)
     end lookupByEntry
 
     def initPackages()(using ctx: Context): Unit =
