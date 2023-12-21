@@ -7,8 +7,19 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Types.*
 
-final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageSymbol, emptyPackage: PackageSymbol):
-  private given Context = ctx
+final class Definitions private[tastyquery] (
+  ctxRestricted: Context,
+  rootPackage: PackageSymbol,
+  emptyPackage: PackageSymbol
+):
+  /** Use the restricted context for an op.
+    *
+    * !!! ONLY use from the initialization code of `lazy val`s.
+    *
+    * Well ... `def FunctionNClass` also uses it, for compatibility reasons, but it's fine.
+    */
+  private inline def withRestrictedContext[A](op: Context ?=> A): A =
+    op(using ctxRestricted)
 
   // Core packages
 
@@ -284,15 +295,17 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     createSpecialMethod(cls, nme.m_synchronized, synchronizedTpe)
   end createObjectMagicMethods
 
-  lazy val Object_eq: TermSymbol = ObjectClass.findNonOverloadedDecl(nme.m_eq)
-  lazy val Object_ne: TermSymbol = ObjectClass.findNonOverloadedDecl(nme.m_ne)
-  lazy val Object_synchronized: TermSymbol = ObjectClass.findNonOverloadedDecl(nme.m_synchronized)
+  lazy val Object_eq: TermSymbol = withRestrictedContext(ObjectClass.findNonOverloadedDecl(nme.m_eq))
+  lazy val Object_ne: TermSymbol = withRestrictedContext(ObjectClass.findNonOverloadedDecl(nme.m_ne))
+
+  lazy val Object_synchronized: TermSymbol =
+    withRestrictedContext(ObjectClass.findNonOverloadedDecl(nme.m_synchronized))
 
   private[tastyquery] def createStringMagicMethods(cls: ClassSymbol): Unit =
     createSpecialMethod(cls, nme.m_+, stringConcatMethodType, Final)
   end createStringMagicMethods
 
-  lazy val String_+ : TermSymbol = StringClass.findNonOverloadedDecl(nme.m_+)
+  lazy val String_+ : TermSymbol = withRestrictedContext(StringClass.findNonOverloadedDecl(nme.m_+))
 
   private[tastyquery] def createEnumMagicMethods(cls: ClassSymbol): Unit =
     val ctorTpe = PolyType(List(typeName("E")), List(NothingAnyBounds), MethodType(Nil, Nil, UnitType))
@@ -412,8 +425,12 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   // Derived symbols, found on the classpath
 
   extension (pkg: PackageSymbol)
-    private def requiredClass(name: String): ClassSymbol = pkg.getDecl(typeName(name)).get.asClass
-    private def optionalClass(name: String): Option[ClassSymbol] = pkg.getDecl(typeName(name)).map(_.asClass)
+    private def requiredClass(name: String): ClassSymbol =
+      withRestrictedContext(pkg.getDecl(typeName(name)).get.asClass)
+
+    private def optionalClass(name: String): Option[ClassSymbol] =
+      withRestrictedContext(pkg.getDecl(typeName(name)).map(_.asClass))
+  end extension
 
   lazy val ObjectClass = javaLangPackage.requiredClass("Object")
 
@@ -423,7 +440,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
   lazy val Function0Class = scalaPackage.requiredClass("Function0")
 
   def FunctionNClass(n: Int): ClassSymbol =
-    scalaPackage.requiredClass(s"Function$n")
+    withRestrictedContext(scalaPackage.findDecl(typeName(s"Function$n")).asClass)
 
   lazy val IntClass = scalaPackage.requiredClass("Int")
   lazy val LongClass = scalaPackage.requiredClass("Long")
@@ -465,15 +482,15 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
 
   private[tastyquery] lazy val PolyFunctionClass = scalaPackage.optionalClass("PolyFunction")
 
-  private[tastyquery] def isPolyFunctionSub(tpe: Type): Boolean =
+  private[tastyquery] def isPolyFunctionSub(tpe: Type)(using Context): Boolean =
     PolyFunctionClass.exists(cls => tpe.baseType(cls).isDefined)
 
-  private[tastyquery] def isPolyFunctionSub(prefix: Prefix): Boolean = prefix match
+  private[tastyquery] def isPolyFunctionSub(prefix: Prefix)(using Context): Boolean = prefix match
     case tpe: Type => isPolyFunctionSub(tpe)
     case _         => false
 
   private[tastyquery] object PolyFunctionType:
-    def unapply(tpe: TermRefinement): Option[MethodicType] =
+    def unapply(tpe: TermRefinement)(using Context): Option[MethodicType] =
       PolyFunctionClass match
         case None =>
           None
@@ -488,7 +505,7 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
                 None
     end unapply
 
-    private[tastyquery] def functionClassOf(mt: MethodicType): ClassSymbol = mt match
+    private[tastyquery] def functionClassOf(mt: MethodicType)(using Context): ClassSymbol = mt match
       case mt: PolyType =>
         mt.resultType match
           case resultType: MethodicType =>
@@ -500,15 +517,17 @@ final class Definitions private[tastyquery] (ctx: Context, rootPackage: PackageS
     end functionClassOf
   end PolyFunctionType
 
-  lazy val hasGenericTuples = ctx.classloader.hasGenericTuples
+  lazy val hasGenericTuples = withRestrictedContext(ctx.classloader.hasGenericTuples)
 
   lazy val uninitializedMethod: Option[TermSymbol] =
-    scalaCompiletimePackage.getDecl(moduleClassName("package$package")).flatMap { packageObjectClass =>
-      packageObjectClass.asClass.getDecl(termName("uninitialized"))
+    withRestrictedContext {
+      scalaCompiletimePackage.getDecl(moduleClassName("package$package")).flatMap { packageObjectClass =>
+        packageObjectClass.asClass.getDecl(termName("uninitialized"))
+      }
     }
   end uninitializedMethod
 
   private[tastyquery] lazy val uninitializedMethodTermRef: TermRef =
-    TermRef(TermRef(defn.scalaCompiletimePackage.packageRef, termName("package$package")), termName("uninitialized"))
+    TermRef(TermRef(scalaCompiletimePackage.packageRef, termName("package$package")), termName("uninitialized"))
 
 end Definitions
