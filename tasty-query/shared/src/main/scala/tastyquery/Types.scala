@@ -909,7 +909,7 @@ object Types {
     private[tastyquery] final def designatorInternal: AnyDesignatorType =
       designator
 
-    private var myName: ThisName | Null = null
+    private var myName: Memo[ThisName] = uninitializedMemo
 
     private[tastyquery] final def isLocalRef(sym: Symbol): Boolean =
       prefix == NoPrefix && (designator eq sym)
@@ -1431,7 +1431,7 @@ object Types {
   end TypeRef
 
   final class ThisType(val tref: TypeRef) extends SingletonType {
-    private var myUnderlying: Type | Null = null
+    private var myUnderlying: Memo[Type] = uninitializedMemo
 
     override def underlying(using Context): Type = memoized(myUnderlying, myUnderlying = _) {
       val cls = this.cls
@@ -1449,10 +1449,12 @@ object Types {
     * by `super`.
     */
   final class SuperType(val thistpe: ThisType, val explicitSupertpe: Option[Type]) extends TypeProxy with SingletonType:
-    private var mySupertpe: Type | Null = explicitSupertpe.orNull
+    private var mySupertpe: Memo[Type] = uninitializedMemo
 
     private[tastyquery] final def supertpe(using Context): Type = memoized(mySupertpe, mySupertpe = _) {
-      thistpe.cls.parents.reduceLeft(_ & _)
+      explicitSupertpe.getOrElse {
+        thistpe.cls.parents.reduceLeft(_ & _)
+      }
     }
 
     override def underlying(using Context): Type = supertpe
@@ -1555,7 +1557,7 @@ object Types {
 
   /** The type of a repeated parameter of the form `T*`. */
   final class RepeatedType(val elemType: Type) extends TypeProxy:
-    private var myUnderlying: Type | Null = null
+    private var myUnderlying: Memo[Type] = uninitializedMemo
 
     override def underlying(using Context): Type = memoized(myUnderlying, myUnderlying = _) {
       defn.SeqTypeOf(elemType)
@@ -2059,7 +2061,7 @@ object Types {
   ) extends RefinedType:
     // Cache fields
     private[tastyquery] val isMethodic = refinedType.isInstanceOf[MethodicType]
-    private var mySignedName: SignedName | Null = null
+    private var mySignedName: Memo[SignedName] = uninitializedMemo
 
     require(!(isStable && isMethodic), s"Ill-formed $this")
 
@@ -2251,7 +2253,7 @@ object Types {
 
   /** selector match { cases } */
   final class MatchType(val bound: Type, val scrutinee: Type, val cases: List[MatchTypeCase]) extends TypeProxy:
-    private var myReduced: Option[Type] | Null = null
+    private var myReduced: Memo[Option[Type]] = uninitializedMemo
 
     def underlying(using Context): Type = bound
 

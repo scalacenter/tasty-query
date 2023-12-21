@@ -13,20 +13,16 @@ import tastyquery.Utils.*
 
 object Annotations:
   final class Annotation(val tree: TermTree):
-    private var mySymbol: ClassSymbol | Null = null
-    private var mySafeSymbol: Option[ClassSymbol] | Null = null
-    private var myArguments: List[TermTree] | Null = null
+    private var mySymbol: Memo[ClassSymbol] = uninitializedMemo
+    private var mySafeSymbol: Memo[Option[ClassSymbol]] = uninitializedMemo
+    private var myArguments: Memo[List[TermTree]] = uninitializedMemo
 
     /** The annotation class symbol. */
     def symbol(using Context): ClassSymbol =
-      memoized(
-        mySymbol,
-        { computed =>
-          mySymbol = computed
-          mySafeSymbol = Some(computed)
-        }
-      ) {
+      memoized2(mySymbol, mySymbol = _) {
         computeAnnotSymbol(tree)
+      } { computed =>
+        initializeMemo[Option[ClassSymbol]](mySafeSymbol = _, Some(computed))
       }
     end symbol
 
@@ -35,14 +31,10 @@ object Annotations:
       * If the class of this annotation cannot be successfully resolved, returns `false`.
       */
     private[tastyquery] def safeHasSymbol(cls: ClassSymbol)(using Context): Boolean =
-      val safeSymbol = memoized(
-        mySafeSymbol,
-        { computed =>
-          computed.foreach(mySymbol = _)
-          mySafeSymbol = computed
-        }
-      ) {
+      val safeSymbol = memoized2(mySafeSymbol, mySafeSymbol = _) {
         computeSafeAnnotSymbol(tree)
+      } { computed =>
+        computed.foreach(sym => initializeMemo[ClassSymbol](mySymbol = _, sym))
       }
 
       safeSymbol.contains(cls)

@@ -75,8 +75,8 @@ object Symbols {
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
     private var myTree: Option[DefiningTreeType] = None
-    private var myPrivateWithin: Option[DeclaringSymbol] | Null = null
-    private var myAnnotations: List[Annotation] | Null = null
+    private var myPrivateWithin: SingleAssign[Option[DeclaringSymbol]] = uninitializedSingleAssign
+    private var myAnnotations: SingleAssign[List[Annotation]] = uninitializedSingleAssign
 
     /** Checks that this `Symbol` has been completely initialized.
       *
@@ -97,8 +97,8 @@ object Symbols {
       */
     protected def doCheckCompleted(): Unit =
       if !isFlagsInitialized then failNotCompleted("flags were not initialized")
-      if myPrivateWithin == null then failNotCompleted("privateWithin was not initialized")
-      if myAnnotations == null then failNotCompleted("annotations were not initialized")
+      if !myPrivateWithin.isInitialized then failNotCompleted("privateWithin was not initialized")
+      if !myAnnotations.isInitialized then failNotCompleted("annotations were not initialized")
 
     private[tastyquery] def setTree(t: DefiningTreeType): this.type =
       require(!isPackage, s"Multiple trees correspond to one package, a single tree cannot be assigned")
@@ -113,7 +113,7 @@ object Symbols {
       setPrivateWithin(privateWithin)
 
     private[tastyquery] final def setFlags(flags: FlagSet): this.type =
-      if isFlagsInitialized || myPrivateWithin != null then
+      if isFlagsInitialized || myPrivateWithin.isInitialized then
         throw IllegalStateException(s"reassignment of flags to $this")
       else
         isFlagsInitialized = true
@@ -122,11 +122,11 @@ object Symbols {
     end setFlags
 
     private[tastyquery] final def setPrivateWithin(privateWithin: Option[DeclaringSymbol]): this.type =
-      assignOnce(myPrivateWithin, (myPrivateWithin = privateWithin))(s"reassignment of privateWithin to $this")
+      assignOnce(myPrivateWithin, myPrivateWithin = _, privateWithin)(s"reassignment of privateWithin to $this")
       this
 
     private[tastyquery] final def setAnnotations(annots: List[Annotation]): this.type =
-      assignOnce(myAnnotations, (myAnnotations = annots))(s"reassignment of annotations to $this")
+      assignOnce(myAnnotations, myAnnotations = _, annots)(s"reassignment of annotations to $this")
       this
 
     final def annotations: List[Annotation] =
@@ -216,7 +216,7 @@ object Symbols {
   sealed abstract class TermOrTypeSymbol(override val owner: Symbol) extends Symbol(owner):
     type MatchingSymbolType >: this.type <: TermOrTypeSymbol
 
-    private var myLocalRef: NamedType | Null = null
+    private var myLocalRef: Memo[NamedType] = uninitializedMemo
 
     /** A reference to this symbol that is valid within its declaring scope.
       *
@@ -425,33 +425,35 @@ object Symbols {
     type MatchingSymbolType = TermSymbol
 
     // Reference fields (checked in doCheckCompleted)
-    private var myDeclaredType: TypeOrMethodic | Null = null
-    private var myParamSymss: List[ParamSymbolsClause] | Null = null
+    private var myDeclaredType: SingleAssign[TypeOrMethodic] = uninitializedSingleAssign
+    private var myParamSymss: SingleAssign[List[ParamSymbolsClause]] = uninitializedSingleAssign
 
     // Cache fields
-    private var mySignature: Signature | Null = null
-    private var myTargetName: UnsignedTermName | Null = null
-    private var mySignedName: TermName | Null = null
+    private var mySignature: Memo[Signature] = uninitializedMemo
+    private var myTargetName: Memo[UnsignedTermName] = uninitializedMemo
+    private var mySignedName: Memo[TermName] = uninitializedMemo
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
-      if myDeclaredType == null then failNotCompleted("declaredType was not initialized")
+      if !myDeclaredType.isInitialized then failNotCompleted("declaredType was not initialized")
 
       if flags.is(Method) then
-        if myParamSymss == null then failNotCompleted("paramSymss was not initialized")
+        if !myParamSymss.isInitialized then failNotCompleted("paramSymss was not initialized")
         paramSymss.foreach(_.merge.foreach(_.checkCompleted()))
-      else if myParamSymss == null then myParamSymss = Nil // auto-complete for non-methods
-      else if myParamSymss != Nil then
+      else if !myParamSymss.isInitialized then
+        // auto-complete for non-methods
+        assignOnce(myParamSymss, myParamSymss = _, Nil)("unreachable")
+      else if getAssignedOnce(myParamSymss)("unreachable") != Nil then
         throw IllegalArgumentException(s"illegal non-empty paramSymss $myParamSymss for $this")
     end doCheckCompleted
 
     private[tastyquery] final def setDeclaredType(tpe: TypeOrMethodic): this.type =
-      assignOnce(myDeclaredType, (myDeclaredType = tpe))(s"reassignment of declared type to $this")
+      assignOnce(myDeclaredType, myDeclaredType = _, tpe)(s"reassignment of declared type to $this")
       this
 
     /** You should not need this; it is a hack for patching Scala 2 constructors in `PickleReader`. */
     private[tastyquery] final def overwriteDeclaredType(tpe: TypeOrMethodic): this.type =
-      myDeclaredType = tpe
+      overwriteSingleAssign[TypeOrMethodic](myDeclaredType = _, tpe)
       this
 
     def declaredType: TypeOrMethodic =
@@ -460,7 +462,7 @@ object Symbols {
     private lazy val isPrefixDependent: Boolean = TypeOps.isPrefixDependent(declaredType)
 
     private[tastyquery] final def setParamSymss(paramSymss: List[ParamSymbolsClause]): this.type =
-      assignOnce(myParamSymss, (myParamSymss = paramSymss))(s"reassignment of paramSymss to $this")
+      assignOnce(myParamSymss, myParamSymss = _, paramSymss)(s"reassignment of paramSymss to $this")
       this
 
     private[tastyquery] final def autoFillParamSymss(): this.type =
@@ -748,14 +750,14 @@ object Symbols {
     type DefiningTreeType >: TypeParam <: TypeParam | TypeTreeBind
 
     // Reference fields (checked in doCheckCompleted)
-    private var myDeclaredBounds: TypeBounds | Null = null
+    private var myDeclaredBounds: SingleAssign[TypeBounds] = uninitializedSingleAssign
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
-      if myDeclaredBounds == null then failNotCompleted("bounds are not initialized")
+      if !myDeclaredBounds.isInitialized then failNotCompleted("bounds are not initialized")
 
     private[tastyquery] final def setDeclaredBounds(bounds: TypeBounds): this.type =
-      assignOnce(myDeclaredBounds, (myDeclaredBounds = bounds))(s"Trying to re-set the bounds of $this")
+      assignOnce(myDeclaredBounds, myDeclaredBounds = _, bounds)(s"Trying to re-set the bounds of $this")
       this
 
     final def declaredBounds: TypeBounds =
@@ -834,14 +836,14 @@ object Symbols {
     type DefiningTreeType = TypeMember
 
     // Reference fields (checked in doCheckCompleted)
-    private var myDefinition: TypeMemberDefinition | Null = null
+    private var myDefinition: SingleAssign[TypeMemberDefinition] = uninitializedSingleAssign
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
-      if myDefinition == null then failNotCompleted("type member definition not initialized")
+      if !myDefinition.isInitialized then failNotCompleted("type member definition not initialized")
 
     private[tastyquery] final def setDefinition(definition: TypeMemberDefinition): this.type =
-      assignOnce(myDefinition, (myDefinition = definition))(s"Reassignment of the definition of $this")
+      assignOnce(myDefinition, myDefinition = _, definition)(s"Reassignment of the definition of $this")
       this
 
     final def typeDef: TypeMemberDefinition =
@@ -902,9 +904,9 @@ object Symbols {
     private val specialKind: SpecialKind = computeSpecialKind(name, owner)
 
     // Reference fields (checked in doCheckCompleted)
-    private var myTypeParams: List[ClassTypeParamSymbol] | Null = null
-    private var myParents: List[Type] | Null = null
-    private var myGivenSelfType: Option[Type] | Null = null
+    private var myTypeParams: SingleAssign[List[ClassTypeParamSymbol]] = uninitializedSingleAssign
+    private var myParents: Memo[List[Type]] = uninitializedMemo
+    private var myGivenSelfType: SingleAssign[Option[Type]] = uninitializedSingleAssign
 
     // Optional reference fields
     private var myScala2SealedChildren: Option[List[Symbol | Scala2ExternalSymRef]] = None
@@ -914,18 +916,18 @@ object Symbols {
       mutable.HashMap[UnsignedName, mutable.HashSet[TermOrTypeSymbol]]()
 
     // Cache fields
-    private var mySignatureName: SignatureName | Null = null
-    private var myAppliedRef: Type | Null = null
-    private var mySelfType: Type | Null = null
-    private var myLinearization: List[ClassSymbol] | Null = null
-    private var myErasure: ErasedTypeRef.ClassRef | Null = null
-    private var mySealedChildren: List[SealedChild] | Null = null
+    private var mySignatureName: Memo[SignatureName] = uninitializedMemo
+    private var myAppliedRef: Memo[Type] = uninitializedMemo
+    private var mySelfType: Memo[Type] = uninitializedMemo
+    private var myLinearization: Memo[List[ClassSymbol]] = uninitializedMemo
+    private var myErasure: Memo[ErasedTypeRef.ClassRef] = uninitializedMemo
+    private var mySealedChildren: Memo[List[SealedChild]] = uninitializedMemo
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
-      if myTypeParams == null then failNotCompleted("typeParams not initialized")
-      if myParents == null && tree.isEmpty then failNotCompleted("parents not initialized")
-      if myGivenSelfType == null then failNotCompleted("givenSelfType not initialized")
+      if !myTypeParams.isInitialized then failNotCompleted("typeParams not initialized")
+      if !myParents.isInitialized && tree.isEmpty then failNotCompleted("parents not initialized")
+      if !myGivenSelfType.isInitialized then failNotCompleted("givenSelfType not initialized")
 
     /** The open level of this class (open, closed, sealed or final). */
     final def openLevel: OpenLevel =
@@ -1042,14 +1044,14 @@ object Symbols {
     end signatureName
 
     private[tastyquery] final def setTypeParams(tparams: List[ClassTypeParamSymbol]): this.type =
-      assignOnce(myTypeParams, (myTypeParams = tparams))(s"reassignment of type parameters to $this")
+      assignOnce(myTypeParams, myTypeParams = _, tparams)(s"reassignment of type parameters to $this")
       this
 
     final def typeParams: List[ClassTypeParamSymbol] =
       getAssignedOnce(myTypeParams)(s"type params not initialized for $this")
 
     private[tastyquery] final def setParentsDirect(parents: List[Type]): this.type =
-      assignOnce(myParents, (myParents = parents))(s"reassignment of parents of $this")
+      assignOnceMemo(myParents, myParents = _, parents)(s"reassignment of parents of $this")
       this
 
     final def parents(using Context): List[Type] = memoized(myParents, myParents = _) {
@@ -1074,7 +1076,7 @@ object Symbols {
       )
 
     private[tastyquery] final def setGivenSelfType(givenSelfType: Option[Type]): this.type =
-      assignOnce(myGivenSelfType, (myGivenSelfType = givenSelfType))(s"reassignment of givenSelfType for $this")
+      assignOnce(myGivenSelfType, myGivenSelfType = _, givenSelfType)(s"reassignment of givenSelfType for $this")
       this
 
     final def givenSelfType: Option[Type] =
@@ -1271,9 +1273,6 @@ object Symbols {
       }
 
     // Type-related things
-
-    private[tastyquery] final def initParents: Boolean =
-      myTypeParams != null
 
     // Partial internal guarantee that we follow the right shape
     private type BaseType = TypeRef | AppliedType
@@ -1499,7 +1498,7 @@ object Symbols {
       lookup(linearization)
     end resolveMatchingMember
 
-    private var myThisType: ThisType | Null = null
+    private var myThisType: Memo[ThisType] = uninitializedMemo
 
     /** The `ThisType` for this class, as visible from inside this class. */
     final def thisType: ThisType = memoized(myThisType, myThisType = _) {
@@ -1515,7 +1514,8 @@ object Symbols {
         throw IllegalArgumentException(s"Illegal $this.setScala2SealedChildren($children) for non-Scala 2 class")
       if myScala2SealedChildren.isDefined then
         throw IllegalStateException(s"Scala 2 sealed children were already set for $this")
-      if mySealedChildren != null then throw IllegalStateException(s"Sealed children were already computed for $this")
+      if mySealedChildren.isInitialized then
+        throw IllegalStateException(s"Sealed children were already computed for $this")
       myScala2SealedChildren = Some(children)
     end setScala2SealedChildren
 
@@ -1719,7 +1719,7 @@ object Symbols {
 
     // Cache fields
     val packageRef: PackageRef = new PackageRef(this)
-    private var myAllPackageObjectDecls: List[ClassSymbol] | Null = null
+    private var myAllPackageObjectDecls: Memo[List[ClassSymbol]] = uninitializedMemo
 
     this.setFlags(EmptyFlagSet, None)
     this.setAnnotations(Nil)

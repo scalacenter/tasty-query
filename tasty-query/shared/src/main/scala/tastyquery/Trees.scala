@@ -70,7 +70,7 @@ object Trees {
   end StatementTree
 
   sealed abstract class TermTree(pos: SourcePosition) extends StatementTree(pos):
-    private var myType: TermType | Null = null
+    private var myType: Memo[TermType] = uninitializedMemo
 
     def withPos(pos: SourcePosition): TermTree
 
@@ -716,7 +716,7 @@ object Trees {
   end TypeArgTree
 
   sealed abstract class TypeTree(pos: SourcePosition) extends TypeArgTree(pos) {
-    private var myType: NonEmptyPrefix | Null = null
+    private var myType: Memo[NonEmptyPrefix] = uninitializedMemo
 
     protected def calculateType: NonEmptyPrefix
 
@@ -882,7 +882,7 @@ object Trees {
   }
 
   final case class WildcardTypeArgTree(bounds: TypeBoundsTree)(pos: SourcePosition) extends TypeArgTree(pos) {
-    private var myTypeOrWildcard: WildcardTypeArg | Null = null
+    private var myTypeOrWildcard: Memo[WildcardTypeArg] = uninitializedMemo
 
     def toTypeOrWildcard: TypeOrWildcard = memoized(myTypeOrWildcard, myTypeOrWildcard = _) {
       WildcardTypeArg(bounds.toTypeBounds)
