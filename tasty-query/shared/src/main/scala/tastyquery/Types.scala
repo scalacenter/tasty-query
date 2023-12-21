@@ -3,7 +3,6 @@ package tastyquery
 import scala.annotation.{constructorOnly, tailrec, targetName}
 
 import scala.collection.mutable
-import scala.compiletime.uninitialized
 
 import tastyquery.Annotations.*
 import tastyquery.Constants.*
@@ -2348,19 +2347,11 @@ object Types {
   // ----- Ground Types -------------------------------------------------
 
   final class OrType(val first: Type, val second: Type) extends GroundType {
-    private var myJoin: Type | Null = uninitialized
+    private var myJoin: Memo[Type] = uninitializedMemo
 
     /** Returns the closest non-OrType type above this one. */
-    def join(using Context): Type = {
-      val myJoin = this.myJoin
-      if (myJoin != null) then myJoin
-      else
-        val computedJoin = computeJoin()
-        this.myJoin = computedJoin
-        computedJoin
-    }
+    def join(using Context): Type = memoized(myJoin, myJoin = _) {
 
-    private def computeJoin()(using Context): Type =
       /** The minimal set of classes in `classes` which derive all other classes in `classes` */
       def dominators(classes: List[ClassSymbol], acc: List[ClassSymbol]): List[ClassSymbol] = classes match
         case cls :: rest =>
@@ -2375,7 +2366,7 @@ object Types {
       val commonBaseClasses = TypeOps.baseClasses(prunedNulls)
       val doms = dominators(commonBaseClasses, Nil)
       doms.flatMap(cls => prunedNulls.baseType(cls)).reduceLeft(AndType.make(_, _))
-    end computeJoin
+    }
 
     private def tryPruneNulls(tp: Type)(using Context): Type = tp match
       case tp: OrType =>
