@@ -1018,7 +1018,7 @@ object Types {
   /** The singleton type for path prefix#myDesignator. */
   final class TermRef private (
     val prefix: Prefix,
-    private var myDesignator: TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
+    private val myDesignator: TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
   ) extends NamedType
       with SingletonType
       with TermReferenceType {
@@ -1056,7 +1056,6 @@ object Types {
     private def resolve()(using Context): Unit =
       def storeResolved(sym: TermSymbol, tpe: TypeOrMethodic, isStable: Boolean): Unit =
         mySymbol = sym
-        myDesignator = sym
         myUnderlying = tpe
         myIsStable = isStable
 
@@ -1236,7 +1235,7 @@ object Types {
 
   final class TypeRef private (
     val prefix: Prefix,
-    private var myDesignator: TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
+    private val myDesignator: TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
   ) extends NamedType {
 
     protected type ThisName = TypeName
@@ -1257,7 +1256,6 @@ object Types {
       this(prefix, name)
       val optSymbol = resolved.symbols.headOption
       myOptSymbol = optSymbol
-      if optSymbol.isDefined then myDesignator = optSymbol.get
       myBounds = resolved.bounds
     end this
 
@@ -1274,11 +1272,9 @@ object Types {
     private def resolve()(using Context): Unit =
       def storeClass(cls: ClassSymbol): Unit =
         myOptSymbol = Some(cls)
-        myDesignator = cls
 
       def storeTypeMember(sym: Option[TypeSymbolWithBounds], bounds: TypeBounds): Unit =
         myOptSymbol = sym
-        if sym.isDefined then myDesignator = sym.get
         myBounds = bounds
 
       def storeSymbol(sym: TypeSymbol): Unit = sym match
