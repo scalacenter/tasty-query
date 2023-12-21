@@ -338,24 +338,23 @@ object Trees {
   }
 
   /** fun(args) */
-  final case class Apply protected[tastyquery] (fun: TermTree, args: List[TermTree])(
-    private var _methodType: MethodType | Null,
-    pos: SourcePosition
-  ) extends TermTree(pos):
+  final case class Apply(fun: TermTree, args: List[TermTree])(pos: SourcePosition) extends TermTree(pos):
     import Apply.*
 
-    def this(fun: TermTree, args: List[TermTree])(pos: SourcePosition) = this(fun, args)(null, pos)
+    private var myMethodType: Memo[MethodType] = uninitializedMemo
 
-    def methodType(using Context): MethodType =
-      val local = _methodType
-      if local != null then local
-      else
-        val computed = fun.tpe.widenTermRef match
-          case funTpe: MethodType => funTpe
-          case funTpe             => throw NonMethodReferenceException(s"application to $funTpe")
-        _methodType = computed
-        computed
-    end methodType
+    protected[tastyquery] def this(
+      fun: TermTree,
+      args: List[TermTree]
+    )(methodType: MethodType | Null, pos: SourcePosition) =
+      this(fun, args)(pos)
+      if methodType != null then initializeMemo[MethodType](myMethodType = _, methodType)
+
+    def methodType(using Context): MethodType = memoized(myMethodType, myMethodType = _) {
+      fun.tpe.widenTermRef match
+        case funTpe: MethodType => funTpe
+        case funTpe             => throw NonMethodReferenceException(s"application to $funTpe")
+    }
 
     private def instantiateMethodType(args: List[TermType])(using Context): TermType =
       for arg <- args do
@@ -383,7 +382,7 @@ object Trees {
 
   object Apply:
     def apply(fun: TermTree, args: List[TermTree])(pos: SourcePosition): Apply =
-      new Apply(fun, args)(null, pos)
+      new Apply(fun, args)(pos)
 
     def forSignaturePolymorphic(fun: TermTree, methodType: MethodType, args: List[TermTree])(
       pos: SourcePosition
