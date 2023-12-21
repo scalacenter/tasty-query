@@ -126,6 +126,9 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
+          // private[tastyquery], not an issue
+          ProblemFilters.exclude[MissingClassProblem]("tastyquery.Utils"),
+          ProblemFilters.exclude[MissingClassProblem]("tastyquery.Utils$"),
           // Everything in tastyquery.reader is private[tastyquery] at most
           ProblemFilters.exclude[Problem]("tastyquery.reader.*"),
         )

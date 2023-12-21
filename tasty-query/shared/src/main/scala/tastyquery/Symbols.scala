@@ -14,6 +14,7 @@ import tastyquery.Signatures.*
 import tastyquery.Spans.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
+import tastyquery.Utils.*
 
 import tastyquery.reader.Loaders.Loader
 
@@ -95,11 +96,11 @@ object Symbols {
       * If a check fail, it should be reported with [[failNotCompleted]].
       */
     protected def doCheckCompleted(): Unit =
-      if !isFlagsInitialized then throw failNotCompleted("flags were not initialized")
-      if myPrivateWithin == null then throw failNotCompleted("privateWithin was not initialized")
-      if myAnnotations == null then throw failNotCompleted("annotations were not initialized")
+      if !isFlagsInitialized then failNotCompleted("flags were not initialized")
+      if myPrivateWithin == null then failNotCompleted("privateWithin was not initialized")
+      if myAnnotations == null then failNotCompleted("annotations were not initialized")
 
-    private[tastyquery] def withTree(t: DefiningTreeType): this.type =
+    private[tastyquery] def setTree(t: DefiningTreeType): this.type =
       require(!isPackage, s"Multiple trees correspond to one package, a single tree cannot be assigned")
       myTree = Some(t)
       this
@@ -107,7 +108,7 @@ object Symbols {
     final def tree: Option[DefiningTreeType] =
       myTree
 
-    private[tastyquery] final def withFlags(flags: FlagSet, privateWithin: Option[DeclaringSymbol]): this.type =
+    private[tastyquery] final def setFlags(flags: FlagSet, privateWithin: Option[DeclaringSymbol]): this.type =
       setFlags(flags)
       setPrivateWithin(privateWithin)
 
@@ -121,27 +122,18 @@ object Symbols {
     end setFlags
 
     private[tastyquery] final def setPrivateWithin(privateWithin: Option[DeclaringSymbol]): this.type =
-      if myPrivateWithin != null then throw IllegalStateException(s"reassignment of privateWithin to $this")
-      else
-        myPrivateWithin = privateWithin
-        this
-    end setPrivateWithin
+      assignOnce(myPrivateWithin, (myPrivateWithin = privateWithin))(s"reassignment of privateWithin to $this")
+      this
 
     private[tastyquery] final def setAnnotations(annots: List[Annotation]): this.type =
-      if myAnnotations != null then throw IllegalStateException(s"reassignment of annotations to $this")
-      else
-        myAnnotations = annots
-        this
+      assignOnce(myAnnotations, (myAnnotations = annots))(s"reassignment of annotations to $this")
+      this
 
     final def annotations: List[Annotation] =
-      val local = myAnnotations
-      if local != null then local
-      else throw IllegalStateException(s"annotations of $this have not been initialized")
+      getAssignedOnce(myAnnotations)(s"annotations of $this have not been initialized")
 
     protected final def privateWithin: Option[DeclaringSymbol] =
-      val local = myPrivateWithin
-      if local != null then local
-      else throw IllegalStateException(s"privateWithin of $this has not been initialized")
+      getAssignedOnce(myPrivateWithin)(s"privateWithin of $this has not been initialized")
 
     protected final def flags: FlagSet =
       if isFlagsInitialized then myFlags
@@ -233,9 +225,7 @@ object Symbols {
       */
     def localRef: NamedType =
       // overridden in subclasses to provide a better-known result type
-      val local = myLocalRef
-      if local != null then local
-      else
+      memoized(myLocalRef, myLocalRef = _) {
         val pre = this match
           case self: ClassSymbol if self.isRefinementClass =>
             /* Refinement classes are not declarations of their owner.
@@ -247,9 +237,8 @@ object Symbols {
               case owner: PackageSymbol => owner.packageRef
               case owner: ClassSymbol   => owner.thisType
               case _                    => NoPrefix
-        val computed = NamedType(pre, this)
-        myLocalRef = computed
-        computed
+        NamedType(pre, this)
+      }
     end localRef
 
     /** The source language in which this symbol was defined.
@@ -456,9 +445,8 @@ object Symbols {
         throw IllegalArgumentException(s"illegal non-empty paramSymss $myParamSymss for $this")
     end doCheckCompleted
 
-    private[tastyquery] final def withDeclaredType(tpe: TypeOrMethodic): this.type =
-      if myDeclaredType != null then throw new IllegalStateException(s"reassignment of declared type to $this")
-      myDeclaredType = tpe
+    private[tastyquery] final def setDeclaredType(tpe: TypeOrMethodic): this.type =
+      assignOnce(myDeclaredType, (myDeclaredType = tpe))(s"reassignment of declared type to $this")
       this
 
     /** You should not need this; it is a hack for patching Scala 2 constructors in `PickleReader`. */
@@ -467,15 +455,12 @@ object Symbols {
       this
 
     def declaredType: TypeOrMethodic =
-      val local = myDeclaredType
-      if local != null then local
-      else throw new IllegalStateException(s"$this was not assigned a declared type")
+      getAssignedOnce(myDeclaredType)(s"$this was not assigned a declared type")
 
     private lazy val isPrefixDependent: Boolean = TypeOps.isPrefixDependent(declaredType)
 
     private[tastyquery] final def setParamSymss(paramSymss: List[ParamSymbolsClause]): this.type =
-      if myParamSymss != null then throw IllegalStateException(s"reassignment of paramSymss to $this")
-      myParamSymss = paramSymss
+      assignOnce(myParamSymss, (myParamSymss = paramSymss))(s"reassignment of paramSymss to $this")
       this
 
     private[tastyquery] final def autoFillParamSymss(): this.type =
@@ -495,8 +480,8 @@ object Symbols {
           val paramSyms = tpe.paramNames.lazyZip(tpe.paramTypes).map { (name, paramType) =>
             TermSymbol
               .createNotDeclaration(name, this)
-              .withFlags(termParamFlags, privateWithin = None)
-              .withDeclaredType(paramType)
+              .setFlags(termParamFlags, privateWithin = None)
+              .setDeclaredType(paramType)
           }
           Left(paramSyms) :: autoComputeParamSymss(tpe.resultType, termParamFlags)
 
@@ -504,7 +489,7 @@ object Symbols {
           val paramSyms = tpe.paramNames.map { name =>
             LocalTypeParamSymbol
               .create(name, this)
-              .withFlags(EmptyFlagSet, privateWithin = None)
+              .setFlags(EmptyFlagSet, privateWithin = None)
           }
           val paramSymRefs = paramSyms.map(_.localRef)
           def subst(t: TypeOrMethodic): t.ThisTypeMappableType =
@@ -518,9 +503,7 @@ object Symbols {
     end autoComputeParamSymss
 
     def paramSymss: List[ParamSymbolsClause] =
-      val local = myParamSymss
-      if local != null then local
-      else throw IllegalStateException(s"$this was not assigned its paramSymss")
+      getAssignedOnce(myParamSymss)(s"$this was not assigned its paramSymss")
 
     /** Is this symbol a module val, i.e., the term of an `object`?
       *
@@ -624,25 +607,11 @@ object Symbols {
     private[tastyquery] final def needsSignature: Boolean =
       declaredType.isInstanceOf[MethodicType]
 
-    final def signature(using Context): Signature =
-      val local = mySignature
-      if local != null then local
-      else
-        val sig = Signature.fromType(declaredType, sourceLanguage, Option.when(isConstructor)(owner.asClass))
-        mySignature = sig
-        sig
-    end signature
+    final def signature(using Context): Signature = memoized(mySignature, mySignature = _) {
+      Signature.fromType(declaredType, sourceLanguage, Option.when(isConstructor)(owner.asClass))
+    }
 
-    final def targetName(using Context): UnsignedTermName =
-      val local = myTargetName
-      if local != null then local
-      else
-        val computed = computeTargetName()
-        myTargetName = computed
-        computed
-    end targetName
-
-    private def computeTargetName()(using Context): UnsignedTermName =
+    final def targetName(using Context): UnsignedTermName = memoized(myTargetName, myTargetName = _) {
       if annotations.isEmpty then name
       else
         defn.targetNameAnnotClass match
@@ -651,7 +620,7 @@ object Symbols {
             getAnnotation(targetNameAnnotClass) match
               case None        => name
               case Some(annot) => termName(annot.argIfConstant(0).get.stringValue)
-    end computeTargetName
+    }
 
     /** Returns the possibly signed name of this symbol.
       *
@@ -661,16 +630,10 @@ object Symbols {
       * If the `owner` of this symbol is a `DeclaringSymbol`, then `owner.getDecl(signedName)`
       * will return this symbol. This is not always the case with `name`.
       */
-    final def signedName(using Context): TermName =
-      val local = mySignedName
-      if local != null then local
-      else
-        val computed =
-          if needsSignature then SignedName(name, signature, targetName)
-          else name
-        mySignedName = computed
-        computed
-    end signedName
+    final def signedName(using Context): TermName = memoized(mySignedName, mySignedName = _) {
+      if needsSignature then SignedName(name, signature, targetName)
+      else name
+    }
 
     protected final def matchingDecl(inClass: ClassSymbol, siteClass: ClassSymbol)(using Context): Option[TermSymbol] =
       val candidates = inClass.getAllOverloadedDecls(name).filterNot(_.isPrivate)
@@ -792,14 +755,11 @@ object Symbols {
       if myDeclaredBounds == null then failNotCompleted("bounds are not initialized")
 
     private[tastyquery] final def setDeclaredBounds(bounds: TypeBounds): this.type =
-      if myDeclaredBounds != null then throw IllegalStateException(s"Trying to re-set the bounds of $this")
-      myDeclaredBounds = bounds
+      assignOnce(myDeclaredBounds, (myDeclaredBounds = bounds))(s"Trying to re-set the bounds of $this")
       this
 
     final def declaredBounds: TypeBounds =
-      val local = myDeclaredBounds
-      if local == null then throw IllegalStateException(s"$this was not assigned type bounds")
-      else local
+      getAssignedOnce(myDeclaredBounds)(s"$this was not assigned type bounds")
   end TypeParamSymbol
 
   final class ClassTypeParamSymbol private (name: TypeName, override val owner: ClassSymbol)
@@ -880,15 +840,12 @@ object Symbols {
       super.doCheckCompleted()
       if myDefinition == null then failNotCompleted("type member definition not initialized")
 
-    private[tastyquery] final def withDefinition(definition: TypeMemberDefinition): this.type =
-      if myDefinition != null then throw IllegalStateException(s"Reassignment of the definition of $this")
-      myDefinition = definition
+    private[tastyquery] final def setDefinition(definition: TypeMemberDefinition): this.type =
+      assignOnce(myDefinition, (myDefinition = definition))(s"Reassignment of the definition of $this")
       this
 
     final def typeDef: TypeMemberDefinition =
-      val local = myDefinition
-      if local == null then throw IllegalStateException("$this was not assigned a definition")
-      else local
+      getAssignedOnce(myDefinition)("$this was not assigned a definition")
 
     final def declaredBounds: TypeBounds = typeDef match
       case TypeMemberDefinition.TypeAlias(alias)           => TypeAlias(alias)
@@ -1079,39 +1036,23 @@ object Symbols {
           computeErasedName(owner.owner, filledName)
       end computeErasedName
 
-      val local = mySignatureName
-      if local != null then local
-      else
-        val computed = computeErasedName(owner, name.toTermName.asInstanceOf[SignatureNameItem])
-        mySignatureName = computed
-        computed
+      memoized(mySignatureName, mySignatureName = _) {
+        computeErasedName(owner, name.toTermName.asInstanceOf[SignatureNameItem])
+      }
     end signatureName
 
-    private[tastyquery] final def withTypeParams(tparams: List[ClassTypeParamSymbol]): this.type =
-      if myTypeParams != null then throw new IllegalStateException(s"reassignment of type parameters to $this")
-      myTypeParams = tparams
+    private[tastyquery] final def setTypeParams(tparams: List[ClassTypeParamSymbol]): this.type =
+      assignOnce(myTypeParams, (myTypeParams = tparams))(s"reassignment of type parameters to $this")
       this
 
     final def typeParams: List[ClassTypeParamSymbol] =
-      val local = myTypeParams
-      if local == null then throw new IllegalStateException(s"type params not initialized for $this")
-      else local
+      getAssignedOnce(myTypeParams)(s"type params not initialized for $this")
 
-    private[tastyquery] final def withParentsDirect(parents: List[Type]): this.type =
-      if myParents != null then throw IllegalStateException(s"reassignment of parents of $this")
-      myParents = parents
+    private[tastyquery] final def setParentsDirect(parents: List[Type]): this.type =
+      assignOnce(myParents, (myParents = parents))(s"reassignment of parents of $this")
       this
 
-    final def parents(using Context): List[Type] =
-      val localParents = myParents
-      if localParents != null then localParents
-      else
-        val computed = computeParents()
-        myParents = computed
-        computed
-    end parents
-
-    private def computeParents()(using Context): List[Type] =
+    final def parents(using Context): List[Type] = memoized(myParents, myParents = _) {
       val tree = this.tree.getOrElse {
         throw IllegalStateException(s"$this was not assigned parents")
       }
@@ -1123,7 +1064,7 @@ object Symbols {
         case parent: TypeTree =>
           parent.toType
       }
-    end computeParents
+    }
 
     def parentClasses(using Context): List[ClassSymbol] =
       parents.map(tpe =>
@@ -1132,69 +1073,39 @@ object Symbols {
         }
       )
 
-    private[tastyquery] final def withGivenSelfType(givenSelfType: Option[Type]): this.type =
-      if myGivenSelfType != null then throw new IllegalStateException(s"reassignment of givenSelfType for $this")
-      myGivenSelfType = givenSelfType
+    private[tastyquery] final def setGivenSelfType(givenSelfType: Option[Type]): this.type =
+      assignOnce(myGivenSelfType, (myGivenSelfType = givenSelfType))(s"reassignment of givenSelfType for $this")
       this
 
     final def givenSelfType: Option[Type] =
-      val local = myGivenSelfType
-      if local == null then throw new IllegalStateException(s"givenSelfType not initialized for $this")
-      else local
+      getAssignedOnce(myGivenSelfType)(s"givenSelfType not initialized for $this")
 
-    final def appliedRefInsideThis: Type =
-      val local = myAppliedRef
-      if local != null then local
-      else
-        val computed =
-          if typeParams.isEmpty then localRef
-          else AppliedType(localRef, typeParams.map(_.localRef))
-        myAppliedRef = computed
-        computed
-    end appliedRefInsideThis
+    final def appliedRefInsideThis: Type = memoized(myAppliedRef, myAppliedRef = _) {
+      if typeParams.isEmpty then localRef
+      else AppliedType(localRef, typeParams.map(_.localRef))
+    }
 
-    final def selfType: Type =
-      val local = mySelfType
-      if local != null then local
-      else
-        val computed = givenSelfType match
-          case None =>
-            appliedRefInsideThis
-          case Some(givenSelf) =>
-            if isModuleClass then givenSelf
-            else AndType(givenSelf, appliedRefInsideThis)
-        mySelfType = computed
-        computed
-    end selfType
+    final def selfType: Type = memoized(mySelfType, mySelfType = _) {
+      givenSelfType match
+        case None =>
+          appliedRefInsideThis
+        case Some(givenSelf) =>
+          if isModuleClass then givenSelf
+          else AndType(givenSelf, appliedRefInsideThis)
+    }
 
-    final def linearization(using Context): List[ClassSymbol] =
-      val local = myLinearization
-      if local != null then local
-      else
-        val computed = computeLinearization()
-        myLinearization = computed
-        computed
-
-    private def computeLinearization()(using Context): List[ClassSymbol] =
+    final def linearization(using Context): List[ClassSymbol] = memoized(myLinearization, myLinearization = _) {
       val parentsLin = parentClasses.foldLeft[List[ClassSymbol]](Nil) { (lin, parent) =>
         parent.linearization.filter(c => !lin.contains(c)) ::: lin
       }
       this :: parentsLin
+    }
 
     final def isSubClass(that: ClassSymbol)(using Context): Boolean =
       linearization.contains(that)
 
     /** The erasure of this class; nonsensical for `scala.Array`. */
-    private[tastyquery] final def erasure(using Context): ErasedTypeRef.ClassRef =
-      val local = myErasure
-      if local != null then local
-      else
-        val computed = computeErasure()
-        myErasure = computed
-        computed
-    end erasure
-
-    private def computeErasure()(using Context): ErasedTypeRef.ClassRef =
+    private[tastyquery] final def erasure(using Context): ErasedTypeRef.ClassRef = memoized(myErasure, myErasure = _) {
       (specialKind: @switch) match
         case SpecialKind.Any | SpecialKind.AnyVal | SpecialKind.Matchable | SpecialKind.Singleton =>
           defn.ObjectClass.erasure
@@ -1205,7 +1116,7 @@ object Symbols {
           defn.scalaPackage.findDecl(correspondingFunctionNName).asClass.erasure
         case _ =>
           ErasedTypeRef.ClassRef(this)
-    end computeErasure
+    }
 
     private[tastyquery] final def boxedClass(using Context): ClassSymbol = specialKind match
       case SpecialKind.Unit    => defn.ErasedBoxedUnitClass
@@ -1591,14 +1502,9 @@ object Symbols {
     private var myThisType: ThisType | Null = null
 
     /** The `ThisType` for this class, as visible from inside this class. */
-    final def thisType: ThisType =
-      val local = myThisType
-      if local != null then local
-      else
-        val computed = ThisType(localRef)
-        myThisType = computed
-        computed
-    end thisType
+    final def thisType: ThisType = memoized(myThisType, myThisType = _) {
+      ThisType(localRef)
+    }
 
     /** Directly sets the sealed children of this class.
       *
@@ -1626,27 +1532,20 @@ object Symbols {
       * The results are ordered by their declaration order in the source.
       */
     final def sealedChildren(using Context): List[ClassSymbol | TermSymbol] =
-      val local = mySealedChildren
-      if local != null then local
-      else
-        val computed: List[SealedChild] =
-          if !flags.is(Sealed) then Nil
-          else computeSealedChildren()
-        mySealedChildren = computed
-        computed
-    end sealedChildren
-
-    private def computeSealedChildren()(using Context): List[SealedChild] =
-      myScala2SealedChildren match
-        case Some(scala2Children) =>
-          scala2Children.map(extractSealedChildFromScala2(_))
-        case None =>
-          defn.internalChildAnnotClass match
+      memoized(mySealedChildren, mySealedChildren = _) {
+        if !flags.is(Sealed) then Nil
+        else
+          myScala2SealedChildren match
+            case Some(scala2Children) =>
+              scala2Children.map(extractSealedChildFromScala2(_))
             case None =>
-              Nil
-            case Some(annotClass) =>
-              getAnnotations(annotClass).map(extractSealedChildFromChildAnnot(_))
-    end computeSealedChildren
+              defn.internalChildAnnotClass match
+                case None =>
+                  Nil
+                case Some(annotClass) =>
+                  getAnnotations(annotClass).map(extractSealedChildFromChildAnnot(_))
+      }
+    end sealedChildren
 
     private def extractSealedChildFromScala2(scala2Child: Symbol | Scala2ExternalSymRef)(using Context): SealedChild =
       val sym = scala2Child match
@@ -1794,10 +1693,10 @@ object Symbols {
     private[tastyquery] def createRefinedClassSymbol(owner: Symbol, objectType: TypeRef, flags: FlagSet): ClassSymbol =
       val cls = ClassSymbol(tpnme.RefinedClassMagic, owner) // by-pass `owner.addDeclIfDeclaringSym`
       cls
-        .withTypeParams(Nil)
-        .withParentsDirect(objectType :: Nil)
-        .withGivenSelfType(None)
-        .withFlags(flags, None)
+        .setTypeParams(Nil)
+        .setParentsDirect(objectType :: Nil)
+        .setGivenSelfType(None)
+        .setFlags(flags, None)
         .setAnnotations(Nil)
       cls.checkCompleted()
       cls
@@ -1822,7 +1721,7 @@ object Symbols {
     val packageRef: PackageRef = new PackageRef(this)
     private var myAllPackageObjectDecls: List[ClassSymbol] | Null = null
 
-    this.withFlags(EmptyFlagSet, None)
+    this.setFlags(EmptyFlagSet, None)
     this.setAnnotations(Nil)
 
     private lazy val _fullName: PackageFullName =
@@ -1952,21 +1851,14 @@ object Symbols {
 
     // See PackageRef.findMember
     private[tastyquery] def allPackageObjectDecls()(using Context): List[ClassSymbol] =
-      val local = myAllPackageObjectDecls
-      if local != null then local
-      else
-        val computed = computeAllPackageObjectDecls()
-        myAllPackageObjectDecls = computed
-        computed
+      memoized(myAllPackageObjectDecls, myAllPackageObjectDecls = _) {
+        loadingNewRoots(_.loadAllPackageObjectRoots(this))
+        myDeclarations.valuesIterator.collect {
+          case cls: ClassSymbol if cls.name.isPackageObjectClassName => cls
+        }.toList
+          .sortBy(_.name.toString) // sort for determinism
+      }
     end allPackageObjectDecls
-
-    private def computeAllPackageObjectDecls()(using Context): List[ClassSymbol] =
-      loadingNewRoots(_.loadAllPackageObjectRoots(this))
-      myDeclarations.valuesIterator.collect {
-        case cls: ClassSymbol if cls.name.isPackageObjectClassName => cls
-      }.toList
-        .sortBy(_.name.toString) // sort for determinism
-    end computeAllPackageObjectDecls
   }
 
   private[tastyquery] object PackageSymbol:

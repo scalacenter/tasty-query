@@ -15,6 +15,7 @@ import tastyquery.Names.*
 import tastyquery.Signatures.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
+import tastyquery.Utils.*
 
 /** Types in the Scala type system.
   *
@@ -938,22 +939,15 @@ object Types {
       */
     def name: Name
 
-    protected final def nameImpl: ThisName = {
-      val local = myName
-      if local == null then
-        val computed = computeName
-        myName = computed
-        computed
-      else local.asInstanceOf[ThisName] // do not remove - it is needed to satisfy the debugger's expression evaluator
+    protected final def nameImpl: ThisName = memoized(myName, myName = _) {
+      (designator match {
+        case name: Name                       => name
+        case sym: TermOrTypeSymbol            => sym.name
+        case LookupIn(_, name)                => name
+        case LookupTypeIn(_, name)            => name
+        case designator: Scala2ExternalSymRef => designator.name
+      }).asInstanceOf[ThisName]
     }
-
-    private def computeName: ThisName = (designator match {
-      case name: Name                       => name
-      case sym: TermOrTypeSymbol            => sym.name
-      case LookupIn(_, name)                => name
-      case LookupTypeIn(_, name)            => name
-      case designator: Scala2ExternalSymRef => designator.name
-    }).asInstanceOf[ThisName]
 
     def optSymbol(using Context): Option[TermOrTypeSymbol]
 
@@ -1439,17 +1433,11 @@ object Types {
   final class ThisType(val tref: TypeRef) extends SingletonType {
     private var myUnderlying: Type | Null = null
 
-    override def underlying(using Context): Type =
-      val local = myUnderlying
-      if local != null then local
-      else
-        val cls = this.cls
-        val computed =
-          if cls.isStatic then cls.selfType
-          else cls.selfType.asSeenFrom(tref.prefix, cls)
-        myUnderlying = computed
-        computed
-    end underlying
+    override def underlying(using Context): Type = memoized(myUnderlying, myUnderlying = _) {
+      val cls = this.cls
+      if cls.isStatic then cls.selfType
+      else cls.selfType.asSeenFrom(tref.prefix, cls)
+    }
 
     final def cls(using Context): ClassSymbol = tref.asClass
 
@@ -1463,14 +1451,9 @@ object Types {
   final class SuperType(val thistpe: ThisType, val explicitSupertpe: Option[Type]) extends TypeProxy with SingletonType:
     private var mySupertpe: Type | Null = explicitSupertpe.orNull
 
-    private[tastyquery] final def supertpe(using Context): Type =
-      val local = mySupertpe
-      if local != null then local
-      else
-        val computed = thistpe.cls.parents.reduceLeft(_ & _)
-        mySupertpe = computed
-        computed
-    end supertpe
+    private[tastyquery] final def supertpe(using Context): Type = memoized(mySupertpe, mySupertpe = _) {
+      thistpe.cls.parents.reduceLeft(_ & _)
+    }
 
     override def underlying(using Context): Type = supertpe
 
@@ -1574,14 +1557,9 @@ object Types {
   final class RepeatedType(val elemType: Type) extends TypeProxy:
     private var myUnderlying: Type | Null = null
 
-    override def underlying(using Context): Type =
-      val local = myUnderlying
-      if local != null then local
-      else
-        val computed = defn.SeqTypeOf(elemType)
-        myUnderlying = computed
-        computed
-    end underlying
+    override def underlying(using Context): Type = memoized(myUnderlying, myUnderlying = _) {
+      defn.SeqTypeOf(elemType)
+    }
 
     private[tastyquery] def derivedRepeatedType(elemType: Type): RepeatedType =
       if elemType eq this.elemType then this else RepeatedType(elemType)
@@ -2085,15 +2063,10 @@ object Types {
 
     require(!(isStable && isMethodic), s"Ill-formed $this")
 
-    private[tastyquery] def signedName(using Context): SignedName =
-      val local = mySignedName
-      if local != null then local
-      else
-        val sig = Signature.fromType(refinedType, SourceLanguage.Scala3, optCtorReturn = None)
-        val computed = SignedName(refinedName, sig)
-        mySignedName = computed
-        computed
-    end signedName
+    private[tastyquery] def signedName(using Context): SignedName = memoized(mySignedName, mySignedName = _) {
+      val sig = Signature.fromType(refinedType, SourceLanguage.Scala3, optCtorReturn = None)
+      SignedName(refinedName, sig)
+    }
 
     private[tastyquery] override def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       refinedType match
@@ -2282,17 +2255,9 @@ object Types {
 
     def underlying(using Context): Type = bound
 
-    def reduced(using Context): Option[Type] =
-      val local = myReduced
-      if local != null then local
-      else
-        val computed = computeReduced()
-        myReduced = computed
-        computed
-    end reduced
-
-    private def computeReduced()(using Context): Option[Type] =
+    def reduced(using Context): Option[Type] = memoized(myReduced, myReduced = _) {
       TypeMatching.matchCases(scrutinee, cases)
+    }
 
     override def toString(): String = s"MatchType($bound, $scrutinee, $cases)"
 

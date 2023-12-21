@@ -9,6 +9,7 @@ import tastyquery.Names.*
 import tastyquery.Symbols.*
 import tastyquery.Trees.*
 import tastyquery.Types.*
+import tastyquery.Utils.*
 
 object Annotations:
   final class Annotation(val tree: TermTree):
@@ -18,13 +19,15 @@ object Annotations:
 
     /** The annotation class symbol. */
     def symbol(using Context): ClassSymbol =
-      val local = mySymbol
-      if local != null then local
-      else
-        val computed = computeAnnotSymbol(tree)
-        mySymbol = computed
-        mySafeSymbol = Some(computed)
-        computed
+      memoized(
+        mySymbol,
+        { computed =>
+          mySymbol = computed
+          mySafeSymbol = Some(computed)
+        }
+      ) {
+        computeAnnotSymbol(tree)
+      }
     end symbol
 
     /** Tests whether the annotation has the given class symbol.
@@ -32,14 +35,15 @@ object Annotations:
       * If the class of this annotation cannot be successfully resolved, returns `false`.
       */
     private[tastyquery] def safeHasSymbol(cls: ClassSymbol)(using Context): Boolean =
-      val safeSymbol =
-        val local = mySafeSymbol
-        if local != null then local
-        else
-          val local = computeSafeAnnotSymbol(tree)
-          local.foreach(mySymbol = _)
-          mySafeSymbol = local
-          local
+      val safeSymbol = memoized(
+        mySafeSymbol,
+        { computed =>
+          computed.foreach(mySymbol = _)
+          mySafeSymbol = computed
+        }
+      ) {
+        computeSafeAnnotSymbol(tree)
+      }
 
       safeSymbol.contains(cls)
     end safeHasSymbol
@@ -60,14 +64,9 @@ object Annotations:
       * `NamedArg`s are not visible with this method. They are replaced by
       * their right-hand-side.
       */
-    def arguments: List[TermTree] =
-      val local = myArguments
-      if local != null then local
-      else
-        val computed = computeAnnotArguments(tree)
-        myArguments = computed
-        computed
-    end arguments
+    def arguments: List[TermTree] = memoized(myArguments, myArguments = _) {
+      computeAnnotArguments(tree)
+    }
 
     def argCount: Int = arguments.size
 

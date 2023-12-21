@@ -516,7 +516,7 @@ private[tasties] class TreeUnpickler private (
           throw TastyFormatException(
             s"typeDef $typeDef inconsistent with Opaque flag $isOpaque for $symbol at $posErrorMsg"
           )
-        symbol.withDefinition(typeDef)
+        symbol.setDefinition(typeDef)
         definingTree(symbol, TypeMember(name, typeDefTree, symbol)(spn))
       }
       readAnnotationsInModifiers(typeDef.symbol, end)
@@ -674,7 +674,7 @@ private[tasties] class TreeUnpickler private (
     reader.readByte()
     val end = reader.readEnd()
     val tparams = readTypeParams
-    cls.withTypeParams(tparams.map(_.symbol.asInstanceOf[ClassTypeParamSymbol]))
+    cls.setTypeParams(tparams.map(_.symbol.asInstanceOf[ClassTypeParamSymbol]))
     val params = readParams
     val parents: List[Apply | Block | TypeTree] =
       reader.collectWhile(reader.nextByte != SELFDEF && reader.nextByte != DEFDEF) {
@@ -697,7 +697,7 @@ private[tasties] class TreeUnpickler private (
       case _ =>
         self0
 
-    cls.withGivenSelfType(self.map(_.tpt.toType))
+    cls.setGivenSelfType(self.map(_.tpt.toType))
     // The first entry is the constructor
     val cstr = readStat.asInstanceOf[DefDef]
     val body = readStats(end)
@@ -770,14 +770,14 @@ private[tasties] class TreeUnpickler private (
             // Work around https://github.com/lampepfl/dotty/issues/19237
             if tag == PARAM && symbol.owner.name.isInstanceOf[InlineAccessorName] then rctx.NothingType
             else throw TastyFormatException(s"unexpected type $packageRef for $symbol in $posErrorMsg")
-        symbol.withDeclaredType(tpe)
+        symbol.setDeclaredType(tpe)
         definingTree(symbol, ValDef(name, tpt, rhs, symbol)(spn))
 
       case DEFDEF =>
         val normalizedParams =
           if name == nme.Constructor then normalizeCtorParamClauses(params)
           else params
-        symbol.withDeclaredType(ParamsClause.makeDefDefType(normalizedParams, tpt))
+        symbol.setDeclaredType(ParamsClause.makeDefDefType(normalizedParams, tpt))
         symbol.setParamSymss(normalizedParams.map(paramsClauseToParamSymbolsClause(_)))
         definingTree(symbol, DefDef(name, normalizedParams, tpt, rhs, symbol)(spn))
     }
@@ -816,7 +816,7 @@ private[tasties] class TreeUnpickler private (
     reader.until(end)(readTerm)
 
   def definingTree(symbol: Symbol, tree: symbol.DefiningTreeType): tree.type =
-    symbol.withTree(tree)
+    symbol.setTree(tree)
     tree
 
   private def makeIdent(name: UnsignedTermName, tpe: TermType, pos: SourcePosition): Ident =
@@ -854,7 +854,7 @@ private[tasties] class TreeUnpickler private (
       val body = readPattern
       val symbol = caches.getSymbol[TermSymbol](start)
       readAnnotationsInModifiers(symbol, end)
-      symbol.withDeclaredType(typ)
+      symbol.setDeclaredType(typ)
       definingTree(symbol, Bind(name, body, symbol)(spn))
     case ALTERNATIVE =>
       val spn = span

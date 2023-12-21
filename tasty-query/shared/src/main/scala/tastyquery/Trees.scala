@@ -14,6 +14,7 @@ import tastyquery.Spans.*
 import tastyquery.Symbols.*
 import tastyquery.Traversers.*
 import tastyquery.Types.*
+import tastyquery.Utils.*
 
 object Trees {
 
@@ -93,13 +94,8 @@ object Trees {
     protected def calculateType(using Context): TermType
 
     /** The term type of this tree. */
-    final def tpe(using Context): TermType = {
-      val local = myType
-      if local != null then local
-      else
-        val computed = calculateType
-        myType = computed
-        computed
+    final def tpe(using Context): TermType = memoized(myType, myType = _) {
+      calculateType
     }
   end TermTree
 
@@ -726,14 +722,9 @@ object Trees {
 
     def withPos(pos: SourcePosition): TypeTree
 
-    final def toPrefix: NonEmptyPrefix =
-      val local = myType
-      if local == null then
-        val computed = calculateType
-        myType = calculateType
-        computed
-      else local
-    end toPrefix
+    final def toPrefix: NonEmptyPrefix = memoized(myType, myType = _) {
+      calculateType
+    }
 
     final def toType: Type = toPrefix.requireType
 
@@ -893,14 +884,9 @@ object Trees {
   final case class WildcardTypeArgTree(bounds: TypeBoundsTree)(pos: SourcePosition) extends TypeArgTree(pos) {
     private var myTypeOrWildcard: WildcardTypeArg | Null = null
 
-    def toTypeOrWildcard: TypeOrWildcard =
-      val local = myTypeOrWildcard
-      if local != null then local
-      else
-        val computed = WildcardTypeArg(bounds.toTypeBounds)
-        myTypeOrWildcard = computed
-        computed
-    end toTypeOrWildcard
+    def toTypeOrWildcard: TypeOrWildcard = memoized(myTypeOrWildcard, myTypeOrWildcard = _) {
+      WildcardTypeArg(bounds.toTypeBounds)
+    }
 
     override final def withPos(pos: SourcePosition): WildcardTypeArgTree =
       WildcardTypeArgTree(bounds)(pos)

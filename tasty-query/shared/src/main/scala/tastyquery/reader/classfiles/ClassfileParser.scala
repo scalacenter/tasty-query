@@ -168,17 +168,17 @@ private[reader] object ClassfileParser {
 
     val moduleClass = ClassSymbol
       .create(name.withObjectSuffix.toTypeName, classOwner)
-      .withTypeParams(Nil)
-      .withFlags(clsFlags | Flags.ModuleClassCreationFlags, clsPrivateWithin)
+      .setTypeParams(Nil)
+      .setFlags(clsFlags | Flags.ModuleClassCreationFlags, clsPrivateWithin)
       .setAnnotations(Nil)
-      .withParentsDirect(rctx.ObjectType :: Nil)
-      .withGivenSelfType(None)
+      .setParentsDirect(rctx.ObjectType :: Nil)
+      .setGivenSelfType(None)
     allRegisteredSymbols += moduleClass
 
     val module = TermSymbol
       .create(name, classOwner)
-      .withDeclaredType(moduleClass.localRef)
-      .withFlags(clsFlags | Flags.ModuleValCreationFlags, clsPrivateWithin)
+      .setDeclaredType(moduleClass.localRef)
+      .setFlags(clsFlags | Flags.ModuleValCreationFlags, clsPrivateWithin)
       .setAnnotations(Nil)
     allRegisteredSymbols += module
 
@@ -236,7 +236,7 @@ private[reader] object ClassfileParser {
           else parsedType
         adaptedType
       end declaredType
-      sym.withDeclaredType(declaredType)
+      sym.setDeclaredType(declaredType)
 
       // Compute the flags for the symbol
       val flags =
@@ -245,7 +245,7 @@ private[reader] object ClassfileParser {
         if isSignaturePolymorphic(isMethod, javaFlags, declaredType) then flags1 |= SignaturePolymorphic
         flags1
       end flags
-      sym.withFlags(flags, privateWithin(javaFlags))
+      sym.setFlags(flags, privateWithin(javaFlags))
 
       // Read and fill annotations
       val annots = readAnnotations(sym, attributes)
@@ -314,11 +314,11 @@ private[reader] object ClassfileParser {
       val parents1 =
         if parents.head eq rctx.FromJavaObjectType then rctx.ObjectType :: parents.tail
         else parents
-      cls.withParentsDirect(parents1)
+      cls.setParentsDirect(parents1)
     end initParents
 
-    cls.withGivenSelfType(None)
-    cls.withFlags(clsFlags, clsPrivateWithin)
+    cls.setGivenSelfType(None)
+    cls.setFlags(clsFlags, clsPrivateWithin)
     initParents()
 
     // Intercept special classes to create their magic methods
@@ -331,8 +331,8 @@ private[reader] object ClassfileParser {
     if cls.isTrait then
       val ctor = TermSymbol
         .create(nme.Constructor, cls)
-        .withDeclaredType(cls.makePolyConstructorType(MethodType(Nil, Nil, rctx.UnitType)))
-        .withFlags(Method | JavaDefined, None)
+        .setDeclaredType(cls.makePolyConstructorType(MethodType(Nil, Nil, rctx.UnitType)))
+        .setFlags(Method | JavaDefined, None)
         .setAnnotations(Nil)
         .autoFillParamSymss()
       ctor.paramSymss.foreach(_.merge.foreach(_.setAnnotations(Nil)))
