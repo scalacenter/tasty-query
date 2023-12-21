@@ -1022,6 +1022,7 @@ object Types {
   ) extends NamedType
       with SingletonType
       with TermReferenceType {
+    import TermRef.Resolved
 
     protected type ThisName = TermName
     private[tastyquery] type ThisSymbolType = TermSymbol
@@ -1029,14 +1030,11 @@ object Types {
     protected type ThisDesignatorType = TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
 
     // Cache fields
-    private var mySymbol: TermSymbol | Null = null
-    private var myUnderlying: TypeOrMethodic | Null = null
-    private var myIsStable: Boolean = false // only meaningful once mySymbol is non-null
+    private var myResolved: Memo[Resolved] = uninitializedMemo
 
     private def this(prefix: NonEmptyPrefix, resolved: ResolveMemberResult.TermMember) =
       this(prefix, resolved.symbols.head)
-      mySymbol = resolved.symbols.head
-      myUnderlying = resolved.tpe
+      initializeMemo[Resolved](myResolved = _, Resolved(resolved.symbols.head, resolved.tpe, resolved.isStable))
     end this
 
     protected def designator: ThisDesignatorType = myDesignator
@@ -1047,55 +1045,51 @@ object Types {
     final def name: TermName = nameImpl
 
     final def symbol(using Context): TermSymbol =
-      ensureResolved()
-      mySymbol.nn
+      resolved.symbol
 
-    private def ensureResolved()(using Context): Unit =
-      if mySymbol == null then resolve()
+    private def resolved(using Context): Resolved = memoized(myResolved, myResolved = _) {
+      doResolve()
+    }
 
-    private def resolve()(using Context): Unit =
-      def storeResolved(sym: TermSymbol, tpe: TypeOrMethodic, isStable: Boolean): Unit =
-        mySymbol = sym
-        myUnderlying = tpe
-        myIsStable = isStable
+    private def doResolve()(using Context): Resolved =
+      def resolveToMember(sym: TermSymbol, tpe: TypeOrMethodic, isStable: Boolean): Resolved =
+        Resolved(sym, tpe, isStable)
 
-      def storeSymbol(sym: TermSymbol): Unit =
-        storeResolved(sym, sym.typeAsSeenFrom(prefix), sym.isStableMember)
+      def resolveToSymbol(sym: TermSymbol): Resolved =
+        resolveToMember(sym, sym.typeAsSeenFrom(prefix), sym.isStableMember)
 
       designator match
         case sym: TermSymbol =>
-          storeSymbol(sym)
+          resolveToSymbol(sym)
         case lookupIn: LookupIn =>
           val sym = TermRef.resolveLookupIn(lookupIn)
-          storeSymbol(sym)
+          resolveToSymbol(sym)
         case externalRef: Scala2ExternalSymRef =>
           val sym = NamedType.resolveScala2ExternalRef(externalRef).asTerm
-          storeSymbol(sym)
+          resolveToSymbol(sym)
         case name: TermName =>
           prefix match
             case prefix: NonEmptyPrefix =>
               TermRef.resolvePolyFunctionApply(prefix, name, prefix.resolveMember(name)) match
                 case ResolveMemberResult.TermMember(symbols, tpe, isStable) if symbols.nonEmpty =>
-                  storeResolved(symbols.head, tpe, isStable)
+                  resolveToMember(symbols.head, tpe, isStable)
                 case _ =>
                   throw MemberNotFoundException(prefix, name)
             case NoPrefix =>
               throw new AssertionError(s"found reference by name $name without a prefix")
-    end resolve
+    end doResolve
 
     final def optSymbol(using Context): Option[TermSymbol] =
       Some(symbol)
 
     def underlyingOrMethodic(using Context): TypeOrMethodic =
-      ensureResolved()
-      myUnderlying.asInstanceOf[TypeOrMethodic]
+      resolved.tpe
 
     override def underlying(using Context): Type =
       underlyingOrMethodic.requireType
 
     final override def isStable(using Context): Boolean =
-      ensureResolved()
-      myIsStable
+      resolved.isStable
 
     private[tastyquery] override def resolveMember(name: Name, pre: Type)(using Context): ResolveMemberResult =
       underlyingOrMethodic match
@@ -1138,6 +1132,8 @@ object Types {
   }
 
   object TermRef:
+    private final class Resolved(val symbol: TermSymbol, val tpe: TypeOrMethodic, val isStable: Boolean)
+
     def apply(prefix: NonEmptyPrefix, name: TermName): TermRef = new TermRef(prefix, name)
     def apply(prefix: Prefix, symbol: TermSymbol): TermRef = new TermRef(prefix, symbol)
 
@@ -1237,6 +1233,7 @@ object Types {
     val prefix: Prefix,
     private val myDesignator: TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
   ) extends NamedType {
+    import TypeRef.Resolved
 
     protected type ThisName = TypeName
     private[tastyquery] type ThisSymbolType = TypeSymbol
@@ -1244,19 +1241,16 @@ object Types {
     protected type ThisDesignatorType = TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
 
     // Cache fields
-    private var myOptSymbol: Option[TypeSymbol] | Null = null
-    private var myBounds: TypeBounds | Null = null
+    private var myResolved: Memo[Resolved] = uninitializedMemo
 
     private def this(prefix: NonEmptyPrefix, resolved: ResolveMemberResult.ClassMember) =
       this(prefix, resolved.cls)
-      myOptSymbol = Some(resolved.cls)
+      initializeMemo[Resolved](myResolved = _, Resolved(Some(resolved.cls), null))
     end this
 
     private def this(prefix: NonEmptyPrefix, name: TypeName, resolved: ResolveMemberResult.TypeMember) =
       this(prefix, name)
-      val optSymbol = resolved.symbols.headOption
-      myOptSymbol = optSymbol
-      myBounds = resolved.bounds
+      initializeMemo[Resolved](myResolved = _, Resolved(resolved.symbols.headOption, resolved.bounds))
     end this
 
     final def name: TypeName = nameImpl
@@ -1266,47 +1260,46 @@ object Types {
     override def toString(): String =
       s"TypeRef($prefix, $myDesignator)"
 
-    private def ensureResolved()(using Context): Unit =
-      if myOptSymbol == null then resolve()
+    private def resolved(using Context): Resolved = memoized(myResolved, myResolved = _) {
+      doResolve()
+    }
 
-    private def resolve()(using Context): Unit =
-      def storeClass(cls: ClassSymbol): Unit =
-        myOptSymbol = Some(cls)
+    private def doResolve()(using Context): Resolved =
+      def resolveToClass(cls: ClassSymbol): Resolved =
+        Resolved(Some(cls), null)
 
-      def storeTypeMember(sym: Option[TypeSymbolWithBounds], bounds: TypeBounds): Unit =
-        myOptSymbol = sym
-        myBounds = bounds
+      def resolveToTypeMember(sym: Option[TypeSymbolWithBounds], bounds: TypeBounds): Resolved =
+        Resolved(sym, bounds)
 
-      def storeSymbol(sym: TypeSymbol): Unit = sym match
-        case cls: ClassSymbol          => storeClass(cls)
-        case sym: TypeSymbolWithBounds => storeTypeMember(Some(sym), sym.boundsAsSeenFrom(prefix))
+      def resolveToSymbol(sym: TypeSymbol): Resolved = sym match
+        case cls: ClassSymbol          => resolveToClass(cls)
+        case sym: TypeSymbolWithBounds => resolveToTypeMember(Some(sym), sym.boundsAsSeenFrom(prefix))
 
       designator match
         case sym: TypeSymbol =>
-          storeSymbol(sym)
+          resolveToSymbol(sym)
         case lookupTypeIn: LookupTypeIn =>
           val sym = TypeRef.resolveLookupTypeIn(lookupTypeIn)
-          storeSymbol(sym)
+          resolveToSymbol(sym)
         case externalRef: Scala2ExternalSymRef =>
           val sym = NamedType.resolveScala2ExternalRef(externalRef).asType
-          storeSymbol(sym)
+          resolveToSymbol(sym)
         case name: TypeName =>
           prefix match
             case prefix: NonEmptyPrefix =>
               prefix.resolveMember(name) match
                 case ResolveMemberResult.ClassMember(cls) =>
-                  storeClass(cls)
+                  resolveToClass(cls)
                 case ResolveMemberResult.TypeMember(symbols, bounds) =>
-                  storeTypeMember(symbols.headOption, bounds)
+                  resolveToTypeMember(symbols.headOption, bounds)
                 case _ =>
                   throw MemberNotFoundException(prefix, name)
             case NoPrefix =>
               throw new AssertionError(s"found reference by name $name without a prefix")
-    end resolve
+    end doResolve
 
     final def optSymbol(using Context): Option[TypeSymbol] =
-      ensureResolved()
-      myOptSymbol.nn
+      resolved.optSymbol
 
     final def isClass(using Context): Boolean =
       optSymbol.exists(_.isClass)
@@ -1321,8 +1314,7 @@ object Types {
       bounds.high
 
     final def bounds(using Context): TypeBounds =
-      ensureResolved()
-      val local = myBounds
+      val local = resolved.bounds
       if local == null then
         throw AssertionError(s"TypeRef $this has no `underlying` because it refers to a `ClassSymbol`")
       else local
@@ -1333,8 +1325,7 @@ object Types {
         throw AssertionError(s"No typeDef for $this")
 
     def optAliasedType(using Context): Option[Type] =
-      ensureResolved()
-      myBounds match
+      resolved.bounds match
         case TypeAlias(alias) => Some(alias)
         case _                => None
 
@@ -1387,6 +1378,8 @@ object Types {
   }
 
   object TypeRef:
+    private final class Resolved(val optSymbol: Option[TypeSymbol], val bounds: TypeBounds | Null)
+
     def apply(prefix: NonEmptyPrefix, name: TypeName): TypeRef = new TypeRef(prefix, name)
     def apply(prefix: Prefix, symbol: TypeSymbol): TypeRef = new TypeRef(prefix, symbol)
 
