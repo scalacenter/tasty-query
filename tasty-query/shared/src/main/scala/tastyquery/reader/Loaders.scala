@@ -30,12 +30,7 @@ private[tastyquery] object Loaders {
       localRoots
     end dataByBinaryName
 
-    private val topLevelTastys = mutable.HashMap.empty[String, List[Tree]]
-
     private type LoadedFiles = mutable.HashSet[String]
-
-    def topLevelTastyFor(rootName: String): Option[List[Tree]] =
-      topLevelTastys.get(rootName)
 
     def loadAllRoots()(using ReaderContext, Resolver): Unit =
       // Sort for determinism, and to make sure that outer classes always come before their inner classes
@@ -148,7 +143,7 @@ private[tastyquery] object Loaders {
     private def doLoadTasty(classData: ClassData)(using ReaderContext): Unit =
       val unpickler = TastyUnpickler(classData.readTastyFileBytes())
       val debugPath = classData.toString()
-      val trees = unpickler
+      unpickler
         .unpickle(
           debugPath,
           TastyUnpickler.TreeSectionUnpickler(
@@ -157,7 +152,6 @@ private[tastyquery] object Loaders {
         )
         .get
         .unpickle()
-      topLevelTastys += classData.binaryName -> trees
     end doLoadTasty
   end PackageLoadingInfo
 
@@ -190,14 +184,6 @@ private[tastyquery] object Loaders {
 
     private def rootNameToTopLevelTermSymbolName(rootName: String): SimpleName =
       termName(NameTransformer.decode(rootName))
-
-    /** If this is a root symbol, lookup possible top level tasty trees associated with it. */
-    private[tastyquery] def topLevelTasty(rootSymbol: Symbol)(using Context): Option[List[Tree]] =
-      rootSymbol.owner match
-        case pkg: PackageSymbol =>
-          val rootName = topLevelSymbolNameToRootName(rootSymbol.name)
-          packages.get(pkg).flatMap(_.topLevelTastyFor(rootName))
-        case _ => None
 
     /** Loads all the roots of the given `pkg`. */
     private[tastyquery] def loadAllRoots(pkg: PackageSymbol)(using Context): Unit =

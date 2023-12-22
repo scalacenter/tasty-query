@@ -910,6 +910,7 @@ object Symbols {
 
     // Optional reference fields
     private var myScala2SealedChildren: Option[List[Symbol | Scala2ExternalSymRef]] = None
+    private var myTopLevelTasty: List[TopLevelTree] = Nil
 
     // DeclaringSymbol-related fields
     private val myDeclarations: mutable.HashMap[UnsignedName, mutable.HashSet[TermOrTypeSymbol]] =
@@ -1095,6 +1096,22 @@ object Symbols {
           if isModuleClass then givenSelf
           else AndType(givenSelf, appliedRefInsideThis)
     }
+
+    private[tastyquery] final def setTopLevelTasty(trees: List[TopLevelTree]): this.type =
+      require(owner.isPackage, "cannot set topLevelTasty to a non-top-level class")
+      require(!flags.isAnyOf(Scala2Defined | JavaDefined), "cannot set topLevelTasty to a non-Scala 3 class")
+      myTopLevelTasty = trees
+      this
+    end setTopLevelTasty
+
+    private[tastyquery] final def topLevelTasty: List[TopLevelTree] =
+      require(owner.isPackage, s"illegal call to topLevelTasty on the non-top-level class $this")
+      require(
+        !flags.isAnyOf(Scala2Defined | JavaDefined),
+        s"illegal call to topLevelTasty on the non-Scala 3 class $this"
+      )
+      myTopLevelTasty
+    end topLevelTasty
 
     final def linearization(using Context): List[ClassSymbol] = memoized(myLinearization, myLinearization = _) {
       val parentsLin = parentClasses.foldLeft[List[ClassSymbol]](Nil) { (lin, parent) =>

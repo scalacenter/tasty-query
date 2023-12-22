@@ -44,21 +44,24 @@ private[tasties] class TreeUnpickler private (
     using ReaderContext
   ) = this(filename, reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
 
-  def unpickle(): List[Tree] =
+  def unpickle(): Unit =
     @tailrec
-    def read(acc: ListBuffer[Tree])(using SourceFile): List[Tree] =
+    def read(acc: ListBuffer[TopLevelTree])(using SourceFile): List[TopLevelTree] =
       acc += readTopLevelStat
       if !reader.isAtEnd then read(acc) else acc.toList
 
     fork.enterSymbols()
-    val result = maybeAdjustSourceFileIn {
-      read(new ListBuffer[Tree])
+    val topLevelTasty = maybeAdjustSourceFileIn {
+      read(new ListBuffer[TopLevelTree])
     }(using SourceFile.NoSource)
 
-    // Check that all the Symbols we created have been completed
-    for sym <- caches.allRegisteredSymbols do sym.checkCompleted()
-
-    result
+    // Check that all the Symbols we created have been completed, and fill in top-level TASTy trees
+    for sym <- caches.allRegisteredSymbols do
+      sym match
+        case sym: ClassSymbol if sym.owner.isPackage => sym.setTopLevelTasty(topLevelTasty)
+        case _                                       => ()
+      sym.checkCompleted()
+    end for
   end unpickle
 
   private def enterSymbols(): Unit =
