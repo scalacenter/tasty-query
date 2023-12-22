@@ -517,7 +517,7 @@ final class Definitions private[tastyquery] (
     end functionClassOf
   end PolyFunctionType
 
-  lazy val hasGenericTuples = withRestrictedContext(ctx.classloader.hasGenericTuples)
+  lazy val hasGenericTuples = withRestrictedContext(ctx.hasGenericTuples)
 
   lazy val uninitializedMethod: Option[TermSymbol] =
     withRestrictedContext {

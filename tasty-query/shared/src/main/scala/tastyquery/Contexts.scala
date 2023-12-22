@@ -58,14 +58,18 @@ object Contexts {
     * The same instance of [[Classpaths.Classpath]] can be reused to create
     * several [[Context]]s, if necessary.
     */
-  final class Context private[Contexts] (private[tastyquery] val classloader: Loader) {
+  final class Context private[Contexts] (classloader: Loader) {
     private given Context = this
 
     private val sourceFiles = mutable.HashMap.empty[String, SourceFile]
 
     private val (RootPackage @ _, EmptyPackage @ _) = PackageSymbol.createRoots()
 
+    private[tastyquery] def hasGenericTuples: Boolean = classloader.hasGenericTuples
+
     val defn: Definitions = Definitions(this: @unchecked, RootPackage, EmptyPackage)
+
+    private[tastyquery] def internalClasspathForTestsOnly: Classpath = classloader.classpath
 
     private[tastyquery] def getSourceFile(path: String): SourceFile =
       sourceFiles.getOrElseUpdate(path, new SourceFile(path))

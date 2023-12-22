@@ -69,7 +69,7 @@ private[reader] final class ReaderContext(underlying: Context):
   def getSourceFile(path: String): SourceFile =
     underlying.getSourceFile(path)
 
-  def hasGenericTuples: Boolean = underlying.classloader.hasGenericTuples
+  def hasGenericTuples: Boolean = underlying.hasGenericTuples
 
   def createObjectMagicMethods(cls: ClassSymbol): Unit =
     underlying.defn.createObjectMagicMethods(cls)
