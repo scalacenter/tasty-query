@@ -15,6 +15,7 @@ import tastyquery.Utils.*
 import tastyquery.reader.ReaderContext.rctx
 import tastyquery.reader.classfiles.{ClassfileParser, ClassfileReader}
 import tastyquery.reader.classfiles.ClassfileParser.{ClassKind, InnerClassDecl, Resolver}
+import tastyquery.reader.classfiles.ClassfileReader.Structure
 import tastyquery.reader.tasties.TastyUnpickler
 
 private[tastyquery] object Loaders {
@@ -22,7 +23,7 @@ private[tastyquery] object Loaders {
   private[tastyquery] final class PackageLoadingInfo private[Loaders] (
     pkg: PackageSymbol,
     initPackageData: List[PackageData]
-  )(using Resolver):
+  ):
     private lazy val dataByBinaryName =
       val localRoots = mutable.HashMap.empty[String, ClassData]
       for packageData <- initPackageData do
@@ -124,8 +125,7 @@ private[tastyquery] object Loaders {
           ClassfileParser.loadScala2Class(structure)
           true
         case ClassKind.Java =>
-          val innerDecls = ClassfileParser.loadJavaClass(pkg, termName(classData.binaryName), structure)
-          doLoadJavaInnerClasses(innerDecls, loadedFiles)
+          doLoadJavaTopLevelClass(classData, structure, loadedFiles)
           true
         case ClassKind.TASTy =>
           throw TastyFormatException(s"Missing TASTy file for class ${classData.binaryName} in package $pkg")
@@ -137,8 +137,19 @@ private[tastyquery] object Loaders {
           false
     end doLoadClassFile
 
-    private def doLoadJavaInnerClasses(explore: List[InnerClassDecl], loadedFiles: LoadedFiles)(
+    private def doLoadJavaTopLevelClass(classData: ClassData, structure: Structure, loadedFiles: LoadedFiles)(
       using ReaderContext
+    ): Unit =
+      // The resolver for this top-level class and all its inner classes
+      given Resolver = Resolver()
+
+      val innerDecls = ClassfileParser.loadJavaClass(pkg, termName(classData.binaryName), structure)
+      doLoadJavaInnerClasses(innerDecls, loadedFiles)
+    end doLoadJavaTopLevelClass
+
+    private def doLoadJavaInnerClasses(explore: List[InnerClassDecl], loadedFiles: LoadedFiles)(
+      using ReaderContext,
+      Resolver
     ): Unit =
       explore match
         case inner :: rest =>
@@ -174,8 +185,6 @@ private[tastyquery] object Loaders {
   end PackageLoadingInfo
 
   class Loader(val classpath: Classpath) {
-    given Resolver = Resolver()
-
     private type ByEntryMap = Map[ClasspathEntry, IArray[(PackageSymbol, IArray[String])]]
 
     private var initialized = false
