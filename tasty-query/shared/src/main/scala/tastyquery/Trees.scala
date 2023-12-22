@@ -70,7 +70,7 @@ object Trees {
   end StatementTree
 
   sealed abstract class TermTree(pos: SourcePosition) extends StatementTree(pos):
-    private var myType: Memo[TermType] = uninitializedMemo
+    private val myType: Memo[TermType] = uninitializedMemo
 
     def withPos(pos: SourcePosition): TermTree
 
@@ -94,7 +94,7 @@ object Trees {
     protected def calculateType(using Context): TermType
 
     /** The term type of this tree. */
-    final def tpe(using Context): TermType = memoized(myType, myType = _) {
+    final def tpe(using Context): TermType = memoized(myType) {
       calculateType
     }
   end TermTree
@@ -341,16 +341,16 @@ object Trees {
   final case class Apply(fun: TermTree, args: List[TermTree])(pos: SourcePosition) extends TermTree(pos):
     import Apply.*
 
-    private var myMethodType: Memo[MethodType] = uninitializedMemo
+    private val myMethodType: Memo[MethodType] = uninitializedMemo
 
     protected[tastyquery] def this(
       fun: TermTree,
       args: List[TermTree]
     )(methodType: MethodType | Null, pos: SourcePosition) =
       this(fun, args)(pos)
-      if methodType != null then initializeMemo[MethodType](myMethodType = _, methodType)
+      if methodType != null then initializeMemo(myMethodType, methodType)
 
-    def methodType(using Context): MethodType = memoized(myMethodType, myMethodType = _) {
+    def methodType(using Context): MethodType = memoized(myMethodType) {
       fun.tpe.widenTermRef match
         case funTpe: MethodType => funTpe
         case funTpe             => throw NonMethodReferenceException(s"application to $funTpe")
@@ -715,13 +715,13 @@ object Trees {
   end TypeArgTree
 
   sealed abstract class TypeTree(pos: SourcePosition) extends TypeArgTree(pos) {
-    private var myType: Memo[NonEmptyPrefix] = uninitializedMemo
+    private val myType: Memo[NonEmptyPrefix] = uninitializedMemo
 
     protected def calculateType: NonEmptyPrefix
 
     def withPos(pos: SourcePosition): TypeTree
 
-    final def toPrefix: NonEmptyPrefix = memoized(myType, myType = _) {
+    final def toPrefix: NonEmptyPrefix = memoized(myType) {
       calculateType
     }
 
@@ -881,9 +881,9 @@ object Trees {
   }
 
   final case class WildcardTypeArgTree(bounds: TypeBoundsTree)(pos: SourcePosition) extends TypeArgTree(pos) {
-    private var myTypeOrWildcard: Memo[WildcardTypeArg] = uninitializedMemo
+    private val myTypeOrWildcard: Memo[WildcardTypeArg] = uninitializedMemo
 
-    def toTypeOrWildcard: TypeOrWildcard = memoized(myTypeOrWildcard, myTypeOrWildcard = _) {
+    def toTypeOrWildcard: TypeOrWildcard = memoized(myTypeOrWildcard) {
       WildcardTypeArg(bounds.toTypeBounds)
     }
 

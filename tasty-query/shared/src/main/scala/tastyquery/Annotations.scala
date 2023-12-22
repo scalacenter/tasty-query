@@ -13,16 +13,16 @@ import tastyquery.Utils.*
 
 object Annotations:
   final class Annotation(val tree: TermTree):
-    private var mySymbol: Memo[ClassSymbol] = uninitializedMemo
-    private var mySafeSymbol: Memo[Option[ClassSymbol]] = uninitializedMemo
-    private var myArguments: Memo[List[TermTree]] = uninitializedMemo
+    private val mySymbol: Memo[ClassSymbol] = uninitializedMemo
+    private val mySafeSymbol: Memo[Option[ClassSymbol]] = uninitializedMemo
+    private val myArguments: Memo[List[TermTree]] = uninitializedMemo
 
     /** The annotation class symbol. */
     def symbol(using Context): ClassSymbol =
-      memoized2(mySymbol, mySymbol = _) {
+      memoized2(mySymbol) {
         computeAnnotSymbol(tree)
       } { computed =>
-        initializeMemo[Option[ClassSymbol]](mySafeSymbol = _, Some(computed))
+        initializeMemo(mySafeSymbol, Some(computed))
       }
     end symbol
 
@@ -31,10 +31,10 @@ object Annotations:
       * If the class of this annotation cannot be successfully resolved, returns `false`.
       */
     private[tastyquery] def safeHasSymbol(cls: ClassSymbol)(using Context): Boolean =
-      val safeSymbol = memoized2(mySafeSymbol, mySafeSymbol = _) {
+      val safeSymbol = memoized2(mySafeSymbol) {
         computeSafeAnnotSymbol(tree)
       } { computed =>
-        computed.foreach(sym => initializeMemo[ClassSymbol](mySymbol = _, sym))
+        computed.foreach(sym => initializeMemo(mySymbol, sym))
       }
 
       safeSymbol.contains(cls)
@@ -56,7 +56,7 @@ object Annotations:
       * `NamedArg`s are not visible with this method. They are replaced by
       * their right-hand-side.
       */
-    def arguments: List[TermTree] = memoized(myArguments, myArguments = _) {
+    def arguments: List[TermTree] = memoized(myArguments) {
       computeAnnotArguments(tree)
     }
 

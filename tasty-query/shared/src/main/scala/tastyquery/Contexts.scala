@@ -27,11 +27,22 @@ object Contexts {
 
   /** Factory methods for [[Context]]. */
   object Context:
-    /** Creates a new [[Context]] for the given [[Classpaths.Classpath]]. */
+    /** Creates a new [[Context]] for the given [[Classpaths.Classpath]].
+      *
+      * If all the [[Classpaths.ClasspathEntry ClasspathEntries]] in the classpath
+      * are thread-safe, then the resulting [[Context]] is thread-safe.
+      */
     def initialize(classpath: Classpath): Context =
       val classloader = Loader(classpath)
       val ctx = new Context(classloader)
       classloader.initPackages()(using ctx)
+
+      /* Exploit the portable releaseFence() call inside the `::` constructor,
+       * in order to publish all the mutations that were done during the
+       * above initialization to other threads.
+       */
+      new ::(Nil, Nil)
+
       ctx
     end initialize
   end Context

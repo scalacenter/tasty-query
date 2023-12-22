@@ -908,7 +908,7 @@ object Types {
     private[tastyquery] final def designatorInternal: AnyDesignatorType =
       designator
 
-    private var myName: Memo[ThisName] = uninitializedMemo
+    private val myName: Memo[ThisName] = uninitializedMemo
 
     private[tastyquery] final def isLocalRef(sym: Symbol): Boolean =
       prefix == NoPrefix && (designator eq sym)
@@ -938,7 +938,7 @@ object Types {
       */
     def name: Name
 
-    protected final def nameImpl: ThisName = memoized(myName, myName = _) {
+    protected final def nameImpl: ThisName = memoized(myName) {
       (designator match {
         case name: Name                       => name
         case sym: TermOrTypeSymbol            => sym.name
@@ -1029,11 +1029,11 @@ object Types {
     protected type ThisDesignatorType = TermSymbol | TermName | LookupIn | Scala2ExternalSymRef
 
     // Cache fields
-    private var myResolved: Memo[Resolved] = uninitializedMemo
+    private val myResolved: Memo[Resolved] = uninitializedMemo
 
     private def this(prefix: NonEmptyPrefix, resolved: ResolveMemberResult.TermMember) =
       this(prefix, resolved.symbols.head)
-      initializeMemo[Resolved](myResolved = _, Resolved(resolved.symbols.head, resolved.tpe, resolved.isStable))
+      initializeMemo(myResolved, Resolved(resolved.symbols.head, resolved.tpe, resolved.isStable))
     end this
 
     protected def designator: ThisDesignatorType = myDesignator
@@ -1046,7 +1046,7 @@ object Types {
     final def symbol(using Context): TermSymbol =
       resolved.symbol
 
-    private def resolved(using Context): Resolved = memoized(myResolved, myResolved = _) {
+    private def resolved(using Context): Resolved = memoized(myResolved) {
       doResolve()
     }
 
@@ -1240,16 +1240,16 @@ object Types {
     protected type ThisDesignatorType = TypeName | TypeSymbol | LookupTypeIn | Scala2ExternalSymRef
 
     // Cache fields
-    private var myResolved: Memo[Resolved] = uninitializedMemo
+    private val myResolved: Memo[Resolved] = uninitializedMemo
 
     private def this(prefix: NonEmptyPrefix, resolved: ResolveMemberResult.ClassMember) =
       this(prefix, resolved.cls)
-      initializeMemo[Resolved](myResolved = _, Resolved(Some(resolved.cls), null))
+      initializeMemo(myResolved, Resolved(Some(resolved.cls), null))
     end this
 
     private def this(prefix: NonEmptyPrefix, name: TypeName, resolved: ResolveMemberResult.TypeMember) =
       this(prefix, name)
-      initializeMemo[Resolved](myResolved = _, Resolved(resolved.symbols.headOption, resolved.bounds))
+      initializeMemo(myResolved, Resolved(resolved.symbols.headOption, resolved.bounds))
     end this
 
     final def name: TypeName = nameImpl
@@ -1259,7 +1259,7 @@ object Types {
     override def toString(): String =
       s"TypeRef($prefix, $myDesignator)"
 
-    private def resolved(using Context): Resolved = memoized(myResolved, myResolved = _) {
+    private def resolved(using Context): Resolved = memoized(myResolved) {
       doResolve()
     }
 
@@ -1419,9 +1419,9 @@ object Types {
   end TypeRef
 
   final class ThisType(val tref: TypeRef) extends SingletonType {
-    private var myUnderlying: Memo[Type] = uninitializedMemo
+    private val myUnderlying: Memo[Type] = uninitializedMemo
 
-    override def underlying(using Context): Type = memoized(myUnderlying, myUnderlying = _) {
+    override def underlying(using Context): Type = memoized(myUnderlying) {
       val cls = this.cls
       if cls.isStatic then cls.selfType
       else cls.selfType.asSeenFrom(tref.prefix, cls)
@@ -1437,9 +1437,9 @@ object Types {
     * by `super`.
     */
   final class SuperType(val thistpe: ThisType, val explicitSupertpe: Option[Type]) extends TypeProxy with SingletonType:
-    private var mySupertpe: Memo[Type] = uninitializedMemo
+    private val mySupertpe: Memo[Type] = uninitializedMemo
 
-    private[tastyquery] final def supertpe(using Context): Type = memoized(mySupertpe, mySupertpe = _) {
+    private[tastyquery] final def supertpe(using Context): Type = memoized(mySupertpe) {
       explicitSupertpe.getOrElse {
         thistpe.cls.parents.reduceLeft(_ & _)
       }
@@ -1545,9 +1545,9 @@ object Types {
 
   /** The type of a repeated parameter of the form `T*`. */
   final class RepeatedType(val elemType: Type) extends TypeProxy:
-    private var myUnderlying: Memo[Type] = uninitializedMemo
+    private val myUnderlying: Memo[Type] = uninitializedMemo
 
-    override def underlying(using Context): Type = memoized(myUnderlying, myUnderlying = _) {
+    override def underlying(using Context): Type = memoized(myUnderlying) {
       defn.SeqTypeOf(elemType)
     }
 
@@ -2049,11 +2049,11 @@ object Types {
   ) extends RefinedType:
     // Cache fields
     private[tastyquery] val isMethodic = refinedType.isInstanceOf[MethodicType]
-    private var mySignedName: Memo[SignedName] = uninitializedMemo
+    private val mySignedName: Memo[SignedName] = uninitializedMemo
 
     require(!(isStable && isMethodic), s"Ill-formed $this")
 
-    private[tastyquery] def signedName(using Context): SignedName = memoized(mySignedName, mySignedName = _) {
+    private[tastyquery] def signedName(using Context): SignedName = memoized(mySignedName) {
       val sig = Signature.fromType(refinedType, SourceLanguage.Scala3, optCtorReturn = None)
       SignedName(refinedName, sig)
     }
@@ -2241,11 +2241,11 @@ object Types {
 
   /** selector match { cases } */
   final class MatchType(val bound: Type, val scrutinee: Type, val cases: List[MatchTypeCase]) extends TypeProxy:
-    private var myReduced: Memo[Option[Type]] = uninitializedMemo
+    private val myReduced: Memo[Option[Type]] = uninitializedMemo
 
     def underlying(using Context): Type = bound
 
-    def reduced(using Context): Option[Type] = memoized(myReduced, myReduced = _) {
+    def reduced(using Context): Option[Type] = memoized(myReduced) {
       TypeMatching.matchCases(scrutinee, cases)
     }
 
@@ -2347,10 +2347,10 @@ object Types {
   // ----- Ground Types -------------------------------------------------
 
   final class OrType(val first: Type, val second: Type) extends GroundType {
-    private var myJoin: Memo[Type] = uninitializedMemo
+    private val myJoin: Memo[Type] = uninitializedMemo
 
     /** Returns the closest non-OrType type above this one. */
-    def join(using Context): Type = memoized(myJoin, myJoin = _) {
+    def join(using Context): Type = memoized(myJoin) {
 
       /** The minimal set of classes in `classes` which derive all other classes in `classes` */
       def dominators(classes: List[ClassSymbol], acc: List[ClassSymbol]): List[ClassSymbol] = classes match

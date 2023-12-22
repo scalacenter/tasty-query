@@ -23,6 +23,11 @@ object Classpaths:
     * All the methods of `ClasspathEntry` and its components may throw
     * `java.io.IOException`s to indicate I/O errors.
     *
+    * A `ClasspathEntry` is encouraged to be thread-safe, along with all its
+    * components, but it is not a strong requirement. Implementations that are
+    * thread-safe should be documented as such. [[Contexts.Context]]s created
+    * only from thread-safe `ClasspathEntry`s are thread-safe themselves.
+    *
     * Implementations of this class are encouraged to define a `toString()`
     * method that helps identifying the entry for debugging purposes.
     */
@@ -99,16 +104,21 @@ object Classpaths:
     def readClassFileBytes(): IArray[Byte]
   end ClassData
 
-  /** In-memory representation of classpath entries. */
+  /** In-memory representation of classpath entries.
+    *
+    * In-memory classpath entries are thread-safe.
+    */
   object InMemory:
     import Classpaths as generic
 
+    /** A thread-safe, immutable classpath entry. */
     final class ClasspathEntry(debugString: String, val packages: List[PackageData]) extends generic.ClasspathEntry:
       override def toString(): String = debugString
 
       def listAllPackages(): List[generic.PackageData] = packages
     end ClasspathEntry
 
+    /** A thread-safe, immutable package information within a classpath entry. */
     final class PackageData(debugString: String, val dotSeparatedName: String, val classes: List[ClassData])
         extends generic.PackageData:
       private lazy val byBinaryName = classes.map(c => c.binaryName -> c).toMap
@@ -120,6 +130,7 @@ object Classpaths:
       def getClassDataByBinaryName(binaryName: String): Option[generic.ClassData] = byBinaryName.get(binaryName)
     end PackageData
 
+    /** A thread-safe, immutable class information within a classpath entry. */
     final class ClassData(
       debugString: String,
       val binaryName: String,

@@ -2,6 +2,9 @@ package tastyquery
 
 import scala.annotation.{switch, tailrec}
 
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+
 import scala.collection.mutable
 
 import tastyquery.Annotations.*
@@ -214,7 +217,7 @@ object Symbols {
   sealed abstract class TermOrTypeSymbol(override val owner: Symbol) extends Symbol(owner):
     type MatchingSymbolType >: this.type <: TermOrTypeSymbol
 
-    private var myLocalRef: Memo[NamedType] = uninitializedMemo
+    private val myLocalRef: Memo[NamedType] = uninitializedMemo
 
     /** A reference to this symbol that is valid within its declaring scope.
       *
@@ -223,7 +226,7 @@ object Symbols {
       */
     def localRef: NamedType =
       // overridden in subclasses to provide a better-known result type
-      memoized(myLocalRef, myLocalRef = _) {
+      memoized(myLocalRef) {
         val pre = this match
           case self: ClassSymbol if self.isRefinementClass =>
             /* Refinement classes are not declarations of their owner.
@@ -427,9 +430,9 @@ object Symbols {
     private var myParamSymss: SingleAssign[List[ParamSymbolsClause]] = uninitializedSingleAssign
 
     // Cache fields
-    private var mySignature: Memo[Signature] = uninitializedMemo
-    private var myTargetName: Memo[UnsignedTermName] = uninitializedMemo
-    private var mySignedName: Memo[TermName] = uninitializedMemo
+    private val mySignature: Memo[Signature] = uninitializedMemo
+    private val myTargetName: Memo[UnsignedTermName] = uninitializedMemo
+    private val mySignedName: Memo[TermName] = uninitializedMemo
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
@@ -607,11 +610,11 @@ object Symbols {
     private[tastyquery] final def needsSignature: Boolean =
       declaredType.isInstanceOf[MethodicType]
 
-    final def signature(using Context): Signature = memoized(mySignature, mySignature = _) {
+    final def signature(using Context): Signature = memoized(mySignature) {
       Signature.fromType(declaredType, sourceLanguage, Option.when(isConstructor)(owner.asClass))
     }
 
-    final def targetName(using Context): UnsignedTermName = memoized(myTargetName, myTargetName = _) {
+    final def targetName(using Context): UnsignedTermName = memoized(myTargetName) {
       if annotations.isEmpty then name
       else
         defn.targetNameAnnotClass match
@@ -630,7 +633,7 @@ object Symbols {
       * If the `owner` of this symbol is a `DeclaringSymbol`, then `owner.getDecl(signedName)`
       * will return this symbol. This is not always the case with `name`.
       */
-    final def signedName(using Context): TermName = memoized(mySignedName, mySignedName = _) {
+    final def signedName(using Context): TermName = memoized(mySignedName) {
       if needsSignature then SignedName(name, signature, targetName)
       else name
     }
@@ -903,7 +906,7 @@ object Symbols {
 
     // Reference fields (checked in doCheckCompleted)
     private var myTypeParams: SingleAssign[List[ClassTypeParamSymbol]] = uninitializedSingleAssign
-    private var myParents: Memo[List[Type]] = uninitializedMemo
+    private val myParents: Memo[List[Type]] = uninitializedMemo
     private var myGivenSelfType: SingleAssign[Option[Type]] = uninitializedSingleAssign
 
     // Optional reference fields
@@ -915,12 +918,12 @@ object Symbols {
       mutable.HashMap[UnsignedName, mutable.HashSet[TermOrTypeSymbol]]()
 
     // Cache fields
-    private var mySignatureName: Memo[SignatureName] = uninitializedMemo
-    private var myAppliedRef: Memo[Type] = uninitializedMemo
-    private var mySelfType: Memo[Type] = uninitializedMemo
-    private var myLinearization: Memo[List[ClassSymbol]] = uninitializedMemo
-    private var myErasure: Memo[ErasedTypeRef.ClassRef] = uninitializedMemo
-    private var mySealedChildren: Memo[List[SealedChild]] = uninitializedMemo
+    private val mySignatureName: Memo[SignatureName] = uninitializedMemo
+    private val myAppliedRef: Memo[Type] = uninitializedMemo
+    private val mySelfType: Memo[Type] = uninitializedMemo
+    private val myLinearization: Memo[List[ClassSymbol]] = uninitializedMemo
+    private val myErasure: Memo[ErasedTypeRef.ClassRef] = uninitializedMemo
+    private val mySealedChildren: Memo[List[SealedChild]] = uninitializedMemo
 
     protected override def doCheckCompleted(): Unit =
       super.doCheckCompleted()
@@ -1037,7 +1040,7 @@ object Symbols {
           computeErasedName(owner.owner, filledName)
       end computeErasedName
 
-      memoized(mySignatureName, mySignatureName = _) {
+      memoized(mySignatureName) {
         computeErasedName(owner, name.toTermName.asInstanceOf[SignatureNameItem])
       }
     end signatureName
@@ -1050,10 +1053,10 @@ object Symbols {
       getAssignedOnce(myTypeParams)(s"type params not initialized for $this")
 
     private[tastyquery] final def setParentsDirect(parents: List[Type]): this.type =
-      assignOnceMemo(myParents, myParents = _, parents)(s"reassignment of parents of $this")
+      assignOnceMemo(myParents, parents)(s"reassignment of parents of $this")
       this
 
-    final def parents(using Context): List[Type] = memoized(myParents, myParents = _) {
+    final def parents(using Context): List[Type] = memoized(myParents) {
       val tree = this.tree.getOrElse {
         throw IllegalStateException(s"$this was not assigned parents")
       }
@@ -1081,12 +1084,12 @@ object Symbols {
     final def givenSelfType: Option[Type] =
       getAssignedOnce(myGivenSelfType)(s"givenSelfType not initialized for $this")
 
-    final def appliedRefInsideThis: Type = memoized(myAppliedRef, myAppliedRef = _) {
+    final def appliedRefInsideThis: Type = memoized(myAppliedRef) {
       if typeParams.isEmpty then localRef
       else AppliedType(localRef, typeParams.map(_.localRef))
     }
 
-    final def selfType: Type = memoized(mySelfType, mySelfType = _) {
+    final def selfType: Type = memoized(mySelfType) {
       givenSelfType match
         case None =>
           appliedRefInsideThis
@@ -1111,7 +1114,7 @@ object Symbols {
       myTopLevelTasty
     end topLevelTasty
 
-    final def linearization(using Context): List[ClassSymbol] = memoized(myLinearization, myLinearization = _) {
+    final def linearization(using Context): List[ClassSymbol] = memoized(myLinearization) {
       val parentsLin = parentClasses.foldLeft[List[ClassSymbol]](Nil) { (lin, parent) =>
         parent.linearization.filter(c => !lin.contains(c)) ::: lin
       }
@@ -1122,7 +1125,7 @@ object Symbols {
       linearization.contains(that)
 
     /** The erasure of this class; nonsensical for `scala.Array`. */
-    private[tastyquery] final def erasure(using Context): ErasedTypeRef.ClassRef = memoized(myErasure, myErasure = _) {
+    private[tastyquery] final def erasure(using Context): ErasedTypeRef.ClassRef = memoized(myErasure) {
       (specialKind: @switch) match
         case SpecialKind.Any | SpecialKind.AnyVal | SpecialKind.Matchable | SpecialKind.Singleton =>
           defn.ObjectClass.erasure
@@ -1297,7 +1300,7 @@ object Symbols {
       case _             => throw AssertionError(s"baseType internally produced an invalid shape: $tpe")
     end asBaseType
 
-    private val baseTypeForClassCache = mutable.AnyRefMap.empty[ClassSymbol, Option[BaseType]]
+    private val baseTypeForClassCache = new ConcurrentHashMap[ClassSymbol, Option[BaseType]]()
 
     /** Cached core lookup of `this.baseTypeOf(clsOwner.this.cls)`.
       *
@@ -1309,13 +1312,19 @@ object Symbols {
       def foldGlb(bt: Option[BaseType], ps: List[Type]): Option[BaseType] =
         ps.foldLeft(bt)((bt, p) => baseTypeCombine(bt, baseTypeOf(p), meet = true))
 
-      baseTypeForClassCache.getOrElseUpdate(
-        cls,
-        if cls.isSubClass(this) then
-          if this.isStatic && this.typeParams.isEmpty then Some(this.localRef)
-          else foldGlb(None, cls.parents)
-        else None
-      )
+      // Do not use computeIfAbsent because it is not lock-free
+      val cachedResult = baseTypeForClassCache.get(cls)
+      if cachedResult != null then cachedResult
+      else
+        val computed =
+          if cls.isSubClass(this) then
+            if this.isStatic && this.typeParams.isEmpty then Some(this.localRef)
+            else foldGlb(None, cls.parents)
+          else None
+
+        val concurrentlyCachedResult = baseTypeForClassCache.putIfAbsent(cls, computed)
+        if concurrentlyCachedResult != null then concurrentlyCachedResult
+        else computed
     end baseTypeForClass
 
     /** Computes the (unapplied) baseType of a class type constructor.
@@ -1513,10 +1522,10 @@ object Symbols {
       lookup(linearization)
     end resolveMatchingMember
 
-    private var myThisType: Memo[ThisType] = uninitializedMemo
+    private val myThisType: Memo[ThisType] = uninitializedMemo
 
     /** The `ThisType` for this class, as visible from inside this class. */
-    final def thisType: ThisType = memoized(myThisType, myThisType = _) {
+    final def thisType: ThisType = memoized(myThisType) {
       ThisType(localRef)
     }
 
@@ -1547,7 +1556,7 @@ object Symbols {
       * The results are ordered by their declaration order in the source.
       */
     final def sealedChildren(using Context): List[ClassSymbol | TermSymbol] =
-      memoized(mySealedChildren, mySealedChildren = _) {
+      memoized(mySealedChildren) {
         if !flags.is(Sealed) then Nil
         else
           myScala2SealedChildren match
@@ -1732,16 +1741,31 @@ object Symbols {
     private var optLoadingInfo: Option[PackageLoadingInfo] = None
 
     // DeclaringSymbol-related fields
-    private val myDeclarations = mutable.HashMap[UnsignedName, Symbol]()
+
+    /** Atomically swapped when `loadingNewRoots` successfully finishes.
+      *
+      * Other threads can read this reference at any time.
+      */
+    private val myDeclarations = new AtomicReference[Map[UnsignedName, Symbol]](Map.empty)
+
+    /** The pending declarations while `loadingNewRoots` is executing.
+      *
+      * Only the thread performing `loadingNewRoots` is allowed to use this map.
+      */
     private val pendingDeclarations = mutable.HashMap[UnsignedName, Symbol]()
-    private var isLoadingNewRoots: Boolean = false
+
+    /** Whether we are currently loading new roots; atomically set and reset by `loadingNewRoots`. */
+    private val isLoadingNewRoots = new AtomicBoolean(false)
 
     // Cache fields
     val packageRef: PackageRef = new PackageRef(this)
-    private var myAllPackageObjectDecls: Memo[List[ClassSymbol]] = uninitializedMemo
+    private val myAllPackageObjectDecls: Memo[List[ClassSymbol]] = uninitializedMemo
 
     this.setFlags(EmptyFlagSet, None)
     this.setAnnotations(Nil)
+
+    private def getMyDeclaractions: Map[UnsignedName, Symbol] =
+      myDeclarations.get().nn
 
     private lazy val _fullName: PackageFullName =
       if owner == null || name == nme.EmptyPackageName then PackageFullName.rootPackageName
@@ -1787,16 +1811,13 @@ object Symbols {
       /* All subpackages are created eagerly when initializing contexts,
        * so we can directly access myDeclarations here.
        */
-      myDeclarations.get(name).collect { case pkg: PackageSymbol =>
+      getMyDeclaractions.get(name).collect { case pkg: PackageSymbol =>
         pkg
       }
     end getPackageDecl
 
     private[Symbols] final def addDecl(decl: Symbol): Unit =
-      assert(
-        !myDeclarations.contains(decl.name) && !pendingDeclarations.contains(decl.name),
-        s"trying to add a second entry $decl for name ${decl.name} in $this"
-      )
+      def duplicateMessage: String = s"trying to add a second entry $decl for name ${decl.name} in $this"
 
       /* If we are loading new roots and the decl is not a package,
        * add the declaration to the pending set only. They will be committed
@@ -1805,13 +1826,28 @@ object Symbols {
        * Packages are always eagerly committed.
        */
       decl match
-        case decl: TermOrTypeSymbol if isLoadingNewRoots =>
+        case decl: TermOrTypeSymbol if isLoadingNewRoots.get() =>
+          assert(!getMyDeclaractions.contains(decl.name) && !pendingDeclarations.contains(decl.name), duplicateMessage)
           pendingDeclarations(decl.name) = decl
+
         case _ =>
-          myDeclarations(decl.name) = decl
+          // Manual CAS loop because `updateAndGet` does not say anything about when the lambda throws
+          @tailrec
+          def loop(): Unit =
+            val prev = getMyDeclaractions
+            assert(!prev.contains(decl.name), duplicateMessage)
+            val next = prev + (decl.name -> decl)
+            if !myDeclarations.compareAndSet(prev, next) then loop()
+          end loop
+
+          loop()
     end addDecl
 
     /** Performs an operation that can load new roots from the class loader.
+      *
+      * This operation is synchronized per package. If another thread is
+      * already loading roots, this method will synchronously wait for it to
+      * be done.
       *
       * While loading new roots, any new non-package member sent to `addDecl`
       * is added to `pendingDeclarations` instead of `myDeclarations`. They
@@ -1825,30 +1861,43 @@ object Symbols {
       *   true iff at least one new declaration was added to the package during the operation
       */
     private def loadingNewRoots(op: PackageLoadingInfo => Unit)(using Context): Boolean =
-      if isLoadingNewRoots then throw IllegalStateException(s"Cyclic loading of new roots in package $this")
-
       optLoadingInfo match
         case None =>
           false
 
         case Some(loadingInfo) =>
-          isLoadingNewRoots = true
-          try
-            op(loadingInfo)
+          val myDeclarationsBefore = getMyDeclaractions
 
-            // Upon success, commit pending declations
-            myDeclarations ++= pendingDeclarations
+          val myDeclarationsAfter = loadingInfo.synchronized {
+            if !isLoadingNewRoots.compareAndSet(false, true) then
+              throw IllegalStateException(s"Cyclic loading of new roots in package $this")
 
-            pendingDeclarations.nonEmpty
-          finally
-            pendingDeclarations.clear() // whether or not they were committed
-            isLoadingNewRoots = false
+            try
+              op(loadingInfo)
+
+              // Upon success, commit pending declations
+              if pendingDeclarations.nonEmpty then
+                myDeclarations.updateAndGet({ prev =>
+                  prev.nn ++ pendingDeclarations
+                })
+              else
+                // get without updating to test whether another thread has brought some changes
+                myDeclarations.get()
+            finally
+              pendingDeclarations.clear() // whether or not they were committed
+              isLoadingNewRoots.set(false)
+          }
+
+          /* This could be true even if `pendingDeclarations.nonEmpty`, if two
+           * threads concurrently ask to load the same root.
+           */
+          myDeclarationsAfter ne myDeclarationsBefore
     end loadingNewRoots
 
     final def getDecl(name: Name)(using Context): Option[Symbol] = name match
       case name: UnsignedName =>
-        myDeclarations.get(name).orElse {
-          if loadingNewRoots(_.loadOneRoot(name)) then myDeclarations.get(name)
+        getMyDeclaractions.get(name).orElse {
+          if loadingNewRoots(_.loadOneRoot(name)) then getMyDeclaractions.get(name)
           else None
         }
       case _: SignedName =>
@@ -1878,13 +1927,13 @@ object Symbols {
 
     final def declarations(using Context): List[Symbol] =
       loadingNewRoots(_.loadAllRoots())
-      myDeclarations.values.toList
+      getMyDeclaractions.values.toList
 
     // See PackageRef.findMember
     private[tastyquery] def allPackageObjectDecls()(using Context): List[ClassSymbol] =
-      memoized(myAllPackageObjectDecls, myAllPackageObjectDecls = _) {
+      memoized(myAllPackageObjectDecls) {
         loadingNewRoots(_.loadAllPackageObjectRoots())
-        myDeclarations.valuesIterator.collect {
+        getMyDeclaractions.valuesIterator.collect {
           case cls: ClassSymbol if cls.name.isPackageObjectClassName => cls
         }.toList
           .sortBy(_.name.toString) // sort for determinism

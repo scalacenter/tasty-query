@@ -189,7 +189,7 @@ private[tastyquery] object Loaders {
 
     private var initialized = false
     private var _hasGenericTuples: Boolean = false
-    private var byEntry: Memo[ByEntryMap] = uninitializedMemo
+    private val byEntry: Memo[ByEntryMap] = uninitializedMemo
 
     private def toPackageName(dotSeparated: String): PackageFullName =
       val parts =
@@ -217,7 +217,7 @@ private[tastyquery] object Loaders {
           case Some(pkgs) => Some(pkgs.view.flatMap(lookupRoots))
           case None       => None
 
-      val localByEntry = memoized(byEntry, byEntry = _) {
+      val localByEntry = memoized(byEntry) {
         computeByEntry()
       }
       computeLookup(localByEntry)
