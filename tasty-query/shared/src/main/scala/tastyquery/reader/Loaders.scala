@@ -19,7 +19,10 @@ import tastyquery.reader.tasties.TastyUnpickler
 
 private[tastyquery] object Loaders {
 
-  private final class PackageLoadingInfo(val pkg: PackageSymbol, initPackageData: List[PackageData]):
+  private[tastyquery] final class PackageLoadingInfo private[Loaders] (
+    pkg: PackageSymbol,
+    initPackageData: List[PackageData]
+  )(using Resolver):
     private lazy val dataByBinaryName =
       val localRoots = mutable.HashMap.empty[String, ClassData]
       for packageData <- initPackageData do
@@ -32,7 +35,10 @@ private[tastyquery] object Loaders {
 
     private type LoadedFiles = mutable.HashSet[String]
 
-    def loadAllRoots()(using ReaderContext, Resolver): Unit =
+    /** Loads all the roots of the associated package. */
+    def loadAllRoots()(using Context): Unit =
+      given ReaderContext = ReaderContext(ctx)
+
       // Sort for determinism, and to make sure that outer classes always come before their inner classes
       val allNames = dataByBinaryName.keysIterator.toList.sorted
 
@@ -44,7 +50,10 @@ private[tastyquery] object Loaders {
       dataByBinaryName.clear()
     end loadAllRoots
 
-    def loadAllPackageObjectRoots()(using ReaderContext, Resolver): Unit =
+    /** Loads all the roots of the associated package that could be package objects. */
+    def loadAllPackageObjectRoots()(using Context): Unit =
+      given ReaderContext = ReaderContext(ctx)
+
       def isPackageObjectBinaryName(name: String): Boolean =
         name == "package" || name.endsWith("$package")
 
@@ -56,11 +65,26 @@ private[tastyquery] object Loaders {
       }
     end loadAllPackageObjectRoots
 
-    def loadOneRoot(binaryName: String)(using ReaderContext, Resolver): Boolean =
+    /** Loads the root of the associated package that would define `name`, if there is one such root. */
+    def loadOneRoot(name: Name)(using Context): Unit =
+      given ReaderContext = ReaderContext(ctx)
+
       loadingRoots { loadedFiles =>
+        val binaryName = topLevelSymbolNameToRootName(name)
         tryLoadRoot(binaryName, loadedFiles)
       }
     end loadOneRoot
+
+    private def topLevelSymbolNameToRootName(name: Name): String = name match
+      case name: TypeName =>
+        topLevelSymbolNameToRootName(name.toTermName)
+      case ObjectClassName(objName) =>
+        topLevelSymbolNameToRootName(objName)
+      case name: SimpleName =>
+        NameTransformer.encode(name.name)
+      case _ =>
+        throw IllegalStateException(s"Invalid top-level symbol name ${name.toDebugString}")
+    end topLevelSymbolNameToRootName
 
     private def loadingRoots[A](op: LoadedFiles => A): A =
       val loadedFiles = mutable.HashSet.empty[String]
@@ -72,32 +96,27 @@ private[tastyquery] object Loaders {
       result
     end loadingRoots
 
-    private def tryLoadRoot(binaryName: String, loadedFiles: LoadedFiles)(using ReaderContext, Resolver): Boolean =
+    private def tryLoadRoot(binaryName: String, loadedFiles: LoadedFiles)(using ReaderContext): Unit =
       dataByBinaryName.get(binaryName) match
         case None =>
-          false
+          ()
         case Some(classData) =>
           // Avoid reading inner classes that we already loaded through their outer classes.
           if loadedFiles.add(binaryName) then
-            if classData.hasTastyFile then
-              doLoadTasty(classData)
-              true
-            else if doLoadClassFile(classData, loadedFiles) then true
-            else
+            if classData.hasTastyFile then doLoadTasty(classData)
+            else if !doLoadClassFile(classData, loadedFiles) then
               /* Oops, maybe we will need this one later, if it is a (non-local)
                * inner class of another Java class.
                * Removing it from loadedFiles so that we do not throw away the file.
                */
               loadedFiles -= binaryName
-              false
-          else false
     end tryLoadRoot
 
     private lazy val fullBinaryNamePrefix: String =
       if pkg.isEmptyPackage then ""
       else pkg.fullName.path.mkString("", "/", "/")
 
-    def doLoadClassFile(classData: ClassData, loadedFiles: LoadedFiles)(using ReaderContext, Resolver): Boolean =
+    def doLoadClassFile(classData: ClassData, loadedFiles: LoadedFiles)(using ReaderContext): Boolean =
       val structure = ClassfileReader.readStructure(pkg, classData)
       val kind = ClassfileParser.detectClassKind(structure)
       kind match
@@ -119,8 +138,7 @@ private[tastyquery] object Loaders {
     end doLoadClassFile
 
     private def doLoadJavaInnerClasses(explore: List[InnerClassDecl], loadedFiles: LoadedFiles)(
-      using ReaderContext,
-      Resolver
+      using ReaderContext
     ): Unit =
       explore match
         case inner :: rest =>
@@ -161,8 +179,7 @@ private[tastyquery] object Loaders {
     private type ByEntryMap = Map[ClasspathEntry, IArray[(PackageSymbol, IArray[String])]]
 
     private var initialized = false
-    private var packages: Map[PackageSymbol, PackageLoadingInfo] = compiletime.uninitialized
-    private var _hasGenericTuples: Boolean = compiletime.uninitialized
+    private var _hasGenericTuples: Boolean = false
     private var byEntry: Memo[ByEntryMap] = uninitializedMemo
 
     private def toPackageName(dotSeparated: String): PackageFullName =
@@ -171,49 +188,8 @@ private[tastyquery] object Loaders {
         else dotSeparated.split('.').toList.map(termName(_))
       PackageFullName(parts)
 
-    private def topLevelSymbolNameToRootName(name: Name): String = name match
-      case name: TypeName =>
-        topLevelSymbolNameToRootName(name.toTermName)
-      case ObjectClassName(objName) =>
-        topLevelSymbolNameToRootName(objName)
-      case name: SimpleName =>
-        NameTransformer.encode(name.name)
-      case _ =>
-        throw IllegalStateException(s"Invalid top-level symbol name ${name.toDebugString}")
-    end topLevelSymbolNameToRootName
-
     private def rootNameToTopLevelTermSymbolName(rootName: String): SimpleName =
       termName(NameTransformer.decode(rootName))
-
-    /** Loads all the roots of the given `pkg`. */
-    private[tastyquery] def loadAllRoots(pkg: PackageSymbol)(using Context): Unit =
-      for loadingInfo <- packages.get(pkg) do loadingInfo.loadAllRoots()(using ReaderContext(ctx))
-
-    /** Loads all the roots of the given `pkg` that could be package objects. */
-    private[tastyquery] def loadAllPackageObjectRoots(pkg: PackageSymbol)(using Context): Unit =
-      for loadingInfo <- packages.get(pkg) do loadingInfo.loadAllPackageObjectRoots()(using ReaderContext(ctx))
-
-    /** Loads the root of the given `pkg` that would define `name`, if there is one such root.
-      *
-      * When this method returns `true`, it is not guaranteed that the
-      * particular `name` corresponds to a `Symbol`. But when it returns
-      * `false`, there is a guarantee that no new symbol with the given `name`
-      * was loaded.
-      *
-      * Whether this method returns `true` or `false`, any subsequent call to
-      * `loadRoot` with the same arguments will return `false`.
-      *
-      * @return
-      *   `true` if a root was loaded, `false` otherwise.
-      */
-    private[tastyquery] def loadRoot(pkg: PackageSymbol, name: Name)(using Context): Boolean =
-      packages.get(pkg) match
-        case Some(loadingInfo) =>
-          val rootName = topLevelSymbolNameToRootName(name)
-          loadingInfo.loadOneRoot(rootName)(using ReaderContext(ctx))
-        case None =>
-          false
-    end loadRoot
 
     def lookupByEntry(src: ClasspathEntry)(using Context): Option[Iterable[TermOrTypeSymbol]] =
       def lookupRoots(pkg: PackageSymbol, rootNames: IArray[String]) =
@@ -252,13 +228,13 @@ private[tastyquery] object Loaders {
         )
       end loadPackages
 
-      val rawMap = loadPackages().groupBy(_._1)
-      packages = rawMap.map((pkg, pairs) => pkg -> new PackageLoadingInfo(pkg, pairs.map(_._2)))
-      _hasGenericTuples = rawMap
-        .get(defn.scalaPackage)
-        .exists(_.exists { (pkg, data) =>
-          data.getClassDataByBinaryName("$times$colon").isDefined
-        })
+      for (pkg, pairs) <- loadPackages().groupBy(_._1) do
+        val initPackageData = pairs.map(_._2)
+        pkg.setLoadingInfo(new PackageLoadingInfo(pkg, initPackageData))
+
+        if pkg.isScalaPackage then
+          _hasGenericTuples = initPackageData.exists(_.getClassDataByBinaryName("$times$colon").isDefined)
+      end for
     end initPackages
 
     def hasGenericTuples: Boolean = _hasGenericTuples

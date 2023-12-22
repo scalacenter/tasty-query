@@ -16,8 +16,6 @@ import tastyquery.Trees.*
 import tastyquery.Types.*
 import tastyquery.Utils.*
 
-import tastyquery.reader.Loaders.Loader
-
 /** Symbols for all kinds of definitions in Scala programs.
   *
   * Every definition, like `class`es, `def`s, `type`s and type parameters, is
@@ -1723,11 +1721,15 @@ object Symbols {
       extends Symbol(owner)
       with DeclaringSymbol {
     import PackageSymbol.*
+    import tastyquery.reader.Loaders.PackageLoadingInfo
 
     type DefiningTreeType = Nothing
     type DeclType = Symbol
 
     private[Symbols] val specialKind: SpecialKind = computeSpecialKind(name, owner)
+
+    /** Package loading info with raw data from the classpath. */
+    private var optLoadingInfo: Option[PackageLoadingInfo] = None
 
     // DeclaringSymbol-related fields
     private val myDeclarations = mutable.HashMap[UnsignedName, Symbol]()
@@ -1764,6 +1766,10 @@ object Symbols {
 
     /** Is this the scala package? */
     private[tastyquery] def isScalaPackage: Boolean = specialKind == SpecialKind.scala
+
+    private[tastyquery] def setLoadingInfo(loadingInfo: PackageLoadingInfo): Unit =
+      if optLoadingInfo.isDefined then throw IllegalStateException(s"Loading info already set for $this")
+      optLoadingInfo = Some(loadingInfo)
 
     /** Gets the subpackage with the specified `name`, if it exists.
       *
@@ -1814,27 +1820,35 @@ object Symbols {
       *
       * This way, any exception occurring during loading does not pollute the
       * publicly visible state in `myDeclarations`.
+      *
+      * @return
+      *   true iff at least one new declaration was added to the package during the operation
       */
-    private def loadingNewRoots[A](op: Loader => A)(using Context): A =
+    private def loadingNewRoots(op: PackageLoadingInfo => Unit)(using Context): Boolean =
       if isLoadingNewRoots then throw IllegalStateException(s"Cyclic loading of new roots in package $this")
 
-      isLoadingNewRoots = true
-      try
-        val result = op(ctx.classloader)
+      optLoadingInfo match
+        case None =>
+          false
 
-        // Upon success, commit pending declations
-        myDeclarations ++= pendingDeclarations
+        case Some(loadingInfo) =>
+          isLoadingNewRoots = true
+          try
+            op(loadingInfo)
 
-        result
-      finally
-        pendingDeclarations.clear() // whether or not they were committed
-        isLoadingNewRoots = false
+            // Upon success, commit pending declations
+            myDeclarations ++= pendingDeclarations
+
+            pendingDeclarations.nonEmpty
+          finally
+            pendingDeclarations.clear() // whether or not they were committed
+            isLoadingNewRoots = false
     end loadingNewRoots
 
     final def getDecl(name: Name)(using Context): Option[Symbol] = name match
       case name: UnsignedName =>
         myDeclarations.get(name).orElse {
-          if loadingNewRoots(_.loadRoot(this, name)) then myDeclarations.get(name)
+          if loadingNewRoots(_.loadOneRoot(name)) then myDeclarations.get(name)
           else None
         }
       case _: SignedName =>
@@ -1863,13 +1877,13 @@ object Symbols {
       }
 
     final def declarations(using Context): List[Symbol] =
-      loadingNewRoots(_.loadAllRoots(this))
+      loadingNewRoots(_.loadAllRoots())
       myDeclarations.values.toList
 
     // See PackageRef.findMember
     private[tastyquery] def allPackageObjectDecls()(using Context): List[ClassSymbol] =
       memoized(myAllPackageObjectDecls, myAllPackageObjectDecls = _) {
-        loadingNewRoots(_.loadAllPackageObjectRoots(this))
+        loadingNewRoots(_.loadAllPackageObjectRoots())
         myDeclarations.valuesIterator.collect {
           case cls: ClassSymbol if cls.name.isPackageObjectClassName => cls
         }.toList
