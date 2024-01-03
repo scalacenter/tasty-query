@@ -1,13 +1,14 @@
 package tastyquery
 
 import java.util.Arrays
+import java.io.File
 
 final class SourceFile private[tastyquery] (_path: String):
   /** The full, though usually relative, path of the file, as stored in TASTy. */
   def path: String = _path
 
   /** The last `/`-separated component of the `path`. */
-  def name: String = path.substring(path.lastIndexOf('/') + 1).nn
+  def name: String = path.substring(path.lastIndexOf(File.separatorChar) + 1).nn
 
   override def toString(): String = path
 
