@@ -27,11 +27,22 @@ object Contexts {
 
   /** Factory methods for [[Context]]. */
   object Context:
-    /** Creates a new [[Context]] for the given [[Classpaths.Classpath]]. */
+    /** Creates a new [[Context]] for the given [[Classpaths.Classpath]].
+      *
+      * If all the [[Classpaths.ClasspathEntry ClasspathEntries]] in the classpath
+      * are thread-safe, then the resulting [[Context]] is thread-safe.
+      */
     def initialize(classpath: Classpath): Context =
       val classloader = Loader(classpath)
       val ctx = new Context(classloader)
       classloader.initPackages()(using ctx)
+
+      /* Exploit the portable releaseFence() call inside the `::` constructor,
+       * in order to publish all the mutations that were done during the
+       * above initialization to other threads.
+       */
+      new ::(Nil, Nil)
+
       ctx
     end initialize
   end Context
@@ -58,14 +69,18 @@ object Contexts {
     * The same instance of [[Classpaths.Classpath]] can be reused to create
     * several [[Context]]s, if necessary.
     */
-  final class Context private[Contexts] (private[tastyquery] val classloader: Loader) {
+  final class Context private[Contexts] (classloader: Loader) {
     private given Context = this
 
     private val sourceFiles = mutable.HashMap.empty[String, SourceFile]
 
     private val (RootPackage @ _, EmptyPackage @ _) = PackageSymbol.createRoots()
 
+    private[tastyquery] def hasGenericTuples: Boolean = classloader.hasGenericTuples
+
     val defn: Definitions = Definitions(this: @unchecked, RootPackage, EmptyPackage)
+
+    private[tastyquery] def internalClasspathForTestsOnly: Classpath = classloader.classpath
 
     private[tastyquery] def getSourceFile(path: String): SourceFile =
       sourceFiles.getOrElseUpdate(path, new SourceFile(path))

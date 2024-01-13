@@ -31,6 +31,9 @@ object ClasspathLoaders:
     * to create a [[Contexts.Context]]. The latter gives semantic access to all
     * the definitions on the classpath.
     *
+    * The entries of the resulting [[Classpaths.Classpath]] can be considered
+    * thread-safe, since the JavaScript environment is always single-threaded.
+    *
     * @note the resulting [[Classpaths.ClasspathEntry ClasspathEntry]] entries of
     *       the returned [[Classpaths.Classpath]] correspond to the elements of `classpath`.
     */

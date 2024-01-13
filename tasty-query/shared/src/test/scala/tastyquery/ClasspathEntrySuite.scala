@@ -9,7 +9,7 @@ import tastyquery.testutil.TestPlatform
 class ClasspathEntrySuite extends UnrestrictedUnpicklingSuite:
 
   def scala3ClasspathEntry(using Context): ClasspathEntry =
-    ctx.classloader.classpath(TestPlatform.scala3ClasspathIndex)
+    ctx.internalClasspathForTestsOnly(TestPlatform.scala3ClasspathIndex)
 
   def lookupSyms(entry: ClasspathEntry)(using Context): IArray[Symbol] =
     IArray.from(ctx.findSymbolsByClasspathEntry(entry))

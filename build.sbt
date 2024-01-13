@@ -127,8 +127,13 @@ lazy val tastyQuery =
         import com.typesafe.tools.mima.core.*
         Seq(
           // private[tastyquery], not an issue
+          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.Contexts#Context.classloader"),
           ProblemFilters.exclude[MissingClassProblem]("tastyquery.Utils"),
           ProblemFilters.exclude[MissingClassProblem]("tastyquery.Utils$"),
+          // private, not an issue
+          ProblemFilters.exclude[MissingClassProblem]("tastyquery.Types$TermRef$Resolved"),
+          ProblemFilters.exclude[MissingClassProblem]("tastyquery.Types$TypeRef$Resolved"),
+
           // Everything in tastyquery.reader is private[tastyquery] at most
           ProblemFilters.exclude[Problem]("tastyquery.reader.*"),
         )
