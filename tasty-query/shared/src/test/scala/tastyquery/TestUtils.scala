@@ -19,6 +19,12 @@ object TestUtils:
     }
   end findLocalValDef
 
+  def findValDefTree(body: Tree, name: TermName): ValDef =
+    findTree(body) {
+      case vd: ValDef if vd.name == name => vd
+    }
+  end findValDefTree
+
   def findTree[A](body: Tree)(test: PartialFunction[Tree, A]): A =
     object finder extends TreeTraverser:
       var result: Option[A] = None

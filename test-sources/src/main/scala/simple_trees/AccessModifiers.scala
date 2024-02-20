@@ -1,5 +1,8 @@
 package simple_trees
 
+import scala.annotation.nowarn
+
+@nowarn("msg=The \\[this\\] qualifier will be deprecated")
 class AccessModifiers(
   localParam: Int,
   private[this] val privateThisParam: Int,

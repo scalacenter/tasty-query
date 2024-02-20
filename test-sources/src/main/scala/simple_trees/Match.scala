@@ -11,6 +11,6 @@ class Match {
   }
 
   def g(xs: Seq[Int]): Int = xs match
-    case List(elems: _*) => 0
-    case _               => 1
+    case List(elems*) => 0
+    case _            => 1
 }

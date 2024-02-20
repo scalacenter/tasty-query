@@ -106,8 +106,8 @@ class PositionSuite extends RestrictedUnpicklingSuite {
           |    case _ => -x
           |  }""".stripMargin,
         """xs match
-          |    case List(elems: _*) => 0
-          |    case _               => 1""".stripMargin
+          |    case List(elems*) => 0
+          |    case _            => 1""".stripMargin
       )
     )
 
@@ -132,8 +132,8 @@ class PositionSuite extends RestrictedUnpicklingSuite {
         "case 3 | 4 | 5 if x < 5 => 0",
         "case _ if (x % 2 == 0) => x / 2",
         "case _ => -x",
-        "case List(elems: _*) => 0",
-        "case _               => 1"
+        "case List(elems*) => 0",
+        "case _            => 1"
       )
     )
   }
@@ -151,7 +151,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
         "(x: Int) => x + 1",
         "() => ()",
         "T] => T => T", // TODO Improve this
-        "T] => (x: T) => x", // TODO Improve this
+        "[T] => (x: T) => x",
         "(x: Any) => x.type",
         "x => x"
       )

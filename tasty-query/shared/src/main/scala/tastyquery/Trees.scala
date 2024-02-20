@@ -527,20 +527,31 @@ object Trees {
         tpt.toType
 
       case None =>
-        val methodType = meth.tpe.widenTermRef match
-          case mt: MethodType if !mt.resultType.isInstanceOf[MethodicType] =>
-            mt
-          case mt =>
-            throw InvalidProgramStructureException(s"Unexpected type for the `meth` part of a Lambda: $mt")
-
-        val paramCount = methodType.paramNames.size
-        val functionNTypeRef = defn.FunctionNClass(paramCount).staticRef
-
-        if methodType.isResultDependent then
-          val parent = functionNTypeRef.appliedTo(List.fill(paramCount + 1)(defn.AnyType))
-          TermRefinement(parent, isStable = false, nme.m_apply, methodType)
-        else functionNTypeRef.appliedTo(methodType.paramTypes :+ methodType.resultType.asInstanceOf[Type])
+        convertMethodTypeToFunctionType(meth.tpe.widenTermRef)
     end calculateType
+
+    private def convertMethodTypeToFunctionType(tpe: TermType)(using Context): Type =
+      tpe match
+        case tpe: MethodType if tpe.resultType.isInstanceOf[Type] =>
+          val paramCount = tpe.paramNames.size
+          val functionNTypeRef = defn.FunctionNClass(paramCount).staticRef
+
+          if tpe.isResultDependent then
+            val parent = functionNTypeRef.appliedTo(List.fill(paramCount + 1)(defn.AnyType))
+            TermRefinement(parent, isStable = false, nme.m_apply, tpe)
+          else functionNTypeRef.appliedTo(tpe.paramTypes :+ tpe.resultType.asInstanceOf[Type])
+
+        case tpe: PolyType if tpe.resultType.isInstanceOf[MethodType] =>
+          val polyFunctionClass = defn.PolyFunctionClass.getOrElse {
+            throw InvalidProgramStructureException(
+              s"Found a polymorphic Lambda but PolyFunction is not on the classpath"
+            )
+          }
+          TermRefinement(polyFunctionClass.staticRef, isStable = false, nme.m_apply, tpe)
+
+        case _ =>
+          throw InvalidProgramStructureException(s"Unexpected type for the `meth` part of a Lambda: ${tpe.showBasic}")
+    end convertMethodTypeToFunctionType
 
     /** The class symbol of the SAM type of this lambda.
       *

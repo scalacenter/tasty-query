@@ -41,11 +41,11 @@ class RefinedTypeTree {
 
   def polyTypeRefinement(c: C { type Poly[X] = List[(X, X)] }) = c
 
-  // With an additional 'with'
+  // With an additional '&'
 
   trait AndTypeA
   trait AndTypeB extends AndTypeA
 
-  def andType(): AndTypeA with AndTypeB { def foo: String } =
+  def andType(): (AndTypeA & AndTypeB) { def foo: String } =
     new AndTypeA with AndTypeB { def foo: String = toString }
 }

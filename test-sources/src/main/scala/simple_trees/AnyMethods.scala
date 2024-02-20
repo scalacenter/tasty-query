@@ -18,9 +18,9 @@ class AnyMethods:
 
   class Bag extends scala.reflect.Selectable
 
-  def testTypeCast(bag: Bag { val m: Int }): Any = bag.m // bag.selectDynamic("m").$asInstanceOf$[Int]
+  def testTypeCast(bag: Bag { val m: Int }): Any = bag.m // bag.selectDynamic("m").$asInstanceOf$[bag.m.type]
 
   def testGetClassAny(x: Any): Any = x.getClass()
-  def testGetClassProduct(x: Product): Class[_ <: Product] = x.getClass()
+  def testGetClassProduct(x: Product): Class[? <: Product] = x.getClass()
   def testGetClassInt(x: Int): Class[Int] = x.getClass() // nonsensical, but what can we do?
 end AnyMethods

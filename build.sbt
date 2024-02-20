@@ -3,7 +3,7 @@ import sbt.internal.util.ManagedLogger
 
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
-val usedScalaCompiler = "3.3.1"
+val usedScalaCompiler = "3.4.0"
 val usedTastyRelease = usedScalaCompiler
 val scala2Version = "2.13.12"
 
@@ -37,7 +37,7 @@ inThisBuild(Def.settings(
     Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd/")),
     Developer("bishabosha", "Jamie Thompson", "bishbashboshjt@gmail.com", url("https://github.com/bishabosha")),
   ),
-  versionPolicyIntention := Compatibility.BinaryAndSourceCompatible,
+  versionPolicyIntention := Compatibility.BinaryCompatible,
   // Ignore dependencies to internal modules whose version is like `1.2.3+4...` (see https://github.com/scalacenter/sbt-version-policy#how-to-integrate-with-sbt-dynver)
   versionPolicyIgnoredInternalDependencyVersions := Some("^\\d+\\.\\d+\\.\\d+\\+\\d+".r)
 ))
@@ -139,7 +139,8 @@ lazy val tastyQuery =
         )
       },
 
-      tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
+      // Temporarily disabled until we have a published version of tasty-query that can handle 3.4.x.
+      //tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
       tastyMiMaConfig ~= { prev =>
         import tastymima.intf._
         prev
