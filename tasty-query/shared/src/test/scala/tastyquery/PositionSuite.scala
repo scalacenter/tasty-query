@@ -151,7 +151,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
         "(x: Int) => x + 1",
         "() => ()",
         "T] => T => T", // TODO Improve this
-        "T] => (x: T) => x", // TODO Improve this
+        "[T] => (x: T) => x",
         "(x: Any) => x.type",
         "x => x"
       )
