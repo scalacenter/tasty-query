@@ -129,8 +129,7 @@ lazy val tastyQuery =
         )
       },
 
-      // Temporarily disabled until we have a published version of tasty-query that can handle 3.4.x.
-      //tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
+      tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
       tastyMiMaConfig ~= { prev =>
         import tastymima.intf._
         prev
