@@ -5,7 +5,7 @@ import org.scalajs.jsenv.nodejs.NodeJSEnv
 
 val usedScalaCompiler = "3.4.0"
 val usedTastyRelease = usedScalaCompiler
-val scala2Version = "2.13.12"
+val scala2Version = "2.13.14"
 
 val SourceDeps = config("sourcedeps").hide
 
@@ -37,7 +37,7 @@ inThisBuild(Def.settings(
     Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd/")),
     Developer("bishabosha", "Jamie Thompson", "bishbashboshjt@gmail.com", url("https://github.com/bishabosha")),
   ),
-  versionPolicyIntention := Compatibility.BinaryAndSourceCompatible,
+  versionPolicyIntention := Compatibility.BinaryCompatible,
   // Ignore dependencies to internal modules whose version is like `1.2.3+4...` (see https://github.com/scalacenter/sbt-version-policy#how-to-integrate-with-sbt-dynver)
   versionPolicyIgnoredInternalDependencyVersions := Some("^\\d+\\.\\d+\\.\\d+\\+\\d+".r)
 ))
@@ -91,7 +91,7 @@ lazy val tastyQuery =
     .settings(strictCompileSettings)
     .settings(name := "tasty-query")
     .settings(
-      libraryDependencies += "org.scalameta" %%% "munit" % "0.7.29" % Test,
+      libraryDependencies += "org.scalameta" %%% "munit" % "1.0.0" % Test,
       testFrameworks += new TestFramework("munit.Framework")
     )
     .settings(
