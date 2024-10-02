@@ -3,7 +3,7 @@ import sbt.internal.util.ManagedLogger
 
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
-val usedScalaCompiler = "3.4.0"
+val usedScalaCompiler = "3.4.3"
 val usedTastyRelease = usedScalaCompiler
 val scala2Version = "2.13.14"
 
