@@ -238,6 +238,9 @@ private[tastyquery] object Subtyping:
       isSubType(tp1, tp2.first) || isSubType(tp1, tp2.second)
         || level4(tp1, tp2)
 
+    case tp2: FlexibleType =>
+      isSubType(tp1, tp2.nullableType)
+
     case tp2: ByNameType =>
       tp1 match
         case tp1: ByNameType => isSubType(tp1.resultType, tp2.resultType)
@@ -477,6 +480,9 @@ private[tastyquery] object Subtyping:
 
     case tp1: RecType =>
       isSubType(tp1.parent, tp2)
+
+    case tp1: FlexibleType =>
+      isSubType(tp1.nonNullableType, tp2)
 
     case tp1: AndType =>
       // TODO Try and simplify first

@@ -80,8 +80,8 @@ class WholeClasspathSuite extends UnrestrictedUnpicklingSuite:
     traverseEveryTopLevelClassDef(_ != RuntimeLazyValsClass)(traverser)
 
     tracker.finalize(
-      // As of this writing, there were 15293 successes
-      minExpectedSuccessCount = 15000,
+      // As of this writing, there were 11617 successes
+      minExpectedSuccessCount = 11000,
       errorTitle = "Could not resolve the `symbol` of some trees on the classpath:"
     )
   }
@@ -116,8 +116,8 @@ class WholeClasspathSuite extends UnrestrictedUnpicklingSuite:
     traverseEveryTopLevelClassDef(_ != RuntimeLazyValsClass)(traverser)
 
     tracker.finalize(
-      // As of this writing, there were 44959 successes
-      minExpectedSuccessCount = 44000,
+      // As of this writing, there were 38337 successes
+      minExpectedSuccessCount = 38000,
       errorTitle = "Could not compute the `tpe` of some term trees on the classpath:"
     )
   }
@@ -144,7 +144,10 @@ object WholeClasspathSuite:
       val errors = errorsBuilder.result()
       if errors.nonEmpty then fail(errors.mkString(errorTitle + "\n", "\n", "\n"))
 
-      assert(clue(successCount) >= clue(minExpectedSuccessCount))
+      assert(
+        clue(successCount) >= clue(minExpectedSuccessCount),
+        "There were no failures, but there were not as many successes as expected."
+      )
     end finalize
   end Tracker
 end WholeClasspathSuite

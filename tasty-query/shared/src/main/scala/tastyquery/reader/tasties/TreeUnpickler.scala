@@ -160,7 +160,8 @@ private[tasties] class TreeUnpickler private (
         reader.readNat()
         createSymbols(owner)
       case APPLY | TYPEAPPLY | SUPER | TYPED | ASSIGN | BLOCK | INLINED | LAMBDA | IF | MATCH | TRY | WHILE | REPEATED |
-          ALTERNATIVE | UNAPPLY | APPLIEDtpt | LAMBDAtpt | TYPEBOUNDStpt | ANNOTATEDtpt | MATCHtpt | CASEDEF =>
+          ALTERNATIVE | UNAPPLY | APPLIEDtpt | LAMBDAtpt | TYPEBOUNDStpt | ANNOTATEDtpt | MATCHtpt | CASEDEF | QUOTE |
+          SPLICE | QUOTEPATTERN | SPLICEPATTERN =>
         val end = reader.readEnd()
         reader.until(end)(createSymbols(owner))
       case SELECTin =>
@@ -878,6 +879,19 @@ private[tasties] class TreeUnpickler private (
       val patType = readTrueType()
       val patterns = reader.until(end)(readPattern)
       Unapply(fun, args, patterns)(spn)
+    case QUOTEPATTERN =>
+      val spn = span
+      reader.readByte()
+      val end = reader.readEnd()
+      val body =
+        if reader.nextByte == EXPLICITtpt then
+          reader.readByte()
+          Right(readTypeTree)
+        else Left(readTerm)
+      val quotes = readTerm
+      val patternType = readTrueType()
+      val bindings = reader.until(end)(readTypeTree.asInstanceOf[TypeTreeBind])
+      QuotePattern(bindings, body, quotes, patternType)(spn)
     case SHAREDterm =>
       val spn = span
       reader.readByte()
@@ -1080,6 +1094,32 @@ private[tasties] class TreeUnpickler private (
       val caller = readInlinedCaller(end)
       val bindings = reader.until(end)(readValOrDefDef)
       Inlined(expr, caller, bindings)(spn)
+    case QUOTE =>
+      val spn = span
+      reader.readByte()
+      reader.readEnd() // ignored
+      val body = readTerm
+      val bodyType = readTrueType()
+      Quote(body, bodyType)(spn)
+    case SPLICE =>
+      val spn = span
+      reader.readByte()
+      reader.readEnd() // ignored
+      val expr = readTerm
+      val spliceType = readTrueType()
+      Splice(expr, spliceType)(spn)
+    case SPLICEPATTERN =>
+      val spn = span
+      reader.readByte()
+      val end = reader.readEnd()
+      val pattern = readPattern
+      val spliceType = readTrueType()
+      val targs = reader.collectWhile(reader.isBefore(end) && reader.nextByte == EXPLICITtpt) {
+        reader.readByte()
+        readTypeTree
+      }
+      val args = reader.until(end)(readTerm)
+      SplicePattern(pattern, targs, args, spliceType)(spn)
     case SHAREDterm =>
       val spn = span
       reader.readByte()
@@ -1325,6 +1365,10 @@ private[tasties] class TreeUnpickler private (
       val lambda = readBinderRef[ParamRefBinder]()
       val num = reader.readNat()
       lambda.paramRefs(num)
+    case FLEXIBLEtype =>
+      reader.readByte()
+      reader.readEnd()
+      FlexibleType(readTrueType())
     case REFINEDtype =>
       reader.readByte()
       val end = reader.readEnd()
@@ -1619,7 +1663,10 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       ByNameTypeTree(readTypeTree)(spn)
     case BLOCK =>
-      // #284 See QuotesAndSplices.typeQuoteMatching
+      /* #284 See QuotesAndSplices.typeQuoteMatching, but before 3.5.0.
+       * It is unclear whether post-3.5.0 TASTy can still produce this shape,
+       * and therefore whether `TypeBindingsTree` is still relevant at all.
+       */
       val spn = span
       reader.readByte()
       val end = reader.readEnd()

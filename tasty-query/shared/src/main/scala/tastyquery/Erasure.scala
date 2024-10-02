@@ -111,6 +111,8 @@ private[tastyquery] object Erasure:
         preErase(tpe.parent, keepUnit)
       case tpe: RecType =>
         preErase(tpe.parent, keepUnit)
+      case tpe: FlexibleType =>
+        preErase(tpe.nonNullableType, keepUnit)
       case _: ByNameType =>
         defn.Function0Class.erasure
       case tpe: RepeatedType =>

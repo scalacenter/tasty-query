@@ -2308,25 +2308,74 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickle("quotes-and-splices", "simple_trees.QuotesAndSplices$") { tree =>
-    val typeQuoteMatchingDef = findTree(tree) { case dd @ DefDef(SimpleName("typeQuoteMatching"), _, _, _, _) =>
+    val termQuoteBody = findTree(tree) { case dd @ DefDef(SimpleName("termQuote"), _, _, Some(rhs), _) =>
+      rhs
+    }
+    val termQuoteCheck: StructureCheck = {
+      case Quote(Literal(Constant("hello")), TypeRefInternal(_, SimpleTypeName("String"))) =>
+    }
+    assert(containsSubtree(termQuoteCheck)(clue(termQuoteBody)))
+
+    val termSpliceBody = findTree(tree) { case dd @ DefDef(SimpleName("termSplice"), _, _, Some(rhs), _) =>
+      rhs
+    }
+    val termSpliceCheck: StructureCheck = {
+      case Splice(Block(List(_: DefDef), _: Lambda), TypeRefInternal(_, SimpleTypeName("String"))) =>
+    }
+    assert(containsSubtree(termSpliceCheck)(clue(termSpliceBody)))
+
+    val termQuotePatternDef = findTree(tree) { case dd @ DefDef(SimpleName("termQuotePattern"), _, _, _, _) =>
       dd
     }
-    val typeQuoteMatchingCaseDef = findTree(typeQuoteMatchingDef) { case cd: CaseDef =>
+    val termQuotePatternCaseDef = findTree(termQuotePatternDef) { case cd: CaseDef =>
       cd
     }
-    val typeQuoteMatchingCheck: StructureCheck = {
-      case TypeBindingsTree(
-            List(
-              TypeMember(SimpleTypeName("t"), InferredTypeBoundsTree(_), tSym),
-              TypeMember(SimpleTypeName("u"), InferredTypeBoundsTree(_), uSym)
+    val termQuotePatternCheck: StructureCheck = {
+      case QuotePattern(
+            Nil,
+            Left(
+              Apply(
+                Select(
+                  Typed(
+                    SplicePattern(
+                      Bind(SimpleName("a"), WildcardPattern(_), aSym),
+                      Nil,
+                      Nil,
+                      TypeRefInternal(ScalaPackageRef(), SimpleTypeName("Int"))
+                    ),
+                    _
+                  ),
+                  _
+                ),
+                _
+              )
             ),
-            AppliedTypeTree(
-              TypeIdent(SimpleTypeName("Map")),
-              List(TypeWrapper(TypeRefInternal(NoPrefix, tSymRef)), TypeWrapper(TypeRefInternal(NoPrefix, uSymRef)))
-            )
+            Ident(SimpleName("quotes")),
+            _
+          ) =>
+    }
+    assert(containsSubtree(termQuotePatternCheck)(clue(termQuotePatternCaseDef)))
+
+    val typeQuotePatternDef = findTree(tree) { case dd @ DefDef(SimpleName("typeQuotePattern"), _, _, _, _) =>
+      dd
+    }
+    val typeQuotePatternCaseDef = findTree(typeQuotePatternDef) { case cd: CaseDef =>
+      cd
+    }
+    val typeQuotePatternCheck: StructureCheck = {
+      case QuotePattern(
+            List(TypeTreeBind(SimpleTypeName("t"), _, tSym), TypeTreeBind(SimpleTypeName("u"), _, uSym)),
+            Right(
+              AppliedTypeTree(
+                TypeIdent(SimpleTypeName("Map")),
+                List(TypeWrapper(TypeRefInternal(NoPrefix, tSymRef)), TypeWrapper(TypeRefInternal(NoPrefix, uSymRef)))
+              )
+            ),
+            Ident(SimpleName("quotes")),
+            _
           ) if tSymRef == tSym && uSymRef == uSym && tSym != uSym =>
     }
-    assert(containsSubtree(typeQuoteMatchingCheck)(clue(typeQuoteMatchingCaseDef)))
+    assert(containsSubtree(typeQuotePatternCheck)(clue(typeQuotePatternCaseDef)))
   }
 
   testUnpickle("anon-classes-in-constructor", "simple_trees.AnonClassesInCtor") { tree =>
