@@ -130,7 +130,6 @@ lazy val tastyQuery =
       },
 
       tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
-      tastyMiMaTastyQueryVersionOverride := Some("1.4.0"),
       tastyMiMaConfig ~= { prev =>
         import tastymima.intf._
         prev
