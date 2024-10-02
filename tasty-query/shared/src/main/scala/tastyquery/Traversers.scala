@@ -120,6 +120,14 @@ object Traversers:
         traverse(expr)
         traverse(caller)
         traverse(bindings)
+      case Quote(body, bodyType) =>
+        traverse(body)
+      case Splice(expr, spliceType) =>
+        traverse(expr)
+      case SplicePattern(pattern, targs, args, spliceType) =>
+        traverse(pattern)
+        traverse(targs)
+        traverse(args)
       case _: ImportIdent | _: Ident | _: This | _: Literal =>
         ()
 
@@ -139,6 +147,10 @@ object Traversers:
         traverse(expr)
       case WildcardPattern(tpe) =>
         ()
+      case QuotePattern(bindings, body, quotes, patternType) =>
+        traverse(bindings)
+        body.fold(traverse(_), traverse(_))
+        traverse(quotes)
 
       // TypeTree-ish
       case TypeIdent(tpe) =>

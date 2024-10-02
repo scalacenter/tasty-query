@@ -186,11 +186,7 @@ class PositionSuite extends RestrictedUnpicklingSuite {
   }
 
   testUnpickle("lambda", "simple_trees.Function") { tree =>
-    assertEquals(
-      collectCode[Lambda](tree),
-      // NoSpan is the expected behavior
-      Nil
-    )
+    assertEquals(collectCode[Lambda](tree), List("(x: Int) => x + 1", "() => ()", "[T] => (x: T) => x", "x => x"))
   }
 
   testUnpickle("return", "simple_trees.Return") { tree =>

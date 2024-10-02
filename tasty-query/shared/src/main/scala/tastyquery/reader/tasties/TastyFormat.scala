@@ -107,10 +107,14 @@ import scala.annotation.switch
   *                  WHILE          Length cond_Term body_Term                        -- while cond do body
   *                  REPEATED       Length elem_Type elem_Term*                       -- Varargs argument of type `elem`
   *                  SELECTouter    Length levels_Nat qual_Term underlying_Type       -- Follow `levels` outer links, starting from `qual`, with given `underlying` type
+  *                  QUOTE          Length body_Term bodyTpe_Type                     -- Quoted expression `'{ body }` of a body typed as `bodyTpe`
+  *                  SPLICE         Length expr_Term tpe_Type                         -- Spliced expression `${ expr }` typed as `tpe`
+  *                  SPLICEPATTERN  Length pat_Term tpe_Type targs_Type* args_Term*   -- Pattern splice `${pat}` or `$pat[targs*](args*)` in a quoted pattern of type `tpe`.
   *    -- patterns:
   *                  BIND           Length boundName_NameRef patType_Type pat_Term    -- name @ pat, wherev `patType` is the type of the bound symbol
   *                  ALTERNATIVE    Length alt_Term*                                  -- alt1 | ... | altn   as a pattern
   *                  UNAPPLY        Length fun_Term ImplicitArg* pat_Type pat_Term*   -- Unapply node `fun(_: pat_Type)(implicitArgs)` flowing into patterns `pat`.
+  *                  QUOTEPATTERN   Length body_Term quotes_Term pat_Type bindings_Term* -- Quote pattern node `'{ bindings*; body }(using quotes)`
   *    -- type trees:
   *                  IDENTtpt              NameRef Type                               -- Used for all type idents
   *                  SELECTtpt             NameRef qual_Term                          -- qual.name
@@ -123,6 +127,8 @@ import scala.annotation.switch
   *                  MATCHtpt       Length bound_Term? sel_Term CaseDef*              -- sel match { CaseDef } where `bound` is optional upper bound of all rhs
   *                  BYNAMEtpt             underlying_Term                            -- => underlying
   *                  SHAREDterm            term_ASTRef                                -- Link to previously serialized term
+  *    -- pickled quote trees:                                                        -- These trees can only appear in pickled quotes. They will never be in a TASTy file.
+  *                  EXPLICITtpt           tpt_Term                                   -- Tag for a type tree that in a context where it is not explicitly known that this tree is a type.
   *                  HOLE           Length idx_Nat tpe_Type arg_Tree*                 -- Splice hole with index `idx`, the type of the hole `tpe`, type and term arguments of the hole `arg`s
   *
   *  CaseDef       = CASEDEF        Length pat_Term rhs_Tree guard_Tree?              -- case pat if guard => rhs
@@ -170,6 +176,7 @@ import scala.annotation.switch
   *                  ORtype         Length left_Type right_Type                       -- lefgt | right
   *                  MATCHtype      Length bound_Type sel_Type case_Type*             -- sel match {cases} with optional upper `bound`
   *                  MATCHCASEtype  Length pat_type rhs_Type                          -- match cases are MATCHCASEtypes or TYPELAMBDAtypes over MATCHCASEtypes
+  *                  FLEXIBLEtype   Length underlying_Type                            -- (underlying)?
   *                  BIND           Length boundName_NameRef bounds_Type Modifier*    -- boundName @ bounds,  for type-variables defined in a type pattern
   *                  BYNAMEtype            underlying_Type                            -- => underlying
   *                  PARAMtype      Length binder_ASTRef paramNum_Nat                 -- A reference to parameter # paramNum in lambda type `binder`
@@ -289,7 +296,7 @@ private[tasties] object TastyFormat:
     * compatibility, but remains backwards compatible, with all
     * preceeding `MinorVersion`.
     */
-  final val MinorVersion: Int = 4
+  final val MinorVersion: Int = 5
 
   /** Natural Number. The `ExperimentalVersion` allows for
     * experimentation with changes to TASTy without committing
@@ -518,6 +525,8 @@ private[tasties] object TastyFormat:
   final val RECtype = 100
   final val SINGLETONtpt = 101
   final val BOUNDED = 102
+  final val EXPLICITtpt = 103
+  final val ELIDED = 104
 
   // Cat. 4:    tag Nat AST
 
@@ -584,14 +593,17 @@ private[tasties] object TastyFormat:
   final val TYPEREFin = 175
   final val SELECTin = 176
   final val EXPORT = 177
-  // final val ??? = 178
-  // final val ??? = 179
+  final val QUOTE = 178
+  final val SPLICE = 179
   final val METHODtype = 180
   final val APPLYsigpoly = 181
+  final val QUOTEPATTERN = 182
+  final val SPLICEPATTERN = 183
 
   final val MATCHtype = 190
   final val MATCHtpt = 191
   final val MATCHCASEtype = 192
+  final val FLEXIBLEtype = 193
 
   final val HOLE = 255
 
@@ -606,7 +618,7 @@ private[tasties] object TastyFormat:
       || firstNatTreeTag <= tag && tag <= RENAMED
       || firstASTTreeTag <= tag && tag <= BOUNDED
       || firstNatASTTreeTag <= tag && tag <= NAMEDARG
-      || firstLengthTreeTag <= tag && tag <= MATCHtpt
+      || firstLengthTreeTag <= tag && tag <= FLEXIBLEtype
       || tag == HOLE
   end isLegalTag
 
@@ -625,7 +637,7 @@ private[tasties] object TastyFormat:
 
   def isTypeTreeTag(tag: Int): Boolean = (tag: @switch) match
     case IDENTtpt | SELECTtpt | SINGLETONtpt | REFINEDtpt | APPLIEDtpt | LAMBDAtpt | TYPEBOUNDStpt | ANNOTATEDtpt |
-        BYNAMEtpt | MATCHtpt | BIND =>
+        BYNAMEtpt | MATCHtpt | EXPLICITtpt | BIND =>
       true
     case _ =>
       false
@@ -768,9 +780,16 @@ private[tasties] object TastyFormat:
     case MATCHCASEtype      => "MATCHCASEtype"
     case MATCHtpt           => "MATCHtpt"
     case PARAMtype          => "PARAMtype"
+    case FLEXIBLEtype       => "FLEXIBLEtype"
     case ANNOTATION         => "ANNOTATION"
     case PRIVATEqualified   => "PRIVATEqualified"
     case PROTECTEDqualified => "PROTECTEDqualified"
+    case EXPLICITtpt        => "EXPLICITtpt"
+    case ELIDED             => "ELIDED"
+    case QUOTE              => "QUOTE"
+    case SPLICE             => "SPLICE"
+    case QUOTEPATTERN       => "QUOTEPATTERN"
+    case SPLICEPATTERN      => "SPLICEPATTERN"
     case HOLE               => "HOLE"
 
     case _ => s"UnknownTag($tag)"

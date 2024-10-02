@@ -131,17 +131,21 @@ private[tasties] class TastyReader(val bytes: Array[Byte], start: Int, end: Int,
   def goto(addr: Addr): Unit =
     bp = index(addr)
 
+  /** Is the current read address before the given end address? */
+  def isBefore(end: Addr): Boolean =
+    bp < index(end)
+
   /** Perform `op` until `end` address is reached and collect results in a list. */
   def until[T](end: Addr)(op: => T): List[T] =
     val buf = new mutable.ListBuffer[T]
-    while bp < index(end) do buf += op
+    while isBefore(end) do buf += op
     assert(bp == index(end))
     buf.toList
   end until
 
   /** If before given `end` address, the result of `op`, otherwise `default` */
   def ifBefore[T](end: Addr)(op: => T, default: T): T =
-    if bp < index(end) then op
+    if isBefore(end) then op
     else default
 
   /** Perform `op` while cindition `cond` holds and collect results in a list. */

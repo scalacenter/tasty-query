@@ -43,6 +43,8 @@ final class Definitions private[tastyquery] (
     scalaPackage.getPackageDeclOrCreate(termName("compiletime"))
   private val scalaCollectionImmutablePackage =
     scalaCollectionPackage.getPackageDeclOrCreate(termName("immutable"))
+  private val scalaQuotedPackage =
+    scalaPackage.getPackageDeclOrCreate(termName("quoted"))
   private val scalaRuntimePackage =
     scalaPackage.getPackageDeclOrCreate(termName("runtime"))
 
@@ -439,6 +441,8 @@ final class Definitions private[tastyquery] (
   lazy val SeqClass = scalaCollectionImmutablePackage.requiredClass("Seq")
   lazy val Function0Class = scalaPackage.requiredClass("Function0")
 
+  private[tastyquery] lazy val ContextFunction1Class = scalaPackage.requiredClass("ContextFunction1")
+
   def FunctionNClass(n: Int): ClassSymbol =
     withRestrictedContext(scalaPackage.findDecl(typeName(s"Function$n")).asClass)
 
@@ -481,6 +485,9 @@ final class Definitions private[tastyquery] (
   private[tastyquery] lazy val TupleNClasses = (1 to 22).map(n => scalaPackage.requiredClass(s"Tuple$n")).toSet
 
   private[tastyquery] lazy val PolyFunctionClass = scalaPackage.optionalClass("PolyFunction")
+
+  private[tastyquery] lazy val QuotedExprClass = scalaQuotedPackage.requiredClass("Expr")
+  private[tastyquery] lazy val QuotesClass = scalaQuotedPackage.requiredClass("Quotes")
 
   private[tastyquery] def isPolyFunctionSub(tpe: Type)(using Context): Boolean =
     PolyFunctionClass.exists(cls => tpe.baseType(cls).isDefined)

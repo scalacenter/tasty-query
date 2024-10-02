@@ -77,6 +77,9 @@ private[tastyquery] object Printers:
         print("[")
         printCommaSeparatedList(tpe.args)(print(_))
         print("]")
+      case tpe: FlexibleType =>
+        print(tpe.nonNullableType)
+        print("?")
       case tpe: ByNameType =>
         print("=> ")
         print(tpe.resultType)
@@ -445,6 +448,32 @@ private[tastyquery] object Printers:
           print(c)
           print(">")
         printBlock(bindings, expr)(print(_))
+
+      case Quote(body, bodyType) =>
+        print("'[")
+        print(bodyType)
+        print("]")
+        printBlock(Nil, body)(print(_))
+
+      case Splice(expr, spliceType) =>
+        print("$[")
+        print(spliceType)
+        print("]")
+        printBlock(Nil, expr)(print(_))
+
+      case SplicePattern(pattern, targs, args, spliceType) =>
+        print("$[")
+        print(spliceType)
+        print("]")
+        print(pattern)
+        if targs.nonEmpty then
+          print("[")
+          printCommaSeparatedList(targs)(print(_))
+          print("]")
+        if args.nonEmpty then
+          print("(")
+          printCommaSeparatedList(args)(print(_))
+          print(")")
     end print
 
     def print(caze: CaseDef): Unit =
@@ -577,6 +606,26 @@ private[tastyquery] object Printers:
 
       case ExprPattern(expr) =>
         print(expr)
+
+      case QuotePattern(bindings, body, quotes, patternType) =>
+        print("'<")
+        print(quotes)
+        print(">")
+        body match
+          case Left(termBody) =>
+            print("{ ")
+            for binding <- bindings do
+              print(binding)
+              print("; ")
+            print(termBody)
+            print(" }")
+          case Right(typeBody) =>
+            print("[ ")
+            for binding <- bindings do
+              print(binding)
+              print("; ")
+            print(typeBody)
+            print(" ]")
     end print
 
     def print(tree: TypeTree): Unit = tree match

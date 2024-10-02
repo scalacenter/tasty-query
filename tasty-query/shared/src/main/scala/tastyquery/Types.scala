@@ -58,6 +58,7 @@ import tastyquery.Utils.*
   *          +- AppliedType          `C[T1, ..., Tn]`
   *          +- ByNameType            type of a by-name parameter `=> T`
   *          +- ThisType             `C.this`
+  *          +- FlexibleType         `U?`
   *          +- OrType               `A | B`
   *          +- AndType              `A & B`
   *          +- TypeLambda           `[T1, ..., Tn] => R`
@@ -579,7 +580,8 @@ object Types {
           self.superType.typeParams
         case self: AnnotatedType =>
           self.superType.typeParams
-        case _: SingletonType | _: RefinedType | _: ByNameType | _: RepeatedType | _: MatchType | _: RecType =>
+        case _: SingletonType | _: RefinedType | _: FlexibleType | _: ByNameType | _: RepeatedType | _: MatchType |
+            _: RecType =>
           // These types are always proper types
           Nil
         case _: NothingType | _: AnyKindType =>
@@ -1531,6 +1533,22 @@ object Types {
       derivedAppliedType(tyconOp(tycon), args.mapConserve(argsOp))
 
     override def toString(): String = s"AppliedType($tycon, $args)"
+  }
+
+  /** A flexible type `T?`, with `T | Null <: T? <: T`. */
+  final class FlexibleType(val nonNullableType: Type) extends TypeProxy {
+    private val myNullableType: Memo[Type] = uninitializedMemo
+
+    final def nullableType(using Context): Type = memoized(myNullableType) {
+      OrType(nonNullableType, defn.NullType)
+    }
+
+    override def underlying(using Context): Type = nonNullableType
+
+    private[tastyquery] final def derivedFlexibleType(nonNullableType: Type): FlexibleType =
+      if nonNullableType eq this.nonNullableType then this else FlexibleType(nonNullableType)
+
+    override def toString(): String = s"FlexibleType($nonNullableType)"
   }
 
   /** A by-name parameter type of the form `=> T`. */

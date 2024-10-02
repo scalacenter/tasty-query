@@ -114,6 +114,8 @@ private[tastyquery] object TypeOps:
         apply(z, tp.thistpe)
       case tp: AppliedType =>
         tp.args.foldLeft(apply(z, tp.tycon))(this)
+      case tp: FlexibleType =>
+        apply(z, tp.nonNullableType)
       case tp: ByNameType =>
         apply(z, tp.resultType)
       case tp: RepeatedType =>

@@ -638,6 +638,33 @@ object Trees {
     override final def withPos(pos: SourcePosition): ExprPattern = ExprPattern(expr)(pos)
   end ExprPattern
 
+  /** A tree representing a quote pattern `'{ type binding1; ...; body }` or `'[ type binding1; ...; body ]`.
+    *
+    * The `bindings` contain the list of quote pattern type variable definitions (`TypeTreeBind`s)
+    * in the order in which they are defined in the source.
+    *
+    * @param bindings
+    *   Type variable definitions
+    * @param body
+    *   Quoted pattern (without type variable definitions):
+    *   `Left(termTree)` for a term quote pattern `'{ ... }` or
+    *   `Right(typeTree)` for a type quote pattern `'[ ... ]`
+    * @param quotes
+    *   A reference to the given `Quotes` instance in scope
+    * @param patternType
+    *   The type of the pattern
+    */
+  final case class QuotePattern(
+    bindings: List[TypeTreeBind],
+    body: Either[TermTree, TypeTree],
+    quotes: TermTree,
+    patternType: Type
+  )(pos: SourcePosition)
+      extends PatternTree(pos) {
+    override def withPos(pos: SourcePosition): QuotePattern =
+      QuotePattern(bindings, body, quotes, patternType)(pos)
+  }
+
   /** Seq(elems)
     *  @param  tpt  The element type of the sequence.
     */
@@ -715,6 +742,65 @@ object Trees {
       expr.tpe
 
     override final def withPos(pos: SourcePosition): Inlined = Inlined(expr, caller, bindings)(pos)
+  }
+
+  /** A tree representing a quote `'{ body }`.
+    *
+    * @param body
+    *   The tree that was quoted
+    * @param bodyType
+    *   Explicit type of quoted body, which is the source of truth from which we build the type of the quote
+    */
+  final case class Quote(body: TermTree, bodyType: Type)(pos: SourcePosition) extends TermTree(pos) {
+    protected final def calculateType(using Context): TermType =
+      // `Quotes ?=> Expr[bodyType]`
+      defn.ContextFunction1Class.staticRef.appliedTo(
+        List(defn.QuotesClass.staticRef, defn.QuotedExprClass.staticRef.appliedTo(bodyType))
+      )
+    end calculateType
+
+    override final def withPos(pos: SourcePosition): Quote =
+      Quote(body, bodyType)(pos)
+  }
+
+  /** A tree representing a splice `${ expr }`.
+    *
+    * @param expr
+    *   The tree that was spliced
+    */
+  final case class Splice(expr: TermTree, spliceType: Type)(pos: SourcePosition) extends TermTree(pos) {
+    protected final def calculateType(using Context): TermType =
+      spliceType
+
+    override final def withPos(pos: SourcePosition): Splice =
+      Splice(expr, spliceType)(pos)
+  }
+
+  /** A tree representing a pattern splice `${ pattern }`, `$ident` or `$ident(args*)` in a quote pattern.
+    *
+    * Parser will only create `${ pattern }` and `$ident`, hence they will not have args.
+    * While typing, the `$ident(args*)` the args are identified and desugared into a `SplicePattern`
+    * containing them.
+    *
+    * `SplicePattern` can only be contained within a `QuotePattern`.
+    *
+    * @param pattern
+    *   The pattern that was spliced
+    * @param targs
+    *   The type arguments of the splice (the HOAS arguments)
+    * @param args
+    *   The arguments of the splice (the HOAS arguments)
+    * @param spliceType
+    *   The type of the splice, i.e., of this tree
+    */
+  final case class SplicePattern(pattern: PatternTree, targs: List[TypeTree], args: List[TermTree], spliceType: Type)(
+    pos: SourcePosition
+  ) extends TermTree(pos) {
+    protected final def calculateType(using Context): TermType =
+      spliceType
+
+    override final def withPos(pos: SourcePosition): SplicePattern =
+      SplicePattern(pattern, targs, args, spliceType)(pos)
   }
 
   // --- TypeTrees ------------------------------------------------------------
