@@ -3282,27 +3282,28 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         val paramRefs = pt.paramRefs
 
         def failWrongResultType(): Nothing =
-          fail(s"unexpected result type: ${pt.resultType}")
+          fail(s"unexpected result type: ${pt.resultType.showMultiline}")
+
+        def findRefinementBoundsByName(tpe: Type, name: TypeName): TypeBounds = tpe match {
+          case tpe: TypeRefinement =>
+            if tpe.refinedName == name then tpe.refinedBounds
+            else findRefinementBoundsByName(tpe.parent, name)
+          case _ =>
+            failWrongResultType()
+        }
 
         // { α => (((scala.collection.generic.IsMap[CC0[K0, V0]] { type V = V0 }) { type C = CC0[α.K, α.V] }) { type K = K0 }) }
         pt.resultType match
           case rt: RecType =>
-            rt.parent match
-              case kRefinement: TypeRefinement =>
-                kRefinement.parent match
-                  case cRefinement: TypeRefinement =>
-                    cRefinement.refinedBounds match
-                      case TypeAlias(appliedCC0: AppliedType) =>
-                        assert(clue(appliedCC0.tycon) eq paramRefs(0))
-                        assert(clue(appliedCC0.args).sizeIs == 2)
-                        appliedCC0.args(0) match
-                          case alphaK: TypeRef =>
-                            assert(clue(alphaK).name == typeName("K"))
-                            assert(clue(alphaK).prefix eq rt.recThis)
-                          case _ =>
-                            failWrongResultType()
-                      case _ =>
-                        failWrongResultType()
+            val cRefinedBounds = findRefinementBoundsByName(rt.parent, typeName("C"))
+            cRefinedBounds match
+              case TypeAlias(appliedCC0: AppliedType) =>
+                assert(clue(appliedCC0.tycon) eq paramRefs(0))
+                assert(clue(appliedCC0.args).sizeIs == 2)
+                appliedCC0.args(0) match
+                  case alphaK: TypeRef =>
+                    assert(clue(alphaK).name == typeName("K"))
+                    assert(clue(alphaK).prefix eq rt.recThis)
                   case _ =>
                     failWrongResultType()
               case _ =>

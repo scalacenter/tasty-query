@@ -916,6 +916,7 @@ object Symbols {
     // DeclaringSymbol-related fields
     private val myDeclarations: mutable.HashMap[UnsignedName, mutable.HashSet[TermOrTypeSymbol]] =
       mutable.HashMap[UnsignedName, mutable.HashSet[TermOrTypeSymbol]]()
+    private val myDeclarationList: mutable.ListBuffer[TermOrTypeSymbol] = mutable.ListBuffer.empty
 
     // Cache fields
     private val mySignatureName: Memo[SignatureName] = uninitializedMemo
@@ -1157,6 +1158,7 @@ object Symbols {
       val set = myDeclarations.getOrElseUpdate(decl.name, new mutable.HashSet)
       if decl.isType then assert(set.isEmpty, s"trying to add a second entry $decl for type name ${decl.name} in $this")
       set += decl
+      myDeclarationList += decl
 
     final def getDecl(name: Name)(using Context): Option[TermOrTypeSymbol] =
       name match
@@ -1262,7 +1264,7 @@ object Symbols {
       declarationsOfClass
 
     private[tastyquery] final def declarationsOfClass: List[TermOrTypeSymbol] =
-      myDeclarations.values.toList.flatten
+      myDeclarationList.toList
 
     // Member lookup, including inherited members
 
