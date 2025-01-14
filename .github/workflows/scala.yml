@@ -20,11 +20,10 @@ jobs:
         # fetch the Git tags for sbt-dynver and sbt-version-policy to work correctly
         fetch-depth: 0
     - name: Set up JDK ${{ matrix.java }}
-      uses: actions/setup-java@v3
+      uses: coursier/setup-action@v1
       with:
-        distribution: 'temurin'
-        java-version: ${{ matrix.java }}
-        cache: 'sbt'
+        jvm: temurin:1.${{ matrix.java }}
+        apps: sbt
     - name: npm install
       run: npm install
     - name: Run JVM tests

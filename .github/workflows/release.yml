@@ -11,11 +11,10 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up JDK 8
-        uses: actions/setup-java@v3
+        uses: coursier/setup-action@v1
         with:
-          distribution: 'temurin'
-          java-version: 8
-          cache: 'sbt'
+          jvm: temurin:1.8
+          apps: sbt
       - name: sbt ci-release
         run: sbt versionCheck ci-release
         env:
