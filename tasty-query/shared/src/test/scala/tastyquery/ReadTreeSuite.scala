@@ -56,6 +56,11 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
   private object ScalaPackageRef:
     def unapply(tree: PackageRef): Boolean = tree.fullyQualifiedName.path == List(termName("scala"))
 
+  private object PredefRef:
+    def unapply(tree: TermRef): Boolean = tree match
+      case TermRefInternal(ScalaPackageRef(), SimpleName("Predef")) => true
+      case _                                                        => false
+
   private object ScalaCollImmutablePackageRef:
     def unapply(tree: PackageRef): Boolean =
       tree.fullyQualifiedName.path == List(termName("scala"), termName("collection"), termName("immutable"))
@@ -1529,7 +1534,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
             TypeWrapper(
               ty.OrType(
                 TypeRefInternal(ScalaPackageRef(), SimpleTypeName("Int")),
-                TypeRefInternal(TermRefInternal(ScalaPackageRef(), SimpleName("Predef")), SimpleTypeName("String"))
+                TypeRefInternal(PredefRef(), SimpleTypeName("String"))
               )
             ),
             _,
@@ -1904,8 +1909,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               List(TypeParam(SimpleTypeName("X"), NothingAnyTypeBoundsTree(), _)),
               TypeAliasDefinitionTree(
                 MatchTypeTree(
-                  // No bound on the match result
-                  TypeWrapper(TypeRefInternal(ScalaPackageRef(), tpnme.Any)),
+                  // No bound on the match result -- inferred to be String
+                  TypeWrapper(TypeRefInternal(PredefRef(), tpnme.String)),
                   TypeIdent(SimpleTypeName("X")),
                   List(TypeCaseDef(TypeIdent(SimpleTypeName("Int")), TypeIdent(SimpleTypeName("String"))))
                 )
@@ -1946,8 +1951,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               List(TypeParam(SimpleTypeName("X"), NothingAnyTypeBoundsTree(), _)),
               TypeAliasDefinitionTree(
                 MatchTypeTree(
-                  // No bound on the match result
-                  TypeWrapper(TypeRefInternal(ScalaPackageRef(), tpnme.Any)),
+                  // No bound on the match result -- inferred to be Int
+                  TypeWrapper(TypeRefInternal(ScalaPackageRef(), tpnme.Int)),
                   TypeIdent(SimpleTypeName("X")),
                   List(TypeCaseDef(TypeIdent(tpnme.Wildcard), TypeIdent(SimpleTypeName("Int"))))
                 )
@@ -1965,8 +1970,8 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
               List(TypeParam(SimpleTypeName("X"), NothingAnyTypeBoundsTree(), _)),
               TypeAliasDefinitionTree(
                 MatchTypeTree(
-                  // No bound on the match result
-                  TypeWrapper(TypeRefInternal(ScalaPackageRef(), tpnme.Any)),
+                  // No bound on the match result -> (erroneously) inferred to `t`
+                  TypeWrapper(_),
                   TypeIdent(SimpleTypeName("X")),
                   List(
                     TypeCaseDef(
@@ -1995,16 +2000,13 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 Select(rhs, SignedName(SimpleName("$asInstanceOf$"), _, _)),
                 TypeWrapper(
                   ty.MatchType(
-                    TypeRefInternal(ScalaPackageRef(), SimpleTypeName("Any")),
+                    TypeRefInternal(PredefRef(), SimpleTypeName("String")),
                     TypeRefInternal(_, xRef),
                     List(
                       ty.MatchTypeCase(
                         Nil,
                         TypeRefInternal(ScalaPackageRef(), SimpleTypeName("Int")),
-                        TypeRefInternal(
-                          TermRefInternal(ScalaPackageRef(), SimpleName("Predef")),
-                          SimpleTypeName("String")
-                        )
+                        TypeRefInternal(PredefRef(), SimpleTypeName("String"))
                       )
                     )
                   )
@@ -2026,7 +2028,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
                 Select(rhs, SignedName(SimpleName("$asInstanceOf$"), _, _)),
                 TypeWrapper(
                   ty.MatchType(
-                    TypeRefInternal(ScalaPackageRef(), SimpleTypeName("Any")),
+                    _, // erroneously inferred to `t`
                     TypeRefInternal(_, xRef),
                     List(
                       ty.MatchTypeCase(
@@ -2252,9 +2254,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
         sym
     }
     assert(clue(javaAnnotWithDefaultImplicitSym.annotations).sizeIs == 1)
-    val javaAnnotWithDefaultImplicitAnnotCheck: StructureCheck = {
-      case Apply(Select(New(_), _), List(ident @ Ident(nme.Wildcard)))
-          if ident.tpe eq defn.uninitializedMethodTermRef =>
+    val javaAnnotWithDefaultImplicitAnnotCheck: StructureCheck = { case Apply(Select(New(_), _), Nil) =>
     }
     assert(
       containsSubtree(javaAnnotWithDefaultImplicitAnnotCheck)(clue(javaAnnotWithDefaultImplicitSym.annotations(0).tree))
@@ -2266,7 +2266,7 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     }
     assert(clue(javaAnnotWithDefaultExplicitSym.annotations).sizeIs == 1)
     val javaAnnotWithDefaultExplicitAnnotCheck: StructureCheck = {
-      case Apply(Select(New(_), _), List(Literal(Constant(false)))) =>
+      case Apply(Select(New(_), _), List(NamedArg(SimpleName("value"), Literal(Constant(false))))) =>
     }
     assert(
       containsSubtree(javaAnnotWithDefaultExplicitAnnotCheck)(clue(javaAnnotWithDefaultExplicitSym.annotations(0).tree))
