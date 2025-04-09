@@ -31,9 +31,9 @@ private[pickles] class PickleReader {
   private var frozenSymbols: Boolean = false
 
   /** The map from created local symbols to the address of their info, until it gets read. */
-  private val localSymbolInfoRefs = mutable.AnyRefMap.empty[TermOrTypeSymbol, Int]
+  private val localSymbolInfoRefs = mutable.HashMap.empty[TermOrTypeSymbol, Int]
 
-  private val localClassGivenSelfTypeRefs = mutable.AnyRefMap.empty[ClassSymbol, Int]
+  private val localClassGivenSelfTypeRefs = mutable.HashMap.empty[ClassSymbol, Int]
 
   final class Structure(using val myEntries: Entries, val myIndex: Index):
     def allRegisteredSymbols: Iterator[TermOrTypeSymbol] =

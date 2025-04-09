@@ -30,6 +30,8 @@ jobs:
       run: sbt tastyQueryJVM/test
     - name: Run JS tests
       run: sbt tastyQueryJS/test
+    - name: Run Native tests
+      run: sbt tastyQueryNative/test
     - name: Run scalafmt check
       run: sbt scalafmtCheck
     - name: Run version policy check
