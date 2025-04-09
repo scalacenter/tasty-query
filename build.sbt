@@ -32,7 +32,7 @@ inThisBuild(
       Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd/")),
       Developer("bishabosha", "Jamie Thompson", "bishbashboshjt@gmail.com", url("https://github.com/bishabosha"))
     ),
-    versionPolicyIntention := Compatibility.BinaryAndSourceCompatible,
+    versionPolicyIntention := Compatibility.None,
     // Ignore dependencies to internal modules whose version is like `1.2.3+4...` (see https://github.com/scalacenter/sbt-version-policy#how-to-integrate-with-sbt-dynver)
     versionPolicyIgnoredInternalDependencyVersions := Some("^\\d+\\.\\d+\\.\\d+\\+\\d+".r)
   )
@@ -140,6 +140,7 @@ lazy val tastyQuery =
       jsEnv := new NodeJSEnv(NodeJSEnv.Config().withArgs(List("--enable-source-maps")))
     )
     .nativeSettings(
+      tastyMiMaPreviousArtifacts := Set.empty, // TODO: remove after publishing for scala-native!
       Test / javalibEntry := {
         val rtJar = (Test / rtJarOpt).value
 
