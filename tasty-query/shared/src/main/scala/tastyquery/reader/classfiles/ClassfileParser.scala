@@ -132,7 +132,7 @@ private[reader] object ClassfileParser {
         .use(ClassfileReader.readAnnotation(Set(annot.ScalaLongSignature, annot.ScalaSignature)))
         .getOrElse(failNoAnnot())
 
-    val sigBytes = scalaSigAnnotation.tpe match {
+    val sigBytes = (scalaSigAnnotation.tpe: @unchecked) match {
       case annot.ScalaSignature =>
         val bytesArg = scalaSigAnnotation.values.head._2.asInstanceOf[AnnotationValue.Const]
         pool.sigbytes(bytesArg.valueIdx)

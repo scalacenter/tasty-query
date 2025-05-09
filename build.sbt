@@ -3,7 +3,7 @@ import sbt.internal.util.ManagedLogger
 
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
-val usedScalaCompiler = "3.6.2"
+val usedScalaCompiler = "3.7.0"
 val usedTastyRelease = usedScalaCompiler
 val scala2Version = "2.13.16"
 
@@ -131,7 +131,8 @@ lazy val tastyQuery =
         )
       },
 
-      tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
+      // Temporarily disabled until we have a published version of tasty-query that can handle 3.7.x.
+      // tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
       tastyMiMaTastyQueryVersionOverride := Some("1.5.0"),
       tastyMiMaConfig ~= { prev =>
         import tastymima.intf._

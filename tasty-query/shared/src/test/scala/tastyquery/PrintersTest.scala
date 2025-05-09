@@ -229,7 +229,7 @@ class PrintersTest extends UnrestrictedUnpicklingSuite:
     testShowBasicMember(
       MatchTypeClass,
       typeName("MTWithBind"),
-      "type MTWithBind[X] <: t = X match { case List[t] => t }"
+      "type MTWithBind[X] = X match { case List[t] => t }"
     )
   }
 
@@ -315,7 +315,7 @@ class PrintersTest extends UnrestrictedUnpicklingSuite:
     testShowMultilineMember(
       MatchTypeClass,
       typeName("MTWithBind"),
-      """type MTWithBind[X] <: t = X match {
+      """type MTWithBind[X] = X match {
         |  case List[t] => t
         |}""".stripMargin
     )
