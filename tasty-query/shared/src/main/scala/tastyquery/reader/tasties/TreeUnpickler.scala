@@ -1806,7 +1806,7 @@ private[tasties] object TreeUnpickler {
       *
       * This is used in `readWithin` to resolve top-level class references without a Context.
       */
-    val declaredTopLevelClasses = mutable.AnyRefMap.empty[(PackageSymbol, TypeName), ClassSymbol]
+    val declaredTopLevelClasses = mutable.HashMap.empty[(PackageSymbol, TypeName), ClassSymbol]
 
     def hasSymbolAt(addr: Addr): Boolean = localSymbols.contains(addr)
 

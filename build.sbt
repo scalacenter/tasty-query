@@ -5,7 +5,7 @@ import org.scalajs.jsenv.nodejs.NodeJSEnv
 
 val usedScalaCompiler = "3.6.2"
 val usedTastyRelease = usedScalaCompiler
-val scala2Version = "2.13.14"
+val scala2Version = "2.13.16"
 
 val SourceDeps = config("sourcedeps").hide
 
@@ -126,6 +126,8 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
+          // val in a private class; no issue
+          ProblemFilters.exclude[IncompatibleResultTypeProblem]("tastyquery.reader.tasties.TreeUnpickler#Caches.declaredTopLevelClasses"),
         )
       },
 
@@ -162,6 +164,13 @@ lazy val tastyQuery =
       scalaJSUseMainModuleInitializer := true,
       scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.CommonJSModule)),
       jsEnv := new NodeJSEnv(NodeJSEnv.Config().withArgs(List("--enable-source-maps"))),
+
+      /* sbt-version-policy seems to think that the scalajs-scalalib is versioned
+       * according to the "strict" policy, although the pom files declare "semver-spec".
+       * We force it to "always" so that it does not report false positives.
+       * We trust Scala.js core to never break backward compatibility anyway.
+       */
+      libraryDependencySchemes += "org.scala-js" % "scalajs-scalalib_2.13" % "always",
     )
 
 def extractRTJar(targetRTJar: File): Unit = {
