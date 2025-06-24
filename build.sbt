@@ -3,9 +3,9 @@ import sbt.internal.util.ManagedLogger
 
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
-val usedScalaCompiler = "3.6.2"
+val usedScalaCompiler = "3.7.1"
 val usedTastyRelease = usedScalaCompiler
-val scala2Version = "2.13.14"
+val scala2Version = "2.13.16"
 
 val SourceDeps = config("sourcedeps").hide
 
@@ -37,7 +37,7 @@ inThisBuild(Def.settings(
     Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd/")),
     Developer("bishabosha", "Jamie Thompson", "bishbashboshjt@gmail.com", url("https://github.com/bishabosha")),
   ),
-  versionPolicyIntention := Compatibility.BinaryAndSourceCompatible,
+  versionPolicyIntention := Compatibility.BinaryCompatible,
   // Ignore dependencies to internal modules whose version is like `1.2.3+4...` (see https://github.com/scalacenter/sbt-version-policy#how-to-integrate-with-sbt-dynver)
   versionPolicyIgnoredInternalDependencyVersions := Some("^\\d+\\.\\d+\\.\\d+\\+\\d+".r)
 ))
@@ -126,10 +126,13 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
+          // val in a private class; no issue
+          ProblemFilters.exclude[IncompatibleResultTypeProblem]("tastyquery.reader.tasties.TreeUnpickler#Caches.declaredTopLevelClasses"),
         )
       },
 
-      tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
+      // Temporarily disabled until we have a published version of tasty-query that can handle 3.7.x.
+      // tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
       tastyMiMaTastyQueryVersionOverride := Some("1.5.0"),
       tastyMiMaConfig ~= { prev =>
         import tastymima.intf._
@@ -162,6 +165,13 @@ lazy val tastyQuery =
       scalaJSUseMainModuleInitializer := true,
       scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.CommonJSModule)),
       jsEnv := new NodeJSEnv(NodeJSEnv.Config().withArgs(List("--enable-source-maps"))),
+
+      /* sbt-version-policy seems to think that the scalajs-scalalib is versioned
+       * according to the "strict" policy, although the pom files declare "semver-spec".
+       * We force it to "always" so that it does not report false positives.
+       * We trust Scala.js core to never break backward compatibility anyway.
+       */
+      libraryDependencySchemes += "org.scala-js" % "scalajs-scalalib_2.13" % "always",
     )
 
 def extractRTJar(targetRTJar: File): Unit = {

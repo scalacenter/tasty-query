@@ -42,7 +42,7 @@ private[reader] object Unpickler {
       }
 
       // Read the annotations to give to the symbols we read
-      val annotationMap = mutable.AnyRefMap.empty[TermOrTypeSymbol, List[Annotation]]
+      val annotationMap = mutable.HashMap.empty[TermOrTypeSymbol, List[Annotation]]
       index.loopWithIndices { (offset, i) =>
         if reader.isSymbolAnnotationEntry(i) then
           pkl.unsafeFork(offset) {
