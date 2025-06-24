@@ -37,7 +37,7 @@ inThisBuild(Def.settings(
     Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd/")),
     Developer("bishabosha", "Jamie Thompson", "bishbashboshjt@gmail.com", url("https://github.com/bishabosha")),
   ),
-  versionPolicyIntention := Compatibility.BinaryCompatible,
+  versionPolicyIntention := Compatibility.BinaryAndSourceCompatible,
   // Ignore dependencies to internal modules whose version is like `1.2.3+4...` (see https://github.com/scalacenter/sbt-version-policy#how-to-integrate-with-sbt-dynver)
   versionPolicyIgnoredInternalDependencyVersions := Some("^\\d+\\.\\d+\\.\\d+\\+\\d+".r)
 ))
@@ -126,14 +126,11 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
-          // val in a private class; no issue
-          ProblemFilters.exclude[IncompatibleResultTypeProblem]("tastyquery.reader.tasties.TreeUnpickler#Caches.declaredTopLevelClasses"),
         )
       },
 
-      // Temporarily disabled until we have a published version of tasty-query that can handle 3.7.x.
-      // tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
-      tastyMiMaTastyQueryVersionOverride := Some("1.5.0"),
+      tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
+      tastyMiMaTastyQueryVersionOverride := Some("1.6.0"),
       tastyMiMaConfig ~= { prev =>
         import tastymima.intf._
         prev
