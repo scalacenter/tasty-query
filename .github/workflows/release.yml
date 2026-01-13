@@ -10,10 +10,10 @@ jobs:
       - uses: actions/checkout@v3.0.2
         with:
           fetch-depth: 0
-      - name: Set up JDK 8
+      - name: Set up JDK 17
         uses: coursier/setup-action@v1
         with:
-          jvm: temurin:1.8
+          jvm: temurin:1.17
           apps: sbt
       - name: sbt ci-release
         run: sbt versionCheck ci-release
