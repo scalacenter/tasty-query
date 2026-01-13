@@ -795,8 +795,8 @@ object Symbols {
           var tparams = cls.typeParams
           var args = base.args
           var idx = 0
-          while (tparams.nonEmpty && args.nonEmpty) {
-            if (tparams.head.eq(this))
+          while tparams.nonEmpty && args.nonEmpty do {
+            if tparams.head.eq(this) then
               return Some(args.head match {
                 case _: WildcardTypeArg if !widenAbstract => TypeRef(pre, this)
                 case arg                                  => arg
@@ -811,9 +811,9 @@ object Symbols {
           None
 
         case None =>
-          /*if (pre.termSymbol.isPackage) argForParam(pre.select(nme.PACKAGE))
+          /*if pre.termSymbol.isPackage then argForParam(pre.select(nme.PACKAGE))
           else*/
-          if (pre.isExactlyNothing) Some(pre)
+          if pre.isExactlyNothing then Some(pre)
           else None
       }
     end argForParam

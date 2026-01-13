@@ -232,10 +232,10 @@ private[tasties] class TreeUnpickler private (
     forkAt(reader.currentAddr)
 
   def skipTree(tag: Int): Unit =
-    if (tag >= firstLengthTreeTag) reader.goto(reader.readEnd())
-    else if (tag >= firstNatASTTreeTag) { reader.readNat(); skipTree() }
-    else if (tag >= firstASTTreeTag) skipTree()
-    else if (tag >= firstNatTreeTag) reader.readNat()
+    if tag >= firstLengthTreeTag then reader.goto(reader.readEnd())
+    else if tag >= firstNatASTTreeTag then { reader.readNat(); skipTree() }
+    else if tag >= firstASTTreeTag then skipTree()
+    else if tag >= firstNatTreeTag then reader.readNat()
 
   def skipTree(): Unit = skipTree(reader.readByte())
 
@@ -253,7 +253,7 @@ private[tasties] class TreeUnpickler private (
   /** The tag at the end of SHAREDtype/term chain */
   def tagFollowShared: Int = {
     val tag = reader.nextByte
-    if (isSharedTag(tag)) {
+    if isSharedTag(tag) then {
       val lookAhead = fork
       // skip SHAREDtype / SHAREDterm tag, read the address
       lookAhead.reader.readByte()
@@ -406,12 +406,12 @@ private[tasties] class TreeUnpickler private (
     *  - restores the reader to seamlessly continue reading after the SHARED tag we started from
     */
   def readPotentiallyShared[T](read: => T): T =
-    if (isSharedTag(reader.nextByte)) {
+    if isSharedTag(reader.nextByte) then {
       reader.readByte()
       val addr = reader.readAddr()
       val returnTo = reader.currentAddr
       reader.goto(addr)
-      val result = if (isSharedTag(reader.nextByte)) {
+      val result = if isSharedTag(reader.nextByte) then {
         readPotentiallyShared(read)
       } else {
         read
@@ -500,14 +500,14 @@ private[tasties] class TreeUnpickler private (
       val end = reader.readEnd()
       val qual = readTerm
       val selectors = reader.until(end)(readSelector)
-      if (tag == IMPORT) Import(qual, selectors)(spn) else Export(qual, selectors)(spn)
+      if tag == IMPORT then Import(qual, selectors)(spn) else Export(qual, selectors)(spn)
     case TYPEDEF =>
       val spn = span
       val start = reader.currentAddr
       reader.readByte()
       val end = reader.readEnd()
       val name = readTypeName()
-      val typeDef: ClassDef | TypeMember = if (reader.nextByte == TEMPLATE) {
+      val typeDef: ClassDef | TypeMember = if reader.nextByte == TEMPLATE then {
         val classSymbol = caches.getSymbol[ClassSymbol](start)
         val template = readTemplate(classSymbol)
         definingTree(classSymbol, ClassDef(name, template, classSymbol)(spn))
@@ -625,7 +625,7 @@ private[tasties] class TreeUnpickler private (
       reader.readByte()
       val end = reader.readEnd()
       val low = readTrueType()
-      if (reader.currentAddr != end && !isModifierTag(reader.nextByte)) {
+      if reader.currentAddr != end && !isModifierTag(reader.nextByte) then {
         val high = readTrueType()
         // TODO: read variance (a modifier)
         skipModifiers(end)
@@ -664,7 +664,7 @@ private[tasties] class TreeUnpickler private (
     }
 
     val acc = new ListBuffer[TypeParam]()
-    while (reader.nextByte == TYPEPARAM) {
+    while reader.nextByte == TYPEPARAM do {
       acc += readTypeParam
     }
     acc.toList
@@ -727,14 +727,14 @@ private[tasties] class TreeUnpickler private (
 
   private def readParams(using SourceFile): List[ValDef] = {
     var acc = new ListBuffer[ValDef]()
-    while (reader.nextByte == PARAM) {
+    while reader.nextByte == PARAM do {
       acc += readValOrDefDef.asInstanceOf[ValDef]
     }
     acc.toList
   }
 
   private def readSelf(using SourceFile): Option[SelfDef] =
-    if (reader.nextByte != SELFDEF) {
+    if reader.nextByte != SELFDEF then {
       None
     } else {
       assertNoSourceFileChangeHere()
@@ -760,7 +760,7 @@ private[tasties] class TreeUnpickler private (
     val params = readAllParams
     val tpt = readTypeTree
     val rhs =
-      if (reader.currentAddr == end || isModifierTag(reader.nextByte)) None
+      if reader.currentAddr == end || isModifierTag(reader.nextByte) then None
       else if tag == VALDEF then Some(readTermOrUninitialized())
       else Some(readTerm)
     readAnnotationsInModifiers(symbol, end)
@@ -1039,7 +1039,7 @@ private[tasties] class TreeUnpickler private (
       val spn = span
       reader.readByte()
       reader.readEnd()
-      if (reader.nextByte == INLINE) {
+      if reader.nextByte == INLINE then {
         reader.readByte()
         new InlineIf(readTerm, readTerm, readTerm)(spn)
       } else {
@@ -1060,10 +1060,10 @@ private[tasties] class TreeUnpickler private (
       val spn = span
       reader.readByte()
       val end = reader.readEnd()
-      if (reader.nextByte == IMPLICIT) {
+      if reader.nextByte == IMPLICIT then {
         reader.readByte()
         new InlineMatch(None, readCases[CaseDef](CaseDefFactory, end))(spn)
-      } else if (reader.nextByte == INLINE) {
+      } else if reader.nextByte == INLINE then {
         reader.readByte()
         new InlineMatch(Some(readTerm), readCases[CaseDef](CaseDefFactory, end))(spn)
       } else Match(readTerm, readCases[CaseDef](CaseDefFactory, end))(spn)
@@ -1181,7 +1181,7 @@ private[tasties] class TreeUnpickler private (
   /** The next tag, following through SHARED tags */
   def nextUnsharedTag: Int = {
     val tag = reader.nextByte
-    if (tag == SHAREDtype || tag == SHAREDterm) {
+    if tag == SHAREDtype || tag == SHAREDterm then {
       val lookAhead = fork
       lookAhead.reader.readByte()
       forkAt(lookAhead.reader.readAddr()).nextUnsharedTag
@@ -1192,7 +1192,7 @@ private[tasties] class TreeUnpickler private (
     using SourceFile
   ): List[T] =
     reader.collectWhile((nextUnsharedTag == CASEDEF) && reader.currentAddr != end) {
-      if (reader.nextByte == SHAREDterm) {
+      if reader.nextByte == SHAREDterm then {
         // skip the SHAREDterm tag
         reader.readByte()
         // TODO: changes in the context?
@@ -1646,7 +1646,7 @@ private[tasties] class TreeUnpickler private (
          * example: case List[t] => t
          * Such a bind has IDENT(_) as its body, which is not a type tree and therefore not expected.
          * Treat it as if it were an IDENTtpt. */
-        val body: TypeDefinitionTree = if (reader.nextByte == IDENT) {
+        val body: TypeDefinitionTree = if reader.nextByte == IDENT then {
           val identSpn = spn // for some reason, the span of the IDENT itself is empty, so we reuse the span of the BIND
           reader.readByte()
           val typeName = readTypeName()
@@ -1777,7 +1777,7 @@ private[tasties] class TreeUnpickler private (
         reader.goto(end)
       case _ => ()
     }
-    while (reader.currentAddr != end && isModifierTag(reader.nextByte)) {
+    while reader.currentAddr != end && isModifierTag(reader.nextByte) do {
       skipModifier()
     }
   }

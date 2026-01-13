@@ -605,8 +605,7 @@ object Types {
     final def appliedTo(args: List[TypeOrWildcard])(using Context): Type = {
       val typParams = this.typeParams
       val dealiased = this.dealias
-      if (args.isEmpty)
-        this
+      if args.isEmpty then this
       else
         dealiased match {
           case dealiased: TypeLambda =>
@@ -621,7 +620,7 @@ object Types {
     }
 
     private[tastyquery] final def applyIfParameterized(args: List[TypeOrWildcard])(using Context): Type =
-      if (args.nonEmpty /*typeParams.nonEmpty*/ ) appliedTo(args) else this
+      if args.nonEmpty /*typeParams.nonEmpty*/ then appliedTo(args) else this
 
     /** Substitute class type params by some other types. */
     private[tastyquery] final def substClassTypeParams(from: List[ClassTypeParamSymbol], to: List[TypeOrWildcard])(
@@ -958,8 +957,8 @@ object Types {
       *    T#A --> B    if A is bound to an alias `= B` in T
       */
     private[tastyquery] final def normalizedDerivedSelect(prefix: Type)(using Context): Type =
-      if (prefix eq this.prefix) this
-      else if (prefix.isExactlyNothing) prefix
+      if prefix eq this.prefix then this
+      else if prefix.isExactlyNothing then prefix
       else normalizedDerivedSelectImpl(prefix)
 
     protected def normalizedDerivedSelectImpl(prefix: Type)(using Context): Type
@@ -1526,7 +1525,7 @@ object Types {
     end resolveMatchingMember
 
     private[tastyquery] final def derivedAppliedType(tycon: Type, args: List[TypeOrWildcard]): AppliedType =
-      if ((tycon eq this.tycon) && (args eq this.args)) this
+      if (tycon eq this.tycon) && (args eq this.args) then this
       else AppliedType(tycon, args)
 
     private[tastyquery] final def map(tyconOp: Type => Type, argsOp: TypeOrWildcard => TypeOrWildcard): AppliedType =
@@ -1556,7 +1555,7 @@ object Types {
     override def underlying(using Context): Type = resultType
 
     private[tastyquery] final def derivedByNameType(resultType: Type): ByNameType =
-      if (resultType eq this.resultType) this else ByNameType(resultType)
+      if resultType eq this.resultType then this else ByNameType(resultType)
 
     override def toString(): String = s"ByNameType($resultType)"
   }
@@ -2011,7 +2010,7 @@ object Types {
     override def underlying(using Context): Type = typ
 
     private[tastyquery] final def derivedAnnotatedType(typ: Type, annotation: Annotation): AnnotatedType =
-      if ((typ eq this.typ) && (annotation eq this.annotation)) this
+      if (typ eq this.typ) && (annotation eq this.annotation) then this
       else AnnotatedType(typ, annotation)
 
     override def toString(): String = s"AnnotatedType($typ, $annotation)"
@@ -2047,7 +2046,7 @@ object Types {
       refinedName: TypeName,
       refinedBounds: TypeBounds
     ): Type =
-      if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedBounds eq this.refinedBounds)) this
+      if (parent eq this.parent) && (refinedName eq this.refinedName) && (refinedBounds eq this.refinedBounds) then this
       else TypeRefinement(parent, refinedName, refinedBounds)
     end derivedTypeRefinement
 
@@ -2124,7 +2123,7 @@ object Types {
       refinedName: UnsignedTermName,
       refinedType: TypeOrMethodic
     ): Type =
-      if ((parent eq this.parent) && (refinedName eq this.refinedName) && (refinedType eq this.refinedType)) this
+      if (parent eq this.parent) && (refinedName eq this.refinedName) && (refinedType eq this.refinedType) then this
       else TermRefinement(parent, isStable, refinedName, refinedType)
 
     override def toString(): String = s"TermRefinement($parent, $refinedName, $refinedType)"
@@ -2279,7 +2278,7 @@ object Types {
 
     /** The non-alias type bounds type with given bounds */
     private[tastyquery] def derivedTypeBounds(low: Type, high: Type): TypeBounds =
-      if ((low eq this.low) && (high eq this.high)) this
+      if (low eq this.low) && (high eq this.high) then this
       else AbstractTypeBounds(low, high)
 
     final def contains(tp: TypeOrWildcard)(using Context): Boolean = tp match
@@ -2340,7 +2339,7 @@ object Types {
     override def underlying(using Context): Type = tpe
 
     private[tastyquery] def derivedSkolemType(tpe: Type): SkolemType =
-      if (tpe eq this.tpe) this else SkolemType(tpe)
+      if tpe eq this.tpe then this else SkolemType(tpe)
 
     override def toString: String = s"SkolemType@$debugID($tpe)"
 
@@ -2416,7 +2415,7 @@ object Types {
 
   object OrType {
     private[tastyquery] def make(first: Type, second: Type): Type =
-      if (first eq second) first
+      if first eq second then first
       else OrType(first, second)
   }
 
@@ -2436,7 +2435,7 @@ object Types {
     end resolveMatchingMember
 
     private[tastyquery] def derivedAndType(first: Type, second: Type): Type =
-      if ((first eq this.first) && (second eq this.second)) this
+      if (first eq this.first) && (second eq this.second) then this
       else AndType.make(first, second)
 
     private[tastyquery] def parts: List[Type] =

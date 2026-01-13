@@ -53,7 +53,7 @@ object ClasspathLoaders {
 
     def classAndPackage(binaryName: String): (String, String) = {
       val lastSep = binaryName.lastIndexOf('.')
-      if (lastSep == -1) ("", binaryName)
+      if lastSep == -1 then ("", binaryName)
       else
         import scala.language.unsafeNulls
         val packageName = binaryName.substring(0, lastSep)
