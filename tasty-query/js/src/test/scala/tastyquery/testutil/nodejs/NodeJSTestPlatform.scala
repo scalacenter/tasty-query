@@ -26,7 +26,7 @@ object NodeJSTestPlatform:
     classpath
 
   lazy val scala3ClasspathIndex: Int =
-    classpathEntries.indexWhere(_.contains("scala3-library_3"))
+    classpathEntries.indexWhere(_.contains("scala-library-3"))
 
   def readResourceCodeFile(relPath: String): String =
     val path = getEnvVar(ResourceCodeEnvVar) + "/" + relPath
