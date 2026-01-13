@@ -32,6 +32,7 @@ final class Definitions private[tastyquery] (
   private val javaPackage = RootPackage.getPackageDeclOrCreate(nme.javaPackageName)
   val javaLangPackage = javaPackage.getPackageDeclOrCreate(nme.langPackageName)
   private[tastyquery] val javaLangInvokePackage = javaLangPackage.getPackageDeclOrCreate(termName("invoke"))
+  private val capsPackage = scalaPackage.getPackageDeclOrCreate(termName("caps"))
 
   private val scalaAnnotationPackage =
     scalaPackage.getPackageDeclOrCreate(termName("annotation"))
@@ -419,9 +420,37 @@ final class Definitions private[tastyquery] (
     cls
   end createContextFunctionNClass
 
+  /** Creates one of the `ImpureXYZFunctionN` classes.
+    *
+    * Despite capture checking being highly experimental, we find references to
+    * these type aliases in stable TASTy, so we have to define them.
+    *
+    * They are of the form:
+    *
+    * ```scala
+    * type ImpureXYZFunctionN[-T0,...,-T{N-1}, +R] = XYZFunctionN[T0,...,T{N-1}, R]^{any}
+    * ```
+    *
+    * although of course we don't introduce the `^{any}` part of it.
+    */
+  private def createImpureFunctionTypeAlias(targetClassName: TypeName, n: Int): TypeSymbol =
+    val name = typeName("Impure" + targetClassName.toString())
+    val targetClassRef = TypeRef(scalaPackage.packageRef, targetClassName)
+    val alias = TypeLambda(List.tabulate(n)(i => typeName("T$i")) :+ typeName("R"))(
+      paramInfosExp = tl => List.fill(n + 1)(NothingAnyBounds),
+      resultTypeExp = tl => AppliedType(targetClassRef, tl.paramRefs)
+    )
+    createSpecialTypeAlias(name, scalaPackage, EmptyFlagSet, alias)
+  end createImpureFunctionTypeAlias
+
   locally {
     for (n <- 0 to 22)
       createContextFunctionNClass(n)
+
+    for (n <- 0 to 22) {
+      createImpureFunctionTypeAlias(typeName(s"Function$n"), n)
+      createImpureFunctionTypeAlias(typeName(s"ContextFunction$n"), n)
+    }
   }
 
   // Derived symbols, found on the classpath
@@ -468,6 +497,8 @@ final class Definitions private[tastyquery] (
   lazy val StringClass = javaLangPackage.requiredClass("String")
 
   lazy val ProductClass = scalaPackage.requiredClass("Product")
+
+  lazy val PureClass = capsPackage.requiredClass("Pure")
 
   lazy val ErasedNothingClass = scalaRuntimePackage.requiredClass("Nothing$")
   lazy val ErasedBoxedUnitClass = scalaRuntimePackage.requiredClass("BoxedUnit")
