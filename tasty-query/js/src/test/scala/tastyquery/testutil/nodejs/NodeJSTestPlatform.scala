@@ -26,10 +26,10 @@ object NodeJSTestPlatform:
     classpath
 
   lazy val scala3ClasspathIndex: Int =
-    classpathEntries.indexWhere(_.contains("scala3-library_3").nn)
+    classpathEntries.indexWhere(_.contains("scala3-library_3"))
 
   def readResourceCodeFile(relPath: String): String =
-    val path = getEnvVar(ResourceCodeEnvVar).nn + "/" + relPath
+    val path = getEnvVar(ResourceCodeEnvVar) + "/" + relPath
     NodeFS.readFileSync(path, "utf-8")
 
   private object NodeFS:

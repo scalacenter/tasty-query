@@ -21,7 +21,7 @@ object ClasspathLoaders {
     case Tasty extends FileKind("tasty")
 
     def appliesTo(path: Path): Boolean =
-      path.getFileName().nn.toString().nn.endsWith("." + ext)
+      path.getFileName().nn.toString().endsWith("." + ext)
   end FileKind
 
   private object FileKind:

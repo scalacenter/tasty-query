@@ -27,7 +27,7 @@ object JavaTestPlatform {
     ClasspathLoaders.read(classpathPaths)
 
   lazy val scala3ClasspathIndex: Int =
-    classpathEntries.indexWhere(_.contains("scala3-library_3").nn)
+    classpathEntries.indexWhere(_.contains("scala3-library_3"))
 
   def loadClasspath(): Future[Classpath] =
     Future(classpath)

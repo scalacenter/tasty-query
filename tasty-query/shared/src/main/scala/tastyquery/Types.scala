@@ -1711,11 +1711,11 @@ object Types {
 
     def paramTypes: List[Type] =
       if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
-      myParamTypes.nn
+      myParamTypes
 
     def resultType: TypeOrMethodic =
       if !initialized then throw CyclicReferenceException(s"method [$paramNames]=>???")
-      myRes.nn
+      myRes
 
     private[tastyquery] def isResultDependent(using Context): Boolean =
       // TODO This should be made more efficient; we only need to traverse the type, not transform it
@@ -1830,11 +1830,11 @@ object Types {
 
     def paramTypeBounds: List[TypeBounds] =
       if !initialized then throw CyclicReferenceException(s"polymorphic method [$paramNames]=>???")
-      myBounds.nn
+      myBounds
 
     def resultType: TypeOrMethodic =
       if !initialized then throw CyclicReferenceException(s"polymorphic method [$paramNames]=>???")
-      myRes.nn
+      myRes
 
     def companion: LambdaTypeCompanion[TypeName, TypeBounds, TypeOrMethodic, PolyType] =
       PolyType
@@ -1937,11 +1937,11 @@ object Types {
 
     def paramTypeBounds: List[TypeBounds] =
       if !initialized then throw CyclicReferenceException(s"type lambda [$paramNames]=>???")
-      myBounds.nn
+      myBounds
 
     def resultType: Type =
       if !initialized then throw CyclicReferenceException(s"type lambda [$paramNames]=>???")
-      myRes.nn
+      myRes
 
     private[tastyquery] lazy val typeLambdaParams: List[TypeLambdaParam] =
       List.tabulate(paramNames.size)(num => TypeLambdaParam(this, num))
@@ -2194,15 +2194,15 @@ object Types {
 
     def paramTypeBounds: List[TypeBounds] =
       if !initialized then throw CyclicReferenceException(s"match [$paramNames]=>???")
-      myParamTypeBounds.nn
+      myParamTypeBounds
 
     def pattern: Type =
       if !initialized then throw CyclicReferenceException(s"match [$paramNames]=>???")
-      myPattern.nn
+      myPattern
 
     def result: Type =
       if !initialized then throw CyclicReferenceException(s"match [$paramNames]=>???")
-      myResult.nn
+      myResult
 
     /** The type `[params := this.paramRefs] tp`. */
     private def integrate(params: List[Symbol], tp: Type): Type =

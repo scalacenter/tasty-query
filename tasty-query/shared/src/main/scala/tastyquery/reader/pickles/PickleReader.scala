@@ -243,7 +243,7 @@ private[pickles] class PickleReader {
               case Scala2Constructor | Scala2TraitConstructor =>
                 nme.Constructor
               case SimpleName(MangledDefaultGetterNameRegex(underlyingStr, indexStr)) =>
-                DefaultGetterName(termName(underlyingStr), indexStr.toInt - 1)
+                DefaultGetterName(termName(underlyingStr.nn), indexStr.nn.toInt - 1)
               case _ =>
                 name2
           else name2
