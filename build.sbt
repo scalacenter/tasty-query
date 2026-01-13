@@ -3,9 +3,9 @@ import sbt.internal.util.ManagedLogger
 
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
-val usedScalaCompiler = "3.7.1"
+val usedScalaCompiler = "3.8.0"
 val usedTastyRelease = usedScalaCompiler
-val scala2Version = "2.13.16"
+val scala2Version = "2.13.18"
 
 val SourceDeps = config("sourcedeps").hide
 
