@@ -95,14 +95,23 @@ private[tastyquery] object Erasure:
           finishErase(preErase(tpe.first, keepUnit = false)),
           finishErase(preErase(tpe.second, keepUnit = false))
         )
+
       case tpe: AndType =>
-        summon[SourceLanguage] match
-          case SourceLanguage.Java =>
-            preErase(tpe.first, keepUnit = false)
-          case SourceLanguage.Scala2 =>
-            preErase(Scala2Erasure.eraseAndType(tpe), keepUnit = false)
-          case SourceLanguage.Scala3 =>
-            erasedGlb(preErase(tpe.first, keepUnit = false), preErase(tpe.second, keepUnit = false))
+        /* When erasing something that is `A & Pure` or `Pure & A`, we should take the erasure of A.
+         * This also work for [T <: Pure] `T & A` or `A & T`.
+         * The root problem is described here: https://github.com/scala/scala3/issues/24113
+         */
+        if tpe.first.dealias.classSymbol.contains(defn.PureClass) then preErase(tpe.second, keepUnit)
+        else if tpe.second.dealias.classSymbol.contains(defn.PureClass) then preErase(tpe.first, keepUnit)
+        else
+          summon[SourceLanguage] match
+            case SourceLanguage.Java =>
+              preErase(tpe.first, keepUnit = false)
+            case SourceLanguage.Scala2 =>
+              preErase(Scala2Erasure.eraseAndType(tpe), keepUnit = false)
+            case SourceLanguage.Scala3 =>
+              erasedGlb(preErase(tpe.first, keepUnit = false), preErase(tpe.second, keepUnit = false))
+
       case tpe: AnnotatedType =>
         preErase(tpe.typ, keepUnit)
       case tpe @ defn.PolyFunctionType(mt) =>

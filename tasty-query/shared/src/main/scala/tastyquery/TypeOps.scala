@@ -65,7 +65,7 @@ private[tastyquery] object TypeOps:
                 toPrefix(pre.select(nme.PACKAGE), cls, thiscls)*/
                 else
                   pre.baseType(cls).flatMap(_.normalizedPrefix) match
-                    case Some(normalizedPrefix) => toPrefix(origTp, normalizedPrefix, cls.owner.nn, thiscls)
+                    case Some(normalizedPrefix) => toPrefix(origTp, normalizedPrefix, cls.owner, thiscls)
                     case None                   => origTp
               case _ =>
                 throw AssertionError(

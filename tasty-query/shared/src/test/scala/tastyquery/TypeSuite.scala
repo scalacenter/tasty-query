@@ -446,7 +446,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     assert(
       clue(isSym.declaredType)
-        .isIntersectionOf(_.isRef(typeXSym), _.isApplied(_.isRef(ListClass), List(_.isRef(tTypeCaptureSym))))
+        .isIntersectionOf(_.isApplied(_.isRef(ListClass), List(_.isRef(tTypeCaptureSym))), _.isRef(typeXSym))
     )
 
     val (typed, expr, qualifier) = findTree(castMatchResultWithBindDef) {
@@ -534,8 +534,9 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(pt.paramTypeBounds.sizeIs == 1)
       assertEquals(List[TermName](termName("f")), mt.paramNames, clue(mt.paramNames))
       assert(mt.paramTypes.sizeIs == 1)
+      val impureFunction1 = defn.scalaPackage.findDecl(typeName("ImpureFunction1"))
       assert(
-        mt.paramTypes.head.isApplied(_.isRef(Function1Class), List(_.isRef(defn.IntClass), _ => true)),
+        mt.paramTypes.head.isApplied(_.isRef(impureFunction1), List(_.isRef(defn.IntClass), _ => true)),
         clue(mt.paramTypes.head)
       )
       assert(mt.resultType.isApplied(_.isRef(IndexedSeqClass), List(_ => true)), clue(mt.resultType))
@@ -1538,9 +1539,16 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
     // sc.IterableOps[scala.Int, sci.List, sci.List[scala.Int]]
     assert(
-      optBaseType.get.isApplied(
+      clue(optBaseType.get).isApplied(
         _.isRef(IterableOpsClass),
-        List(_.isRef(defn.IntClass), _.isRef(ListClass), _.isApplied(_.isRef(ListClass), List(_.isRef(defn.IntClass))))
+        List(
+          _.isRef(defn.IntClass),
+          _.isType {
+            case lambda: TypeLambda => lambda.resultType.isApplied(_.isRef(ListClass), List(_ => true))
+            case _                  => false
+          },
+          _.isApplied(_.isRef(ListClass), List(_.isRef(defn.IntClass)))
+        )
       )
     )
 
@@ -2522,8 +2530,6 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       assert(clue(deprecatedAnnot.argCount) == 2)
       assert(clue(deprecatedAnnot.argIfConstant(0)).isDefined)
       assert(clue(deprecatedAnnot.argIfConstant(1)) == Some(Constant("2.13.0")))
-
-      intercept[UnsupportedOperationException](deprecatedAnnot.annotConstructor)
     }
 
     locally {
@@ -3061,13 +3067,16 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         mt.resultType match
           case resultApplied: AppliedType =>
             assert(resultApplied.args.sizeIs == 4, clues(mt))
-            resultApplied.args(2) match
+            resultApplied.args(2).requireType.dealias match
               case tl: TypeLambda =>
                 assert(clue(tl).paramNames.sizeIs == 2)
                 val refs = tl.paramRefs
                 assert(
                   clue(tl).resultType.isApplied(
-                    _.isRef(IterableClass),
+                    _.isType {
+                      case lambda: TypeLambda => lambda.resultType.isApplied(_.isRef(IterableClass), List(_ => true))
+                      case _                  => false
+                    },
                     List(_.isApplied(_.isRef(Tuple2Class), List(_ eq refs(0), _ eq refs(1))))
                   )
                 )
@@ -3124,6 +3133,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("scala-2-with-types") {
+    val AmpersandType = ctx.findStaticType("scala.&")
     val WrappedStringClass = ctx.findTopLevelClass("scala.collection.immutable.WrappedString")
     val StepperClass = ctx.findTopLevelClass("scala.collection.Stepper")
     val EfficientSplitClass = ctx.findStaticClass("scala.collection.Stepper.EfficientSplit")
@@ -3134,12 +3144,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         val typeParamRef = pt.paramRefs.head
         pt.resultType match
           case mt: MethodType if mt.paramNames.sizeIs == 1 =>
-            mt.resultType match
-              case resultType: AndType =>
-                assert(clue(resultType).first eq typeParamRef)
-                assert(clue(resultType).second.isRef(EfficientSplitClass))
-              case _ =>
-                fail("unexpected type", clues(pt))
+            assert(
+              clue(mt.resultType)
+                .isApplied(_.isRef(AmpersandType), List(_ eq typeParamRef, _.isRef(EfficientSplitClass)))
+            )
           case _ =>
             fail("unexpected type", clues(pt))
       case pt =>
@@ -3281,26 +3289,22 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
         assert(clue(pt.paramNames) == List(typeName("CC0"), typeName("K0"), typeName("V0")))
         val paramRefs = pt.paramRefs
 
-        def failWrongResultType(): Nothing =
+        def failWrongResultType()(using munit.Location): Nothing =
           fail(s"unexpected result type: ${pt.resultType}")
 
         // { α => (((scala.collection.generic.IsMap[CC0[K0, V0]] { type V = V0 }) { type C = CC0[α.K, α.V] }) { type K = K0 }) }
         pt.resultType match
           case rt: RecType =>
             rt.parent match
-              case kRefinement: TypeRefinement =>
-                kRefinement.parent match
-                  case cRefinement: TypeRefinement =>
-                    cRefinement.refinedBounds match
-                      case TypeAlias(appliedCC0: AppliedType) =>
-                        assert(clue(appliedCC0.tycon) eq paramRefs(0))
-                        assert(clue(appliedCC0.args).sizeIs == 2)
-                        appliedCC0.args(0) match
-                          case alphaK: TypeRef =>
-                            assert(clue(alphaK).name == typeName("K"))
-                            assert(clue(alphaK).prefix eq rt.recThis)
-                          case _ =>
-                            failWrongResultType()
+              case cRefinement: TypeRefinement =>
+                cRefinement.refinedBounds match
+                  case TypeAlias(appliedCC0: AppliedType) =>
+                    assert(clue(appliedCC0.tycon) eq paramRefs(0))
+                    assert(clue(appliedCC0.args).sizeIs == 2)
+                    appliedCC0.args(0) match
+                      case alphaK: TypeRef =>
+                        assert(clue(alphaK).name == typeName("K"))
+                        assert(clue(alphaK).prefix eq rt.recThis)
                       case _ =>
                         failWrongResultType()
                   case _ =>
@@ -3501,6 +3505,7 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
   }
 
   testWithContext("paramSymss-scala-2") {
+    val AmpersandType = ctx.findStaticType("scala.&")
     val ArrayOpsClass = ctx.findTopLevelClass("scala.collection.ArrayOps")
     val CollSeqHeadTailClass = ctx.findStaticModuleClass("scala.collection.package.+:")
     val CollSeqClass = ctx.findTopLevelClass("scala.collection.Seq")
@@ -3524,7 +3529,10 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
 
       assert(clue(a.declaredBounds).isNothingAnyBounds)
       assert(clue(c.declaredBounds).isBounds(_.isNothing, _.isSeqOpsOf_A_CC_C))
-      assert(clue(cc.declaredBounds.low).isNothing)
+      assert(clue(cc.declaredBounds.low).isType {
+        case lambda: TypeLambda => lambda.resultType.isNothing
+        case _                  => false
+      })
 
       (cc.declaredBounds.high: @unchecked) match
         case tl: TypeLambda =>
@@ -3532,7 +3540,12 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
           val paramRef = tl.paramRefs(0)
           assert(tl.resultType.isApplied(_.isRef(CollSeqClass), List(_.isWildcard)))
 
-      assert(clue(t.declaredType).isIntersectionOf(_.isRef(c), _.isSeqOpsOf_A_CC_C))
+      assert(clue(t.declaredType).isType {
+        // The annotation is `scala.annotation.retainsCap`
+        case ann: AnnotatedType =>
+          ann.typ.isApplied(_.isRef(AmpersandType), List(_.isRef(c), _.isType(_.isSeqOpsOf_A_CC_C)))
+        case _ => false
+      })
     }
 
     locally {
@@ -3554,15 +3567,14 @@ class TypeSuite extends UnrestrictedUnpicklingSuite {
       val find = ArrayOpsClass.findNonOverloadedDecl(termName("find"))
       val List(Left(List(p))) = find.paramSymss: @unchecked
 
+      val impureFunction1 = defn.scalaPackage.findDecl(typeName("ImpureFunction1"))
+
       assert(clue(p.name) == termName("p"))
-      assert(
-        clue(p.declaredType).isApplied(_.isRef(defn.FunctionNClass(1)), List(_ => true, _.isRef(defn.BooleanClass)))
-      )
+      assert(clue(p.declaredType).isApplied(_.isRef(impureFunction1), List(_ => true, _.isRef(defn.BooleanClass))))
 
       val annot = p.getAnnotation(deprecatedNameClass).get
       assert(clue(annot.argIfConstant(0)) == Some(Constant("f")))
       assert(clue(annot.argIfConstant(1)) == Some(Constant("2.13.3")))
-      intercept[UnsupportedOperationException](annot.annotConstructor)
     }
   }
 

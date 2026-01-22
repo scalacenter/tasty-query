@@ -3,7 +3,7 @@ import sbt.internal.util.ManagedLogger
 
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
-val usedScalaCompiler = "3.7.1"
+val usedScalaCompiler = "3.8.1"
 val usedTastyRelease = usedScalaCompiler
 val scala2Version = "2.13.18"
 
@@ -50,10 +50,10 @@ val commonSettings = Seq(
 
 val strictCompileSettings = Seq(
   scalacOptions ++= Seq(
-    "-Xfatal-warnings",
     "-Yexplicit-nulls",
+    "-Werror",
     "-Wsafe-init",
-    "-source:future",
+    // "-source:future",
   ),
 )
 
@@ -69,7 +69,7 @@ lazy val scala2TestSources = crossProject(JSPlatform, JVMPlatform)
   .settings(
     scalaVersion := scala2Version,
     publish / skip := true,
-    scalacOptions += "-Xfatal-warnings",
+    scalacOptions += "-Werror",
     libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value % "provided",
   )
 
@@ -79,7 +79,7 @@ lazy val testSources = crossProject(JSPlatform, JVMPlatform)
   .settings(commonSettings)
   .settings(
     publish / skip := true,
-    scalacOptions += "-Xfatal-warnings",
+    scalacOptions += "-Werror",
     javacOptions += "-parameters",
   )
   .dependsOn(scala2TestSources)
@@ -126,10 +126,13 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
+          // Scala 3.8.x generates fewer static initializers, but that is never an issue
+          ProblemFilters.exclude[DirectMissingMethodProblem]("*.<clinit>"),
         )
       },
 
-      tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
+      // Temporarily disabled until we have a published version of tasty-query that can handle 3.8.x.
+      // tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
       tastyMiMaTastyQueryVersionOverride := Some("1.6.0"),
       tastyMiMaConfig ~= { prev =>
         import tastymima.intf._

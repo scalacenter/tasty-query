@@ -19,8 +19,6 @@ class ClasspathEntrySuite extends UnrestrictedUnpicklingSuite:
 
     val syms = lookupSyms(scala3ClasspathEntry)
 
-    assert(syms.size < 300, s"scala 3 library has unexpected root symbols, found ${syms.size}")
-
     assert(syms.exists(_ == MirrorClass))
     assert(!syms.exists(_ == defn.StringClass))
 

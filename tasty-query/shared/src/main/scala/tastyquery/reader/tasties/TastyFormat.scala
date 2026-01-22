@@ -296,7 +296,7 @@ private[tasties] object TastyFormat:
     * compatibility, but remains backwards compatible, with all
     * preceeding `MinorVersion`.
     */
-  final val MinorVersion: Int = 7
+  final val MinorVersion: Int = 8
 
   /** Natural Number. The `ExperimentalVersion` allows for
     * experimentation with changes to TASTy without committing
