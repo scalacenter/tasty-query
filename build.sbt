@@ -126,14 +126,11 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
-          // Scala 3.8.x generates fewer static initializers, but that is never an issue
-          ProblemFilters.exclude[DirectMissingMethodProblem]("*.<clinit>"),
         )
       },
 
-      // Temporarily disabled until we have a published version of tasty-query that can handle 3.8.x.
-      // tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
-      tastyMiMaTastyQueryVersionOverride := Some("1.6.0"),
+      tastyMiMaPreviousArtifacts := mimaPreviousArtifacts.value,
+      tastyMiMaTastyQueryVersionOverride := Some("1.7.0"),
       tastyMiMaConfig ~= { prev =>
         import tastymima.intf._
         prev
