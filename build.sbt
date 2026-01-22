@@ -5,7 +5,7 @@ import org.scalajs.jsenv.nodejs.NodeJSEnv
 
 val usedScalaCompiler = "3.7.1"
 val usedTastyRelease = usedScalaCompiler
-val scala2Version = "2.13.16"
+val scala2Version = "2.13.18"
 
 val SourceDeps = config("sourcedeps").hide
 
@@ -37,7 +37,7 @@ inThisBuild(Def.settings(
     Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd/")),
     Developer("bishabosha", "Jamie Thompson", "bishbashboshjt@gmail.com", url("https://github.com/bishabosha")),
   ),
-  versionPolicyIntention := Compatibility.BinaryAndSourceCompatible,
+  versionPolicyIntention := Compatibility.BinaryCompatible,
   // Ignore dependencies to internal modules whose version is like `1.2.3+4...` (see https://github.com/scalacenter/sbt-version-policy#how-to-integrate-with-sbt-dynver)
   versionPolicyIgnoredInternalDependencyVersions := Some("^\\d+\\.\\d+\\.\\d+\\+\\d+".r)
 ))
