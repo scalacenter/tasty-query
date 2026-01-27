@@ -53,7 +53,7 @@ val strictCompileSettings = Seq(
     "-Yexplicit-nulls",
     "-Werror",
     "-Wsafe-init",
-    // "-source:future",
+    "-source:future",
   ),
 )
 

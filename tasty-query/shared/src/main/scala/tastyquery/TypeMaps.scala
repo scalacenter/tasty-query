@@ -198,7 +198,7 @@ private[tastyquery] object TypeMaps {
                */
               atVariance(variance * tparams.head.variance.sign)(this(arg: TypeOrWildcard))
           val otherArgs1 = mapArgs(otherArgs, tparams.tail)
-          if ((arg1 eq arg) && (otherArgs1 eq otherArgs)) args
+          if (arg1 eq arg) && (otherArgs1 eq otherArgs) then args
           else arg1 :: otherArgs1
         case nil =>
           nil
@@ -225,9 +225,9 @@ private[tastyquery] object TypeMaps {
   abstract class ApproximatingTypeMap(using Context) extends NormalizingTypeMap { thisMap =>
 
     protected def range(lo: Type, hi: Type): Type =
-      if (variance > 0) hi
-      else if (variance < 0) lo
-      else if (lo `eq` hi) lo
+      if variance > 0 then hi
+      else if variance < 0 then lo
+      else if lo `eq` hi then lo
       else Range(lower(lo), upper(hi))
 
     protected def emptyRange: Type = range(defn.NothingType, defn.AnyType)
@@ -311,7 +311,7 @@ private[tastyquery] object TypeMaps {
       * @pre   the (upper bound of) prefix `pre` has a member named `tp.name`.
       */
     override protected def derivedSelect(tp: NamedType, pre: Type): Type =
-      if (pre eq tp.prefix) tp
+      if pre eq tp.prefix then tp
       else
         pre match {
           case Range(preLo, preHi) =>
@@ -335,18 +335,18 @@ private[tastyquery] object TypeMaps {
         }
 
     /*override protected def derivedRefinedType(tp: RefinedType, parent: Type, info: Type): Type =
-      if ((parent eq tp.parent) && (info eq tp.refinedInfo)) tp
+      if (parent eq tp.parent) && (info eq tp.refinedInfo) then tp
       else parent match {
         case Range(parentLo, parentHi) =>
           range(derivedRefinedType(tp, parentLo, info), derivedRefinedType(tp, parentHi, info))
         case _ =>
           def propagate(lo: Type, hi: Type) =
             range(derivedRefinedType(tp, parent, lo), derivedRefinedType(tp, parent, hi))
-          if (parent.isExactlyNothing) parent
+          if parent.isExactlyNothing then parent
           else info match {
             case Range(infoLo: TypeBounds, infoHi: TypeBounds) =>
               assert(variance == 0)
-              if (!infoLo.isTypeAlias && !infoHi.isTypeAlias) propagate(infoLo, infoHi)
+              if !infoLo.isTypeAlias && !infoHi.isTypeAlias then propagate(infoLo, infoHi)
               else range(defn.NothingType, parent)
             case Range(infoLo, infoHi) =>
               propagate(infoLo, infoHi)
@@ -356,18 +356,18 @@ private[tastyquery] object TypeMaps {
       }*/
 
     /*override protected def derivedRecType(tp: RecType, parent: Type): Type =
-      if (parent eq tp.parent) tp
+      if parent eq tp.parent then tp
       else parent match {
         case Range(lo, hi) => range(tp.rebind(lo), tp.rebind(hi))
         case _ => tp.rebind(parent)
       }*/
 
     override protected def derivedTypeAlias(tp: TypeAlias, alias: Type): TypeBounds =
-      if (alias eq tp.alias) tp
+      if alias eq tp.alias then tp
       else
         alias match {
           case Range(lo, hi) =>
-            if (variance > 0) AbstractTypeBounds(lo, hi)
+            if variance > 0 then AbstractTypeBounds(lo, hi)
             else TypeAlias(range(lo, hi))
           case _ => tp.derivedTypeAlias(alias)
         }
@@ -387,7 +387,7 @@ private[tastyquery] object TypeMaps {
       else tp.derivedWildcardTypeArg(bounds)
 
     /*override protected def derivedSuperType(tp: SuperType, thistp: Type, supertp: Type): Type =
-      if (isRange(thistp) || isRange(supertp)) emptyRange
+      if isRange(thistp) || isRange(supertp) then emptyRange
       else tp.derivedSuperType(thistp, supertp)*/
 
     override protected def derivedAppliedType(tp: AppliedType, tycon: Type, args: List[TypeOrWildcard]): Type =
@@ -416,9 +416,9 @@ private[tastyquery] object TypeMaps {
             def distributeArgs(args: List[TypeOrWildcard], tparams: List[TypeConstructorParam]): Boolean = args match {
               case Range(lo, hi) :: args1 =>
                 val v = tparams.head.variance.sign
-                if (v == 0) false
+                if v == 0 then false
                 else {
-                  if (v > 0) { loBuf += lo; hiBuf += hi }
+                  if v > 0 then { loBuf += lo; hiBuf += hi }
                   else { loBuf += hi; hiBuf += lo }
                   distributeArgs(args1, tparams.tail)
                 }
@@ -429,7 +429,7 @@ private[tastyquery] object TypeMaps {
               case Nil =>
                 true
             }
-            if (distributeArgs(args, tp.tyconTypeParams))
+            if distributeArgs(args, tp.tyconTypeParams) then
               range(tp.derivedAppliedType(tycon, loBuf.toList), tp.derivedAppliedType(tycon, hiBuf.toList))
             else if tycon.isLambdaSub || args.exists(isRangeOfNonTermTypes) then range(defn.NothingType, defn.AnyType)
             else
@@ -443,11 +443,11 @@ private[tastyquery] object TypeMaps {
       case _             => false
 
     override protected def derivedAndType(tp: AndType, tp1: Type, tp2: Type): Type =
-      if (isRange(tp1) || isRange(tp2)) range(lower(tp1) & lower(tp2), upper(tp1) & upper(tp2))
+      if isRange(tp1) || isRange(tp2) then range(lower(tp1) & lower(tp2), upper(tp1) & upper(tp2))
       else tp.derivedAndType(tp1, tp2)
 
     override protected def derivedOrType(tp: OrType, tp1: Type, tp2: Type): Type =
-      if (isRange(tp1) || isRange(tp2)) range(lower(tp1) | lower(tp2), upper(tp1) | upper(tp2))
+      if isRange(tp1) || isRange(tp2) then range(lower(tp1) | lower(tp2), upper(tp1) | upper(tp2))
       else tp.derivedOrType(tp1, tp2)
 
     /*override protected def derivedAnnotatedType(tp: AnnotatedType, underlying: Type, annot: Annotation): Type =
@@ -455,7 +455,7 @@ private[tastyquery] object TypeMaps {
         case Range(lo, hi) =>
           range(tp.derivedAnnotatedType(lo, annot), tp.derivedAnnotatedType(hi, annot))
         case _ =>
-          if (underlying.isExactlyNothing) underlying
+          if underlying.isExactlyNothing then underlying
           else tp.derivedAnnotatedType(underlying, annot)
       }*/
 
