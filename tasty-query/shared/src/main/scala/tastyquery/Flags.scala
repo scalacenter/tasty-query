@@ -60,6 +60,7 @@ private[tastyquery] object Flags:
   val Infix: Flag = newFlag("Infix")
   val Inline: Flag = newFlag("Inline")
   val InlineProxy: Flag = newFlag("InlineProxy")
+  val Into: Flag = newFlag("Into")
   val JavaDefined: Flag = newFlag("JavaDefined")
   val Lazy: Flag = newFlag("Lazy")
   val Local: Flag = newFlag("Local")

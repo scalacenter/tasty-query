@@ -80,6 +80,7 @@ lazy val testSources = crossProject(JSPlatform, JVMPlatform)
   .settings(
     publish / skip := true,
     scalacOptions += "-Werror",
+    scalacOptions += "-preview",
     javacOptions += "-parameters",
   )
   .dependsOn(scala2TestSources)

@@ -2411,4 +2411,21 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     }
     assert(containsSubtree(myMapStructure)(clue(myMapDef)))
   }
+
+  testUnpickle("into-modifier", "simple_trees.IntoModifier") { tree =>
+    val intoClass: StructureCheck = {
+      case ClassDef(SimpleTypeName("IntoClass"), _, sym) if sym.isIntoType =>
+    }
+    assert(containsSubtree(intoClass)(clue(tree)))
+
+    val intoTrait: StructureCheck = {
+      case ClassDef(SimpleTypeName("IntoTrait"), _, sym) if sym.isIntoType =>
+    }
+    assert(containsSubtree(intoTrait)(clue(tree)))
+
+    val intoEnum: StructureCheck = {
+      case ClassDef(SimpleTypeName("IntoEnum"), _, sym) if sym.isIntoType =>
+    }
+    assert(containsSubtree(intoEnum)(clue(tree)))
+  }
 }
