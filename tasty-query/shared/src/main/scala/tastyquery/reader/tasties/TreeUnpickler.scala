@@ -328,6 +328,7 @@ private[tasties] class TreeUnpickler private (
         case INVISIBLE     => ignoreFlag()
         case TRANSPARENT   => addFlag(Transparent)
         case INFIX         => addFlag(Infix)
+        case INTO          => addFlag(Into)
         case PRIVATEqualified =>
           ignoreFlag()
           skipTree()

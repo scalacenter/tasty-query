@@ -224,6 +224,7 @@ import scala.annotation.switch
   *                  EXPORTED                                                         -- An export forwarder
   *                  OPEN                                                             -- an open class
   *                  INVISIBLE                                                        -- invisible during typechecking
+  *                  INTO                                                             -- has the `into` modifier
   *                  Annotation
   *
   *  Variance      = STABLE                                                           -- invariant
@@ -489,6 +490,7 @@ private[tasties] object TastyFormat:
   final val INVISIBLE = 44
   final val EMPTYCLAUSE = 45
   final val SPLITCLAUSE = 46
+  final val INTO = 49
 
   // Cat. 2:    tag Nat
 
@@ -614,7 +616,7 @@ private[tasties] object TastyFormat:
 
   /** Useful for debugging */
   def isLegalTag(tag: Int): Boolean =
-    firstSimpleTreeTag <= tag && tag <= SPLITCLAUSE
+    firstSimpleTreeTag <= tag && tag <= INTO
       || firstNatTreeTag <= tag && tag <= RENAMED
       || firstASTTreeTag <= tag && tag <= BOUNDED
       || firstNatASTTreeTag <= tag && tag <= NAMEDARG
@@ -628,7 +630,7 @@ private[tasties] object TastyFormat:
     case PRIVATE | PROTECTED | ABSTRACT | FINAL | SEALED | CASE | IMPLICIT | GIVEN | ERASED | LAZY | OVERRIDE | INLINE |
         INLINEPROXY | MACRO | OPAQUE | STATIC | OBJECT | TRAIT | TRANSPARENT | INFIX | ENUM | LOCAL | SYNTHETIC |
         ARTIFACT | MUTABLE | FIELDaccessor | CASEaccessor | COVARIANT | CONTRAVARIANT | HASDEFAULT | STABLE |
-        EXTENSION | PARAMsetter | PARAMalias | EXPORTED | OPEN | INVISIBLE | ANNOTATION | PRIVATEqualified |
+        EXTENSION | PARAMsetter | PARAMalias | EXPORTED | OPEN | INVISIBLE | INTO | ANNOTATION | PRIVATEqualified |
         PROTECTEDqualified =>
       true
     case _ =>
@@ -687,6 +689,7 @@ private[tasties] object TastyFormat:
     case PARAMalias    => "PARAMalias"
     case EMPTYCLAUSE   => "EMPTYCLAUSE"
     case SPLITCLAUSE   => "SPLITCLAUSE"
+    case INTO          => "INTO"
 
     case SHAREDterm    => "SHAREDterm"
     case SHAREDtype    => "SHAREDtype"

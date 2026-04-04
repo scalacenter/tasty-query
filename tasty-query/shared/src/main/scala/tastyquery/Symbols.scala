@@ -692,6 +692,9 @@ object Symbols {
 
     final def isOpaqueTypeAlias: Boolean = flags.is(Opaque)
 
+    /** Is this a type with the `into` modifier? */
+    final def isIntoType: Boolean = flags.is(Into)
+
     private[tastyquery] final def topLevelRef: TypeRef =
       require(owner.isPackage, s"Cannot construct a topLevelRef for non-top-level symbol $this")
       TypeRef(owner.asPackage.packageRef, this)
