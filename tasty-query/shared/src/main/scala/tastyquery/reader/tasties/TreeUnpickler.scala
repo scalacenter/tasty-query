@@ -397,9 +397,17 @@ private[tasties] class TreeUnpickler private (
   private def readAnnotation()(using SourceFile): Annotation =
     val end = reader.readEnd()
     skipTree() // skip the typeref to the annotation class; we only use the tree
-    val tree = readTerm
-    Annotation(tree)
+
+    if isCompactAnnotTypeTag(reader.nextByte) then
+      // #464 Apparently we can have CompactAnnotations anyway?
+      Annotation.fromAnnotTypeAndArgs(readTrueType(), Nil)
+    else Annotation(readTerm)
   end readAnnotation
+
+  /** Can `tag` start a type argument of a CompactAnnotation? */
+  private def isCompactAnnotTypeTag(tag: Int): Boolean = tag match
+    case APPLIEDtype | SHAREDtype | TYPEREF | TYPEREFdirect | TYPEREFsymbol | TYPEREFin => true
+    case _                                                                              => false
 
   /** Performs the read action as if SHARED tags were transparent:
     *  - follows the SHARED tags to the term or type that is shared
