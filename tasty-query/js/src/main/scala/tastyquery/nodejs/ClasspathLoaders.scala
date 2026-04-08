@@ -82,7 +82,7 @@ object ClasspathLoaders:
     for allEntries <- allEntriesFuture yield classpath.lazyZip(allEntries).map(makeEntry(_, _))
   end read
 
-  private def fromDirectory(dir: String, relPath: String)(implicit ec: ExecutionContext): Future[Seq[FileContent]] =
+  private def fromDirectory(dir: String, relPath: String)(using ec: ExecutionContext): Future[Seq[FileContent]] =
     cbFuture[js.Array[Dirent]](readdir(dir, ReadDirOpt, _)).flatMap { entries =>
       val (dirs, files) = entries.toSeq.partition(_.isDirectory())
 
@@ -119,7 +119,7 @@ object ClasspathLoaders:
   end fromJarFile
 
   private def loadFromZip(jarPath: String, obj: JSZip.JSZip)(
-    implicit ec: ExecutionContext
+    using ec: ExecutionContext
   ): Future[Iterator[FileContent]] =
     val entries = obj.files.valuesIterator
       .filter(e => isClassOrTasty(e.name) && !e.dir)

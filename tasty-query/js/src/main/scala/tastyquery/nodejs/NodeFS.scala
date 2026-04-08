@@ -15,10 +15,8 @@ private[nodejs] object NodeFS {
     def cb(err: js.Error, v: A): Unit = {
       import js.DynamicImplicits.truthValue
 
-      if (err.asInstanceOf[js.Dynamic])
-        promise.failure(new js.JavaScriptException(err))
-      else
-        promise.success(v)
+      if err.asInstanceOf[js.Dynamic] then promise.failure(new js.JavaScriptException(err))
+      else promise.success(v)
     }
 
     op(cb(_, _))

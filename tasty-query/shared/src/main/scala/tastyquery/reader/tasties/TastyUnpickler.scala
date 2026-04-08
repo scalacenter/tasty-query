@@ -125,10 +125,8 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
 
   private def readParamSig(): ParamSig = {
     val ref = readInt()
-    if (ref < 0)
-      ParamSig.TypeLen(ref.abs)
-    else
-      ParamSig.Term(nameAtRef.signatureName(new NameRef(ref)))
+    if ref < 0 then ParamSig.TypeLen(ref.abs)
+    else ParamSig.Term(nameAtRef.signatureName(new NameRef(ref)))
   }
 
   private def readNameContents(): nameAtRef.EitherName = {
@@ -152,13 +150,13 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
         val separator = readName().toString
         val num = readNat()
         val originals = reader.until(end)(readUnsignedName())
-        val original = if (originals.isEmpty) nme.EmptyTermName else originals.head
+        val original = if originals.isEmpty then nme.EmptyTermName else originals.head
         new UniqueName(original, separator, num)
       case NameTags.DEFAULTGETTER =>
         new DefaultGetterName(readUnsignedName(), readNat())
       case NameTags.SIGNED | NameTags.TARGETSIGNED =>
         val original = readUnsignedName()
-        val target = if (tag == NameTags.TARGETSIGNED) readUnsignedName() else original
+        val target = if tag == NameTags.TARGETSIGNED then readUnsignedName() else original
         val result = readSignatureName()
         val paramsSig = reader.until(end)(readParamSig())
         val sig = Signature(paramsSig, result)
@@ -189,7 +187,7 @@ private[reader] class TastyUnpickler(reader: TastyReader) {
 
   locally {
     reader.until(readEnd())(nameAtRef.add(readNameContents()))
-    while (!isAtEnd) {
+    while !isAtEnd do {
       val secName = readString()
       val secEnd: Addr = readEnd()
       sectionReader(secName) = new TastyReader(bytes, currentAddr.index, secEnd.index, currentAddr.index)

@@ -37,7 +37,7 @@ private[pickles] class PickleBuffer(val bytes: IArray[Byte], from: Int) {
   def readLong(len: Int): Long = {
     var x = 0L
     var i = 0
-    while (i < len) {
+    while i < len do {
       x = (x << 8) + (readByte() & 0xff)
       i += 1
     }
@@ -73,13 +73,13 @@ private[pickles] class PickleBuffer(val bytes: IArray[Byte], from: Int) {
     *  Concatenate results into a list.
     */
   def until[T](end: Int, op: () => T): List[T] =
-    if (readIndex == end) List() else op() :: until(end, op)
+    if readIndex == end then List() else op() :: until(end, op)
 
   /** Perform operation `op` the number of
     *  times specified.  Concatenate the results into a list.
     */
   def times[T](n: Int, op: () => T): List[T] =
-    if (n == 0) List() else op() :: times(n - 1, op)
+    if n == 0 then List() else op() :: times(n - 1, op)
 
   /** Pickle = majorVersion_Nat minorVersion_Nat nbEntries_Nat {Entry}
     *  Entry  = type_Nat length_Nat [actual entries]

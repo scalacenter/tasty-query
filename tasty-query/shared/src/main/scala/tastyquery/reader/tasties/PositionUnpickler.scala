@@ -27,7 +27,7 @@ private[reader] class PositionUnpickler(reader: TastyReader, nameAtRef: TastyUnp
   private var isDefined = false
 
   def ensureDefined(): Unit =
-    if (!isDefined) {
+    if !isDefined then {
       // Read the line sizes array; we will attach it to the first SOURCE directive we encounter
 
       val lines = readNat()

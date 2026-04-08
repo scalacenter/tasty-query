@@ -66,7 +66,7 @@ private[pickles] class PickleReader {
   private def checkVersion()(using PklStream): Unit = {
     val major = pkl.readNat()
     val minor = pkl.readNat()
-    if (major != MajorVersion || minor > MinorVersion)
+    if major != MajorVersion || minor > MinorVersion then
       throw Scala2PickleFormatException(
         s"Bad pickles version, expected: $MajorVersion.$MinorVersion, found: $major.$minor"
       )
@@ -137,7 +137,7 @@ private[pickles] class PickleReader {
 
     def readExtSymbol(): MaybeExternalSymbol =
       val name = decodeName(readNameRef())
-      val owner = if (atEnd) rctx.RootPackage else readMaybeExternalSymbolRef()
+      val owner = if atEnd then rctx.RootPackage else readMaybeExternalSymbolRef()
       name match
         case nme.RootName | nme.UserLandRootPackageName =>
           rctx.RootPackage
@@ -190,7 +190,7 @@ private[pickles] class PickleReader {
 
     val (privateWithin, infoRef) = {
       val ref = pkl.readNat()
-      if (!isSymbolRef(ref)) (None, ref)
+      if !isSymbolRef(ref) then (None, ref)
       else {
         val pw = readLocalSymbolAt(ref) match
           case pw: DeclaringSymbol => pw
@@ -729,7 +729,7 @@ private[pickles] class PickleReader {
   private def readTypeParams()(using ReaderContext, PklStream, Entries, Index): List[ClassTypeParamSymbol] = {
     val tag = pkl.readByte()
     val end = pkl.readEnd()
-    if (tag == POLYtpe) {
+    if tag == POLYtpe then {
       val unusedRestperef = pkl.readNat()
       pkl.until(end, () => readLocalSymbolRef().asInstanceOf[ClassTypeParamSymbol])
     } else Nil

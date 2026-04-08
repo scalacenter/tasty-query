@@ -189,8 +189,7 @@ private[reader] object ClassfileReader {
     }
 
     def apply(index: Index): ConstantInfo = {
-      if (index < 1 || index >= infos.length)
-        throw ClassfileFormatException(s"Invalid constant pool index $index")
+      if index < 1 || index >= infos.length then throw ClassfileFormatException(s"Invalid constant pool index $index")
       infos(index)
     }
 
@@ -491,7 +490,7 @@ private[reader] object ClassfileReader {
 
   private inline def loop(times: Int)(inline op: => Unit): Unit = {
     var i = 0
-    while (i < times) {
+    while i < times do {
       op
       i += 1
     }
@@ -500,7 +499,7 @@ private[reader] object ClassfileReader {
   private inline def accumulateAnnotValues[A: ClassTag](size: Int)(inline op: => A): IArray[A] = {
     val arr = new Array[A](size)
     var i = 0
-    while (i < size) {
+    while i < size do {
       arr(i) = op
       i += 1
     }

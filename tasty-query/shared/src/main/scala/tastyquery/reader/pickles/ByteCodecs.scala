@@ -21,12 +21,12 @@ private[reader] object ByteCodecs {
     var i = 0
     val srclen = src.length
     var j = 0
-    while (i < srclen) {
+    while i < srclen do {
       val in: Int = src(i) & 0xff
-      if (in == 0xc0 && (src(i + 1) & 0xff) == 0x80) {
+      if in == 0xc0 && (src(i + 1) & 0xff) == 0x80 then {
         src(j) = 0x7f
         i += 2
-      } else if (in == 0) {
+      } else if in == 0 then {
         src(j) = 0x7f
         i += 1
       } else {
@@ -43,7 +43,7 @@ private[reader] object ByteCodecs {
     var i = 0
     var j = 0
     val dstlen = (srclen * 7 + 7) / 8
-    while (i + 7 < srclen) {
+    while i + 7 < srclen do {
       var out: Int = src(i).toInt
       var in: Byte = src(i + 1)
       src(j) = (out | (in & 0x01) << 7).toByte
@@ -68,29 +68,29 @@ private[reader] object ByteCodecs {
       i += 8
       j += 7
     }
-    if (i < srclen) {
+    if i < srclen then {
       var out: Int = src(i).toInt
-      if (i + 1 < srclen) {
+      if i + 1 < srclen then {
         var in: Byte = src(i + 1)
         src(j) = (out | (in & 0x01) << 7).toByte; j += 1
         out = in >>> 1
-        if (i + 2 < srclen) {
+        if i + 2 < srclen then {
           in = src(i + 2)
           src(j) = (out | (in & 0x03) << 6).toByte; j += 1
           out = in >>> 2
-          if (i + 3 < srclen) {
+          if i + 3 < srclen then {
             in = src(i + 3)
             src(j) = (out | (in & 0x07) << 5).toByte; j += 1
             out = in >>> 3
-            if (i + 4 < srclen) {
+            if i + 4 < srclen then {
               in = src(i + 4)
               src(j) = (out | (in & 0x0f) << 4).toByte; j += 1
               out = in >>> 4
-              if (i + 5 < srclen) {
+              if i + 5 < srclen then {
                 in = src(i + 5)
                 src(j) = (out | (in & 0x1f) << 3).toByte; j += 1
                 out = in >>> 5
-                if (i + 6 < srclen) {
+                if i + 6 < srclen then {
                   in = src(i + 6)
                   src(j) = (out | (in & 0x3f) << 2).toByte; j += 1
                   out = in >>> 6
@@ -100,7 +100,7 @@ private[reader] object ByteCodecs {
           }
         }
       }
-      if (j < dstlen) src(j) = out.toByte
+      if j < dstlen then src(j) = out.toByte
     }
     dstlen
   }

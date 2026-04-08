@@ -20,7 +20,7 @@ private[reader] object Unpickler {
 
       // Read the symbol themselves
       index.loopWithIndices { (offset, i) =>
-        if (reader.missingSymbolEntry(i)) {
+        if reader.missingSymbolEntry(i) then {
           pkl.unsafeFork(offset) {
             reader.readMaybeExternalSymbolAt(i)
           }
@@ -32,8 +32,8 @@ private[reader] object Unpickler {
 
       // Read children after reading the symbols themselves, fix for SI-3951
       index.loopWithIndices { (offset, i) =>
-        if (reader.missingEntry(i)) {
-          if (reader.isChildrenEntry(i)) {
+        if reader.missingEntry(i) then {
+          if reader.isChildrenEntry(i) then {
             pkl.unsafeFork(offset) {
               reader.readChildren()
             }

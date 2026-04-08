@@ -57,7 +57,7 @@ private[tastyquery] object Spans {
     def point: Int = {
       assert(exists)
       val poff = pointDelta
-      if (poff == SyntheticPointDelta) start else start + poff
+      if poff == SyntheticPointDelta then start else start + poff
     }
 
     /** The difference between point and start in this span */
@@ -65,14 +65,14 @@ private[tastyquery] object Spans {
       (coords >>> (StartEndBits * 2)).toInt
 
     def orElse(that: Span): Span =
-      if (this.exists) this else that
+      if this.exists then this else that
 
     /** The union of two spans. This is the least range that encloses
       *  both spans. It is always a synthetic span.
       */
     def union(that: Span): Span =
-      if (!this.exists) that
-      else if (!that.exists) this
+      if !this.exists then that
+      else if !that.exists then this
       else Span(this.start min that.start, this.end max that.end, this.point)
 
     /** Does the range of this span contain the one of that span? */
@@ -104,42 +104,40 @@ private[tastyquery] object Spans {
       *  relative to this span.
       */
     def shift(offset: Int): Span =
-      if (exists) fromOffsets(start + offset, end + offset, pointDelta)
+      if exists then fromOffsets(start + offset, end + offset, pointDelta)
       else this
 
     /** The zero-extent span with start and end at the point of this span */
-    def focus: Span = if (exists) Span(point) else NoSpan
+    def focus: Span = if exists then Span(point) else NoSpan
 
     /** The zero-extent span with start and end at the start of this span */
-    def startPos: Span = if (exists) Span(start) else NoSpan
+    def startPos: Span = if exists then Span(start) else NoSpan
 
     /** The zero-extent span with start and end at the end of this span */
-    def endPos: Span = if (exists) Span(end) else NoSpan
+    def endPos: Span = if exists then Span(end) else NoSpan
 
     /** A copy of this span with a different start */
     def withStart(start: Int): Span =
-      if (exists) fromOffsets(start, this.end, if (isSynthetic) SyntheticPointDelta else this.point - start)
+      if exists then fromOffsets(start, this.end, if isSynthetic then SyntheticPointDelta else this.point - start)
       else this
 
     /** A copy of this span with a different end */
     def withEnd(end: Int): Span =
-      if (exists) fromOffsets(this.start, end, pointDelta)
+      if exists then fromOffsets(this.start, end, pointDelta)
       else this
 
     /** A copy of this span with a different point */
     def withPoint(point: Int): Span =
-      if (exists) fromOffsets(this.start, this.end, point - this.start)
+      if exists then fromOffsets(this.start, this.end, point - this.start)
       else this
 
     /** A synthetic copy of this span */
-    def toSynthetic: Span = if (isSynthetic) this else Span(start, end)
+    def toSynthetic: Span = if isSynthetic then this else Span(start, end)
 
     override def toString: String = {
-      val (left, right) = if (isSynthetic) ("<", ">") else ("[", "]")
-      if (exists)
-        s"$left$start..${if (point == start) "" else s"$point.."}$end$right"
-      else
-        s"${left}no position$right"
+      val (left, right) = if isSynthetic then ("<", ">") else ("[", "]")
+      if exists then s"$left$start..${if point == start then "" else s"$point.."}$end$right"
+      else s"${left}no position$right"
     }
 
     def ==(that: Span): Boolean = this.coords == that.coords
@@ -161,7 +159,7 @@ private[tastyquery] object Spans {
   /** A source-derived span with given start, end, and point delta */
   def Span(start: Int, end: Int, point: Int): Span = {
     val pointDelta = (point - start) max 0
-    fromOffsets(start, end, if (pointDelta >= SyntheticPointDelta) 0 else pointDelta)
+    fromOffsets(start, end, if pointDelta >= SyntheticPointDelta then 0 else pointDelta)
   }
 
   /** A synthetic zero-extent span that starts and ends at given `start`. */
@@ -182,15 +180,19 @@ private[tastyquery] object Spans {
     }
     def toSpan: Span = {
       assert(isSpan)
-      if (this == NoCoord) NoSpan else Span(-1 - encoding)
+      if this == NoCoord then NoSpan else Span(-1 - encoding)
     }
   }
 
   /** An index coordinate */
-  private implicit def indexCoord(n: Int): Coord = new Coord(n + 1)
-  private implicit def spanCoord(span: Span): Coord =
-    if (span.exists) new Coord(-(span.point + 1))
-    else NoCoord
+  private given indexCoord: Conversion[Int, Coord] = new Conversion[Int, Coord] {
+    def apply(n: Int): Coord = new Coord(n + 1)
+  }
+  private given spanCoord: Conversion[Span, Coord] = new Conversion[Span, Coord] {
+    def apply(span: Span): Coord =
+      if span.exists then new Coord(-(span.point + 1))
+      else NoCoord
+  }
 
   /** A sentinel for a missing coordinate */
   val NoCoord: Coord = new Coord(0)

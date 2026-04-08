@@ -84,7 +84,7 @@ object Constants {
     }
 
     def booleanValue: Boolean =
-      if (tag == BooleanTag) value.asInstanceOf[Boolean]
+      if tag == BooleanTag then value.asInstanceOf[Boolean]
       else throw new Error("value " + value + " is not a boolean")
 
     def byteValue: Byte = tag match {
