@@ -221,31 +221,36 @@ class ReadTreeSuite extends RestrictedUnpicklingSuite {
     assert({
       {
         case PackageDef(
-              s @ SymbolWithName(SimpleName("empty_class")),
+              SymbolWithName(nme.EmptyPackageName), // FIXME This should NOT be there
               List(
-                ClassDef(
-                  SimpleTypeName("EmptyClass"),
-                  Template(
-                    // default constructor: no type params, no arguments, empty body
-                    DefDef(
-                      SimpleName("<init>"),
-                      Left(Nil) :: Nil,
-                      TypeWrapper(TypeRefInternal(ScalaPackageRef(), SimpleTypeName("Unit"))),
-                      None,
+                PackageDef(
+                  s @ SymbolWithName(SimpleName("empty_class")),
+                  List(
+                    ClassDef(
+                      SimpleTypeName("EmptyClass"),
+                      Template(
+                        // default constructor: no type params, no arguments, empty body
+                        DefDef(
+                          SimpleName("<init>"),
+                          Left(Nil) :: Nil,
+                          TypeWrapper(TypeRefInternal(ScalaPackageRef(), SimpleTypeName("Unit"))),
+                          None,
+                          _
+                        ),
+                        // a single parent -- java.lang.Object
+                        List(parent: Apply),
+                        // self not specified
+                        None,
+                        // empty body
+                        List()
+                      ),
                       _
-                    ),
-                    // a single parent -- java.lang.Object
-                    List(parent: Apply),
-                    // self not specified
-                    None,
-                    // empty body
-                    List()
-                  ),
-                  _
+                    )
+                  )
+                  // tree of package symbols is never set, because one package symbol corresponds to multiple trees
+                  // (defined in different files)
                 )
               )
-              // tree of package symbols is never set, because one package symbol corresponds to multiple trees
-              // (defined in different files)
             ) if isJavaLangObject.isDefinedAt(parent) && s.tree.isEmpty =>
       }: StructureCheck
     }.isDefinedAt(clue(tree)))
