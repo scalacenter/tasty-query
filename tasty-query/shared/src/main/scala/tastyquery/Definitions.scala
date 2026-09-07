@@ -32,7 +32,6 @@ final class Definitions private[tastyquery] (
   private val javaPackage = RootPackage.getPackageDeclOrCreate(nme.javaPackageName)
   val javaLangPackage = javaPackage.getPackageDeclOrCreate(nme.langPackageName)
   private[tastyquery] val javaLangInvokePackage = javaLangPackage.getPackageDeclOrCreate(termName("invoke"))
-  private val capsPackage = scalaPackage.getPackageDeclOrCreate(termName("caps"))
 
   private val scalaAnnotationPackage =
     scalaPackage.getPackageDeclOrCreate(termName("annotation"))
@@ -498,7 +497,24 @@ final class Definitions private[tastyquery] (
 
   lazy val ProductClass = scalaPackage.requiredClass("Product")
 
-  lazy val PureClass = capsPackage.requiredClass("Pure")
+  /** `scala.caps.Pure`, depending on the standard library on the classpath:
+    *   - Scala 3.0 and 3.1: `scala.caps` does not exist, so `None`
+    *   - Scala 3.2 to 3.6: `scala.caps` is an object and `Pure` a member of it
+    *   - Scala 3.7 and later: `scala.caps` is a package
+    */
+  private[tastyquery] lazy val PureClassOpt: Option[ClassSymbol] = withRestrictedContext {
+    def fromPackage = scalaPackage.getPackageDecl(termName("caps")).flatMap(_.getDecl(typeName("Pure")))
+    def fromObject = scalaPackage
+      .getDecl(termName("caps"))
+      .collect { case caps: TermSymbol => caps }
+      .flatMap(_.moduleClass)
+      .flatMap(_.getDecl(typeName("Pure")))
+    // Package first: `getDecl` loads the `caps` root, which asserts if a `caps` package already exists.
+    fromPackage.orElse(fromObject).map(_.asClass)
+  }
+
+  lazy val PureClass: ClassSymbol =
+    PureClassOpt.getOrElse(throw new NoSuchElementException("scala.caps.Pure is not on the classpath"))
 
   lazy val ErasedNothingClass = scalaRuntimePackage.requiredClass("Nothing$")
   lazy val ErasedBoxedUnitClass = scalaRuntimePackage.requiredClass("BoxedUnit")

@@ -101,8 +101,10 @@ private[tastyquery] object Erasure:
          * This also work for [T <: Pure] `T & A` or `A & T`.
          * The root problem is described here: https://github.com/scala/scala3/issues/24113
          */
-        if tpe.first.dealias.classSymbol.contains(defn.PureClass) then preErase(tpe.second, keepUnit)
-        else if tpe.second.dealias.classSymbol.contains(defn.PureClass) then preErase(tpe.first, keepUnit)
+        if defn.PureClassOpt.exists(pure => tpe.first.dealias.classSymbol.contains(pure)) then
+          preErase(tpe.second, keepUnit)
+        else if defn.PureClassOpt.exists(pure => tpe.second.dealias.classSymbol.contains(pure)) then
+          preErase(tpe.first, keepUnit)
         else
           summon[SourceLanguage] match
             case SourceLanguage.Java =>
