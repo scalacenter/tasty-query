@@ -36,13 +36,19 @@ private[tasties] class TreeUnpickler private (
   protected val reader: TastyReader,
   nameAtRef: NameTable,
   posUnpicklerOpt: Option[PositionUnpickler],
+  commentUnpicklerOpt: Option[CommentUnpickler],
   caches: TreeUnpickler.Caches
 )(using ReaderContext) {
   import TreeUnpickler.*
 
-  def this(filename: String, reader: TastyReader, nameAtRef: NameTable, posUnpicklerOpt: Option[PositionUnpickler])(
-    using ReaderContext
-  ) = this(filename, reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
+  def this(
+    filename: String,
+    reader: TastyReader,
+    nameAtRef: NameTable,
+    posUnpicklerOpt: Option[PositionUnpickler],
+    commentUnpicklerOpt: Option[CommentUnpickler]
+  )(using ReaderContext) =
+    this(filename, reader, nameAtRef, posUnpicklerOpt, commentUnpicklerOpt, new TreeUnpickler.Caches)
 
   def unpickle(): Unit =
     @tailrec
@@ -100,6 +106,7 @@ private[tasties] class TreeUnpickler private (
             cls
           else TypeMemberSymbol.create(name, owner)
         caches.registerSym(start, sym)
+        sym.setDocComment(commentUnpicklerOpt.flatMap(_.commentAt(start)))
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case DEFDEF | VALDEF | PARAM =>
@@ -107,6 +114,7 @@ private[tasties] class TreeUnpickler private (
         val name = readUnsignedName()
         val sym = TermSymbol.create(name, owner)
         caches.registerSym(start, sym)
+        sym.setDocComment(commentUnpicklerOpt.flatMap(_.commentAt(start)))
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case TYPEPARAM =>
@@ -116,6 +124,7 @@ private[tasties] class TreeUnpickler private (
           if owner.isClass then ClassTypeParamSymbol.create(name, owner.asClass)
           else LocalTypeParamSymbol.create(name, owner)
         caches.registerSym(start, sym)
+        sym.setDocComment(commentUnpicklerOpt.flatMap(_.commentAt(start)))
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case BIND =>
@@ -226,7 +235,14 @@ private[tasties] class TreeUnpickler private (
       assert(!posUnpickler.hasSourceFileAt(reader.currentAddr), s"unexpected source file change $posErrorMsg")
 
   def forkAt(start: Addr): TreeUnpickler =
-    new TreeUnpickler(filename, reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt, caches)
+    new TreeUnpickler(
+      filename,
+      reader.subReader(start, reader.endAddr),
+      nameAtRef,
+      posUnpicklerOpt,
+      commentUnpicklerOpt,
+      caches
+    )
 
   def fork: TreeUnpickler =
     forkAt(reader.currentAddr)
