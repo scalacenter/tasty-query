@@ -270,7 +270,8 @@ import scala.annotation.switch
   *
   * Standard Section: "Comments" Comment*
   * ```none
-  *  Comment       = Length Bytes LongInt      // Raw comment's bytes encoded as UTF-8, followed by the comment's coordinates.
+  *  Comment       = Addr Length UTF8-CodePoint* LongInt // Address of the commented definition, raw comment's bytes
+  *                                                      // encoded as UTF-8, followed by the comment's coordinates.
   * ```
   * ************************************************************************************
   */

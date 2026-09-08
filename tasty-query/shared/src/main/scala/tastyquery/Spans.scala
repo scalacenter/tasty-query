@@ -167,6 +167,9 @@ private[tastyquery] object Spans {
   /** A synthetic zero-extent span that starts and ends at given `start`. */
   def Span(start: Int): Span = Span(start, start)
 
+  /** A span from its raw coordinates, as pickled in TASTy */
+  def spanFromCoord(coords: Long): Span = new Span(coords)
+
   /** A sentinel for a non-existing span */
   val NoSpan: Span = Span(1, 0)
 
