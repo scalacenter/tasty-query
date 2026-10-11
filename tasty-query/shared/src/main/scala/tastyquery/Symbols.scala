@@ -78,6 +78,7 @@ object Symbols {
     private var myTree: Option[DefiningTreeType] = None
     private var myPrivateWithin: SingleAssign[Option[DeclaringSymbol]] = uninitializedSingleAssign
     private var myAnnotations: SingleAssign[List[Annotation]] = uninitializedSingleAssign
+    private var myDocComment: Option[DocComment] = None
 
     /** Checks that this `Symbol` has been completely initialized.
       *
@@ -132,6 +133,17 @@ object Symbols {
 
     final def annotations: List[Annotation] =
       getAssignedOnce(myAnnotations)(s"annotations of $this have not been initialized")
+
+    private[tastyquery] final def setDocComment(docComment: Option[DocComment]): this.type =
+      myDocComment = docComment
+      this
+
+    /** The documentation comment of this symbol, if any.
+      *
+      * Only symbols read from TASTy can have a documentation comment.
+      */
+    final def docComment: Option[DocComment] =
+      myDocComment
 
     protected final def privateWithin: Option[DeclaringSymbol] =
       getAssignedOnce(myPrivateWithin)(s"privateWithin of $this has not been initialized")

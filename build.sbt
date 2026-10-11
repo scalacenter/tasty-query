@@ -127,6 +127,8 @@ lazy val tastyQuery =
       mimaBinaryIssueFilters ++= {
         import com.typesafe.tools.mima.core.*
         Seq(
+          // constructor of a class nested in a private[reader] object; no issue
+          ProblemFilters.exclude[DirectMissingMethodProblem]("tastyquery.reader.tasties.TastyUnpickler#TreeSectionUnpickler.this"),
         )
       },
 

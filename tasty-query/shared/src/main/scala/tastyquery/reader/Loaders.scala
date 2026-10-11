@@ -172,13 +172,10 @@ private[tastyquery] object Loaders {
     private def doLoadTasty(classData: ClassData)(using ReaderContext): Unit =
       val unpickler = TastyUnpickler(classData.readTastyFileBytes())
       val debugPath = classData.toString()
+      val posUnpickler = unpickler.unpickle(debugPath, new TastyUnpickler.PositionSectionUnpickler)
+      val commentUnpickler = unpickler.unpickle(debugPath, new TastyUnpickler.CommentSectionUnpickler)
       unpickler
-        .unpickle(
-          debugPath,
-          TastyUnpickler.TreeSectionUnpickler(
-            unpickler.unpickle(debugPath, new TastyUnpickler.PositionSectionUnpickler)
-          )
-        )
+        .unpickle(debugPath, TastyUnpickler.TreeSectionUnpickler(posUnpickler, commentUnpickler))
         .get
         .unpickle()
     end doLoadTasty
