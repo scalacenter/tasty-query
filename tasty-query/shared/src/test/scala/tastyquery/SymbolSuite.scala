@@ -309,4 +309,88 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     assert(clue(ArrayBufferClass.getDecl(termName("size0 "))).isEmpty)
     assert(!clue(ArrayBufferClass.declarations).exists(_.name == termName("size0 ")))
   }
+
+  testWithContext("docString-of-class-and-members", "simple_trees.DocStrings") {
+    val DocStrings = ctx.findTopLevelClass("simple_trees.DocStrings")
+
+    assert(clue(DocStrings.docString).contains("/** Documentation of the class DocStrings. */"))
+
+    val DocumentedType = DocStrings.findDecl(tname"DocumentedType")
+    assert(clue(DocumentedType.docString).contains("/** Documentation of the type member DocumentedType. */"))
+
+    val documentedValue = DocStrings.findDecl(termName("documentedValue"))
+    assert(clue(documentedValue.docString).contains("/** Documentation of the value documentedValue. */"))
+
+    val documentedMethod = DocStrings
+      .findAllOverloadedDecls(termName("documentedMethod"))
+      .find(_.paramSymss.head.left.exists(_.sizeIs == 1))
+      .get
+    assert(clue(documentedMethod.docString).contains("/** Documentation of the method documentedMethod. */"))
+  }
+
+  testWithContext("docString-of-overloaded-methods", "simple_trees.DocStrings") {
+    val DocStrings = ctx.findTopLevelClass("simple_trees.DocStrings")
+
+    // Each overload carries its own docstring
+    val docStrings = DocStrings.declarations.filter(_.name == termName("documentedMethod")).map(_.docString)
+
+    assert(clue(docStrings).size == 2, clue(docStrings).mkString("\n"))
+    assert(clue(docStrings).contains(Some("/** Documentation of the method documentedMethod. */")))
+
+    // The raw comment keeps its line breaks, whose line endings depend on the source checkout
+    def normalizeLineEndings(text: String): String = text.replace("\r\n", "\n").replace('\r', '\n')
+    val multilineDocStrings = docStrings.flatten.filter(_.contains("Overloaded methods have separate docstrings."))
+    val normalizedDocStrings = multilineDocStrings.map(normalizeLineEndings)
+    val expectedDocString =
+      """|/** Documentation of the method documentedMethod.
+         |    * Overloaded methods have separate docstrings.
+         |    */""".stripMargin
+    assert(clue(normalizedDocStrings) == List(normalizeLineEndings(expectedDocString)), clue(docStrings).mkString("\n"))
+  }
+
+  testWithContext("docString-with-non-ascii-characters", "simple_trees.DocStrings") {
+    val DocStrings = ctx.findTopLevelClass("simple_trees.DocStrings")
+
+    val documentedMethod = DocStrings.findNonOverloadedDecl(termName("documentedWithNonAscii"))
+    val expectedDocString = Some("/** Documentation with non-ASCII characters: àéîõü, 日本語, Ελληνικά. */")
+    assert(clue(documentedMethod.docString) == expectedDocString)
+  }
+
+  testWithContext("docString-of-object", "simple_trees.DocStrings") {
+    val DocStrings = ctx.findTopLevelClass("simple_trees.DocStrings")
+
+    val DocumentedObjectClass = DocStrings.findDecl(moduleClassName("DocumentedObject")).asClass
+    val expectedObjectDocString = Some("/** Documentation of the object DocumentedObject. */")
+    assert(clue(DocumentedObjectClass.docString) == expectedObjectDocString)
+
+    // The documentation of an object is attached to both the module class and the module value
+    val DocumentedObjectValue = DocumentedObjectClass.moduleValue.get
+    assert(clue(DocumentedObjectValue.docString) == expectedObjectDocString)
+
+    val documentedObjectValue = DocumentedObjectClass.findDecl(termName("documentedObjectValue"))
+    assert(clue(documentedObjectValue.docString).contains("/** Documentation of the value documentedObjectValue. */"))
+  }
+
+  testWithContext(
+    "docString-from-dependency",
+    "simple_trees.DocStrings",
+    (fundamentalClasses :+ "simple_trees.DocumentedDependency")*
+  ) {
+    val DocStrings = ctx.findTopLevelClass("simple_trees.DocStrings")
+
+    val inheritedMethod = DocStrings.findMember(termName("inheritedDocumentedMethod"))
+    assert(clue(inheritedMethod.docString).contains("/** Documentation of the method inheritedDocumentedMethod. */"))
+  }
+
+  testWithContext("docString-absent", "simple_trees.DocStrings", fundamentalClasses*) {
+    val DocStrings = ctx.findTopLevelClass("simple_trees.DocStrings")
+
+    // Symbols without a documentation comment
+    assert(clue(DocStrings.findNonOverloadedDecl(termName("undocumentedMethod")).docString).isEmpty)
+    assert(clue(DocStrings.findDecl(termName("undocumentedValue")).docString).isEmpty)
+
+    // Symbols from Java class files never have a docstring
+    val ObjectClass = ctx.findStaticClass("java.lang.Object")
+    assert(clue(ObjectClass.findNonOverloadedDecl(termName("toString")).docString).isEmpty)
+  }
 }

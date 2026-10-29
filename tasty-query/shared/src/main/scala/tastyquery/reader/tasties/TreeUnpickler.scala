@@ -36,13 +36,19 @@ private[tasties] class TreeUnpickler private (
   protected val reader: TastyReader,
   nameAtRef: NameTable,
   posUnpicklerOpt: Option[PositionUnpickler],
+  commentUnpicklerOpt: Option[CommentUnpickler],
   caches: TreeUnpickler.Caches
 )(using ReaderContext) {
   import TreeUnpickler.*
 
-  def this(filename: String, reader: TastyReader, nameAtRef: NameTable, posUnpicklerOpt: Option[PositionUnpickler])(
-    using ReaderContext
-  ) = this(filename, reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
+  def this(
+    filename: String,
+    reader: TastyReader,
+    nameAtRef: NameTable,
+    posUnpicklerOpt: Option[PositionUnpickler],
+    commentUnpicklerOpt: Option[CommentUnpickler]
+  )(using ReaderContext) =
+    this(filename, reader, nameAtRef, posUnpicklerOpt, commentUnpicklerOpt, new TreeUnpickler.Caches)
 
   def unpickle(): Unit =
     @tailrec
@@ -66,6 +72,14 @@ private[tasties] class TreeUnpickler private (
 
   private def enterSymbols(): Unit =
     while !reader.isAtEnd do createSymbols(rctx.RootPackage)
+
+  /** Registers a symbol at @addr, and attaches its documentation if it has one. */
+  private def registerSymbol(addr: Addr, sym: Symbol): Unit =
+    caches.registerSym(addr, sym)
+    for
+      commentUnpickler <- commentUnpicklerOpt
+      comment <- commentUnpickler.commentAt(addr)
+    do sym.setDocString(comment)
 
   /* This method walks a TASTy file and creates all symbols in it.
    *
@@ -99,14 +113,14 @@ private[tasties] class TreeUnpickler private (
               case _                    => ()
             cls
           else TypeMemberSymbol.create(name, owner)
-        caches.registerSym(start, sym)
+        registerSymbol(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case DEFDEF | VALDEF | PARAM =>
         val end = reader.readEnd()
         val name = readUnsignedName()
         val sym = TermSymbol.create(name, owner)
-        caches.registerSym(start, sym)
+        registerSymbol(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case TYPEPARAM =>
@@ -115,7 +129,7 @@ private[tasties] class TreeUnpickler private (
         val sym =
           if owner.isClass then ClassTypeParamSymbol.create(name, owner.asClass)
           else LocalTypeParamSymbol.create(name, owner)
-        caches.registerSym(start, sym)
+        registerSymbol(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case BIND =>
@@ -124,13 +138,13 @@ private[tasties] class TreeUnpickler private (
         val sym =
           if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(toTypeName(name), owner)
           else TermSymbol.create(name, owner)
-        caches.registerSym(start, sym)
+        registerSymbol(start, sym)
         readSymbolModifiers(sym, tag, end)
         // bind is never an owner
         reader.until(end)(createSymbols(owner))
       case REFINEDtpt =>
         val sym = ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, EmptyFlagSet)
-        caches.registerSym(start, sym)
+        registerSymbol(start, sym)
         val end = reader.readEnd()
         reader.until(end)(createSymbols(owner = sym))
 
@@ -226,7 +240,14 @@ private[tasties] class TreeUnpickler private (
       assert(!posUnpickler.hasSourceFileAt(reader.currentAddr), s"unexpected source file change $posErrorMsg")
 
   def forkAt(start: Addr): TreeUnpickler =
-    new TreeUnpickler(filename, reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt, caches)
+    new TreeUnpickler(
+      filename,
+      reader.subReader(start, reader.endAddr),
+      nameAtRef,
+      posUnpicklerOpt,
+      commentUnpicklerOpt,
+      caches
+    )
 
   def fork: TreeUnpickler =
     forkAt(reader.currentAddr)

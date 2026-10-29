@@ -76,6 +76,7 @@ object Symbols {
     private var isFlagsInitialized = false
     private var myFlags: FlagSet = Flags.EmptyFlagSet
     private var myTree: Option[DefiningTreeType] = None
+    private var myDocString: Option[String] = None
     private var myPrivateWithin: SingleAssign[Option[DeclaringSymbol]] = uninitializedSingleAssign
     private var myAnnotations: SingleAssign[List[Annotation]] = uninitializedSingleAssign
 
@@ -108,6 +109,13 @@ object Symbols {
 
     final def tree: Option[DefiningTreeType] =
       myTree
+
+    /** The documentation comment of this `Symbol`, as written in the source code, if it has one. */
+    final def docString: Option[String] =
+      myDocString
+
+    private[tastyquery] final def setDocString(doc: String): Unit =
+      myDocString = Some(doc)
 
     private[tastyquery] final def setFlags(flags: FlagSet, privateWithin: Option[DeclaringSymbol]): this.type =
       setFlags(flags)
