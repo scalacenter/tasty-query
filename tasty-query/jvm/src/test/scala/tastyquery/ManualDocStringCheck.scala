@@ -21,12 +21,22 @@ object ManualDocStringCheck:
     println("overloaded methods : " + DocStrings.findAllOverloadedDecls(termName("documentedMethod")).map(_.docString))
     println("non-ASCII          : " + DocStrings.findNonOverloadedDecl(termName("documentedWithNonAscii")).docString)
     println("object class       : " + DocStrings.findDecl(moduleClassName("DocumentedObject")).asClass.docString)
-    println("object value       : " + DocStrings.findDecl(moduleClassName("DocumentedObject")).asClass.moduleValue.get.docString)
+    println(
+      "object value       : " + DocStrings
+        .findDecl(moduleClassName("DocumentedObject"))
+        .asClass
+        .moduleValue
+        .get
+        .docString
+    )
     println("inherited          : " + DocStrings.findMember(termName("inheritedDocumentedMethod")).docString)
     println("undocumented method: " + DocStrings.findNonOverloadedDecl(termName("undocumentedMethod")).docString)
     println("undocumented value : " + DocStrings.findDecl(termName("undocumentedValue")).docString)
     println(
-      "java toString      : " + ctx.findStaticClass("java.lang.Object").findNonOverloadedDecl(termName("toString")).docString
+      "java toString      : " + ctx
+        .findStaticClass("java.lang.Object")
+        .findNonOverloadedDecl(termName("toString"))
+        .docString
     )
   end main
 end ManualDocStringCheck

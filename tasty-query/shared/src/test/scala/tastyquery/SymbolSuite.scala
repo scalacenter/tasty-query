@@ -382,6 +382,15 @@ class SymbolSuite extends RestrictedUnpicklingSuite {
     assert(clue(inheritedMethod.docString).contains("/** Documentation of the method inheritedDocumentedMethod. */"))
   }
 
+  testWithContext("docString-without-comments-section", "simple_trees.NoComments", fundamentalClasses*) {
+    val NoComments = ctx.findTopLevelClass("simple_trees.NoComments")
+
+    // The source has documentation comments, but they are not present in TASTy compiled with -Xdrop-docs
+    assert(clue(NoComments.docString).isEmpty)
+    assert(clue(NoComments.findDecl(termName("documentedValue")).docString).isEmpty)
+    assert(clue(NoComments.findNonOverloadedDecl(termName("undocumentedValue")).docString).isEmpty)
+  }
+
   testWithContext("docString-absent", "simple_trees.DocStrings", fundamentalClasses*) {
     val DocStrings = ctx.findTopLevelClass("simple_trees.DocStrings")
 

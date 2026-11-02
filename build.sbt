@@ -85,6 +85,16 @@ lazy val testSources = crossProject(JSPlatform, JVMPlatform)
   )
   .dependsOn(scala2TestSources)
 
+lazy val noCommentsTestSources = crossProject(JSPlatform, JVMPlatform)
+  .crossType(CrossType.Pure)
+  .in(file("no-comments-test-sources"))
+  .settings(commonSettings)
+  .settings(
+    publish / skip := true,
+    scalacOptions += "-Werror",
+    scalacOptions += "-Xdrop-docs",
+  )
+
 lazy val tastyQuery =
   crossProject(JSPlatform, JVMPlatform).in(file("tasty-query"))
     .dependsOn(testSources % Test)
@@ -113,7 +123,10 @@ lazy val tastyQuery =
       Test / envVars ++= {
         val javalib = (Test / javalibEntry).value
         val testSourcesCP = Attributed.data((testSources.jvm / Compile / fullClasspath).value)
-        val testClasspath = (javalib +: testSourcesCP.map(_.getAbsolutePath())).mkString(";")
+        val noCommentsTestSourcesCP = (noCommentsTestSources.jvm / Compile / products).value
+        val testClasspath =
+          (javalib +: (testSourcesCP.map(_.getAbsolutePath()) ++ noCommentsTestSourcesCP.map(_.getAbsolutePath())))
+            .mkString(";")
 
         val testResourcesCode =
           ((LocalRootProject / baseDirectory).value / "test-sources/src").getAbsolutePath()
