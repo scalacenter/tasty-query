@@ -110,7 +110,7 @@ object Symbols {
     final def tree: Option[DefiningTreeType] =
       myTree
 
-    /** The documentation comment of this `Symbol`, as written in the source code, if it has one. */
+    /** The raw documentation comment of this `Symbol`, including its delimiters, if it has one. */
     final def docString: Option[String] =
       myDocString
 

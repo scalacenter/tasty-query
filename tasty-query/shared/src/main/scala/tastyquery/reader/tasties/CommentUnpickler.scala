@@ -43,4 +43,10 @@ private[reader] class CommentUnpickler(reader: TastyReader) {
   def commentAt(addr: Addr): Option[String] =
     ensureDefined()
     myComments.get(addr)
+
+  /** Iterate over all loaded comments and apply the given function. */
+  private[tasties] def foreachComment(f: (Addr, String) => Unit): Unit =
+    ensureDefined()
+    for (addr, comment) <- myComments do
+      f(addr, comment)
 }

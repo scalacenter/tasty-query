@@ -57,6 +57,12 @@ private[tasties] class TreeUnpickler private (
       if !reader.isAtEnd then read(acc) else acc.toList
 
     fork.enterSymbols()
+
+    for commentUnpickler <- commentUnpicklerOpt do
+      commentUnpickler.foreachComment { (addr, comment) =>
+        caches.getSymbol[Symbol](addr).setDocString(comment)
+      }
+
     val topLevelTasty = maybeAdjustSourceFileIn {
       read(new ListBuffer[TopLevelTree])
     }(using SourceFile.NoSource)
@@ -72,14 +78,6 @@ private[tasties] class TreeUnpickler private (
 
   private def enterSymbols(): Unit =
     while !reader.isAtEnd do createSymbols(rctx.RootPackage)
-
-  /** Registers a symbol at @addr, and attaches its documentation if it has one. */
-  private def registerSymbol(addr: Addr, sym: Symbol): Unit =
-    caches.registerSym(addr, sym)
-    for
-      commentUnpickler <- commentUnpicklerOpt
-      comment <- commentUnpickler.commentAt(addr)
-    do sym.setDocString(comment)
 
   /* This method walks a TASTy file and creates all symbols in it.
    *
@@ -113,14 +111,14 @@ private[tasties] class TreeUnpickler private (
               case _                    => ()
             cls
           else TypeMemberSymbol.create(name, owner)
-        registerSymbol(start, sym)
+        caches.registerSym(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case DEFDEF | VALDEF | PARAM =>
         val end = reader.readEnd()
         val name = readUnsignedName()
         val sym = TermSymbol.create(name, owner)
-        registerSymbol(start, sym)
+        caches.registerSym(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case TYPEPARAM =>
@@ -129,7 +127,7 @@ private[tasties] class TreeUnpickler private (
         val sym =
           if owner.isClass then ClassTypeParamSymbol.create(name, owner.asClass)
           else LocalTypeParamSymbol.create(name, owner)
-        registerSymbol(start, sym)
+        caches.registerSym(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case BIND =>
@@ -138,13 +136,13 @@ private[tasties] class TreeUnpickler private (
         val sym =
           if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(toTypeName(name), owner)
           else TermSymbol.create(name, owner)
-        registerSymbol(start, sym)
+        caches.registerSym(start, sym)
         readSymbolModifiers(sym, tag, end)
         // bind is never an owner
         reader.until(end)(createSymbols(owner))
       case REFINEDtpt =>
         val sym = ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, EmptyFlagSet)
-        registerSymbol(start, sym)
+        caches.registerSym(start, sym)
         val end = reader.readEnd()
         reader.until(end)(createSymbols(owner = sym))
 
