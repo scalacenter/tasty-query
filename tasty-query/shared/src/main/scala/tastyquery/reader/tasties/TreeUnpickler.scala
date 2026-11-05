@@ -111,14 +111,14 @@ private[tasties] class TreeUnpickler private (
               case _                    => ()
             cls
           else TypeMemberSymbol.create(name, owner)
-        caches.registerSym(start, sym)
+        caches.registerSymbolAt(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case DEFDEF | VALDEF | PARAM =>
         val end = reader.readEnd()
         val name = readUnsignedName()
         val sym = TermSymbol.create(name, owner)
-        caches.registerSym(start, sym)
+        caches.registerSymbolAt(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case TYPEPARAM =>
@@ -127,7 +127,7 @@ private[tasties] class TreeUnpickler private (
         val sym =
           if owner.isClass then ClassTypeParamSymbol.create(name, owner.asClass)
           else LocalTypeParamSymbol.create(name, owner)
-        caches.registerSym(start, sym)
+        caches.registerSymbolAt(start, sym)
         readSymbolModifiers(sym, tag, end)
         reader.until(end)(createSymbols(owner = sym))
       case BIND =>
@@ -136,13 +136,13 @@ private[tasties] class TreeUnpickler private (
         val sym =
           if tagFollowShared == TYPEBOUNDS then LocalTypeParamSymbol.create(toTypeName(name), owner)
           else TermSymbol.create(name, owner)
-        caches.registerSym(start, sym)
+        caches.registerSymbolAt(start, sym)
         readSymbolModifiers(sym, tag, end)
         // bind is never an owner
         reader.until(end)(createSymbols(owner))
       case REFINEDtpt =>
         val sym = ClassSymbol.createRefinedClassSymbol(owner, rctx.ObjectType, EmptyFlagSet)
-        caches.registerSym(start, sym)
+        caches.registerSymbolAt(start, sym)
         val end = reader.readEnd()
         reader.until(end)(createSymbols(owner = sym))
 
@@ -1848,7 +1848,7 @@ private[tasties] object TreeUnpickler {
     def hasSymbolAt(addr: Addr): Boolean = localSymbols.contains(addr)
 
     /** Registers a symbol at @addr with @name. */
-    def registerSym(addr: Addr, sym: Symbol): sym.type =
+    def registerSymbolAt(addr: Addr, sym: Symbol): sym.type =
       if hasSymbolAt(addr) then throw AssertionError(s"Duplicate symbol $sym for address $addr")
       localSymbols(addr) = sym
       sym
