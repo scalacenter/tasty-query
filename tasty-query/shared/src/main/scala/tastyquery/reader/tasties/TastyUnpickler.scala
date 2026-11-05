@@ -18,14 +18,20 @@ private[reader] object TastyUnpickler {
     def unpickle(filename: String, reader: TastyReader, nameAtRef: NameTable)(using ReaderContext): R
   }
 
-  class TreeSectionUnpickler(posUnpickler: Option[PositionUnpickler]) extends SectionUnpickler[TreeUnpickler]("ASTs") {
+  class TreeSectionUnpickler(posUnpickler: Option[PositionUnpickler], commentUnpickler: Option[CommentUnpickler])
+      extends SectionUnpickler[TreeUnpickler]("ASTs") {
     def unpickle(filename: String, reader: TastyReader, nameAtRef: NameTable)(using ReaderContext): TreeUnpickler =
-      new TreeUnpickler(filename, reader, nameAtRef, posUnpickler)
+      new TreeUnpickler(filename, reader, nameAtRef, posUnpickler, commentUnpickler)
   }
 
   class PositionSectionUnpickler extends SectionUnpickler[PositionUnpickler]("Positions") {
     def unpickle(filename: String, reader: TastyReader, nameAtRef: NameTable)(using ReaderContext): PositionUnpickler =
       new PositionUnpickler(reader, nameAtRef)
+  }
+
+  class CommentSectionUnpickler extends SectionUnpickler[CommentUnpickler]("Comments") {
+    def unpickle(filename: String, reader: TastyReader, nameAtRef: NameTable)(using ReaderContext): CommentUnpickler =
+      new CommentUnpickler(reader)
   }
 
   final class NameTable {

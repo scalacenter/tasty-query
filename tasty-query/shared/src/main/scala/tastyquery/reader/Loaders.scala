@@ -176,7 +176,8 @@ private[tastyquery] object Loaders {
         .unpickle(
           debugPath,
           TastyUnpickler.TreeSectionUnpickler(
-            unpickler.unpickle(debugPath, new TastyUnpickler.PositionSectionUnpickler)
+            unpickler.unpickle(debugPath, new TastyUnpickler.PositionSectionUnpickler),
+            unpickler.unpickle(debugPath, new TastyUnpickler.CommentSectionUnpickler)
           )
         )
         .get

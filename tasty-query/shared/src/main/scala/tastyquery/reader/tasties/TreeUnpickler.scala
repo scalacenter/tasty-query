@@ -36,13 +36,19 @@ private[tasties] class TreeUnpickler private (
   protected val reader: TastyReader,
   nameAtRef: NameTable,
   posUnpicklerOpt: Option[PositionUnpickler],
+  commentUnpicklerOpt: Option[CommentUnpickler],
   caches: TreeUnpickler.Caches
 )(using ReaderContext) {
   import TreeUnpickler.*
 
-  def this(filename: String, reader: TastyReader, nameAtRef: NameTable, posUnpicklerOpt: Option[PositionUnpickler])(
-    using ReaderContext
-  ) = this(filename, reader, nameAtRef, posUnpicklerOpt, new TreeUnpickler.Caches)
+  def this(
+    filename: String,
+    reader: TastyReader,
+    nameAtRef: NameTable,
+    posUnpicklerOpt: Option[PositionUnpickler],
+    commentUnpicklerOpt: Option[CommentUnpickler]
+  )(using ReaderContext) =
+    this(filename, reader, nameAtRef, posUnpicklerOpt, commentUnpicklerOpt, new TreeUnpickler.Caches)
 
   def unpickle(): Unit =
     @tailrec
@@ -51,6 +57,12 @@ private[tasties] class TreeUnpickler private (
       if !reader.isAtEnd then read(acc) else acc.toList
 
     fork.enterSymbols()
+
+    for commentUnpickler <- commentUnpicklerOpt 
+        (addr, comment) <- commentUnpickler.allComments
+    do
+      caches.getSymbol[Symbol](addr).setDocString(comment)
+
     val topLevelTasty = maybeAdjustSourceFileIn {
       read(new ListBuffer[TopLevelTree])
     }(using SourceFile.NoSource)
@@ -226,7 +238,14 @@ private[tasties] class TreeUnpickler private (
       assert(!posUnpickler.hasSourceFileAt(reader.currentAddr), s"unexpected source file change $posErrorMsg")
 
   def forkAt(start: Addr): TreeUnpickler =
-    new TreeUnpickler(filename, reader.subReader(start, reader.endAddr), nameAtRef, posUnpicklerOpt, caches)
+    new TreeUnpickler(
+      filename,
+      reader.subReader(start, reader.endAddr),
+      nameAtRef,
+      posUnpicklerOpt,
+      commentUnpicklerOpt,
+      caches
+    )
 
   def fork: TreeUnpickler =
     forkAt(reader.currentAddr)
