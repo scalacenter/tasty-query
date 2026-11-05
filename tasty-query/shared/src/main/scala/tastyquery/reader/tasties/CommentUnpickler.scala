@@ -45,8 +45,7 @@ private[reader] class CommentUnpickler(reader: TastyReader) {
     myComments.get(addr)
 
   /** Iterate over all loaded comments and apply the given function. */
-  private[tasties] def foreachComment(f: (Addr, String) => Unit): Unit =
+  private[tasties] def allComments: Iterator[(Addr, String)] =
     ensureDefined()
-    for (addr, comment) <- myComments do
-      f(addr, comment)
+    myComments.iterator
 }
